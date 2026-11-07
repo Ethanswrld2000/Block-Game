@@ -5,8 +5,7 @@
 //! run them later; the systems here gather the surroundings each frame and
 //! feed them in.
 //!
-//! Debug keys: F6 cycles extra pack weight, F7 is a stab (piercing), F8 a
-//! club blow (blunt). `BLOCKGAME_VITALS=damage,fatigue,blood,injuries[,food,air,warmth]`
+//! Debug keys: F7 is a stab (piercing), F8 a club blow (blunt). `BLOCKGAME_VITALS=damage,fatigue,blood,injuries[,food,air,warmth]`
 //! sets the bars at start, for screenshots.
 
 pub mod camp;
@@ -20,7 +19,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::camera::FlyCamera;
 use crate::clock::{Seasons, WorldClock};
-use crate::interact::{Hand, HandAnim, Hands, Hotbar};
+use crate::interact::{HandAnim, Wielded};
+use crate::inventory::Inventory;
 use crate::items::{ItemKind, Items};
 use crate::player::{Body, Damage, DamageCause, MoveMode, Player, PlayerSet};
 use crate::save::SaveDir;
@@ -33,11 +33,7 @@ use vitals::{Env, Vitals};
 
 /// Seconds of holding right click to eat something.
 const EAT_SECONDS: f32 = 1.2;
-/// What you always carry (clothes, water skin, the bedroll strap), kg.
-const BASE_GEAR: f32 = 4.0;
 pub const BEDROLL_MASS: f32 = 3.0;
-/// Extra pack weights F6 cycles through, kg.
-const BALLAST: [f32; 6] = [0.0, 8.0, 16.0, 24.0, 36.0, 50.0];
 
 pub struct SurvivalPlugin;
 
@@ -72,8 +68,6 @@ pub struct Toast(pub String);
 #[derive(Resource, Debug, Default)]
 pub struct Survival {
     pub vitals: Vitals,
-    /// Index into `BALLAST`: test weight until the inventory phase.
-    pub ballast: usize,
     /// What the body felt this frame (for the HUD).
     pub env: Env,
     /// Eating progress, 0..1.
@@ -90,11 +84,7 @@ fn remember_spawn(mut commands: Commands, player: Res<Player>) {
     commands.insert_resource(SpawnPoint(player.pos));
 }
 
-fn debug_keys(keys: Res<ButtonInput<KeyCode>>, mut s: ResMut<Survival>, mut hits: MessageWriter<Damage>, mut toast: MessageWriter<Toast>) {
-    if keys.just_pressed(KeyCode::F6) {
-        s.ballast = (s.ballast + 1) % BALLAST.len();
-        toast.write(Toast(format!("Test pack: +{} kg", BALLAST[s.ballast])));
-    }
+fn debug_keys(keys: Res<ButtonInput<KeyCode>>, mut hits: MessageWriter<Damage>) {
     if keys.just_pressed(KeyCode::F7) {
         hits.write(Damage { amount: 20.0, cause: DamageCause::Piercing });
     }
@@ -112,14 +102,17 @@ pub fn entry_layer(cause: DamageCause) -> Layer {
     }
 }
 
-fn take_hits(mut hits: MessageReader<Damage>, mut s: ResMut<Survival>, mut toast: MessageWriter<Toast>) {
+fn take_hits(mut hits: MessageReader<Damage>, inv: Res<Inventory>, items: Res<Items>, mut s: ResMut<Survival>, mut toast: MessageWriter<Toast>) {
     for d in hits.read() {
         let h = &mut s.vitals.health;
         let was_mortal = h.mortal();
-        h.hit(entry_layer(d.cause), d.amount);
+        // Armor keeps part of the blow off the bar it lands on.
+        let layer = entry_layer(d.cause);
+        let amount = d.amount * (1.0 - inv.protection(&items, layer));
+        h.hit(layer, amount);
         if d.cause == DamageCause::Piercing {
             // Open wounds keep losing blood for a while.
-            h.bleeding += d.amount * 0.02;
+            h.bleeding += amount * 0.02;
         }
         if let Some(m) = h.mortal()
             && Some(m) != was_mortal
@@ -134,21 +127,22 @@ fn take_hits(mut hits: MessageReader<Damage>, mut s: ResMut<Survival>, mut toast
 fn eat(
     time: Res<Time>,
     mouse: Res<ButtonInput<MouseButton>>,
-    hands: Res<Hands>,
-    hotbar: Res<Hotbar>,
+    wielded: Res<Wielded>,
+    menus: Res<crate::camera::Menus>,
     items: Res<Items>,
     tiers: Res<FoodTiers>,
     body: Res<Body>,
+    mut inv: ResMut<Inventory>,
     mut anim: ResMut<HandAnim>,
     mut s: ResMut<Survival>,
     mut toast: MessageWriter<Toast>,
 ) {
-    let held = hands.item(Hand::Right, &hotbar);
+    let held = wielded.0;
     let food = held.and_then(|i| match items.get(i).kind {
         ItemKind::Food { tier, satiety } => Some((i, tier, satiety)),
         _ => None,
     });
-    let (Some((id, tier, satiety)), true, false) = (food, mouse.pressed(MouseButton::Right), body.frozen) else {
+    let (Some((id, tier, satiety)), true, false) = (food, mouse.pressed(MouseButton::Right), body.frozen || menus.open) else {
         s.eating = 0.0;
         anim.eat = 0.0;
         return;
@@ -161,6 +155,9 @@ fn eat(
             warn!("{} names food tier {tier}, which food_tiers.ron doesn't have", items.get(id).name);
             return;
         };
+        if !inv.take(id, 1) {
+            return;
+        }
         s.vitals.eat(t, satiety);
         toast.write(Toast(format!("Ate {} ({})", items.get(id).title, t.title)));
     }
@@ -196,24 +193,22 @@ fn tick_body(
     seasons: Res<Seasons>,
     torches: Res<Torches>,
     camp: Res<Camp>,
-    hands: Res<Hands>,
-    hotbar: Res<Hotbar>,
+    wielded: Res<Wielded>,
+    inv: Res<Inventory>,
     items: Res<Items>,
     mut s: ResMut<Survival>,
 ) {
-    let held = hands.item(Hand::Right, &hotbar);
+    let held = wielded.0;
     let holding_torch = held.is_some_and(|i| matches!(items.get(i).kind, ItemKind::Torch));
     let eye = player.pos + Vec3::Y * player.eye;
     let daylight = seasons.blended(seasons.at(&clock), |x| x.daylight);
     let sun = crate::sky::sun_direction(clock.time, daylight).y;
-    let carried = BASE_GEAR
-        + held.map_or(0.0, |i| items.get(i).mass)
-        + if camp.bedroll.is_none() { BEDROLL_MASS } else { 0.0 }
-        + BALLAST[s.ballast];
+    let carried = inv.mass(&items) + if camp.bedroll.is_none() { BEDROLL_MASS } else { 0.0 };
+    let raw = feels_like(&climate, &conditions, sun, player.in_water, eye, &torches, holding_torch);
     let air = if player.head_in_water { 0.0 } else { vitals::air_at(eye.y) * conditions.air };
     let env = Env {
         air,
-        feels: feels_like(&climate, &conditions, sun, player.in_water, eye, &torches, holding_torch),
+        feels: vitals::clothed(raw, inv.insulation(&items)),
         sprinting: player.sprinting && *mode == MoveMode::Walk,
         carried,
     };

@@ -1,7 +1,9 @@
 //! Using what is in your hand: mining, placing blocks and torches.
 //!
-//! One hand for now: the hotbar lists every item in pages of nine. Keys 1-9
-//! pick a slot in the current page; the mouse wheel steps through them all. Hold left click to mine (how long depends on the block's hardness
+//! One hand for now: the hotbar's nine slots are shortcuts to things in your
+//! inventory (bind them in the inventory screen). Keys 1-9 or the mouse wheel
+//! pick one. Placing a block or torch uses one up; mining sends a `Mined`
+//! message, which the inventory turns into drops. Hold left click to mine (how long depends on the block's hardness
 //! and your tool, see items.ron); right click places the block or torch you
 //! hold. In free-fly mode blocks break instantly.
 //!
@@ -16,6 +18,7 @@ use voxel::{BlockId, BlockPos, ChunkPos};
 
 use crate::blocks::Blocks;
 use crate::camera::FlyCamera;
+use crate::inventory::Inventory;
 use crate::items::{ItemId, ItemKind, Items};
 use crate::player::{MoveMode, Player};
 use crate::world::World;
@@ -27,10 +30,14 @@ impl Plugin for InteractPlugin {
         app.init_resource::<Target>()
             .init_resource::<Mining>()
             .init_resource::<HandAnim>()
-            .add_systems(Startup, setup_hotbar)
+            .init_resource::<Wielded>()
+            .insert_resource(Hands { right: Some(0), left: None })
+            .insert_resource(Hotbar { slots: vec![None; SLOTS] })
+            .add_message::<Mined>()
+            .add_message::<OpenChest>()
             .add_systems(
                 Update,
-                (choose_items, find_target, use_hands, animate_swings, draw_target)
+                (choose_items, wield, find_target, use_hands, animate_swings, draw_target)
                     .chain()
                     .in_set(InteractSet)
                     .after(crate::player::PlayerSet),
@@ -56,14 +63,29 @@ pub enum Hand {
     Right,
 }
 
-/// Hotbar slots in each page, on keys 1-9.
-pub const PAGE: usize = 9;
+/// Hotbar slots, on keys 1-9.
+pub const SLOTS: usize = 9;
 
-/// Every item, in pages of nine. Phase 7 replaces this with the inventory.
-#[derive(Resource)]
+/// Shortcuts to item kinds in the inventory.
+#[derive(Resource, Debug, Clone)]
 pub struct Hotbar {
-    pub slots: Vec<ItemId>,
+    pub slots: Vec<Option<ItemId>>,
 }
+
+/// What the right hand actually holds: the selected slot's item, if you have any.
+#[derive(Resource, Debug, Default, Clone, Copy, PartialEq)]
+pub struct Wielded(pub Option<ItemId>);
+
+/// A block was broken (by hand, not by world generation).
+#[derive(Message, Debug, Clone, Copy)]
+pub struct Mined {
+    pub pos: BlockPos,
+    pub block: BlockId,
+}
+
+/// Right click on a chest.
+#[derive(Message, Debug, Clone, Copy)]
+pub struct OpenChest(pub BlockPos);
 
 /// What each hand holds: an index into the hotbar, or nothing. Only the
 /// right hand is used for now; `left` stays `None` until the off-hand slot.
@@ -82,7 +104,7 @@ impl Hands {
     }
 
     pub fn item(&self, hand: Hand, hotbar: &Hotbar) -> Option<ItemId> {
-        self.slot(hand).and_then(|s| hotbar.slots.get(s).copied())
+        self.slot(hand).and_then(|s| hotbar.slots.get(s).copied().flatten())
     }
 }
 
@@ -121,36 +143,38 @@ impl HandAnim {
     }
 }
 
-fn setup_hotbar(mut commands: Commands, items: Res<Items>) {
-    let slots: Vec<ItemId> = items.ids().collect();
-    let find = |n: &str| items.id(n).and_then(|i| slots.iter().position(|s| *s == i));
-    // Start holding the pickaxe.
-    commands.insert_resource(Hands { right: find("stone_pickaxe").or(Some(0)), left: None });
-    commands.insert_resource(Hotbar { slots });
-}
-
 fn choose_items(
     keys: Res<ButtonInput<KeyCode>>,
     scroll: Res<AccumulatedMouseScroll>,
     mode: Res<MoveMode>,
-    hotbar: Res<Hotbar>,
+    menus: Res<crate::camera::Menus>,
     mut hands: ResMut<Hands>,
 ) {
+    if menus.open {
+        return;
+    }
     const DIGITS: [KeyCode; 9] = [
         KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4, KeyCode::Digit5,
         KeyCode::Digit6, KeyCode::Digit7, KeyCode::Digit8, KeyCode::Digit9,
     ];
-    let n = hotbar.slots.len();
-    let page = hands.right.unwrap_or(0) / PAGE * PAGE;
+    let n = SLOTS;
     for (i, k) in DIGITS.iter().enumerate() {
-        if keys.just_pressed(*k) && page + i < n && hands.right != Some(page + i) {
-            hands.right = Some(page + i);
+        if keys.just_pressed(*k) && hands.right != Some(i) {
+            hands.right = Some(i);
         }
     }
     // The wheel steps through the hotbar on foot (when flying it sets speed).
     if *mode == MoveMode::Walk && scroll.delta.y != 0.0 && n > 0 {
         let step = if scroll.delta.y > 0.0 { n - 1 } else { 1 };
         hands.right = Some((hands.right.unwrap_or(0) + step) % n);
+    }
+}
+
+/// The selected hotbar item, if any is left in the inventory.
+fn wield(hands: Res<Hands>, hotbar: Res<Hotbar>, inv: Res<Inventory>, mut wielded: ResMut<Wielded>) {
+    let w = Wielded(hands.item(Hand::Right, &hotbar).filter(|i| inv.count(*i) > 0));
+    if *wielded != w {
+        *wielded = w;
     }
 }
 
@@ -190,9 +214,11 @@ fn use_hands(
     mouse: Res<ButtonInput<MouseButton>>,
     cursor: Single<&CursorOptions, With<PrimaryWindow>>,
     target: Res<Target>,
-    hotbar: Res<Hotbar>,
-    hands: Res<Hands>,
+    wielded: Res<Wielded>,
     items: Res<Items>,
+    mut inv: ResMut<Inventory>,
+    mut mined: MessageWriter<Mined>,
+    mut open_chest: MessageWriter<OpenChest>,
     blocks: Res<Blocks>,
     mode: Res<MoveMode>,
     player: Res<Player>,
@@ -210,8 +236,19 @@ fn use_hands(
     }
     let mut mined_this_frame = false;
     let hand = Hand::Right;
-    let item = hands.item(hand, &hotbar);
+    let item = wielded.0;
     let kind = item.map(|i| &items.get(i).kind);
+
+    // Right click on a chest opens it (whatever you hold).
+    let chest = blocks.registry.id("chest");
+    if mouse.just_pressed(MouseButton::Right)
+        && let Some(hit) = target.hit
+        && chest.is_some()
+        && world.block(hit.block) == chest
+    {
+        open_chest.write(OpenChest(hit.block));
+        return;
+    }
 
     // Right click: place the block or torch in your hand.
     let place = match kind {
@@ -227,7 +264,7 @@ fn use_hands(
         let free = world.block(into).is_some_and(|b| !blocks.registry.get(b).solid && blocks.registry.get(b).shape == voxel::Shape::Cube);
         // Never inside yourself (solid blocks only; a torch can go at your feet).
         let blocks_player = blocks.registry.get(place).solid && player.overlaps(into);
-        if free && !blocks_player && world.set_block(into, place) {
+        if free && !blocks_player && item.is_some_and(|i| inv.take(i, 1)) && world.set_block(into, place) {
             remesh_around(&mut world, &blocks, into);
             anim.start(hand);
             anim.place_cooldown = PLACE_REPEAT;
@@ -254,6 +291,7 @@ fn use_hands(
                 mining.progress += dt / seconds;
             }
             if mining.progress >= 1.0 && world.set_block(hit.block, BlockId::AIR) {
+                mined.write(Mined { pos: hit.block, block: b });
                 remesh_around(&mut world, &blocks, hit.block);
                 mining.block = None;
                 mining.progress = 0.0;

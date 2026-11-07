@@ -19,16 +19,29 @@ Tools in Software Update, or put
 - WASD walk, Space jump (or swim up), Shift sprint, Ctrl or C crouch (you won't walk off edges)
 - F switches between walking and flying. Flying: Space up, Shift down, Ctrl fast,
   mouse wheel changes flying speed, blocks break instantly
-- Keys 1-9 pick what you hold from the hotbar page; the mouse wheel scrolls through every item
-- Hold left click to mine; right click places the block or torch you're holding, hold it to eat food
+- Keys 1-9 or the mouse wheel pick what you hold from the hotbar
+- Hold left click to mine (what you break goes into your pockets); right click places the block or
+  torch you're holding, opens a chest, or (held down) eats food
+- Tab opens the inventory: click to pick up and put down, R turns what you hold, right click moves
+  things to and from a chest or puts clothes on, hover and press 1-9 to put something on the hotbar,
+  Q throws it away; click a recipe to craft it
 - B unrolls your bedroll on a clear, flat 2x2 patch (your camp), or packs it up when you're beside it
 - Z sleeps at camp, at night or when worn out
-- Test keys: F6 adds pack weight, F7 is a stab, F8 a club blow
+- Test keys: F7 is a stab, F8 a club blow, F9 gives you one of everything
 - `-` / `=` change the view distance; hold T to fast-forward time; F4 changes the weather
 - F3 toggles the debug overlay
 
 Tools mine their own materials faster: the pickaxe for stone and ore, the axe for wood and
 leaves, the shovel for soil.
+
+## Carrying things
+
+Items take space by their size: a pickaxe fills 2x3 cells, a berry one. You have pockets (5x3) and a
+bag on your back (a reed satchel to start; a hide pack is bigger). Clothes keep you warm and armor
+keeps part of each blow off the bar it lands on. Everything you carry and wear counts toward your
+load. Craft from what you gather: logs into planks and sticks, grass and leaves give plant fiber for
+cordage, and stone, sticks and cordage make tools. Chests (8 planks) hold more. Hide and fur clothes
+need creatures, which come in a later phase.
 
 ## Staying alive
 

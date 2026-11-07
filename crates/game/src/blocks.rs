@@ -37,7 +37,7 @@ pub struct Blocks {
     pub registry: Arc<BlockRegistry>,
     pub opaque: Arc<Vec<bool>>,
     pub tiles: TileSheet,
-    sheet: Handle<Image>,
+    pub sheet: Handle<Image>,
     pub material: Option<Handle<VoxelMaterial>>,
     /// Blended, double-sided material for water and ice.
     pub translucent_material: Option<Handle<VoxelMaterial>>,

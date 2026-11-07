@@ -1,10 +1,17 @@
-// Items you can hold. Phase 7 adds the grid inventory; for now the hotbar
-// lists all of these in pages of nine (keys 1-9 pick in the page, the wheel
-// scrolls through everything).
+// Items. The hotbar (keys 1-9) holds shortcuts to things in your inventory;
+// open the inventory with Tab.
 //   title:  shown on screen
 //   kind:   Tool(speeds: {material: multiplier}), Block("block name"), Torch,
-//           or Food(tier: 1-4, satiety: 0-100); tiers are in food_tiers.ron
-//   mass:   kg, counts toward the load you carry (default 0.5)
+//           Food(tier: 1-4, satiety: 0-100) (tiers are in food_tiers.ron),
+//           Wear(slot: Head|HeadArmor|Body|BodyArmor|Legs|Feet, insulation: °C,
+//                protection: {Damage: 0.2, Blood: 0.1, Injuries: 0.1}) - the share of a blow kept
+//                off the bar where it lands,
+//           Bag(grid: (w, h)) - worn on the back, holds a grid of that size,
+//           Material - for crafting (recipes.ron)
+//   mass:   kg each (default 0.5)
+//   size:   cells in a grid, (width, height) (default (1, 1)); R rotates while you hold it
+//   stack:  how many share one cell (defaults: blocks and materials 32, torches 16, food 8, else 1)
+//   color:  icon colour (sRGB 0..1) for items without a block texture; defaults to the last model box
 //   model:  boxes drawn in your hand, in hand space (metres): size, offset, colour (sRGB 0..1)
 //           Block items are drawn as a small cube of the block instead.
 // Breaking takes hardness (blocks.ron) / speed seconds. A missing material
@@ -13,7 +20,7 @@
     hand: { "stone": 0.3, "ore": 0.25 },
     items: [
         (
-            name: "stone_pickaxe", title: "Stone Pickaxe", mass: 2.5,
+            name: "stone_pickaxe", title: "Stone Pickaxe", mass: 2.5, size: (2, 3),
             kind: Tool(speeds: { "stone": 4.0, "ore": 3.5, "soil": 1.3 }),
             model: [
                 (size: (0.05, 0.05, 0.55), offset: (0.0, 0.0, -0.22), color: (0.45, 0.3, 0.17)),
@@ -21,7 +28,7 @@
             ],
         ),
         (
-            name: "stone_axe", title: "Stone Axe", mass: 2.0,
+            name: "stone_axe", title: "Stone Axe", mass: 2.0, size: (1, 3),
             kind: Tool(speeds: { "wood": 4.0, "plant": 3.0 }),
             model: [
                 (size: (0.05, 0.05, 0.5), offset: (0.0, 0.0, -0.2), color: (0.45, 0.3, 0.17)),
@@ -29,7 +36,7 @@
             ],
         ),
         (
-            name: "stone_shovel", title: "Stone Shovel", mass: 1.8,
+            name: "stone_shovel", title: "Stone Shovel", mass: 1.8, size: (1, 3),
             kind: Tool(speeds: { "soil": 4.0 }),
             model: [
                 (size: (0.05, 0.05, 0.55), offset: (0.0, 0.0, -0.22), color: (0.45, 0.3, 0.17)),
@@ -37,7 +44,7 @@
             ],
         ),
         (
-            name: "torch", title: "Torch", mass: 0.4,
+            name: "torch", title: "Torch", mass: 0.4, size: (1, 2),
             kind: Torch,
             model: [
                 (size: (0.05, 0.05, 0.36), offset: (0.0, 0.0, -0.12), color: (0.45, 0.3, 0.17)),
@@ -63,7 +70,7 @@
             model: [(size: (0.05, 0.05, 0.3), offset: (0.0, 0.0, -0.15), color: (0.62, 0.7, 0.4))],
         ),
         (
-            name: "smoked_fish", title: "Smoked Fish", kind: Food(tier: 2, satiety: 25.0), mass: 0.6,
+            name: "smoked_fish", title: "Smoked Fish", kind: Food(tier: 2, satiety: 25.0), mass: 0.6, size: (2, 1), stack: 4,
             model: [
                 (size: (0.08, 0.12, 0.3), offset: (0.0, 0.0, -0.16), color: (0.62, 0.42, 0.22)),
                 (size: (0.02, 0.1, 0.08), offset: (0.0, 0.0, -0.33), color: (0.5, 0.33, 0.18)),
@@ -74,7 +81,7 @@
             model: [(size: (0.14, 0.1, 0.24), offset: (0.0, 0.0, -0.15), color: (0.78, 0.55, 0.28))],
         ),
         (
-            name: "peat_stew", title: "Peat-Smoked Stew", kind: Food(tier: 3, satiety: 45.0), mass: 1.2,
+            name: "peat_stew", title: "Peat-Smoked Stew", kind: Food(tier: 3, satiety: 45.0), mass: 1.2, size: (1, 2), stack: 2,
             model: [
                 (size: (0.2, 0.1, 0.2), offset: (0.0, 0.0, -0.16), color: (0.4, 0.3, 0.22)),
                 (size: (0.16, 0.02, 0.16), offset: (0.0, 0.05, -0.16), color: (0.55, 0.32, 0.14)),
@@ -85,7 +92,7 @@
             model: [(size: (0.12, 0.08, 0.22), offset: (0.0, 0.0, -0.14), color: (0.62, 0.22, 0.2))],
         ),
         (
-            name: "feast_platter", title: "Feast Platter", kind: Food(tier: 4, satiety: 100.0), mass: 3.0,
+            name: "feast_platter", title: "Feast Platter", kind: Food(tier: 4, satiety: 100.0), mass: 3.0, size: (2, 2), stack: 1,
             model: [
                 (size: (0.3, 0.03, 0.3), offset: (0.0, -0.03, -0.18), color: (0.75, 0.72, 0.66)),
                 (size: (0.12, 0.08, 0.16), offset: (0.04, 0.03, -0.18), color: (0.6, 0.3, 0.16)),
@@ -98,6 +105,79 @@
                 (size: (0.03, 0.03, 0.2), offset: (0.0, 0.0, -0.1), color: (0.3, 0.45, 0.2)),
                 (size: (0.08, 0.06, 0.06), offset: (0.0, 0.0, -0.22), color: (0.95, 0.4, 0.12)),
             ],
+        ),
+        // More blocks you can mine and place.
+        (name: "mud", title: "Mud", kind: Block("mud"), mass: 1.8),
+        (name: "peat", title: "Peat", kind: Block("peat"), mass: 1.2),
+        (name: "sand", title: "Sand", kind: Block("sand"), mass: 1.6),
+        (name: "gravel", title: "Gravel", kind: Block("gravel"), mass: 1.8),
+        (name: "clay", title: "Clay", kind: Block("clay"), mass: 1.8),
+        (name: "swamp_log", title: "Swamp Log", kind: Block("swamp_log"), mass: 2.0),
+        (name: "skystone", title: "Skystone", kind: Block("skystone"), mass: 1.5),
+        (name: "cloud_moss", title: "Cloud Moss", kind: Block("cloud_moss"), mass: 0.3),
+        (name: "chest", title: "Chest", kind: Block("chest"), mass: 6.0, size: (2, 2), stack: 1),
+        // Crafting materials.
+        (name: "stick", title: "Stick", kind: Material, mass: 0.1, size: (1, 2), color: (0.5, 0.34, 0.18)),
+        (name: "plant_fiber", title: "Plant Fiber", kind: Material, mass: 0.05, color: (0.55, 0.65, 0.3)),
+        (name: "cordage", title: "Cordage", kind: Material, mass: 0.1, color: (0.7, 0.62, 0.42)),
+        (name: "coal", title: "Coal", kind: Material, mass: 0.3, color: (0.15, 0.15, 0.16)),
+        (name: "raw_iron", title: "Raw Iron", kind: Material, mass: 0.8, color: (0.62, 0.48, 0.38)),
+        (name: "flint", title: "Flint", kind: Material, mass: 0.2, color: (0.32, 0.33, 0.38)),
+        (name: "hide", title: "Hide", kind: Material, mass: 1.0, size: (2, 2), stack: 4, color: (0.55, 0.38, 0.25)),
+        (name: "fur", title: "Fur", kind: Material, mass: 0.6, size: (2, 2), stack: 4, color: (0.42, 0.33, 0.27)),
+        // Clothes keep you warm; armor keeps blows off your health bars.
+        (
+            name: "linen_shirt", title: "Linen Shirt", mass: 0.4, size: (2, 2), color: (0.85, 0.82, 0.72),
+            kind: Wear(slot: Body, insulation: 2.0),
+        ),
+        (
+            name: "linen_trousers", title: "Linen Trousers", mass: 0.4, size: (2, 2), color: (0.72, 0.68, 0.58),
+            kind: Wear(slot: Legs, insulation: 2.0),
+        ),
+        (
+            name: "hide_boots", title: "Hide Boots", mass: 0.8, size: (2, 1), color: (0.45, 0.3, 0.2),
+            kind: Wear(slot: Feet, insulation: 2.0, protection: { Damage: 0.03 }),
+        ),
+        (
+            name: "reed_hat", title: "Reed Hat", mass: 0.2, size: (2, 1), color: (0.78, 0.72, 0.45),
+            kind: Wear(slot: Head, insulation: 1.0),
+        ),
+        (
+            name: "reed_cloak", title: "Reed Cloak", mass: 1.2, size: (2, 3), color: (0.55, 0.6, 0.35),
+            kind: Wear(slot: Body, insulation: 5.0),
+        ),
+        (
+            name: "fur_hood", title: "Fur Hood", mass: 0.5, size: (2, 2), color: (0.5, 0.4, 0.32),
+            kind: Wear(slot: Head, insulation: 5.0),
+        ),
+        (
+            name: "fur_coat", title: "Fur Coat", mass: 3.0, size: (2, 3), color: (0.45, 0.35, 0.28),
+            kind: Wear(slot: Body, insulation: 12.0, protection: { Damage: 0.05 }),
+        ),
+        (
+            name: "hide_leggings", title: "Hide Leggings", mass: 1.5, size: (2, 2), color: (0.5, 0.36, 0.24),
+            kind: Wear(slot: Legs, insulation: 5.0, protection: { Damage: 0.05 }),
+        ),
+        (
+            name: "bark_helm", title: "Bark Helm", mass: 1.5, size: (2, 2), color: (0.38, 0.28, 0.18),
+            kind: Wear(slot: HeadArmor, protection: { Damage: 0.15, Injuries: 0.1 }),
+        ),
+        (
+            name: "bark_vest", title: "Bark Vest", mass: 4.0, size: (2, 3), color: (0.42, 0.3, 0.2),
+            kind: Wear(slot: BodyArmor, insulation: 1.0, protection: { Damage: 0.2, Blood: 0.15, Injuries: 0.05 }),
+        ),
+        (
+            name: "hide_jerkin", title: "Hide Jerkin", mass: 3.0, size: (2, 3), color: (0.52, 0.34, 0.22),
+            kind: Wear(slot: BodyArmor, insulation: 2.0, protection: { Damage: 0.15, Blood: 0.3 }),
+        ),
+        // Bags are worn on the back and hold a grid of their own.
+        (
+            name: "reed_satchel", title: "Reed Satchel", mass: 0.6, size: (3, 3), color: (0.62, 0.62, 0.38),
+            kind: Bag(grid: (5, 4)),
+        ),
+        (
+            name: "hide_pack", title: "Hide Pack", mass: 1.5, size: (4, 4), color: (0.5, 0.34, 0.22),
+            kind: Bag(grid: (7, 6)),
         ),
     ],
 )

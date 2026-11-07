@@ -69,12 +69,21 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   from survival into movement; `player::DamageCause` picks the entry layer. Weather kinds have
   `chill` and `air`. Player state saves to `player.ron` (not in screenshot runs).
   `BLOCKGAME_VITALS=damage,fatigue,blood,injuries[,food,air,warmth]` sets bars for screenshots.
-  The hotbar lists every item in pages of nine until the inventory phase; F6 test weight stands in
-  for carried items.
+- Phase 7 (items and inventory): done. `game::inventory`: `grid` (items fill cells by size, rotate,
+  stack; saved by item name), `Inventory` (pockets 5x3, worn `WearSlot`s, bag grid; mass,
+  insulation, per-layer protection), `Chests` (chest block, `chests.ron`), `crafting`
+  (`assets/data/recipes.ron`, `Station::Hand|Camp`), `drops` (`assets/data/drops.ron`; unlisted
+  blocks drop their own item), `world_items` (dropped stacks, pickup), `ui` (Tab screen; hit-testing
+  via `ComputedNode::contains_point`, since `Interaction` is deprecated in 0.20). Items have `size`,
+  `stack`, `color` and kinds `Wear`, `Bag`, `Material`. New characters get `assets/data/start_kit.ron`.
+  The hotbar holds shortcuts (`interact::Hotbar`, `Wielded` = selected item if you have any);
+  `interact` writes `Mined`/`OpenChest` messages. Survival reads weight, clothes warmth
+  (`vitals::clothed`) and armor from the inventory. `camera::Menus.open` frees the mouse.
+  Saves: `inventory.ron`, `chests.ron`. `BLOCKGAME_INVENTORY=1` opens the screen for screenshots.
 - Known gaps: vertices are 40 bytes, not the packed 8-byte format (performance pass); no thunder
   sound or snow cover yet; ancestral spirits come with creatures; no block light propagation
-  (torches are real point lights); mined blocks don't drop items until the inventory phase.
-- Next: phase 7 per the plan doc.
+  (torches are real point lights); items on the ground are not saved; hide and fur only come from F9 until creatures.
+- Next: phase 8 per the plan doc.
 
 ## Testing without a screen
 

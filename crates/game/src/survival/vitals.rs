@@ -103,6 +103,16 @@ pub fn air_at(y: f32) -> f32 {
     }
 }
 
+/// Felt temperature with clothes on: they warm you up to the top of the
+/// comfortable range in the cold, and make heat worse (by half) when it's hot.
+pub fn clothed(feels: f32, insulation: f32) -> f32 {
+    if feels >= COMFORT_HIGH {
+        feels + insulation * 0.5
+    } else {
+        (feels + insulation).min(COMFORT_HIGH.max(feels))
+    }
+}
+
 /// Where body warmth settles for a felt temperature.
 pub fn warmth_target(feels: f32) -> f32 {
     let w = if feels < COMFORT_LOW {
@@ -344,6 +354,16 @@ mod tests {
         assert_eq!(v.health.get(Layer::Injuries), 35.0);
         assert_eq!(v.health.get(Layer::Damage), 0.0);
         assert_eq!(v.health.get(Layer::Fatigue), 0.0);
+    }
+
+    #[test]
+    fn clothes_warm_you_in_the_cold_and_cook_you_in_the_heat() {
+        assert_eq!(clothed(-10.0, 12.0), 2.0);
+        assert_eq!(clothed(20.0, 12.0), COMFORT_HIGH);
+        assert_eq!(clothed(34.0, 12.0), 40.0);
+        // A fur coat turns a freezing night into a merely cold one.
+        assert!(warmth_target(clothed(-10.0, 16.0)) > COLD_BELOW);
+        assert!(warmth_target(-10.0) < COLD_BELOW);
     }
 
     #[test]

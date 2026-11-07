@@ -80,7 +80,7 @@ struct DeathScreen;
 struct DeathHint;
 
 fn text(s: impl Into<String>, size: f32, color: Color) -> impl Bundle {
-    (Text::new(s), TextFont { font_size: bevy::text::FontSize::Px(size), ..default() }, TextColor(color), TextShadow::default())
+    (Text::new(s), TextFont { font_size: bevy::text::FontSize::Px(size), ..default() }, TextColor(color), TextShadow { offset: Vec2::splat(1.5), color: Color::srgba(0.0, 0.0, 0.0, 0.85) })
 }
 
 fn bar_back() -> impl Bundle {
