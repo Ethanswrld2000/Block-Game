@@ -335,6 +335,11 @@ impl WorldGen {
     pub fn island_top(&self, x: i32, z: i32) -> Option<i32> {
         islands::top_at(self, x, z)
     }
+
+    /// (bottom, top) of the sky island over this column, if any.
+    pub fn island_span(&self, x: i32, z: i32) -> Option<(i32, i32)> {
+        islands::span_at(self, x, z)
+    }
 }
 
 /// Cave noise sampled every 4 blocks and interpolated: ~50x cheaper than per block.

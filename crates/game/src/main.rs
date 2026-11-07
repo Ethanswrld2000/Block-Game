@@ -1,13 +1,18 @@
 //! Game client entry point. Each system lives in its own plugin.
 
-mod atmosphere;
 mod autoshot;
 mod blocks;
 mod camera;
 mod chunk_mesh;
+mod clock;
+mod clouds;
+mod lod;
+mod precipitation;
 mod debug;
 mod interact;
 mod save;
+mod sky;
+mod weather;
 mod world;
 
 use bevy::prelude::*;
@@ -28,13 +33,20 @@ fn main() {
         )
         .add_plugins((
             blocks::BlocksPlugin,
-            atmosphere::AtmospherePlugin,
             camera::FlyCameraPlugin,
             save::SavePlugin,
             world::WorldPlugin,
             interact::InteractPlugin,
             debug::DebugOverlayPlugin,
             autoshot::AutoShotPlugin,
+        ))
+        .add_plugins((
+            clock::ClockPlugin,
+            weather::WeatherPlugin,
+            sky::SkyPlugin,
+            clouds::CloudPlugin,
+            precipitation::PrecipitationPlugin,
+            lod::LodPlugin,
         ))
         .run();
 }

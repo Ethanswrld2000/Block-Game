@@ -3,19 +3,20 @@
 // the column's height above sea level. Order does not matter.
 //   surface / subsurface / underwater: block names from blocks.ron
 //   trees: swamp, "oak", "pine" or "none";  tree_chance: per column, 0..1
-//   fog: RGB 0..1, used by the sky and fog in phase 4
+//   fog: RGB 0..1, the colour the sky and fog lean towards here
+//   haze: optional, default 1; how far you can see (0.5 = half as far)
 [
     (
         name: "great_swamp", title: "The Great Swamp",
         temperature: 0.4, humidity: 0.8, min_height: -3, max_height: 10,
         surface: "moss", subsurface: "peat", underwater: "mud",
-        trees: swamp, tree_chance: 0.012, fog: (0.46, 0.53, 0.47),
+        trees: swamp, tree_chance: 0.012, fog: (0.46, 0.53, 0.47), haze: 0.4,
     ),
     (
         name: "mossy_woods", title: "The Mossy Woods",
         temperature: 0.1, humidity: 0.35, min_height: 1, max_height: 70,
         surface: "grass", subsurface: "dirt", underwater: "clay",
-        trees: oak, tree_chance: 0.03, fog: (0.55, 0.65, 0.6),
+        trees: oak, tree_chance: 0.03, fog: (0.55, 0.65, 0.6), haze: 0.8,
     ),
     (
         name: "meadow", title: "The Windward Meadows",

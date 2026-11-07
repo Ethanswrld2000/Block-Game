@@ -42,7 +42,7 @@ impl Buffers {
 }
 
 /// Mesh a padded chunk. Position, normal, UV (0..size, repeated per block in
-/// the shader) and UV_1.x = texture layer.
+/// the shader), UV_1.x = texture layer, UV_1.y = season tint strength.
 pub fn build(chunk: &PaddedChunk, registry: &BlockRegistry, opaque: &[bool]) -> ChunkMeshes {
     let quads = voxel::mesher::mesh(chunk, opaque);
     let (mut solid, mut clear) = (Buffers::default(), Buffers::default());
@@ -73,6 +73,13 @@ fn push_quad(q: &Quad, registry: &BlockRegistry, b: &mut Buffers) {
     let corners = [corner(0.0, 0.0), corner(su, 0.0), corner(su, sv), corner(0.0, sv)];
     let normal = q.face.normal().map(|v| v as f32);
     let tex = def.textures[q.face as usize] as f32;
+    // UV_1.y: how strongly the season tints this face (see `foliage` in
+    // blocks.ron): fully for leaves, half for the top of grass and moss.
+    let foliage = match (def.foliage, def.opaque) {
+        (true, false) => 1.0,
+        (true, true) if q.face == voxel::Face::PosY => 0.5,
+        _ => 0.0,
+    };
     let start = b.pos.len() as u32;
     for mut c in corners {
         if lower_top {
@@ -87,7 +94,7 @@ fn push_quad(q: &Quad, registry: &BlockRegistry, b: &mut Buffers) {
             1 => [c[0], c[2]],
             _ => [c[0], -c[1]],
         });
-        b.layer.push([tex, 0.0]);
+        b.layer.push([tex, foliage]);
     }
     // u x v points along +axis for x and z faces, and along -axis for y faces.
     let flip = (axis == 1) == q.face.is_positive();

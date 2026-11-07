@@ -58,6 +58,11 @@ fn span(wg: &WorldGen, isl: &Island, x: i32, z: i32) -> Option<(i32, i32)> {
     Some((bottom.floor() as i32, top.floor() as i32))
 }
 
+/// (bottom, top) of whichever island covers this column.
+pub(crate) fn span_at(wg: &WorldGen, x: i32, z: i32) -> Option<(i32, i32)> {
+    islands_near(wg, x, z, x, z).iter().filter_map(|i| span(wg, i, x, z)).max_by_key(|s| s.1)
+}
+
 /// Top surface of whichever island covers this column.
 pub(crate) fn top_at(wg: &WorldGen, x: i32, z: i32) -> Option<i32> {
     islands_near(wg, x, z, x, z).iter().filter_map(|i| span(wg, i, x, z)).map(|(_, t)| t).max()

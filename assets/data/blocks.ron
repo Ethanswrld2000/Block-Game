@@ -5,13 +5,14 @@
 //   solid:       collides and can be stood on
 //   opaque:      hides the faces behind it (false for leaves, water, glass, plants)
 //   translucent: drawn see-through, blended (water, ice); default false
+//   foliage:     tinted by the season (seasons.ron); all faces of see-through blocks, top only otherwise
 [
     (name: "air", solid: false, opaque: false),
     (name: "stone", top: "stone"),
     (name: "dirt", top: "dirt"),
-    (name: "grass", top: "grass_top", bottom: "dirt", side: "grass_side"),
+    (name: "grass", top: "grass_top", bottom: "dirt", side: "grass_side", foliage: true),
     (name: "mud", top: "mud"),
-    (name: "moss", top: "moss"),
+    (name: "moss", top: "moss", foliage: true),
     (name: "peat", top: "peat"),
     (name: "sand", top: "sand"),
     (name: "gravel", top: "gravel"),
@@ -19,9 +20,9 @@
     (name: "cobblestone", top: "cobblestone"),
     (name: "planks", top: "planks"),
     (name: "log", top: "log_top", side: "log_side"),
-    (name: "leaves", top: "leaves", opaque: false),
+    (name: "leaves", top: "leaves", opaque: false, foliage: true),
     (name: "swamp_log", top: "swamp_log_top", side: "swamp_log_side"),
-    (name: "swamp_leaves", top: "swamp_leaves", opaque: false),
+    (name: "swamp_leaves", top: "swamp_leaves", opaque: false, foliage: true),
     (name: "water", top: "water", solid: false, opaque: false, translucent: true),
     (name: "snow", top: "snow"),
     (name: "ice", top: "ice", opaque: false, translucent: true),

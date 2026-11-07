@@ -46,13 +46,22 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `saves/world1/chunks` (override with `BLOCKGAME_SAVES`), autosave every 30 s and on exit.
   Water and ice are see-through (separate blended material in `game::chunk_mesh`).
   `cargo run -p worldgen --release --example worldstats` prints biome stats and writes a map.
-- Known gaps: no distant LOD yet; clouds and weather are phase 4; vertices are 40 bytes, not the
-  packed 8-byte format (performance pass).
-- Next: phase 4, atmosphere (day/night, sky, clouds, seasons, weather).
+- Phase 4 (sky and atmosphere): done. `game::clock` (20-minute days, seasons from
+  `assets/data/seasons.ron`, saved to `time.ron`), `game::weather` (kinds in `assets/data/weather.ron`,
+  blended into the `Conditions` resource; local biome fog/haze/temperature in `LocalClimate`),
+  `game::sky` (sun/moon light, ambient, fog, sky dome `assets/shaders/sky.wesl`, season tint of
+  foliage via the voxel material's `season` uniform and UV_1.y), `game::clouds` (blocky, y 236),
+  `game::precipitation` (rain/snow pool), `game::lod` (distant terrain and islands as coloured
+  columns out to 1500 blocks; `assets/shaders/lod.wesl` cuts it away inside the loaded area).
+  Stars turn around the sun's axis; the moon has its own 8-day cycle and phases (`sky::moon_*`).
+- Known gaps: vertices are 40 bytes, not the packed 8-byte format (performance pass); no thunder
+  sound or snow cover yet; ancestral spirits come with creatures.
+- Next: phase 5, the player (walking, collision, head-bob, hands).
 
 ## Testing without a screen
 
 `BLOCKGAME_SCREENSHOT=shot.png cargo run` waits for chunk loading to settle, saves a screenshot and quits.
 `BLOCKGAME_CAMERA=x,y,z,yaw,pitch` (or `x,y,z,@tx,ty,tz` to look at a point) places the camera first.
+`BLOCKGAME_TIME=day:hour` and `BLOCKGAME_WEATHER=rain` set the scene; the clock stands still during a screenshot run.
 In the cloud container: `BEVY_ASSET_ROOT=$PWD BLOCKGAME_SCREENSHOT=/tmp/s.png WGPU_BACKEND=vulkan xvfb-run -s "-screen 0 1280x720x24" ./target/debug/block-game`
 (needs `mesa-vulkan-drivers xvfb libxkbcommon-x11-0`).
