@@ -1,0 +1,20 @@
+[package]
+name = "game"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "block-game"
+path = "src/main.rs"
+
+[dependencies]
+bevy.workspace = true
+voxel.workspace = true
+worldgen.workspace = true
+
+[features]
+# `cargo run --features dev` links Bevy dynamically for much faster rebuilds.
+dev = ["bevy/dynamic_linking"]
+# `cargo run --release --features trace` streams profiling data to Tracy.
+trace = ["bevy/trace_tracy"]

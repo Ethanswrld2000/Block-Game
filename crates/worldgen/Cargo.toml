@@ -1,0 +1,10 @@
+[package]
+name = "worldgen"
+description = "Terrain, biomes, caves and sky islands. Filled in during phase 3."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+fastnoise-lite = "1.1.1"
+voxel.workspace = true

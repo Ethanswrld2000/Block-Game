@@ -1,0 +1,10 @@
+[package]
+name = "voxel"
+description = "Block and chunk data. No rendering, so a future server can share it."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+ron.workspace = true

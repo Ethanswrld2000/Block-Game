@@ -1,0 +1,3 @@
+# Make `cargo run` find assets/ at the workspace root, whatever the crate.
+[env]
+BEVY_ASSET_ROOT = { value = "", relative = true }

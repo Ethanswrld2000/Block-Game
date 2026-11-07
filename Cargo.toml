@@ -1,0 +1,27 @@
+[workspace]
+resolver = "3"
+members = ["crates/voxel", "crates/worldgen", "crates/game"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+bevy = "0.20.1"
+serde = { version = "1", features = ["derive"] }
+ron = "0.10"
+voxel = { path = "crates/voxel" }
+worldgen = { path = "crates/worldgen" }
+
+# Fast iteration: our code at opt-level 1, dependencies (Bevy, noise) fully optimized.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+# Shipping builds.
+[profile.release]
+lto = "thin"
+codegen-units = 1
