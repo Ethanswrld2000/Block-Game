@@ -7,7 +7,7 @@ use voxel::BlockPos;
 use crate::blocks::Blocks;
 use crate::camera::FlyCamera;
 use crate::interact::{Hotbar, Target};
-use crate::world::{ViewDistance, World, WorldStats};
+use crate::world::{Generator, ViewDistance, World, WorldStats};
 
 pub struct DebugOverlayPlugin;
 
@@ -70,6 +70,7 @@ fn update_overlay(
     world: Res<World>,
     blocks: Res<Blocks>,
     hotbar: Option<Res<Hotbar>>,
+    generator: Option<Res<Generator>>,
     mut text: Query<&mut Text, With<DebugText>>,
 ) {
     let fps = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS).and_then(|d| d.smoothed()).unwrap_or(0.0);
@@ -86,13 +87,14 @@ fn update_overlay(
         }
         None => "nothing".into(),
     };
+    let biome = generator.map(|g| g.0.biome_at(block.x, block.y, block.z).title.clone()).unwrap_or_default();
     let selected = hotbar.map(|h| format!("[{}] {}", h.selected + 1, name(h.slots[h.selected]))).unwrap_or_default();
     for mut t in &mut text {
         t.0 = format!(
             "{fps:.0} fps  ({ms:.2} ms)\n\
              pos   {:.1} {:.1} {:.1}   chunk {} {} {}\n\
-             biome {}\n\
-             chunks {} loaded, {} drawn, {} queued\n\
+             biome {biome}\n\
+             chunks {} loaded, {} drawn, {} queued, {} unsaved\n\
              tasks  {} generating, {} meshing   data {} KiB\n\
              view   {} chunks (- / =)\n\
              target {looking}\n\
@@ -100,8 +102,7 @@ fn update_overlay(
              F3 hide | click: capture mouse | Esc: release\n\
              left click: break | right click: place",
             p.x, p.y, p.z, chunk.x, chunk.y, chunk.z,
-            worldgen::SPAWN_BIOME,
-            stats.loaded, stats.meshed, stats.queued,
+            stats.loaded, stats.meshed, stats.queued, stats.unsaved,
             stats.gen_in_flight, stats.mesh_in_flight, stats.chunk_kib,
             view.chunks,
         );

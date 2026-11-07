@@ -8,6 +8,7 @@ pub mod chunk;
 pub mod coords;
 pub mod mesher;
 pub mod raycast;
+pub mod save;
 pub mod tiles;
 
 pub use block::{BlockDef, BlockId, BlockRegistry};

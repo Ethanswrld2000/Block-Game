@@ -4,8 +4,10 @@ mod atmosphere;
 mod autoshot;
 mod blocks;
 mod camera;
+mod chunk_mesh;
 mod debug;
 mod interact;
+mod save;
 mod world;
 
 use bevy::prelude::*;
@@ -28,6 +30,7 @@ fn main() {
             blocks::BlocksPlugin,
             atmosphere::AtmospherePlugin,
             camera::FlyCameraPlugin,
+            save::SavePlugin,
             world::WorldPlugin,
             interact::InteractPlugin,
             debug::DebugOverlayPlugin,

@@ -8,3 +8,4 @@ license.workspace = true
 [dependencies]
 serde.workspace = true
 ron.workspace = true
+lz4_flex = "0.11"

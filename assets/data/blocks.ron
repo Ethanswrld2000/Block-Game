@@ -4,6 +4,7 @@
 //   top/bottom/side: tile names from textures/blocks.ron (omit bottom/side to reuse top)
 //   solid:       collides and can be stood on
 //   opaque:      hides the faces behind it (false for leaves, water, glass, plants)
+//   translucent: drawn see-through, blended (water, ice); default false
 [
     (name: "air", solid: false, opaque: false),
     (name: "stone", top: "stone"),
@@ -21,9 +22,9 @@
     (name: "leaves", top: "leaves", opaque: false),
     (name: "swamp_log", top: "swamp_log_top", side: "swamp_log_side"),
     (name: "swamp_leaves", top: "swamp_leaves", opaque: false),
-    (name: "water", top: "water", solid: false, opaque: false),
+    (name: "water", top: "water", solid: false, opaque: false, translucent: true),
     (name: "snow", top: "snow"),
-    (name: "ice", top: "ice", opaque: false),
+    (name: "ice", top: "ice", opaque: false, translucent: true),
     (name: "coal_ore", top: "coal_ore"),
     (name: "iron_ore", top: "iron_ore"),
     (name: "skystone", top: "skystone"),

@@ -18,10 +18,12 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
 
     let layer = u32(in.uv_b.x + 0.5);
     let texel = textureSample(block_textures, block_sampler, fract(in.uv), layer);
-    if texel.a < 0.5 {
+    // Cut-out for leaves and plants (alpha 0); water and ice keep their alpha
+    // and are drawn by the blended material.
+    if texel.a < 0.1 {
         discard;
     }
-    pbr_input.material.base_color = vec4<f32>(texel.rgb * pbr_input.material.base_color.rgb, 1.0);
+    pbr_input.material.base_color = vec4<f32>(texel.rgb * pbr_input.material.base_color.rgb, texel.a);
 
     var out: FragmentOutput;
     out.color = apply_pbr_lighting(pbr_input);

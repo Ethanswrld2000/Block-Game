@@ -61,10 +61,11 @@ fn pick_block(keys: Res<ButtonInput<KeyCode>>, mut hotbar: ResMut<Hotbar>) {
     }
 }
 
-fn find_target(world: Res<World>, cam: Single<&Transform, With<FlyCamera>>, mut target: ResMut<Target>) {
+fn find_target(world: Res<World>, blocks: Res<Blocks>, cam: Single<&Transform, With<FlyCamera>>, mut target: ResMut<Target>) {
     let origin = cam.translation.to_array();
     let dir = cam.forward().as_vec3().to_array();
-    target.hit = raycast(origin, dir, REACH, |p| world.block(p).is_some_and(|b| !b.is_air()));
+    // Aim through air and water; stop at anything you could stand on or hit.
+    target.hit = raycast(origin, dir, REACH, |p| world.block(p).is_some_and(|b| blocks.registry.get(b).solid));
 }
 
 fn edit_blocks(
@@ -85,7 +86,8 @@ fn edit_blocks(
         world.set_block(hit.block, BlockId::AIR).then_some(hit.block)
     } else if mouse.just_pressed(MouseButton::Right) {
         let eye = BlockPos::from_world(cam.translation.to_array());
-        if hit.before == eye || world.block(hit.before).is_none_or(|b| !b.is_air()) {
+        // Blocks can go into air or replace water, never into something solid.
+        if hit.before == eye || world.block(hit.before).is_none_or(|b| blocks.registry.get(b).solid) {
             None
         } else {
             world.set_block(hit.before, hotbar.slots[hotbar.selected]).then_some(hit.before)
