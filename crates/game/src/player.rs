@@ -36,6 +36,7 @@ impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(MoveMode::Walk)
             .init_resource::<Player>()
+            .init_resource::<Body>()
             .add_message::<Damage>()
             .add_systems(
                 Update,
@@ -64,7 +65,8 @@ pub enum MoveMode {
     Fly,
 }
 
-/// Something hurt the player. The health system (a later phase) takes these.
+/// Something hurt the player in one blow. `survival` decides which health
+/// bar it lands on from the cause.
 #[derive(Message, Debug, Clone, Copy)]
 pub struct Damage {
     pub amount: f32,
@@ -73,7 +75,36 @@ pub struct Damage {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DamageCause {
+    /// A short fall: bruises.
     Fall,
+    /// A fall from higher than `HEAVY_FALL` blocks: straight to Injuries.
+    HeavyFall,
+    /// Stabs and arrows: start at Blood and bleed.
+    Piercing,
+    /// Clubs, fists, falling rocks.
+    Blunt,
+}
+
+/// A fall from higher than this many blocks goes straight to Injuries.
+pub const HEAVY_FALL: f32 = 12.0;
+
+/// How the body's state changes movement, set by `survival` each frame.
+#[derive(Resource, Debug, Clone, Copy)]
+pub struct Body {
+    /// Multiplies walking, running and swimming speed.
+    pub speed: f32,
+    /// Multiplies fall damage (heavy loads land harder).
+    pub fall: f32,
+    /// 0..1: lack of air makes the view sway.
+    pub dizzy: f32,
+    /// No moving at all (dead, or asleep).
+    pub frozen: bool,
+}
+
+impl Default for Body {
+    fn default() -> Self {
+        Self { speed: 1.0, fall: 1.0, dizzy: 0.0, frozen: false }
+    }
 }
 
 #[derive(Resource, Debug, Clone)]
@@ -212,10 +243,16 @@ fn walk(
     world: Res<World>,
     blocks: Res<Blocks>,
     cam: Query<&FlyCamera>,
+    body: Res<Body>,
     mut player: ResMut<Player>,
     mut damage: MessageWriter<Damage>,
 ) {
     let Ok(look) = cam.single() else { return };
+    if body.frozen {
+        player.vel = Vec3::ZERO;
+        player.sprinting = false;
+        return;
+    }
     let p = &mut *player;
     let water = blocks.registry.id("water");
     let feet = BlockPos::from_world(p.pos.to_array());
@@ -264,7 +301,7 @@ fn walk(
         SPRINT
     } else {
         WALK
-    };
+    } * body.speed;
     // Quick to start and stop on the ground; little control in the air.
     let accel = if p.on_ground { 45.0 } else if p.in_water { 12.0 } else { 9.0 };
     let horiz = Vec2::new(p.vel.x, p.vel.z);
@@ -327,7 +364,10 @@ fn walk(
     if p.on_ground && !was_on_ground && fall_speed > 3.0 {
         p.dip_vel -= fall_speed * 0.045;
         if fall_speed > SAFE_LANDING && !p.in_water {
-            let d = Damage { amount: (fall_speed - SAFE_LANDING) * 1.6, cause: DamageCause::Fall };
+            // v^2 = 2 g h
+            let height = fall_speed * fall_speed / (2.0 * GRAVITY);
+            let cause = if height > HEAVY_FALL { DamageCause::HeavyFall } else { DamageCause::Fall };
+            let d = Damage { amount: (fall_speed - SAFE_LANDING) * 1.6 * body.fall, cause };
             p.last_damage = Some(d);
             damage.write(d);
             info!("fall damage {:.1} (landed at {:.1} blocks/s)", d.amount, fall_speed);
@@ -346,15 +386,19 @@ fn walk(
 }
 
 /// Put the camera at the player's eyes, with bob, sway and landing dip.
-fn ride_camera(player: Res<Player>, mut cam: Query<(&mut Transform, &FlyCamera)>) {
+fn ride_camera(time: Res<Time>, player: Res<Player>, body: Res<Body>, mut cam: Query<(&mut Transform, &FlyCamera)>) {
     let Ok((mut tf, look)) = cam.single_mut() else { return };
     let p = &*player;
     let (s, b) = (p.bob_phase.sin(), p.bob);
     // Down on each footfall (|sin|), side to side once per two steps.
     let bob_y = -(s.abs()) * 0.075 * b;
     let sway = (p.bob_phase * 0.5).sin() * 0.04 * b;
-    let roll = (p.bob_phase * 0.5).sin() * 0.012 * b;
-    let rotation = Quat::from_euler(EulerRot::YXZ, look.yaw, look.pitch + s.abs() * 0.006 * b, roll);
+    // Short of air: a slow drunken lean.
+    let t = time.elapsed_secs();
+    let dizzy_roll = (t * 0.9).sin() * 0.09 * body.dizzy;
+    let dizzy_yaw = (t * 0.6).sin() * 0.05 * body.dizzy;
+    let roll = (p.bob_phase * 0.5).sin() * 0.012 * b + dizzy_roll;
+    let rotation = Quat::from_euler(EulerRot::YXZ, look.yaw + dizzy_yaw, look.pitch + s.abs() * 0.006 * b, roll);
     let right = rotation * Vec3::X;
     tf.translation = p.pos + Vec3::Y * (p.eye + bob_y + p.dip) + Vec3::new(right.x, 0.0, right.z) * sway;
     tf.rotation = rotation;

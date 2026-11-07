@@ -16,6 +16,7 @@ mod interact;
 mod items;
 mod save;
 mod sky;
+mod survival;
 mod torches;
 mod weather;
 mod world;
@@ -59,6 +60,7 @@ fn main() {
             hands::HandsPlugin,
             torches::TorchPlugin,
             hud::HudPlugin,
+            survival::SurvivalPlugin,
         ))
         .run();
 }

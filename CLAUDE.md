@@ -62,10 +62,19 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   (view-model arm and held item, built per `Hand`), `game::torches` (torch blocks
   are `shape: torch`, skipped by the chunk mesher and drawn as entities with point lights via
   `World::shape_events`), `game::hud` (hotbar, hurt flash). Blocks have `hardness`/`material`.
+- Phase 6 (survival): done. `game::survival`: pure rules in `health` (four layers, entry layers,
+  mortal rule, healing cap, bleeding), `vitals` (food, air, warmth, weight; `Vitals::tick(Env)`),
+  `food` (`assets/data/food_tiers.ron`; foods are `Food(tier, satiety)` in items.ron, items have
+  `mass`), `camp` (bedroll B, sleep Z, respawn), `hud`. `player::Body` carries speed/fall/dizzy/frozen
+  from survival into movement; `player::DamageCause` picks the entry layer. Weather kinds have
+  `chill` and `air`. Player state saves to `player.ron` (not in screenshot runs).
+  `BLOCKGAME_VITALS=damage,fatigue,blood,injuries[,food,air,warmth]` sets bars for screenshots.
+  The hotbar lists every item in pages of nine until the inventory phase; F6 test weight stands in
+  for carried items.
 - Known gaps: vertices are 40 bytes, not the packed 8-byte format (performance pass); no thunder
   sound or snow cover yet; ancestral spirits come with creatures; no block light propagation
   (torches are real point lights); mined blocks don't drop items until the inventory phase.
-- Next: phase 6 per the plan doc.
+- Next: phase 7 per the plan doc.
 
 ## Testing without a screen
 

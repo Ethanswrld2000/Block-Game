@@ -1,7 +1,7 @@
 //! Using what is in your hand: mining, placing blocks and torches.
 //!
-//! One hand for now: keys 1-9 or the mouse wheel pick the hotbar slot you
-//! hold. Hold left click to mine (how long depends on the block's hardness
+//! One hand for now: the hotbar lists every item in pages of nine. Keys 1-9
+//! pick a slot in the current page; the mouse wheel steps through them all. Hold left click to mine (how long depends on the block's hardness
 //! and your tool, see items.ron); right click places the block or torch you
 //! hold. In free-fly mode blocks break instantly.
 //!
@@ -56,7 +56,10 @@ pub enum Hand {
     Right,
 }
 
-/// The first nine items, on keys 1-9. Phase 7 replaces this with the inventory.
+/// Hotbar slots in each page, on keys 1-9.
+pub const PAGE: usize = 9;
+
+/// Every item, in pages of nine. Phase 7 replaces this with the inventory.
 #[derive(Resource)]
 pub struct Hotbar {
     pub slots: Vec<ItemId>,
@@ -101,6 +104,8 @@ pub struct Mining {
 pub struct HandAnim {
     pub left: f32,
     pub right: f32,
+    /// Eating progress, 0..1 (set by `survival`): the hand comes up to the mouth.
+    pub eat: f32,
     place_cooldown: f32,
 }
 
@@ -117,7 +122,7 @@ impl HandAnim {
 }
 
 fn setup_hotbar(mut commands: Commands, items: Res<Items>) {
-    let slots: Vec<ItemId> = items.ids().take(9).collect();
+    let slots: Vec<ItemId> = items.ids().collect();
     let find = |n: &str| items.id(n).and_then(|i| slots.iter().position(|s| *s == i));
     // Start holding the pickaxe.
     commands.insert_resource(Hands { right: find("stone_pickaxe").or(Some(0)), left: None });
@@ -136,9 +141,10 @@ fn choose_items(
         KeyCode::Digit6, KeyCode::Digit7, KeyCode::Digit8, KeyCode::Digit9,
     ];
     let n = hotbar.slots.len();
+    let page = hands.right.unwrap_or(0) / PAGE * PAGE;
     for (i, k) in DIGITS.iter().enumerate() {
-        if keys.just_pressed(*k) && i < n && hands.right != Some(i) {
-            hands.right = Some(i);
+        if keys.just_pressed(*k) && page + i < n && hands.right != Some(page + i) {
+            hands.right = Some(page + i);
         }
     }
     // The wheel steps through the hotbar on foot (when flying it sets speed).
@@ -190,6 +196,7 @@ fn use_hands(
     blocks: Res<Blocks>,
     mode: Res<MoveMode>,
     player: Res<Player>,
+    body: Res<crate::player::Body>,
     mut mining: ResMut<Mining>,
     mut anim: ResMut<HandAnim>,
     mut world: ResMut<World>,
@@ -197,7 +204,7 @@ fn use_hands(
     let dt = time.delta_secs();
     anim.place_cooldown -= dt;
     // Clicks only act while the mouse is captured (the first click captures it).
-    if cursor.grab_mode == CursorGrabMode::None {
+    if cursor.grab_mode == CursorGrabMode::None || body.frozen {
         mining.block = None;
         return;
     }

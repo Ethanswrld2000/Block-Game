@@ -26,8 +26,15 @@ impl Plugin for TorchPlugin {
 }
 
 #[derive(Resource, Default)]
-struct Torches {
+pub struct Torches {
     placed: HashMap<BlockPos, Entity>,
+}
+
+impl Torches {
+    /// Where the loaded torches are (fire warms you up, see `survival`).
+    pub fn positions(&self) -> impl Iterator<Item = BlockPos> + '_ {
+        self.placed.keys().copied()
+    }
 }
 
 #[derive(Resource, Clone)]

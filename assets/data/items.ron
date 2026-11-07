@@ -1,7 +1,10 @@
 // Items you can hold. Phase 7 adds the grid inventory; for now the hotbar
-// (keys 1-9) lists these in order, first nine only.
+// lists all of these in pages of nine (keys 1-9 pick in the page, the wheel
+// scrolls through everything).
 //   title:  shown on screen
-//   kind:   Tool(speeds: {material: multiplier}), Block("block name"), or Torch
+//   kind:   Tool(speeds: {material: multiplier}), Block("block name"), Torch,
+//           or Food(tier: 1-4, satiety: 0-100); tiers are in food_tiers.ron
+//   mass:   kg, counts toward the load you carry (default 0.5)
 //   model:  boxes drawn in your hand, in hand space (metres): size, offset, colour (sRGB 0..1)
 //           Block items are drawn as a small cube of the block instead.
 // Breaking takes hardness (blocks.ron) / speed seconds. A missing material
@@ -10,7 +13,7 @@
     hand: { "stone": 0.3, "ore": 0.25 },
     items: [
         (
-            name: "stone_pickaxe", title: "Stone Pickaxe",
+            name: "stone_pickaxe", title: "Stone Pickaxe", mass: 2.5,
             kind: Tool(speeds: { "stone": 4.0, "ore": 3.5, "soil": 1.3 }),
             model: [
                 (size: (0.05, 0.05, 0.55), offset: (0.0, 0.0, -0.22), color: (0.45, 0.3, 0.17)),
@@ -18,7 +21,7 @@
             ],
         ),
         (
-            name: "stone_axe", title: "Stone Axe",
+            name: "stone_axe", title: "Stone Axe", mass: 2.0,
             kind: Tool(speeds: { "wood": 4.0, "plant": 3.0 }),
             model: [
                 (size: (0.05, 0.05, 0.5), offset: (0.0, 0.0, -0.2), color: (0.45, 0.3, 0.17)),
@@ -26,7 +29,7 @@
             ],
         ),
         (
-            name: "stone_shovel", title: "Stone Shovel",
+            name: "stone_shovel", title: "Stone Shovel", mass: 1.8,
             kind: Tool(speeds: { "soil": 4.0 }),
             model: [
                 (size: (0.05, 0.05, 0.55), offset: (0.0, 0.0, -0.22), color: (0.45, 0.3, 0.17)),
@@ -34,17 +37,67 @@
             ],
         ),
         (
-            name: "torch", title: "Torch",
+            name: "torch", title: "Torch", mass: 0.4,
             kind: Torch,
             model: [
                 (size: (0.05, 0.05, 0.36), offset: (0.0, 0.0, -0.12), color: (0.45, 0.3, 0.17)),
                 (size: (0.08, 0.08, 0.08), offset: (0.0, 0.0, -0.32), color: (1.0, 0.7, 0.25)),
             ],
         ),
-        (name: "dirt", title: "Dirt", kind: Block("dirt"), model: []),
-        (name: "planks", title: "Planks", kind: Block("planks"), model: []),
-        (name: "cobblestone", title: "Cobblestone", kind: Block("cobblestone"), model: []),
-        (name: "log", title: "Log", kind: Block("log"), model: []),
-        (name: "moss", title: "Moss", kind: Block("moss"), model: []),
+        (name: "dirt", title: "Dirt", kind: Block("dirt"), mass: 1.5, model: []),
+        (name: "planks", title: "Planks", kind: Block("planks"), mass: 1.0, model: []),
+        (name: "cobblestone", title: "Cobblestone", kind: Block("cobblestone"), mass: 2.0, model: []),
+        (name: "log", title: "Log", kind: Block("log"), mass: 2.0, model: []),
+        (name: "moss", title: "Moss", kind: Block("moss"), mass: 0.5, model: []),
+        // Food. Tier 1 is a quick buff, tier 4 can pull you back from a mortal wound.
+        (
+            name: "marsh_berries", title: "Marsh Berries", kind: Food(tier: 1, satiety: 6.0), mass: 0.2,
+            model: [
+                (size: (0.07, 0.07, 0.07), offset: (0.0, 0.0, -0.1), color: (0.35, 0.12, 0.45)),
+                (size: (0.07, 0.07, 0.07), offset: (0.06, 0.03, -0.14), color: (0.45, 0.15, 0.5)),
+                (size: (0.07, 0.07, 0.07), offset: (-0.05, 0.02, -0.16), color: (0.3, 0.1, 0.4)),
+            ],
+        ),
+        (
+            name: "swamp_reed", title: "Swamp Reed Hearts", kind: Food(tier: 1, satiety: 8.0), mass: 0.3,
+            model: [(size: (0.05, 0.05, 0.3), offset: (0.0, 0.0, -0.15), color: (0.62, 0.7, 0.4))],
+        ),
+        (
+            name: "smoked_fish", title: "Smoked Fish", kind: Food(tier: 2, satiety: 25.0), mass: 0.6,
+            model: [
+                (size: (0.08, 0.12, 0.3), offset: (0.0, 0.0, -0.16), color: (0.62, 0.42, 0.22)),
+                (size: (0.02, 0.1, 0.08), offset: (0.0, 0.0, -0.33), color: (0.5, 0.33, 0.18)),
+            ],
+        ),
+        (
+            name: "bread", title: "Bread", kind: Food(tier: 2, satiety: 30.0), mass: 0.5,
+            model: [(size: (0.14, 0.1, 0.24), offset: (0.0, 0.0, -0.15), color: (0.78, 0.55, 0.28))],
+        ),
+        (
+            name: "peat_stew", title: "Peat-Smoked Stew", kind: Food(tier: 3, satiety: 45.0), mass: 1.2,
+            model: [
+                (size: (0.2, 0.1, 0.2), offset: (0.0, 0.0, -0.16), color: (0.4, 0.3, 0.22)),
+                (size: (0.16, 0.02, 0.16), offset: (0.0, 0.05, -0.16), color: (0.55, 0.32, 0.14)),
+            ],
+        ),
+        (
+            name: "cured_meat", title: "Cured Meat", kind: Food(tier: 3, satiety: 40.0), mass: 0.8,
+            model: [(size: (0.12, 0.08, 0.22), offset: (0.0, 0.0, -0.14), color: (0.62, 0.22, 0.2))],
+        ),
+        (
+            name: "feast_platter", title: "Feast Platter", kind: Food(tier: 4, satiety: 100.0), mass: 3.0,
+            model: [
+                (size: (0.3, 0.03, 0.3), offset: (0.0, -0.03, -0.18), color: (0.75, 0.72, 0.66)),
+                (size: (0.12, 0.08, 0.16), offset: (0.04, 0.03, -0.18), color: (0.6, 0.3, 0.16)),
+                (size: (0.06, 0.06, 0.06), offset: (-0.08, 0.02, -0.12), color: (0.4, 0.15, 0.45)),
+            ],
+        ),
+        (
+            name: "ember_herb", title: "Ember Herb", kind: Food(tier: 4, satiety: 5.0), mass: 0.1,
+            model: [
+                (size: (0.03, 0.03, 0.2), offset: (0.0, 0.0, -0.1), color: (0.3, 0.45, 0.2)),
+                (size: (0.08, 0.06, 0.06), offset: (0.0, 0.0, -0.22), color: (0.95, 0.4, 0.12)),
+            ],
+        ),
     ],
 )

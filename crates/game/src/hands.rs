@@ -189,7 +189,11 @@ fn pose_hands(anim: Res<HandAnim>, mining: Res<Mining>, player: Res<Player>, mod
         let (bob, phase) = if walking { (player.bob, player.bob_phase) } else { (0.0, 0.0) };
         let sway = Vec3::new((phase * 0.5).sin() * 0.018 * bob, -(phase.sin().abs()) * 0.02 * bob, 0.0);
         let lift = if mining.block.is_some() && mining.hand == hand { 0.02 } else { 0.0 };
-        tf.translation = base_position(hand) + sway + Vec3::new(-side * 0.06 * arc, lift - 0.05 * arc, -0.12 * arc);
-        tf.rotation = Quat::from_rotation_x(-1.1 * arc) * Quat::from_rotation_y(side * 0.25 * arc);
+        // Eating: bring the food up toward the mouth and bob while chewing.
+        let e = (anim.eat * 4.0).min(1.0);
+        let chew = (anim.eat * 40.0).sin() * 0.012 * e;
+        let to_mouth = Vec3::new(-side * 0.2, 0.12 + chew, 0.12) * e;
+        tf.translation = base_position(hand) + sway + to_mouth + Vec3::new(-side * 0.06 * arc, lift - 0.05 * arc, -0.12 * arc);
+        tf.rotation = Quat::from_rotation_x(-1.1 * arc + 0.5 * e) * Quat::from_rotation_y(side * (0.25 * arc + 0.5 * e));
     }
 }
