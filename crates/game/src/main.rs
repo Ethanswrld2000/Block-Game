@@ -7,11 +7,16 @@ mod chunk_mesh;
 mod clock;
 mod clouds;
 mod lod;
+mod player;
 mod precipitation;
 mod debug;
+mod hands;
+mod hud;
 mod interact;
+mod items;
 mod save;
 mod sky;
+mod torches;
 mod weather;
 mod world;
 
@@ -47,6 +52,13 @@ fn main() {
             clouds::CloudPlugin,
             precipitation::PrecipitationPlugin,
             lod::LodPlugin,
+        ))
+        .add_plugins((
+            items::ItemsPlugin,
+            player::PlayerPlugin,
+            hands::HandsPlugin,
+            torches::TorchPlugin,
+            hud::HudPlugin,
         ))
         .run();
 }

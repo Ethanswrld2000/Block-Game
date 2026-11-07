@@ -107,6 +107,15 @@ impl Chunk {
         }
     }
 
+    /// True if any block in the chunk might be `block` (checks the palette,
+    /// so it is cheap; a palette can keep a block that was since removed).
+    pub fn may_contain(&self, block: BlockId) -> bool {
+        match self {
+            Chunk::Uniform(b) => *b == block,
+            Chunk::Paletted(p) => p.palette.contains(&block),
+        }
+    }
+
     pub fn is_uniform(&self) -> Option<BlockId> {
         match self {
             Chunk::Uniform(b) => Some(*b),

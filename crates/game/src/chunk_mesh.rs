@@ -47,6 +47,10 @@ pub fn build(chunk: &PaddedChunk, registry: &BlockRegistry, opaque: &[bool]) -> 
     let quads = voxel::mesher::mesh(chunk, opaque);
     let (mut solid, mut clear) = (Buffers::default(), Buffers::default());
     for q in &quads {
+        // Torches and other shaped blocks are drawn as their own models.
+        if registry.get(q.block).shape != voxel::Shape::Cube {
+            continue;
+        }
         let b = if registry.get(q.block).translucent { &mut clear } else { &mut solid };
         push_quad(q, registry, b);
     }

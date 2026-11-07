@@ -9,7 +9,8 @@ use crate::clock::{Seasons, WorldClock};
 use crate::lod::LodTiles;
 use crate::weather::{Conditions, WeatherKinds, WeatherState};
 use crate::camera::FlyCamera;
-use crate::interact::{Hotbar, Target};
+use crate::interact::Target;
+use crate::player::{MoveMode, Player};
 use crate::world::{Generator, ViewDistance, World, WorldStats};
 
 pub struct DebugOverlayPlugin;
@@ -106,7 +107,7 @@ fn update_overlay(
     target: Res<Target>,
     world: Res<World>,
     blocks: Res<Blocks>,
-    hotbar: Option<Res<Hotbar>>,
+    body: (Res<Player>, Res<MoveMode>),
     generator: Option<Res<Generator>>,
     sky: SkyInfo,
     mut text: Query<&mut Text, With<DebugText>>,
@@ -127,7 +128,23 @@ fn update_overlay(
         None => "nothing".into(),
     };
     let biome = generator.map(|g| g.0.biome_at(block.x, block.y, block.z).title.clone()).unwrap_or_default();
-    let selected = hotbar.map(|h| format!("[{}] {}", h.selected + 1, name(h.slots[h.selected]))).unwrap_or_default();
+    let (player, mode) = body;
+    let mut state = match *mode {
+        MoveMode::Fly => "flying (F to walk)".to_string(),
+        MoveMode::Walk => {
+            let mut s = format!("walking (F to fly)  {:.1} b/s", Vec2::new(player.vel.x, player.vel.z).length());
+            for (on, word) in [(player.on_ground, "ground"), (player.in_water, "water"), (player.crouching, "crouch"), (player.sprinting, "sprint")] {
+                if on {
+                    s.push_str("  ");
+                    s.push_str(word);
+                }
+            }
+            s
+        }
+    };
+    if let Some(d) = player.last_damage {
+        state.push_str(&format!("  last hurt: {:.1} ({:?})", d.amount, d.cause));
+    }
     for mut t in &mut text {
         t.0 = format!(
             "{fps:.0} fps  ({ms:.2} ms)\n\
@@ -138,9 +155,9 @@ fn update_overlay(
              tasks  {} generating, {} meshing   data {} KiB\n\
              view   {} chunks (- / =)   fly speed {:.0} (wheel, Ctrl x5)\n\
              target {looking}\n\
-             place  {selected}  (keys 1-9)\n\
+             move   {state}\n\
              F3 hide | click: capture mouse | Esc: release | hold T: fast time\n\
-             left click: break | right click: place",
+             1-9: right hand | Shift+1-9: left hand | Q: swap | Shift: sprint | Ctrl/C: crouch",
             p.x, p.y, p.z, chunk.x, chunk.y, chunk.z,
             sky.describe(),
             stats.loaded, stats.meshed, stats.queued, stats.unsaved,
