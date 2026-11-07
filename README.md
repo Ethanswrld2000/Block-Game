@@ -16,7 +16,7 @@ Tools in Software Update, or put
 ## Controls
 
 - Click the window to capture the mouse, Esc to release it
-- WASD move, Space up, Shift down, Ctrl (or Cmd) fast
+- WASD move, Space up, Shift down, Ctrl (or Cmd) fast; mouse wheel changes flying speed
 - Left click breaks a block, right click places one; keys 1-9 choose the block
 - `-` / `=` change the view distance
 - F3 toggles the debug overlay

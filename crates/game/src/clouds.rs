@@ -54,7 +54,7 @@ fn spawn_clouds(mut commands: Commands, mut materials: ResMut<Assets<StandardMat
     noise.set_fractal_type(Some(FractalType::FBm));
     noise.set_fractal_octaves(Some(3));
     let material = materials.add(StandardMaterial {
-        base_color: Color::srgba(1.0, 1.0, 1.0, 0.88),
+        base_color: Color::srgba(1.0, 1.0, 1.0, 0.97),
         alpha_mode: AlphaMode::Blend,
         perceptual_roughness: 1.0,
         reflectance: 0.0,
@@ -113,7 +113,8 @@ fn update_clouds(
     // Shade: white in fair weather, grey before rain.
     if let Some(mut m) = materials.get_mut(&clouds.material) {
         let s = weather.cloud_shade;
-        let want = Color::srgba(s, s, s * 1.02, 0.78 + 0.18 * weather.clouds);
+        // Nearly opaque, so stars and the moon do not shine through.
+        let want = Color::srgba(s, s, s * 1.02, 0.97);
         if m.base_color != want {
             m.base_color = want;
         }

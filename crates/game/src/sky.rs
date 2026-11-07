@@ -24,6 +24,10 @@ pub const SKY_RADIUS: f32 = 4500.0;
 pub const MAX_VISIBILITY: f32 = 1500.0;
 /// How far the sun's path leans away from straight overhead (radians).
 const SUN_TILT: f32 = 0.38;
+/// The moon's path leans differently, so it crosses a different part of the sky.
+const MOON_TILT: f32 = 0.62;
+/// Days from one full moon to the next. The moon rises 24/8 = 3 hours later each day.
+pub const LUNAR_DAYS: f64 = 8.0;
 
 pub type SkyMaterial = ExtendedMaterial<StandardMaterial, SkyExtension>;
 
@@ -35,6 +39,11 @@ pub struct SkyParams {
     pub sun_color: Vec4,
     pub moon_dir: Vec4,
     pub extra: Vec4,
+    /// Rows of the matrix that turns a view direction into star-map space,
+    /// so the stars wheel across the sky around the same axis as the sun.
+    pub star_x: Vec4,
+    pub star_y: Vec4,
+    pub star_z: Vec4,
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -105,6 +114,43 @@ pub fn sun_direction(time: f32, daylight: f32) -> Vec3 {
     Vec3::new(angle.cos(), angle.sin() * SUN_TILT.cos(), angle.sin() * SUN_TILT.sin()).normalize()
 }
 
+/// Axis the sky turns around: perpendicular to the sun's path.
+fn sky_axis() -> Vec3 {
+    Vec3::new(0.0, -SUN_TILT.sin(), SUN_TILT.cos())
+}
+
+/// How the sky has turned at this time of day (stars), one turn per day.
+fn sky_rotation(time: f32) -> Quat {
+    Quat::from_axis_angle(sky_axis(), (time - 0.25) * TAU)
+}
+
+/// Moon phase, 0..1: 0 new moon, 0.5 full moon.
+pub fn moon_phase(clock: &WorldClock) -> f32 {
+    // Start a new world just after full moon so the first nights have light.
+    ((clock.total_days() / LUNAR_DAYS + 0.45).rem_euclid(1.0)) as f32
+}
+
+/// Share of the moon's face that is lit, 0..1.
+pub fn moon_lit(phase: f32) -> f32 {
+    (1.0 - (phase * TAU).cos()) * 0.5
+}
+
+pub fn moon_phase_name(phase: f32) -> &'static str {
+    const NAMES: [&str; 8] = [
+        "new moon", "waxing crescent", "first quarter", "waxing gibbous",
+        "full moon", "waning gibbous", "last quarter", "waning crescent",
+    ];
+    NAMES[((phase * 8.0 + 0.5) as usize) % 8]
+}
+
+/// Direction to the moon. It runs its own course: each day it lags the sun
+/// by a further 1/LUNAR_DAYS of a turn (so it is opposite the sun at full
+/// moon, beside it at new moon), on a path tilted differently from the sun's.
+pub fn moon_direction(time: f32, phase: f32) -> Vec3 {
+    let a = (time - 0.25 - phase) * TAU;
+    Vec3::new(a.cos(), a.sin() * MOON_TILT.cos(), a.sin() * MOON_TILT.sin()).normalize()
+}
+
 fn srgb(r: f32, g: f32, b: f32) -> Vec3 {
     let c = Color::srgb(r, g, b).to_linear();
     Vec3::new(c.red, c.green, c.blue)
@@ -135,7 +181,9 @@ fn update_sky(
     let season = seasons.at(&clock);
     let daylight_share = seasons.blended(season, |s| s.daylight);
     let sun = sun_direction(clock.time, daylight_share);
-    let moon = -sun;
+    let phase = moon_phase(&clock);
+    let lit = moon_lit(phase);
+    let moon = moon_direction(clock.time, phase);
 
     let day = smoothstep(-0.1, 0.22, sun.y);
     let sunset = smoothstep(-0.22, 0.0, sun.y) * (1.0 - smoothstep(0.0, 0.3, sun.y));
@@ -167,7 +215,7 @@ fn update_sky(
     let warm = smoothstep(0.0, 0.35, sun.y);
     if let Ok((mut light, mut tf)) = sun_q.single_mut() {
         let sun_lux = 11_000.0 * sun_amount * weather.light;
-        let moon_lux = 260.0 * moon_amount * weather.light.sqrt();
+        let moon_lux = 300.0 * moon_amount * lit * weather.light.sqrt();
         let (dir, lux, color) = if sun_lux >= moon_lux {
             let c = srgb(1.0, 0.62, 0.38).lerp(srgb(1.0, 0.97, 0.92), warm);
             (sun, sun_lux, c)
@@ -185,7 +233,9 @@ fn update_sky(
     // Ambient: sky light, enough to see by under the moon.
     let sky_tint = (zenith * 0.4 + horizon * 0.6).normalize_or_zero() * 1.7;
     ambient.color = Color::linear_rgb(sky_tint.x.min(1.0), sky_tint.y.min(1.0), sky_tint.z.min(1.0));
-    ambient.brightness = (90.0 + 560.0 * day) * (0.55 + 0.45 * weather.light) + flash * 2500.0;
+    // Brighter nights under a full moon that is up.
+    let moonlight = 1.0 + 0.8 * lit * moon_amount;
+    ambient.brightness = (70.0 * moonlight + 560.0 * day) * (0.55 + 0.45 * weather.light) + flash * 2500.0;
 
     // Fog.
     let visibility = (weather.visibility * climate.haze).clamp(30.0, MAX_VISIBILITY);
@@ -201,18 +251,18 @@ fn update_sky(
         && let Some(mut mat) = materials.get_mut(&handle.0)
     {
         let sc = srgb(1.0, 0.55, 0.28).lerp(srgb(1.0, 0.95, 0.85), warm);
+        // Inverse rotation, as columns; the shader uses them as rows (transpose = inverse).
+        let inv = Mat3::from_quat(sky_rotation(clock.time));
         mat.extension.params = SkyParams {
             zenith: zenith.extend(1.0),
             horizon: horizon.extend(1.0),
             sun_dir: sun.extend(sunset * (1.0 - cloudy * 0.8)),
             sun_color: sc.extend(1.0),
-            moon_dir: moon.extend(1.0 - day),
-            extra: Vec4::new(
-                (1.0 - smoothstep(-0.3, 0.02, sun.y)) * 1.4,
-                clock.time * TAU,
-                flash * 0.6,
-                cloudy,
-            ),
+            moon_dir: moon.extend(0.35 + 0.65 * (1.0 - day)),
+            extra: Vec4::new((1.0 - smoothstep(-0.3, 0.02, sun.y)) * 1.4, lit, flash * 0.6, cloudy),
+            star_x: inv.x_axis.extend(0.0),
+            star_y: inv.y_axis.extend(0.0),
+            star_z: inv.z_axis.extend(0.0),
         };
     }
 }
@@ -254,6 +304,32 @@ fn season_tint(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stars_turn_with_the_sun() {
+        // At the equinox the sun is a point fixed on the star map: turning
+        // the sky carries it exactly along the sun's path.
+        for t in [0.3, 0.5, 0.7] {
+            let sun_on_map = sky_rotation(t).inverse() * sun_direction(t, 0.5);
+            assert!((sun_on_map - Vec3::X).length() < 1e-4, "{t}: {sun_on_map}");
+        }
+    }
+
+    #[test]
+    fn moon_phases_follow_its_place_in_the_sky() {
+        // Full moon: opposite the sun. New moon: next to it.
+        let full = moon_direction(0.5, 0.5);
+        assert!(full.dot(sun_direction(0.5, 0.5)) < -0.9);
+        let new = moon_direction(0.5, 0.0);
+        assert!(new.dot(sun_direction(0.5, 0.5)) > 0.9);
+        assert!(moon_lit(0.5) > 0.99 && moon_lit(0.0) < 0.01);
+        assert_eq!(moon_phase_name(0.5), "full moon");
+        assert_eq!(moon_phase_name(0.99), "new moon");
+        // The moon rises later each day: at the same hour it sits further back.
+        let c = |day| WorldClock { day, time: 0.0, speed: 1.0 };
+        let (p0, p1) = (moon_phase(&c(0)), moon_phase(&c(1)));
+        assert!(((p1 - p0).rem_euclid(1.0) - 1.0 / LUNAR_DAYS as f32).abs() < 1e-4);
+    }
 
     #[test]
     fn sun_rises_and_sets_on_time() {

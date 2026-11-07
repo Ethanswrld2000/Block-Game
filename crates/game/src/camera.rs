@@ -1,9 +1,10 @@
 //! Free-fly debug camera. The walking player controller arrives in phase 5.
 //!
 //! Controls: click to capture the mouse, Esc to release it.
-//! WASD to move, Space/Shift up/down, Ctrl to go fast.
+//! WASD to move, Space/Shift up/down, Ctrl to go fast, mouse wheel to change
+//! the base speed (from a crawl up to about 2000 blocks a second).
 
-use bevy::input::mouse::AccumulatedMouseMotion;
+use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
@@ -27,7 +28,7 @@ pub struct FlyCamera {
 
 impl Default for FlyCamera {
     fn default() -> Self {
-        Self { speed: 12.0, fast_multiplier: 6.0, sensitivity: 0.002, yaw: -0.6, pitch: -0.45 }
+        Self { speed: 12.0, fast_multiplier: 5.0, sensitivity: 0.002, yaw: -0.6, pitch: -0.45 }
     }
 }
 
@@ -73,8 +74,22 @@ fn look(
     }
 }
 
-fn fly(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, mut q: Query<(&mut Transform, &FlyCamera)>) {
-    for (mut tf, cam) in &mut q {
+/// Slowest and fastest base flying speeds, blocks per second.
+pub const MIN_SPEED: f32 = 2.0;
+pub const MAX_SPEED: f32 = 400.0;
+
+fn fly(
+    time: Res<Time>,
+    keys: Res<ButtonInput<KeyCode>>,
+    scroll: Res<AccumulatedMouseScroll>,
+    mut q: Query<(&mut Transform, &mut FlyCamera)>,
+) {
+    for (mut tf, mut cam) in &mut q {
+        if scroll.delta.y != 0.0 {
+            // Each notch is 25% faster or slower.
+            let notches = scroll.delta.y.clamp(-5.0, 5.0);
+            cam.speed = (cam.speed * 1.25f32.powf(notches)).clamp(MIN_SPEED, MAX_SPEED);
+        }
         let forward = tf.forward().as_vec3();
         let right = tf.right().as_vec3();
         let mut dir = Vec3::ZERO;

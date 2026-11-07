@@ -53,6 +53,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   foliage via the voxel material's `season` uniform and UV_1.y), `game::clouds` (blocky, y 236),
   `game::precipitation` (rain/snow pool), `game::lod` (distant terrain and islands as coloured
   columns out to 1500 blocks; `assets/shaders/lod.wesl` cuts it away inside the loaded area).
+  Stars turn around the sun's axis; the moon has its own 8-day cycle and phases (`sky::moon_*`).
 - Known gaps: vertices are 40 bytes, not the packed 8-byte format (performance pass); no thunder
   sound or snow cover yet; ancestral spirits come with creatures.
 - Next: phase 5, the player (walking, collision, head-bob, hands).

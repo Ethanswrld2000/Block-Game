@@ -17,8 +17,12 @@ struct SkyParams {
     sun_color: vec4<f32>,
     // xyz: direction to the moon; w: moon brightness
     moon_dir: vec4<f32>,
-    // x: star brightness, y: star rotation (radians), z: lightning flash, w: cloudiness
+    // x: star brightness, y: share of the moon lit, z: lightning flash, w: cloudiness
     extra: vec4<f32>,
+    // Rows turning a view direction into star-map space (the sky's daily turn).
+    star_x: vec4<f32>,
+    star_y: vec4<f32>,
+    star_z: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100) var<uniform> sky: SkyParams;
@@ -51,9 +55,8 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
 
     let clear = 1.0 - sky.extra.w;
 
-    // Stars, slowly turning with the night.
-    let a = sky.extra.y;
-    let rd = vec3<f32>(dir.x * cos(a) - dir.y * sin(a), dir.x * sin(a) + dir.y * cos(a), dir.z);
+    // Stars, turning across the sky around the same axis as the sun.
+    let rd = vec3<f32>(dot(sky.star_x.xyz, dir), dot(sky.star_y.xyz, dir), dot(sky.star_z.xyz, dir));
     let cell = floor(rd * 220.0);
     let h = hash3(cell);
     if (h > 0.9975 && up > -0.05) {
@@ -67,13 +70,30 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let halo = pow(toward, 400.0) * 0.6 + pow(toward, 60.0) * 0.15;
     col += sky.sun_color.rgb * (disc * 6.0 + halo) * (0.15 + 0.85 * clear) * step(-0.02, sun.y + 0.02);
 
-    // Moon: a pale disc with darker patches, and a faint halo.
+    // Moon: a ball lit by the sun, so it shows its phase. Darker patches,
+    // a faint glow on the unlit side, and a halo that grows with the phase.
     let moon = sky.moon_dir.xyz;
     let md = dot(dir, moon);
-    let mdisc = smoothstep(0.99935, 0.9995, md);
-    let patches = 0.8 + 0.2 * hash3(floor(dir * 2600.0));
-    col = mix(col, vec3<f32>(0.85, 0.88, 0.95) * patches * sky.moon_dir.w * 1.6, mdisc * clear);
-    col += vec3<f32>(0.5, 0.55, 0.7) * pow(max(md, 0.0), 300.0) * 0.25 * sky.moon_dir.w * clear;
+    let mcos = 0.99945;
+    if (md > mcos - 0.0002) {
+        var refv = vec3<f32>(0.0, 1.0, 0.0);
+        if (abs(moon.y) > 0.99) { refv = vec3<f32>(0.0, 0.0, 1.0); }
+        let tx = normalize(cross(moon, refv));
+        let ty = cross(tx, moon);
+        let off = dir - moon * md;
+        let uv = vec2<f32>(dot(off, tx), dot(off, ty)) / sqrt(1.0 - mcos * mcos);
+        let r2 = dot(uv, uv);
+        if (r2 < 1.0) {
+            // Surface normal of the side facing us.
+            let n = tx * uv.x + ty * uv.y - moon * sqrt(1.0 - r2);
+            let lit = smoothstep(-0.04, 0.08, dot(n, sun));
+            let patches = 0.78 + 0.22 * hash3(floor(n * 9.0 + 3.0));
+            let face = vec3<f32>(0.86, 0.88, 0.95) * patches * (0.05 + 0.95 * lit) * 1.6;
+            let edge = smoothstep(1.0, 0.9, r2);
+            col = mix(col, face * sky.moon_dir.w, edge * clear * (0.5 + 0.5 * lit));
+        }
+    }
+    col += vec3<f32>(0.5, 0.55, 0.7) * pow(max(md, 0.0), 300.0) * 0.25 * sky.moon_dir.w * sky.extra.y * clear;
 
     // Lightning lights up the whole sky.
     col += vec3<f32>(0.75, 0.8, 1.0) * sky.extra.z;

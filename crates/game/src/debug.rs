@@ -83,8 +83,9 @@ impl SkyInfo<'_> {
             weather.push_str(" (snow)");
         }
         let fast = if self.clock.speed > 1.0 { "  >> fast" } else { "" };
+        let moon = crate::sky::moon_phase_name(crate::sky::moon_phase(&self.clock));
         format!(
-            "time   day {}  {:02}:{:02}  {} (day {} of {}){fast}\nweather {weather}  (F4 next)  far tiles {}",
+            "time   day {}  {:02}:{:02}  {} (day {} of {}), {moon}{fast}\nweather {weather}  (F4 next)  far tiles {}",
             self.clock.day + 1,
             h as u32,
             ((h.fract()) * 60.0) as u32,
@@ -99,7 +100,7 @@ impl SkyInfo<'_> {
 #[allow(clippy::too_many_arguments)]
 fn update_overlay(
     diagnostics: Res<DiagnosticsStore>,
-    cam: Query<&Transform, With<FlyCamera>>,
+    cam: Query<(&Transform, &FlyCamera)>,
     stats: Res<WorldStats>,
     view: Res<ViewDistance>,
     target: Res<Target>,
@@ -112,7 +113,8 @@ fn update_overlay(
 ) {
     let fps = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS).and_then(|d| d.smoothed()).unwrap_or(0.0);
     let ms = diagnostics.get(&FrameTimeDiagnosticsPlugin::FRAME_TIME).and_then(|d| d.smoothed()).unwrap_or(0.0);
-    let Ok(tf) = cam.single() else { return };
+    let Ok((tf, fc)) = cam.single() else { return };
+    let cam_speed = fc.speed;
     let p = tf.translation;
     let block = BlockPos::from_world(p.to_array());
     let chunk = block.chunk();
@@ -134,7 +136,7 @@ fn update_overlay(
              {}\n\
              chunks {} loaded, {} drawn, {} queued, {} unsaved\n\
              tasks  {} generating, {} meshing   data {} KiB\n\
-             view   {} chunks (- / =)\n\
+             view   {} chunks (- / =)   fly speed {:.0} (wheel, Ctrl x5)\n\
              target {looking}\n\
              place  {selected}  (keys 1-9)\n\
              F3 hide | click: capture mouse | Esc: release | hold T: fast time\n\
@@ -144,6 +146,7 @@ fn update_overlay(
             stats.loaded, stats.meshed, stats.queued, stats.unsaved,
             stats.gen_in_flight, stats.mesh_in_flight, stats.chunk_kib,
             view.chunks,
+            cam_speed,
         );
     }
 }
