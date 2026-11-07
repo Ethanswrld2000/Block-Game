@@ -157,7 +157,7 @@ fn update_overlay(
              target {looking}\n\
              move   {state}\n\
              F3 hide | click: capture mouse | Esc: release | hold T: fast time\n\
-             1-9: right hand | Shift+1-9: left hand | Q: swap | Shift: sprint | Ctrl/C: crouch",
+             1-9 or wheel: pick item | left click: mine | right click: place | Shift: sprint | Ctrl/C: crouch",
             p.x, p.y, p.z, chunk.x, chunk.y, chunk.z,
             sky.describe(),
             stats.loaded, stats.meshed, stats.queued, stats.unsaved,

@@ -57,8 +57,9 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
 - Phase 5 (player): done. `game::player` (`Player` resource: AABB walking, gravity, jump, sprint,
   crouch edge-guard, swimming, head-bob, landing dip, fall `Damage` messages; F toggles `MoveMode`
   Walk/Fly), `game::items` (`assets/data/items.ron`: tools with per-material speeds, block items,
-  torch; break time = hardness / speed), `game::interact` (LMB = right hand, RMB = left hand,
-  hold to mine), `game::hands` (view-model arms and held items), `game::torches` (torch blocks
+  torch; break time = hardness / speed), `game::interact` (one hand for now: 1-9/wheel select,
+  hold LMB to mine, RMB places; `Hands.left` reserved for a later off-hand), `game::hands`
+  (view-model arm and held item, built per `Hand`), `game::torches` (torch blocks
   are `shape: torch`, skipped by the chunk mesher and drawn as entities with point lights via
   `World::shape_events`), `game::hud` (hotbar, hurt flash). Blocks have `hardness`/`material`.
 - Known gaps: vertices are 40 bytes, not the packed 8-byte format (performance pass); no thunder

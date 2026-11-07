@@ -19,9 +19,8 @@ Tools in Software Update, or put
 - WASD walk, Space jump (or swim up), Shift sprint, Ctrl or C crouch (you won't walk off edges)
 - F switches between walking and flying. Flying: Space up, Shift down, Ctrl fast,
   mouse wheel changes flying speed, blocks break instantly
-- Left click uses your right hand, right click your left hand: hold to mine with a tool or
-  bare hand, click to place a block or a torch
-- Keys 1-9 put a hotbar item in your right hand, Shift + 1-9 in your left; Q swaps hands
+- Keys 1-9 or the mouse wheel pick what you hold from the hotbar
+- Hold left click to mine; right click places the block or torch you're holding
 - `-` / `=` change the view distance; hold T to fast-forward time; F4 changes the weather
 - F3 toggles the debug overlay
 

@@ -1,6 +1,6 @@
-//! Your two hands on screen: an arm on each side holding whatever that hand
-//! has (a tool, a block, a torch with its light). They swing when used and
-//! sway with your steps.
+//! Your hand on screen: an arm holding whatever you have selected (a tool, a
+//! block, a torch with its light). It swings when used and sways with your
+//! steps. Built per `Hand`, so an off-hand can be switched on later.
 
 use bevy::asset::RenderAssetUsages;
 use bevy::light::NotShadowCaster;
@@ -43,6 +43,7 @@ fn base_position(hand: Hand) -> Vec3 {
     }
 }
 
+#[allow(clippy::single_element_loop)] // one hand for now
 fn spawn_hands(
     mut commands: Commands,
     cam: Query<Entity, With<FlyCamera>>,
@@ -58,7 +59,8 @@ fn spawn_hands(
     let fist = meshes.add(Cuboid::new(0.075, 0.075, 0.075));
     let sleeve_mat = materials.add(StandardMaterial { base_color: SLEEVE, perceptual_roughness: 1.0, ..default() });
     let skin_mat = materials.add(StandardMaterial { base_color: SKIN, perceptual_roughness: 0.9, ..default() });
-    for hand in [Hand::Left, Hand::Right] {
+    // One hand for now; add Hand::Left here with the off-hand slot.
+    for hand in [Hand::Right] {
         commands.entity(cam).with_children(|c| {
             c.spawn((HandRoot(hand), Transform::from_translation(base_position(hand)), Visibility::default())).with_children(|h| {
                 h.spawn((Mesh3d(sleeve.clone()), MeshMaterial3d(sleeve_mat.clone()), Transform::from_xyz(0.0, -0.015, 0.2), NotShadowCaster));

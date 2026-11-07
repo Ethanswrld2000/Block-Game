@@ -1,4 +1,4 @@
-//! On-screen game UI: the hotbar with what each hand holds, and a red flash
+//! On-screen game UI: the hotbar with what you hold, and a red flash
 //! when you get hurt.
 
 use bevy::prelude::*;
@@ -28,7 +28,6 @@ struct HandsLine;
 struct HurtFlash;
 
 const RIGHT: Color = Color::srgb(1.0, 0.82, 0.3);
-const LEFT: Color = Color::srgb(0.45, 0.85, 1.0);
 
 fn spawn_hud(mut commands: Commands, hotbar: Option<Res<Hotbar>>, items: Res<Items>) {
     let Some(hotbar) = hotbar else { return };
@@ -104,30 +103,23 @@ fn update_hotbar(
     for (s, mut border) in &mut slots {
         let c = if hands.right == Some(s.0) {
             RIGHT
-        } else if hands.left == Some(s.0) {
-            LEFT
         } else {
             Color::srgba(1.0, 1.0, 1.0, 0.15)
         };
         *border = BorderColor::all(c);
     }
     for (t, mut text, mut color) in &mut tags {
-        let (label, c) = match (hands.left == Some(t.0), hands.right == Some(t.0)) {
-            (true, true) => (format!("{} L R", t.0 + 1), Color::WHITE),
-            (true, false) => (format!("{}  L", t.0 + 1), LEFT),
-            (false, true) => (format!("{}  R", t.0 + 1), RIGHT),
-            _ => (format!("{}", t.0 + 1), Color::srgba(1.0, 1.0, 1.0, 0.7)),
+        let (label, c) = if hands.right == Some(t.0) {
+            (format!("{}", t.0 + 1), RIGHT)
+        } else {
+            (format!("{}", t.0 + 1), Color::srgba(1.0, 1.0, 1.0, 0.7))
         };
         text.0 = label;
         color.0 = c;
     }
     let name = |h: Option<crate::items::ItemId>| h.map(|i| items.get(i).title.clone()).unwrap_or_else(|| "empty hand".into());
     if let Ok(mut l) = line.single_mut() {
-        l.0 = format!(
-            "left hand (right click): {}     right hand (left click): {}",
-            name(hands.item(crate::interact::Hand::Left, &hotbar)),
-            name(hands.item(crate::interact::Hand::Right, &hotbar)),
-        );
+        l.0 = name(hands.item(crate::interact::Hand::Right, &hotbar));
     }
 }
 

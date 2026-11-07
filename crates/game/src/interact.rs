@@ -1,11 +1,14 @@
-//! Using what is in your hands: mining, placing blocks and torches.
+//! Using what is in your hand: mining, placing blocks and torches.
 //!
-//! Left click uses the right hand, right click the left hand (the item in
-//! each hand decides what happens). Keys 1-9 put a hotbar item in the right
-//! hand, Shift + 1-9 in the left, Q swaps hands. Hold a click to mine: how
-//! long it takes depends on the block's hardness and the tool (items.ron).
-//! In free-fly mode blocks break instantly.
+//! One hand for now: keys 1-9 or the mouse wheel pick the hotbar slot you
+//! hold. Hold left click to mine (how long depends on the block's hardness
+//! and your tool, see items.ron); right click places the block or torch you
+//! hold. In free-fly mode blocks break instantly.
+//!
+//! `Hands` already has a left slot, always empty for now, so an off-hand can
+//! be added later without reworking this.
 
+use bevy::input::mouse::AccumulatedMouseScroll;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 use voxel::raycast::raycast;
@@ -59,7 +62,8 @@ pub struct Hotbar {
     pub slots: Vec<ItemId>,
 }
 
-/// What each hand holds: an index into the hotbar, or nothing.
+/// What each hand holds: an index into the hotbar, or nothing. Only the
+/// right hand is used for now; `left` stays `None` until the off-hand slot.
 #[derive(Resource, Debug, Clone, Copy)]
 pub struct Hands {
     pub right: Option<usize>,
@@ -115,28 +119,32 @@ impl HandAnim {
 fn setup_hotbar(mut commands: Commands, items: Res<Items>) {
     let slots: Vec<ItemId> = items.ids().take(9).collect();
     let find = |n: &str| items.id(n).and_then(|i| slots.iter().position(|s| *s == i));
-    // Start with a pickaxe in the right hand and a torch in the left.
-    commands.insert_resource(Hands { right: find("stone_pickaxe").or(Some(0)), left: find("torch") });
+    // Start holding the pickaxe.
+    commands.insert_resource(Hands { right: find("stone_pickaxe").or(Some(0)), left: None });
     commands.insert_resource(Hotbar { slots });
 }
 
-fn choose_items(keys: Res<ButtonInput<KeyCode>>, hotbar: Res<Hotbar>, mut hands: ResMut<Hands>) {
+fn choose_items(
+    keys: Res<ButtonInput<KeyCode>>,
+    scroll: Res<AccumulatedMouseScroll>,
+    mode: Res<MoveMode>,
+    hotbar: Res<Hotbar>,
+    mut hands: ResMut<Hands>,
+) {
     const DIGITS: [KeyCode; 9] = [
         KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4, KeyCode::Digit5,
         KeyCode::Digit6, KeyCode::Digit7, KeyCode::Digit8, KeyCode::Digit9,
     ];
-    let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+    let n = hotbar.slots.len();
     for (i, k) in DIGITS.iter().enumerate() {
-        if keys.just_pressed(*k) && i < hotbar.slots.len() {
-            let hand = if shift { &mut hands.left } else { &mut hands.right };
-            // Pressing the key of what you already hold empties that hand.
-            *hand = if *hand == Some(i) { None } else { Some(i) };
+        if keys.just_pressed(*k) && i < n && hands.right != Some(i) {
+            hands.right = Some(i);
         }
     }
-    if keys.just_pressed(KeyCode::KeyQ) {
-        let h = *hands;
-        hands.left = h.right;
-        hands.right = h.left;
+    // The wheel steps through the hotbar on foot (when flying it sets speed).
+    if *mode == MoveMode::Walk && scroll.delta.y != 0.0 && n > 0 {
+        let step = if scroll.delta.y > 0.0 { n - 1 } else { 1 };
+        hands.right = Some((hands.right.unwrap_or(0) + step) % n);
     }
 }
 
@@ -194,64 +202,57 @@ fn use_hands(
         return;
     }
     let mut mined_this_frame = false;
-    // Left click = right hand, right click = left hand.
-    for (button, hand) in [(MouseButton::Left, Hand::Right), (MouseButton::Right, Hand::Left)] {
-        if !mouse.pressed(button) {
-            continue;
+    let hand = Hand::Right;
+    let item = hands.item(hand, &hotbar);
+    let kind = item.map(|i| &items.get(i).kind);
+
+    // Right click: place the block or torch in your hand.
+    let place = match kind {
+        Some(ItemKind::Block(b)) => Some(*b),
+        Some(ItemKind::Torch) => blocks.registry.id("torch"),
+        _ => None,
+    };
+    if let (Some(place), Some(hit)) = (place, target.hit)
+        && mouse.pressed(MouseButton::Right)
+        && (mouse.just_pressed(MouseButton::Right) || anim.place_cooldown <= 0.0)
+    {
+        let into = hit.before;
+        let free = world.block(into).is_some_and(|b| !blocks.registry.get(b).solid && blocks.registry.get(b).shape == voxel::Shape::Cube);
+        // Never inside yourself (solid blocks only; a torch can go at your feet).
+        let blocks_player = blocks.registry.get(place).solid && player.overlaps(into);
+        if free && !blocks_player && world.set_block(into, place) {
+            remesh_around(&mut world, &blocks, into);
+            anim.start(hand);
+            anim.place_cooldown = PLACE_REPEAT;
         }
-        let item = hands.item(hand, &hotbar);
-        let kind = item.map(|i| &items.get(i).kind);
-        match kind {
-            Some(ItemKind::Block(_)) | Some(ItemKind::Torch) => {
-                if !(mouse.just_pressed(button) || anim.place_cooldown <= 0.0) {
-                    continue;
-                }
-                let Some(hit) = target.hit else { continue };
-                let place = match kind {
-                    Some(ItemKind::Block(b)) => *b,
-                    _ => blocks.registry.expect("torch"),
-                };
-                let into = hit.before;
-                let free = world.block(into).is_some_and(|b| !blocks.registry.get(b).solid && blocks.registry.get(b).shape == voxel::Shape::Cube);
-                // Never inside yourself (solid blocks only; a torch can go at your feet).
-                let blocks_player = blocks.registry.get(place).solid && player.overlaps(into);
-                if free && !blocks_player && world.set_block(into, place) {
-                    remesh_around(&mut world, &blocks, into);
-                    anim.start(hand);
-                    anim.place_cooldown = PLACE_REPEAT;
-                }
+    }
+
+    // Left click: mine with whatever you hold (tools are faster).
+    if mouse.pressed(MouseButton::Left) {
+        mined_this_frame = true;
+        anim.start(hand);
+        if let Some(hit) = target.hit
+            && let Some(b) = world.block(hit.block)
+            && let Some(seconds) = items.break_time(item, blocks.registry.get(b))
+        {
+            if mining.block != Some(hit.block) {
+                *mining = Mining { block: Some(hit.block), hand, progress: 0.0 };
             }
-            _ => {
-                // Mining: a tool, or an empty hand.
-                if mined_this_frame {
-                    continue;
-                }
-                mined_this_frame = true;
-                anim.start(hand);
-                let Some(hit) = target.hit else {
-                    mining.block = None;
-                    continue;
-                };
-                let Some(b) = world.block(hit.block) else { continue };
-                let Some(seconds) = items.break_time(item, blocks.registry.get(b)) else { continue };
-                if mining.block != Some(hit.block) || mining.hand != hand {
-                    *mining = Mining { block: Some(hit.block), hand, progress: 0.0 };
-                }
-                let instant = *mode == MoveMode::Fly || seconds <= 0.0;
-                if instant {
-                    if !mouse.just_pressed(button) {
-                        continue;
-                    }
+            let instant = *mode == MoveMode::Fly || seconds <= 0.0;
+            if instant {
+                if mouse.just_pressed(MouseButton::Left) {
                     mining.progress = 1.0;
-                } else {
-                    mining.progress += dt / seconds;
                 }
-                if mining.progress >= 1.0 && world.set_block(hit.block, BlockId::AIR) {
-                    remesh_around(&mut world, &blocks, hit.block);
-                    mining.block = None;
-                    mining.progress = 0.0;
-                }
+            } else {
+                mining.progress += dt / seconds;
             }
+            if mining.progress >= 1.0 && world.set_block(hit.block, BlockId::AIR) {
+                remesh_around(&mut world, &blocks, hit.block);
+                mining.block = None;
+                mining.progress = 0.0;
+            }
+        } else {
+            mining.block = None;
         }
     }
     if !mined_this_frame {
