@@ -85,6 +85,16 @@ pub struct World {
     queue_key: Option<(ChunkPos, i32, i32)>,
     /// Vertical band of chunk y that is kept loaded around the camera.
     y_range: (i32, i32),
+    /// Per block id: drawn as its own model (torches), not in the chunk mesh.
+    shaped: Arc<Vec<bool>>,
+    /// Shaped blocks that appeared or went away, for the systems that draw them.
+    pub shape_events: Vec<ShapeEvent>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShapeEvent {
+    Added(BlockPos, BlockId),
+    Removed(BlockPos),
 }
 
 /// Numbers for the debug overlay.
@@ -100,6 +110,10 @@ pub struct WorldStats {
 }
 
 impl World {
+    pub fn is_loaded(&self, c: ChunkPos) -> bool {
+        self.chunks.contains_key(&c)
+    }
+
     pub fn block(&self, p: BlockPos) -> Option<BlockId> {
         let [x, y, z] = p.local();
         self.chunks.get(&p.chunk()).map(|c| c.data.get(x, y, z))
@@ -110,9 +124,17 @@ impl World {
         let cp = p.chunk();
         let [x, y, z] = p.local();
         let Some(c) = self.chunks.get_mut(&cp) else { return false };
-        if c.data.get(x, y, z) == block {
+        let old = c.data.get(x, y, z);
+        if old == block {
             return false;
         }
+        if self.shaped.get(old.0 as usize).copied().unwrap_or(false) {
+            self.shape_events.push(ShapeEvent::Removed(p));
+        }
+        if self.shaped.get(block.0 as usize).copied().unwrap_or(false) {
+            self.shape_events.push(ShapeEvent::Added(p, block));
+        }
+        let Some(c) = self.chunks.get_mut(&cp) else { return false };
         Arc::make_mut(&mut c.data).set(x, y, z, block);
         c.version += 1;
         c.modified = true;
@@ -236,13 +258,21 @@ impl MeshInput {
     }
 }
 
-pub fn setup_generator(mut commands: Commands, blocks: Res<Blocks>, mut cam: Query<&mut Transform, With<FlyCamera>>) {
+pub fn setup_generator(
+    mut commands: Commands,
+    blocks: Res<Blocks>,
+    mut world: ResMut<World>,
+    mut player: ResMut<crate::player::Player>,
+    mut cam: Query<&mut Transform, With<FlyCamera>>,
+) {
     let wg = WorldGen::new(SEED, &blocks.registry, include_str!("../../../assets/data/biomes.ron"))
         .unwrap_or_else(|e| panic!("{e}"));
     let [x, y, z] = wg.find_spawn();
     info!("spawn at {x} {y} {z} in {}", wg.biome_at(x, y, z).title);
+    world.shaped = Arc::new(blocks.registry.iter().map(|(_, d)| d.shape != voxel::Shape::Cube).collect());
+    player.pos = Vec3::new(x as f32 + 0.5, y as f32, z as f32 + 0.5);
     for mut tf in &mut cam {
-        tf.translation = Vec3::new(x as f32 + 0.5, y as f32 + 24.0, z as f32 + 0.5);
+        tf.translation = player.pos + Vec3::Y * crate::player::EYE;
     }
     commands.insert_resource(Generator(Arc::new(wg)));
 }
@@ -320,6 +350,19 @@ fn collect_generated(mut world: ResMut<World>) {
     }
     for (p, chunk) in done {
         world.gen_tasks.remove(&p);
+        // Find any torches (or other shaped blocks) so they get drawn.
+        let shaped: Vec<BlockId> = (0..world.shaped.len()).filter(|&i| world.shaped[i]).map(|i| BlockId(i as u16)).collect();
+        if shaped.iter().any(|b| chunk.may_contain(*b)) {
+            let o = p.origin();
+            let dense = chunk.to_dense();
+            for (i, b) in dense.iter().enumerate() {
+                if shaped.contains(b) {
+                    let (x, z, y) = (i % CHUNK_SIZE, (i / CHUNK_SIZE) % CHUNK_SIZE, i / (CHUNK_SIZE * CHUNK_SIZE));
+                    let bp = BlockPos::new(o.x + x as i32, o.y + y as i32, o.z + z as i32);
+                    world.shape_events.push(ShapeEvent::Added(bp, *b));
+                }
+            }
+        }
         world.chunks.insert(
             p,
             LoadedChunk { data: Arc::new(chunk), entities: Vec::new(), version: 0, meshed_version: None, modified: false },

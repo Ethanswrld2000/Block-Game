@@ -1,4 +1,5 @@
-//! Free-fly debug camera. The walking player controller arrives in phase 5.
+//! The camera: mouse look always, and free flight when the player presses F
+//! (see `player` for walking).
 //!
 //! Controls: click to capture the mouse, Esc to release it.
 //! WASD to move, Space/Shift up/down, Ctrl to go fast, mouse wheel to change
@@ -13,7 +14,13 @@ pub struct FlyCameraPlugin;
 impl Plugin for FlyCameraPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, spawn_camera)
-            .add_systems(Update, (grab_cursor, look, fly).chain());
+            .add_systems(
+            Update,
+            (look, fly.run_if(resource_equals(crate::player::MoveMode::Fly))).chain(),
+        )
+        // After clicks are handled, so the click that captures the mouse
+        // doesn't also break a block.
+        .add_systems(Update, grab_cursor.after(crate::interact::InteractSet));
     }
 }
 
@@ -38,7 +45,7 @@ fn spawn_camera(mut commands: Commands) {
         Camera3d::default(),
         Transform::from_xyz(0.0, 40.0, 0.0)
             .with_rotation(Quat::from_euler(EulerRot::YXZ, cam.yaw, cam.pitch, 0.0)),
-        Projection::Perspective(PerspectiveProjection { far: crate::sky::SKY_RADIUS * 1.2, ..default() }),
+        Projection::Perspective(PerspectiveProjection { near: 0.05, far: crate::sky::SKY_RADIUS * 1.2, ..default() }),
         DistanceFog { color: Color::srgb(0.46, 0.53, 0.47), ..default() },
         cam,
     ));
@@ -59,7 +66,7 @@ pub fn grab_cursor(
     }
 }
 
-fn look(
+pub fn look(
     motion: Res<AccumulatedMouseMotion>,
     cursor: Single<&CursorOptions, With<PrimaryWindow>>,
     mut q: Query<(&mut Transform, &mut FlyCamera)>,
@@ -78,7 +85,7 @@ fn look(
 pub const MIN_SPEED: f32 = 2.0;
 pub const MAX_SPEED: f32 = 400.0;
 
-fn fly(
+pub fn fly(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
     scroll: Res<AccumulatedMouseScroll>,

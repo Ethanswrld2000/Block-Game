@@ -16,11 +16,17 @@ Tools in Software Update, or put
 ## Controls
 
 - Click the window to capture the mouse, Esc to release it
-- WASD move, Space up, Shift down, Ctrl (or Cmd) fast; mouse wheel changes flying speed
-- Left click breaks a block, right click places one; keys 1-9 choose the block
-- `-` / `=` change the view distance
+- WASD walk, Space jump (or swim up), Shift sprint, Ctrl or C crouch (you won't walk off edges)
+- F switches between walking and flying. Flying: Space up, Shift down, Ctrl fast,
+  mouse wheel changes flying speed, blocks break instantly
+- Keys 1-9 or the mouse wheel pick what you hold from the hotbar
+- Hold left click to mine; right click places the block or torch you're holding
+- `-` / `=` change the view distance; hold T to fast-forward time; F4 changes the weather
 - F3 toggles the debug overlay
-- Hold T to fast-forward time; F4 changes the weather
+
+Tools mine their own materials faster: the pickaxe for stone and ore, the axe for wood and
+leaves, the shovel for soil. Falls of more than about three and a half blocks hurt (water breaks
+your fall); health arrives in a later phase, so for now you only see a red flash.
 
 ## Art
 

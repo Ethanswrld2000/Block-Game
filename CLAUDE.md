@@ -54,14 +54,24 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `game::precipitation` (rain/snow pool), `game::lod` (distant terrain and islands as coloured
   columns out to 1500 blocks; `assets/shaders/lod.wesl` cuts it away inside the loaded area).
   Stars turn around the sun's axis; the moon has its own 8-day cycle and phases (`sky::moon_*`).
+- Phase 5 (player): done. `game::player` (`Player` resource: AABB walking, gravity, jump, sprint,
+  crouch edge-guard, swimming, head-bob, landing dip, fall `Damage` messages; F toggles `MoveMode`
+  Walk/Fly), `game::items` (`assets/data/items.ron`: tools with per-material speeds, block items,
+  torch; break time = hardness / speed), `game::interact` (one hand for now: 1-9/wheel select,
+  hold LMB to mine, RMB places; `Hands.left` reserved for a later off-hand), `game::hands`
+  (view-model arm and held item, built per `Hand`), `game::torches` (torch blocks
+  are `shape: torch`, skipped by the chunk mesher and drawn as entities with point lights via
+  `World::shape_events`), `game::hud` (hotbar, hurt flash). Blocks have `hardness`/`material`.
 - Known gaps: vertices are 40 bytes, not the packed 8-byte format (performance pass); no thunder
-  sound or snow cover yet; ancestral spirits come with creatures.
-- Next: phase 5, the player (walking, collision, head-bob, hands).
+  sound or snow cover yet; ancestral spirits come with creatures; no block light propagation
+  (torches are real point lights); mined blocks don't drop items until the inventory phase.
+- Next: phase 6 per the plan doc.
 
 ## Testing without a screen
 
 `BLOCKGAME_SCREENSHOT=shot.png cargo run` waits for chunk loading to settle, saves a screenshot and quits.
 `BLOCKGAME_CAMERA=x,y,z,yaw,pitch` (or `x,y,z,@tx,ty,tz` to look at a point) places the camera first.
 `BLOCKGAME_TIME=day:hour` and `BLOCKGAME_WEATHER=rain` set the scene; the clock stands still during a screenshot run.
+With `BLOCKGAME_CAMERA` the shot is taken flying; without it, from the player standing at spawn.
 In the cloud container: `BEVY_ASSET_ROOT=$PWD BLOCKGAME_SCREENSHOT=/tmp/s.png WGPU_BACKEND=vulkan xvfb-run -s "-screen 0 1280x720x24" ./target/debug/block-game`
 (needs `mesa-vulkan-drivers xvfb libxkbcommon-x11-0`).

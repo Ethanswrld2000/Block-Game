@@ -4,7 +4,8 @@
 //! settled (or 60 seconds), saves a screenshot, then quits.
 //! `BLOCKGAME_CAMERA="x,y,z,yaw,pitch"` (degrees) places the camera first,
 //! relative to the spawn point if prefixed with `~` (e.g. `~0,~80,~0,45,-30`).
-//! `x,y,z,@tx,ty,tz` points the camera at a target instead.
+//! `x,y,z,@tx,ty,tz` points the camera at a target instead. A placed camera
+//! flies; without one the shot is from the player standing at spawn.
 
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
@@ -31,10 +32,16 @@ struct ShotPath(String);
 #[derive(Resource)]
 struct CameraSpec(String);
 
-fn place_camera(spec: Res<CameraSpec>, mut cam: Query<(&mut Transform, &mut crate::camera::FlyCamera)>) {
+fn place_camera(
+    spec: Res<CameraSpec>,
+    mut mode: ResMut<crate::player::MoveMode>,
+    mut cam: Query<(&mut Transform, &mut crate::camera::FlyCamera)>,
+) {
+    // A placed camera is a flying one.
+    *mode = crate::player::MoveMode::Fly;
     let parts: Vec<&str> = spec.0.split(',').map(str::trim).collect();
     for (mut tf, mut fc) in &mut cam {
-        let spawn = tf.translation - Vec3::Y * 24.0;
+        let spawn = tf.translation - Vec3::Y * crate::player::EYE;
         let coord = |i: usize, base: f32| -> f32 {
             let p = parts.get(i).copied().unwrap_or("~0");
             match p.strip_prefix('~') {

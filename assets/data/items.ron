@@ -1,0 +1,50 @@
+// Items you can hold. Phase 7 adds the grid inventory; for now the hotbar
+// (keys 1-9) lists these in order, first nine only.
+//   title:  shown on screen
+//   kind:   Tool(speeds: {material: multiplier}), Block("block name"), or Torch
+//   model:  boxes drawn in your hand, in hand space (metres): size, offset, colour (sRGB 0..1)
+//           Block items are drawn as a small cube of the block instead.
+// Breaking takes hardness (blocks.ron) / speed seconds. A missing material
+// uses the bare-hand speed below; a missing entry there is 1.
+(
+    hand: { "stone": 0.3, "ore": 0.25 },
+    items: [
+        (
+            name: "stone_pickaxe", title: "Stone Pickaxe",
+            kind: Tool(speeds: { "stone": 4.0, "ore": 3.5, "soil": 1.3 }),
+            model: [
+                (size: (0.05, 0.05, 0.55), offset: (0.0, 0.0, -0.22), color: (0.45, 0.3, 0.17)),
+                (size: (0.42, 0.08, 0.08), offset: (0.0, 0.0, -0.48), color: (0.5, 0.5, 0.52)),
+            ],
+        ),
+        (
+            name: "stone_axe", title: "Stone Axe",
+            kind: Tool(speeds: { "wood": 4.0, "plant": 3.0 }),
+            model: [
+                (size: (0.05, 0.05, 0.5), offset: (0.0, 0.0, -0.2), color: (0.45, 0.3, 0.17)),
+                (size: (0.2, 0.07, 0.16), offset: (0.08, 0.0, -0.4), color: (0.5, 0.5, 0.52)),
+            ],
+        ),
+        (
+            name: "stone_shovel", title: "Stone Shovel",
+            kind: Tool(speeds: { "soil": 4.0 }),
+            model: [
+                (size: (0.05, 0.05, 0.55), offset: (0.0, 0.0, -0.22), color: (0.45, 0.3, 0.17)),
+                (size: (0.15, 0.03, 0.18), offset: (0.0, 0.0, -0.55), color: (0.5, 0.5, 0.52)),
+            ],
+        ),
+        (
+            name: "torch", title: "Torch",
+            kind: Torch,
+            model: [
+                (size: (0.05, 0.05, 0.36), offset: (0.0, 0.0, -0.12), color: (0.45, 0.3, 0.17)),
+                (size: (0.08, 0.08, 0.08), offset: (0.0, 0.0, -0.32), color: (1.0, 0.7, 0.25)),
+            ],
+        ),
+        (name: "dirt", title: "Dirt", kind: Block("dirt"), model: []),
+        (name: "planks", title: "Planks", kind: Block("planks"), model: []),
+        (name: "cobblestone", title: "Cobblestone", kind: Block("cobblestone"), model: []),
+        (name: "log", title: "Log", kind: Block("log"), model: []),
+        (name: "moss", title: "Moss", kind: Block("moss"), model: []),
+    ],
+)

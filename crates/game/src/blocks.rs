@@ -55,7 +55,7 @@ impl Plugin for BlocksPlugin {
     }
 }
 
-fn load_blocks(mut commands: Commands, assets: Res<AssetServer>) {
+pub fn load_blocks(mut commands: Commands, assets: Res<AssetServer>) {
     let tiles = TileSheet::from_ron(include_str!("../../../assets/textures/blocks.ron"))
         .expect("assets/textures/blocks.ron is invalid");
     let registry = BlockRegistry::from_ron(include_str!("../../../assets/data/blocks.ron"), &tiles)

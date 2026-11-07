@@ -35,6 +35,32 @@ struct BlockSpec {
     translucent: bool,
     #[serde(default)]
     foliage: bool,
+    #[serde(default = "one")]
+    hardness: f32,
+    #[serde(default = "generic")]
+    material: String,
+    #[serde(default)]
+    shape: Shape,
+}
+
+fn one() -> f32 {
+    1.0
+}
+
+fn generic() -> String {
+    "generic".into()
+}
+
+/// How a block is drawn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Shape {
+    /// A full textured cube, meshed with the chunk.
+    #[default]
+    Cube,
+    /// Not meshed with the chunk; the game draws it as its own small model
+    /// (and gives it a light).
+    Torch,
 }
 
 fn yes() -> bool {
@@ -54,6 +80,11 @@ pub struct BlockDef {
     /// Takes the season's colour (autumn leaves, winter frost): every face of a
     /// non-opaque block such as leaves, only the top of an opaque one such as grass.
     pub foliage: bool,
+    /// Seconds to break with bare hands, before tool and material speeds.
+    pub hardness: f32,
+    /// Material class tools are rated against ("stone", "wood", "soil", ...).
+    pub material: String,
+    pub shape: Shape,
 }
 
 #[derive(Debug, Clone)]
@@ -119,6 +150,9 @@ impl BlockRegistry {
                 opaque: s.opaque,
                 translucent: s.translucent,
                 foliage: s.foliage,
+                hardness: s.hardness,
+                material: s.material,
+                shape: s.shape,
             });
         }
         Ok(Self { defs, by_name })
