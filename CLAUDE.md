@@ -11,8 +11,8 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
 | `crates/voxel` | Coordinates, chunks, blocks, tile sheet | No Bevy, no rendering. Shared with a future server. |
 | `crates/worldgen` | Terrain, biomes, caves, sky islands | Pure functions of (seed, position); thread-safe; no Bevy. |
 | `crates/game` | The Bevy client; one plugin per system | Gameplay state separate from rendering, so multiplayer can come later. |
-| `assets/textures/blocks.png` | 16x16 grid of 32x32 tiles | Placeholder art; Ethan repaints it. Keep tile positions stable. |
-| `assets/textures/blocks.ron` | Tile name -> index | Regenerate with `python3 tools/gen_placeholder_art.py` (overwrites the PNG). |
+| `assets/textures/blocks.png` | 16x16 grid of 32x32 tiles | Procedural pixel art from `tools/gen_block_art.py`; Ethan may repaint it. Keep tile positions stable. |
+| `assets/textures/blocks.ron` | Tile name -> index | Regenerate with `python3 tools/gen_block_art.py` (overwrites the PNG). |
 
 ## Commands
 
