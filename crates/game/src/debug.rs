@@ -5,6 +5,9 @@ use bevy::prelude::*;
 use voxel::BlockPos;
 
 use crate::blocks::Blocks;
+use crate::clock::{Seasons, WorldClock};
+use crate::lod::LodTiles;
+use crate::weather::{Conditions, WeatherKinds, WeatherState};
 use crate::camera::FlyCamera;
 use crate::interact::{Hotbar, Target};
 use crate::world::{Generator, ViewDistance, World, WorldStats};
@@ -60,6 +63,39 @@ fn toggle_overlay(keys: Res<ButtonInput<KeyCode>>, mut q: Query<&mut Visibility,
     }
 }
 
+#[derive(bevy::ecs::system::SystemParam)]
+struct SkyInfo<'w> {
+    clock: Res<'w, WorldClock>,
+    seasons: Res<'w, Seasons>,
+    weather: Res<'w, WeatherState>,
+    kinds: Res<'w, WeatherKinds>,
+    conditions: Res<'w, Conditions>,
+    lod: Res<'w, LodTiles>,
+}
+
+impl SkyInfo<'_> {
+    fn describe(&self) -> String {
+        let h = self.clock.hour();
+        let p = self.seasons.at(&self.clock);
+        let season = &self.seasons.list[p.current];
+        let mut weather = self.kinds.list[self.weather.current].title.clone();
+        if self.conditions.precipitation > 0.05 && self.conditions.snowing {
+            weather.push_str(" (snow)");
+        }
+        let fast = if self.clock.speed > 1.0 { "  >> fast" } else { "" };
+        format!(
+            "time   day {}  {:02}:{:02}  {} (day {} of {}){fast}\nweather {weather}  (F4 next)  far tiles {}",
+            self.clock.day + 1,
+            h as u32,
+            ((h.fract()) * 60.0) as u32,
+            season.title,
+            p.day_in_season + 1,
+            self.seasons.days,
+            self.lod.count,
+        )
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn update_overlay(
     diagnostics: Res<DiagnosticsStore>,
@@ -71,6 +107,7 @@ fn update_overlay(
     blocks: Res<Blocks>,
     hotbar: Option<Res<Hotbar>>,
     generator: Option<Res<Generator>>,
+    sky: SkyInfo,
     mut text: Query<&mut Text, With<DebugText>>,
 ) {
     let fps = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS).and_then(|d| d.smoothed()).unwrap_or(0.0);
@@ -94,14 +131,16 @@ fn update_overlay(
             "{fps:.0} fps  ({ms:.2} ms)\n\
              pos   {:.1} {:.1} {:.1}   chunk {} {} {}\n\
              biome {biome}\n\
+             {}\n\
              chunks {} loaded, {} drawn, {} queued, {} unsaved\n\
              tasks  {} generating, {} meshing   data {} KiB\n\
              view   {} chunks (- / =)\n\
              target {looking}\n\
              place  {selected}  (keys 1-9)\n\
-             F3 hide | click: capture mouse | Esc: release\n\
+             F3 hide | click: capture mouse | Esc: release | hold T: fast time\n\
              left click: break | right click: place",
             p.x, p.y, p.z, chunk.x, chunk.y, chunk.z,
+            sky.describe(),
             stats.loaded, stats.meshed, stats.queued, stats.unsaved,
             stats.gen_in_flight, stats.mesh_in_flight, stats.chunk_kib,
             view.chunks,

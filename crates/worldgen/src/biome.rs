@@ -26,6 +26,12 @@ struct BiomeSpec {
     trees: TreeKind,
     tree_chance: f32,
     fog: (f32, f32, f32),
+    #[serde(default = "one")]
+    haze: f32,
+}
+
+fn one() -> f32 {
+    1.0
 }
 
 /// A resolved biome.
@@ -44,6 +50,8 @@ pub struct Biome {
     pub trees: TreeKind,
     pub tree_chance: f32,
     pub fog: [f32; 3],
+    /// Multiplies how far you can see: below 1 is hazier (the swamp).
+    pub haze: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -74,6 +82,7 @@ impl Biomes {
                 trees: s.trees,
                 tree_chance: s.tree_chance,
                 fog: [s.fog.0, s.fog.1, s.fog.2],
+                haze: s.haze,
             });
         }
         let find = |n: &str| list.iter().position(|b| b.name == n).ok_or_else(|| format!("biomes.ron needs a '{n}' biome"));

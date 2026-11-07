@@ -28,6 +28,7 @@ impl Plugin for SavePlugin {
 
 #[derive(Resource, Clone)]
 pub struct SaveDir {
+    root: Arc<PathBuf>,
     chunks: Arc<PathBuf>,
 }
 
@@ -46,7 +47,12 @@ impl SaveDir {
         if !meta.exists() {
             let _ = std::fs::write(&meta, format!("(seed: {SEED}, version: 1)\n"));
         }
-        Self { chunks: Arc::new(chunks) }
+        Self { root: Arc::new(dir), chunks: Arc::new(chunks) }
+    }
+
+    /// A file in the world's folder, such as `time.ron`.
+    pub fn file(&self, name: &str) -> PathBuf {
+        self.root.join(name)
     }
 
     fn path(&self, p: ChunkPos) -> PathBuf {

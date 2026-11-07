@@ -20,6 +20,7 @@ Tools in Software Update, or put
 - Left click breaks a block, right click places one; keys 1-9 choose the block
 - `-` / `=` change the view distance
 - F3 toggles the debug overlay
+- Hold T to fast-forward time; F4 changes the weather
 
 ## Art
 
@@ -30,3 +31,6 @@ Paint over any tile and rerun the game.
 
 You start in the Great Swamp. Your edits are saved to `saves/world1` every 30 seconds and when
 you quit; delete that folder to start over. The world seed is in `saves/world1/world.ron`.
+
+A day lasts 20 minutes and each season 10 days. The weather follows the season: rain turns to
+snow where it is cold, and autumn turns the leaves.

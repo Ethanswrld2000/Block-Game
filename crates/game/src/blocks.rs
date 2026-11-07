@@ -20,6 +20,9 @@ pub struct VoxelExtension {
     #[texture(100, dimension = "2d_array")]
     #[sampler(101)]
     pub textures: Handle<Image>,
+    /// Season colour for grass and leaves: rgb, and a = how strongly to apply it.
+    #[uniform(102)]
+    pub season: Vec4,
 }
 
 impl MaterialExtension for VoxelExtension {
@@ -38,6 +41,8 @@ pub struct Blocks {
     pub material: Option<Handle<VoxelMaterial>>,
     /// Blended, double-sided material for water and ice.
     pub translucent_material: Option<Handle<VoxelMaterial>>,
+    /// Average linear colour of each tile, for distant terrain.
+    pub tile_colors: Option<Arc<Vec<Vec3>>>,
 }
 
 pub struct BlocksPlugin;
@@ -62,6 +67,7 @@ fn load_blocks(mut commands: Commands, assets: Res<AssetServer>) {
         sheet: assets.load("textures/blocks.png"),
         material: None,
         translucent_material: None,
+        tile_colors: None,
     });
 }
 
@@ -78,14 +84,24 @@ fn build_material(
     let rows = rgba.height() / t;
     let layers = cols * rows;
     let mut data = Vec::with_capacity((t * t * 4 * layers) as usize);
+    let mut averages = Vec::with_capacity(layers as usize);
     for layer in 0..layers {
         let (cx, cy) = ((layer % cols) * t, (layer / cols) * t);
+        let (mut sum, mut n) = (Vec3::ZERO, 0.0);
         for y in 0..t {
             for x in 0..t {
-                data.extend_from_slice(&rgba.get_pixel(cx + x, cy + y).0);
+                let px = rgba.get_pixel(cx + x, cy + y).0;
+                data.extend_from_slice(&px);
+                if px[3] > 128 {
+                    let c = Color::srgb_u8(px[0], px[1], px[2]).to_linear();
+                    sum += Vec3::new(c.red, c.green, c.blue);
+                    n += 1.0;
+                }
             }
         }
+        averages.push(if n > 0.0 { sum / n } else { Vec3::splat(0.5) });
     }
+    blocks.tile_colors = Some(Arc::new(averages));
     let mut array = Image::new(
         Extent3d { width: t, height: t, depth_or_array_layers: layers },
         TextureDimension::D2,
@@ -102,7 +118,7 @@ fn build_material(
             reflectance: 0.08,
             ..default()
         },
-        extension: VoxelExtension { textures: textures.clone() },
+        extension: VoxelExtension { textures: textures.clone(), season: Vec4::ZERO },
     }));
     blocks.translucent_material = Some(materials.add(VoxelMaterial {
         base: StandardMaterial {
@@ -113,6 +129,6 @@ fn build_material(
             cull_mode: None,
             ..default()
         },
-        extension: VoxelExtension { textures },
+        extension: VoxelExtension { textures, season: Vec4::ZERO },
     }));
 }

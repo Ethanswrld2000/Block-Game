@@ -37,7 +37,8 @@ fn spawn_camera(mut commands: Commands) {
         Camera3d::default(),
         Transform::from_xyz(0.0, 40.0, 0.0)
             .with_rotation(Quat::from_euler(EulerRot::YXZ, cam.yaw, cam.pitch, 0.0)),
-        crate::atmosphere::swamp_fog(),
+        Projection::Perspective(PerspectiveProjection { far: crate::sky::SKY_RADIUS * 1.2, ..default() }),
+        DistanceFog { color: Color::srgb(0.46, 0.53, 0.47), ..default() },
         cam,
     ));
 }

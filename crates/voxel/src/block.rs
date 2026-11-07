@@ -33,6 +33,8 @@ struct BlockSpec {
     opaque: bool,
     #[serde(default)]
     translucent: bool,
+    #[serde(default)]
+    foliage: bool,
 }
 
 fn yes() -> bool {
@@ -49,6 +51,9 @@ pub struct BlockDef {
     pub opaque: bool,
     /// Drawn in the blended pass (water, ice).
     pub translucent: bool,
+    /// Takes the season's colour (autumn leaves, winter frost): every face of a
+    /// non-opaque block such as leaves, only the top of an opaque one such as grass.
+    pub foliage: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -113,6 +118,7 @@ impl BlockRegistry {
                 solid: s.solid,
                 opaque: s.opaque,
                 translucent: s.translucent,
+                foliage: s.foliage,
             });
         }
         Ok(Self { defs, by_name })
