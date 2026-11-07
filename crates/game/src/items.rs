@@ -21,8 +21,14 @@ struct ItemSpec {
     name: String,
     title: String,
     kind: KindSpec,
+    #[serde(default = "default_mass")]
+    mass: f32,
     #[serde(default)]
     model: Vec<ModelBox>,
+}
+
+fn default_mass() -> f32 {
+    0.5
 }
 
 #[derive(Deserialize)]
@@ -30,6 +36,7 @@ enum KindSpec {
     Tool { speeds: HashMap<String, f32> },
     Block(String),
     Torch,
+    Food { tier: u8, satiety: f32 },
 }
 
 /// One box of a held item's model, in hand space (metres, -Z points away).
@@ -45,6 +52,8 @@ pub enum ItemKind {
     Tool { speeds: HashMap<String, f32> },
     Block(BlockId),
     Torch,
+    /// Eaten by holding right click. `tier` is a tier in food_tiers.ron.
+    Food { tier: u8, satiety: f32 },
 }
 
 #[derive(Debug, Clone)]
@@ -52,6 +61,8 @@ pub struct Item {
     pub name: String,
     pub title: String,
     pub kind: ItemKind,
+    /// Weight in kg.
+    pub mass: f32,
     pub model: Vec<ModelBox>,
 }
 
@@ -72,11 +83,12 @@ impl Items {
                     blocks.id(&b).ok_or_else(|| format!("item '{}' places unknown block '{b}'", s.name))?,
                 ),
                 KindSpec::Torch => ItemKind::Torch,
+                KindSpec::Food { tier, satiety } => ItemKind::Food { tier, satiety },
             };
             if list.iter().any(|i: &Item| i.name == s.name) {
                 return Err(format!("item '{}' is defined twice", s.name));
             }
-            list.push(Item { name: s.name, title: s.title, kind, model: s.model });
+            list.push(Item { name: s.name, title: s.title, kind, mass: s.mass, model: s.model });
         }
         Ok(Self { hand: spec.hand, list })
     }

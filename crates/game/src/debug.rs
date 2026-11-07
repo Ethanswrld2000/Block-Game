@@ -157,7 +157,8 @@ fn update_overlay(
              target {looking}\n\
              move   {state}\n\
              F3 hide | click: capture mouse | Esc: release | hold T: fast time\n\
-             1-9 or wheel: pick item | left click: mine | right click: place | Shift: sprint | Ctrl/C: crouch",
+             1-9 or wheel: pick item | left click: mine | right click: place / hold to eat | Shift: sprint | Ctrl/C: crouch\n\
+             B: make or pack up camp | Z: sleep at camp | test: F6 pack weight, F7 stab, F8 club blow",
             p.x, p.y, p.z, chunk.x, chunk.y, chunk.z,
             sky.describe(),
             stats.loaded, stats.meshed, stats.queued, stats.unsaved,

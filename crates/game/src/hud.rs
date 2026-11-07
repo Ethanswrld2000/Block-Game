@@ -3,7 +3,7 @@
 
 use bevy::prelude::*;
 
-use crate::interact::{Hands, Hotbar};
+use crate::interact::{Hands, Hotbar, PAGE};
 use crate::items::Items;
 use crate::player::Damage;
 
@@ -22,6 +22,9 @@ struct Slot(usize);
 struct SlotTag(usize);
 
 #[derive(Component)]
+struct SlotTitle(usize);
+
+#[derive(Component)]
 struct HandsLine;
 
 #[derive(Component)]
@@ -29,8 +32,10 @@ struct HurtFlash;
 
 const RIGHT: Color = Color::srgb(1.0, 0.82, 0.3);
 
-fn spawn_hud(mut commands: Commands, hotbar: Option<Res<Hotbar>>, items: Res<Items>) {
-    let Some(hotbar) = hotbar else { return };
+fn spawn_hud(mut commands: Commands, hotbar: Option<Res<Hotbar>>) {
+    if hotbar.is_none() {
+        return;
+    }
     commands.spawn((
         HurtFlash,
         Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
@@ -56,8 +61,7 @@ fn spawn_hud(mut commands: Commands, hotbar: Option<Res<Hotbar>>, items: Res<Ite
                 TextShadow::default(),
             ));
             root.spawn(Node { column_gap: Val::Px(4.0), ..default() }).with_children(|row| {
-                for (i, id) in hotbar.slots.iter().enumerate() {
-                    let title = &items.get(*id).title;
+                for i in 0..PAGE {
                     row.spawn((
                         Slot(i),
                         Node {
@@ -79,7 +83,8 @@ fn spawn_hud(mut commands: Commands, hotbar: Option<Res<Hotbar>>, items: Res<Ite
                             TextColor(Color::srgba(1.0, 1.0, 1.0, 0.7)),
                         ));
                         s.spawn((
-                            Text::new(title.clone()),
+                            SlotTitle(i),
+                            Text::new(""),
                             TextFont { font_size: bevy::text::FontSize::Px(11.0), ..default() },
                             TextColor(Color::WHITE),
                         ));
@@ -89,19 +94,26 @@ fn spawn_hud(mut commands: Commands, hotbar: Option<Res<Hotbar>>, items: Res<Ite
         });
 }
 
+#[allow(clippy::type_complexity)]
 fn update_hotbar(
     hands: Res<Hands>,
     hotbar: Res<Hotbar>,
     items: Res<Items>,
-    mut slots: Query<(&Slot, &mut BorderColor)>,
-    mut tags: Query<(&SlotTag, &mut Text, &mut TextColor), Without<HandsLine>>,
-    mut line: Query<&mut Text, With<HandsLine>>,
+    mut slots: Query<(&Slot, &mut BorderColor, &mut Visibility)>,
+    mut tags: Query<(&SlotTag, &mut Text, &mut TextColor), (Without<HandsLine>, Without<SlotTitle>)>,
+    mut titles: Query<(&SlotTitle, &mut Text), (Without<HandsLine>, Without<SlotTag>)>,
+    mut line: Query<&mut Text, (With<HandsLine>, Without<SlotTag>, Without<SlotTitle>)>,
 ) {
     if !hands.is_changed() {
         return;
     }
-    for (s, mut border) in &mut slots {
-        let c = if hands.right == Some(s.0) {
+    let page = hands.right.unwrap_or(0) / PAGE * PAGE;
+    for (t, mut text) in &mut titles {
+        text.0 = hotbar.slots.get(page + t.0).map(|i| items.get(*i).title.clone()).unwrap_or_default();
+    }
+    for (s, mut border, mut vis) in &mut slots {
+        *vis = if page + s.0 < hotbar.slots.len() { Visibility::Inherited } else { Visibility::Hidden };
+        let c = if hands.right == Some(page + s.0) {
             RIGHT
         } else {
             Color::srgba(1.0, 1.0, 1.0, 0.15)
@@ -109,7 +121,7 @@ fn update_hotbar(
         *border = BorderColor::all(c);
     }
     for (t, mut text, mut color) in &mut tags {
-        let (label, c) = if hands.right == Some(t.0) {
+        let (label, c) = if hands.right == Some(page + t.0) {
             (format!("{}", t.0 + 1), RIGHT)
         } else {
             (format!("{}", t.0 + 1), Color::srgba(1.0, 1.0, 1.0, 0.7))
@@ -119,7 +131,8 @@ fn update_hotbar(
     }
     let name = |h: Option<crate::items::ItemId>| h.map(|i| items.get(i).title.clone()).unwrap_or_else(|| "empty hand".into());
     if let Ok(mut l) = line.single_mut() {
-        l.0 = name(hands.item(crate::interact::Hand::Right, &hotbar));
+        let pages = hotbar.slots.len().div_ceil(PAGE);
+        l.0 = format!("{}   (page {}/{pages}, wheel for more)", name(hands.item(crate::interact::Hand::Right, &hotbar)), page / PAGE + 1);
     }
 }
 

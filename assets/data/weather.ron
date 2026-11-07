@@ -8,15 +8,18 @@
 //   precipitation: rain or snow amount, 0..1 (snow where it's below freezing)
 //   wind:          cloud and rain drift, blocks per second
 //   lightning:     true for thunderstorms
+//   chill:         added to the felt temperature, °C (wet and wind feel colder)
+//   air:           how breathable the air is, 1 = normal (swamp spores in mist,
+//                  gale winds in storms make it harder to breathe)
 [
     (name: "clear", title: "Clear", hours: (3.0, 8.0), clouds: 0.22, cloud_shade: 1.0,
      visibility: 1400.0, light: 1.0, precipitation: 0.0, wind: 3.0, lightning: false),
     (name: "overcast", title: "Overcast", hours: (2.0, 6.0), clouds: 0.75, cloud_shade: 0.8,
-     visibility: 900.0, light: 0.55, precipitation: 0.0, wind: 5.0, lightning: false),
+     visibility: 900.0, light: 0.55, precipitation: 0.0, wind: 5.0, lightning: false, chill: -1.0),
     (name: "rain", title: "Rain", hours: (1.5, 5.0), clouds: 0.9, cloud_shade: 0.6,
-     visibility: 260.0, light: 0.35, precipitation: 0.7, wind: 6.0, lightning: false),
+     visibility: 260.0, light: 0.35, precipitation: 0.7, wind: 6.0, lightning: false, chill: -4.0),
     (name: "storm", title: "Thunderstorm", hours: (1.0, 3.0), clouds: 1.0, cloud_shade: 0.4,
-     visibility: 170.0, light: 0.2, precipitation: 1.0, wind: 12.0, lightning: true),
+     visibility: 170.0, light: 0.2, precipitation: 1.0, wind: 12.0, lightning: true, chill: -7.0, air: 0.9),
     (name: "mist", title: "Mist", hours: (1.0, 4.0), clouds: 0.5, cloud_shade: 0.9,
-     visibility: 70.0, light: 0.7, precipitation: 0.0, wind: 1.0, lightning: false),
+     visibility: 70.0, light: 0.7, precipitation: 0.0, wind: 1.0, lightning: false, chill: -2.0, air: 0.85),
 ]

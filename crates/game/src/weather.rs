@@ -49,6 +49,16 @@ pub struct WeatherKind {
     pub precipitation: f32,
     pub wind: f32,
     pub lightning: bool,
+    /// Added to the felt temperature, °C.
+    #[serde(default)]
+    pub chill: f32,
+    /// How breathable the air is, 1 = normal (spores, gale winds).
+    #[serde(default = "one")]
+    pub air: f32,
+}
+
+fn one() -> f32 {
+    1.0
 }
 
 #[derive(Resource, Clone, Debug)]
@@ -96,6 +106,9 @@ pub struct Conditions {
     pub flash: f32,
     /// Below freezing here: precipitation falls as snow.
     pub snowing: bool,
+    /// Felt temperature change, °C, and breathability (see `WeatherKind`).
+    pub chill: f32,
+    pub air: f32,
 }
 
 impl Conditions {
@@ -110,6 +123,8 @@ impl Conditions {
             lightning: k.lightning,
             flash: 0.0,
             snowing: false,
+            chill: k.chill,
+            air: k.air,
         }
     }
 }
@@ -236,6 +251,8 @@ fn blend_conditions(
     c.light = mix(a.light, b.light);
     c.precipitation = mix(a.precipitation, b.precipitation);
     c.wind = mix(a.wind, b.wind);
+    c.chill = mix(a.chill, b.chill);
+    c.air = mix(a.air, b.air);
     c.lightning = b.lightning && state.blend > 0.5;
     c.snowing = climate.temperature < 0.0;
 }

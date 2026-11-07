@@ -1,0 +1,11 @@
+// What each food tier does when eaten. Foods (items.ron, kind Food) name a tier.
+//   heals:      layer -> amount restored. Deeper layers are treated first.
+//   ignore_cap: true lets this tier heal even a mortal layer and the bars above it
+//               (normally nothing above a mortal layer heals).
+//   buff:       extra run speed (0.10 = +10%) for `seconds` real seconds.
+[
+    (tier: 1, title: "Snack", heals: {}, buff: Some((speed: 0.10, seconds: 120.0))),
+    (tier: 2, title: "Meal", heals: { Damage: 45.0, Fatigue: 15.0 }),
+    (tier: 3, title: "Hearty meal", heals: { Damage: 70.0, Fatigue: 40.0, Blood: 20.0 }),
+    (tier: 4, title: "Feast", heals: { Damage: 100.0, Fatigue: 100.0, Blood: 100.0, Injuries: 100.0 }, ignore_cap: true),
+]
