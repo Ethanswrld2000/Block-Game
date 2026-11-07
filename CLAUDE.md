@@ -39,12 +39,20 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
 - Phase 2 (voxel core): done. Data-driven blocks (`assets/data/blocks.ron`), palette chunks,
   binary greedy mesher (`voxel::mesher`), texture-array terrain shader (`assets/shaders/voxel.wesl`),
   threaded generation/meshing in `game::world`, break/place in `game::interact`, test terrain in `worldgen`.
-- Known gaps: edits are lost when a chunk unloads (saving is phase 3); water is not see-through yet
-  (phase 4); vertices are 40 bytes, not the packed 8-byte format (performance pass).
-- Next: phase 3, world generation.
+- Phase 3 (world generation): done. Climate noise + spline heights, ridged mountains, flat swamp,
+  overhangs, caves, ores, data-driven biomes (`assets/data/biomes.ron`, picked by height band plus
+  nearest temperature/humidity), trees (`worldgen::trees`), sky islands (`worldgen::islands`, y 340-600),
+  spawn in the Great Swamp. Saving: edited chunks only, lz4 (`voxel::save`, `game::save`) to
+  `saves/world1/chunks` (override with `BLOCKGAME_SAVES`), autosave every 30 s and on exit.
+  Water and ice are see-through (separate blended material in `game::chunk_mesh`).
+  `cargo run -p worldgen --release --example worldstats` prints biome stats and writes a map.
+- Known gaps: no distant LOD yet; clouds and weather are phase 4; vertices are 40 bytes, not the
+  packed 8-byte format (performance pass).
+- Next: phase 4, atmosphere (day/night, sky, clouds, seasons, weather).
 
 ## Testing without a screen
 
 `BLOCKGAME_SCREENSHOT=shot.png cargo run` waits for chunk loading to settle, saves a screenshot and quits.
+`BLOCKGAME_CAMERA=x,y,z,yaw,pitch` (or `x,y,z,@tx,ty,tz` to look at a point) places the camera first.
 In the cloud container: `BEVY_ASSET_ROOT=$PWD BLOCKGAME_SCREENSHOT=/tmp/s.png WGPU_BACKEND=vulkan xvfb-run -s "-screen 0 1280x720x24" ./target/debug/block-game`
 (needs `mesa-vulkan-drivers xvfb libxkbcommon-x11-0`).

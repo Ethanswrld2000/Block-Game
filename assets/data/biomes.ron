@@ -1,0 +1,68 @@
+// Biomes. Each column picks the biome whose climate point (temperature,
+// humidity, both -1..1) is nearest, among biomes whose elevation band contains
+// the column's height above sea level. Order does not matter.
+//   surface / subsurface / underwater: block names from blocks.ron
+//   trees: swamp, "oak", "pine" or "none";  tree_chance: per column, 0..1
+//   fog: RGB 0..1, used by the sky and fog in phase 4
+[
+    (
+        name: "great_swamp", title: "The Great Swamp",
+        temperature: 0.4, humidity: 0.8, min_height: -3, max_height: 10,
+        surface: "moss", subsurface: "peat", underwater: "mud",
+        trees: swamp, tree_chance: 0.012, fog: (0.46, 0.53, 0.47),
+    ),
+    (
+        name: "mossy_woods", title: "The Mossy Woods",
+        temperature: 0.1, humidity: 0.35, min_height: 1, max_height: 70,
+        surface: "grass", subsurface: "dirt", underwater: "clay",
+        trees: oak, tree_chance: 0.03, fog: (0.55, 0.65, 0.6),
+    ),
+    (
+        name: "meadow", title: "The Windward Meadows",
+        temperature: 0.2, humidity: -0.3, min_height: 1, max_height: 70,
+        surface: "grass", subsurface: "dirt", underwater: "gravel",
+        trees: oak, tree_chance: 0.002, fog: (0.7, 0.78, 0.86),
+    ),
+    (
+        name: "dunes", title: "The Ochre Shore",
+        temperature: 0.8, humidity: -0.8, min_height: -4, max_height: 40,
+        surface: "sand", subsurface: "sand", underwater: "sand",
+        trees: none, tree_chance: 0.0, fog: (0.86, 0.8, 0.66),
+    ),
+    (
+        name: "pine_hills", title: "The Pinewatch Hills",
+        temperature: -0.5, humidity: 0.2, min_height: 1, max_height: 90,
+        surface: "grass", subsurface: "dirt", underwater: "gravel",
+        trees: pine, tree_chance: 0.025, fog: (0.6, 0.68, 0.75),
+    ),
+    (
+        name: "shore", title: "The Grey Strand",
+        temperature: 0.0, humidity: 0.0, min_height: -2, max_height: 2,
+        surface: "sand", subsurface: "sand", underwater: "sand",
+        trees: none, tree_chance: 0.0, fog: (0.7, 0.78, 0.86),
+    ),
+    (
+        name: "highlands", title: "The Broken Highlands",
+        temperature: 0.0, humidity: 0.0, min_height: 70, max_height: 150,
+        surface: "stone", subsurface: "stone", underwater: "gravel",
+        trees: pine, tree_chance: 0.004, fog: (0.66, 0.72, 0.82),
+    ),
+    (
+        name: "frost_peaks", title: "The Frost Peaks",
+        temperature: 0.0, humidity: 0.0, min_height: 150, max_height: 1000,
+        surface: "snow", subsurface: "stone", underwater: "ice",
+        trees: none, tree_chance: 0.0, fog: (0.85, 0.9, 0.98),
+    ),
+    (
+        name: "deep_sea", title: "The Drowned Expanse",
+        temperature: 0.0, humidity: 0.0, min_height: -1000, max_height: -4,
+        surface: "gravel", subsurface: "sand", underwater: "gravel",
+        trees: none, tree_chance: 0.0, fog: (0.35, 0.5, 0.65),
+    ),
+    (
+        name: "skyreach", title: "Skyreach",
+        temperature: 0.0, humidity: 0.0, min_height: 9999, max_height: 9999,
+        surface: "cloud_moss", subsurface: "skystone", underwater: "skystone",
+        trees: oak, tree_chance: 0.01, fog: (0.78, 0.86, 1.0),
+    ),
+]

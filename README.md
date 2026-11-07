@@ -24,5 +24,9 @@ Tools in Software Update, or put
 ## Art
 
 `assets/textures/blocks.png` is placeholder art: a 512x512 sheet of 32x32 tiles.
-Paint over any tile and rerun the game. The row of single blocks at the back of the
-island shows every tile so you can check your changes.
+Paint over any tile and rerun the game.
+
+## Worlds
+
+You start in the Great Swamp. Your edits are saved to `saves/world1` every 30 seconds and when
+you quit; delete that folder to start over. The world seed is in `saves/world1/world.ron`.

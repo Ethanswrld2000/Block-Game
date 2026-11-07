@@ -36,6 +36,8 @@ pub struct Blocks {
     pub tiles: TileSheet,
     sheet: Handle<Image>,
     pub material: Option<Handle<VoxelMaterial>>,
+    /// Blended, double-sided material for water and ice.
+    pub translucent_material: Option<Handle<VoxelMaterial>>,
 }
 
 pub struct BlocksPlugin;
@@ -59,6 +61,7 @@ fn load_blocks(mut commands: Commands, assets: Res<AssetServer>) {
         tiles,
         sheet: assets.load("textures/blocks.png"),
         material: None,
+        translucent_material: None,
     });
 }
 
@@ -97,6 +100,17 @@ fn build_material(
         base: StandardMaterial {
             perceptual_roughness: 0.95,
             reflectance: 0.08,
+            ..default()
+        },
+        extension: VoxelExtension { textures: textures.clone() },
+    }));
+    blocks.translucent_material = Some(materials.add(VoxelMaterial {
+        base: StandardMaterial {
+            perceptual_roughness: 0.15,
+            reflectance: 0.5,
+            alpha_mode: AlphaMode::Blend,
+            double_sided: true,
+            cull_mode: None,
             ..default()
         },
         extension: VoxelExtension { textures },

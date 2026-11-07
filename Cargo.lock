@@ -2834,6 +2834,9 @@ name = "game"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "lz4_flex",
+ "ron 0.10.1",
+ "serde",
  "voxel",
  "worldgen",
 ]
@@ -3688,6 +3691,15 @@ dependencies = [
  "scoped-tls",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "lz4_flex"
+version = "0.11.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "373f5eceeeab7925e0c1098212f2fbc4d416adec9d35051a6ab251e824c1854a"
+dependencies = [
+ "twox-hash",
 ]
 
 [[package]]
@@ -5610,6 +5622,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 name = "voxel"
 version = "0.1.0"
 dependencies = [
+ "lz4_flex",
  "ron 0.10.1",
  "serde",
 ]
@@ -6589,6 +6602,8 @@ name = "worldgen"
 version = "0.1.0"
 dependencies = [
  "fastnoise-lite",
+ "ron 0.10.1",
+ "serde",
  "voxel",
 ]
 

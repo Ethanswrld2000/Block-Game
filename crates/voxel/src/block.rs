@@ -31,6 +31,8 @@ struct BlockSpec {
     solid: bool,
     #[serde(default = "yes")]
     opaque: bool,
+    #[serde(default)]
+    translucent: bool,
 }
 
 fn yes() -> bool {
@@ -45,6 +47,8 @@ pub struct BlockDef {
     pub textures: [u32; 6],
     pub solid: bool,
     pub opaque: bool,
+    /// Drawn in the blended pass (water, ice).
+    pub translucent: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -108,6 +112,7 @@ impl BlockRegistry {
                 textures: [side, side, top, bottom, side, side],
                 solid: s.solid,
                 opaque: s.opaque,
+                translucent: s.translucent,
             });
         }
         Ok(Self { defs, by_name })
@@ -162,6 +167,8 @@ mod tests {
         assert_ne!(grass.textures[2], grass.textures[3], "grass top and bottom differ");
         assert!(!reg.get(reg.expect("water")).solid);
         assert!(!reg.get(reg.expect("leaves")).opaque);
+        assert!(reg.get(reg.expect("water")).translucent);
+        assert!(!reg.get(reg.expect("leaves")).translucent);
     }
 
     #[test]
