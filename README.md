@@ -23,8 +23,10 @@ Tools in Software Update, or put
 
 ## Art
 
-`assets/textures/blocks.png` is placeholder art: a 512x512 sheet of 32x32 tiles.
-Paint over any tile and rerun the game.
+`assets/textures/blocks.png` is a 512x512 sheet of 32x32 pixel-art tiles, painted by
+`python3 tools/gen_block_art.py` (add `--preview` for a zoomed, labelled preview). Rerunning the
+script overwrites the PNG, so if you hand-paint tiles, stop using the script or move the tile into it.
+Keep tile positions stable: append new tiles at the end.
 
 ## Worlds
 
