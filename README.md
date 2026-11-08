@@ -94,8 +94,8 @@ refills while no spell is running.
 
 ## Settings
 
-Esc, then Settings: view distance, mouse speed, field of view, volume, ambience and the debug
-overlay. They're saved in `saves/settings.ron` and shared by every world.
+Esc, then Settings: view distance, mouse speed, field of view, volume, ambience, clouds on or
+off and the debug overlay. They're saved in `saves/settings.ron` and shared by every world.
 
 ## Sound
 
@@ -107,6 +107,37 @@ ground makes.
 
 `assets/textures/blocks.png` is placeholder art: a 512x512 sheet of 32x32 tiles.
 Paint over any tile and rerun the game.
+
+### The UI sheet
+
+Every frame, button, slot, bar, icon and skill-tree stone on screen comes from
+`assets/textures/ui.png` (256x128). `assets/textures/ui.ron` says where each sprite is:
+`"panel": (rect: (x, y, w, h), slice: Some((left, top, right, bottom)))`.
+
+- Each sheet pixel is drawn 2x2 on screen (`scale` in ui.ron).
+- Frames with a `slice` stretch: the corners stay as painted, the edges stretch along their length
+  and the middle fills the rest. So a 24x24 `panel` can be a window of any size. Keep the corners
+  inside the slice lines when you repaint.
+- Grey sprites (`node_major`, `node_minor`, `item`, `fill`, `white`) are tinted by the game, so paint
+  them in greys.
+- To move or resize a sprite, change its line in `ui.ron`. The names are what the game asks for.
+- `python3 tools/gen_ui_art.py` rebuilds the placeholder sheet. It overwrites `ui.png`, so keep a copy
+  of your own painting first.
+
+Restart the game to see changes to `ui.png`.
+
+### The font
+
+`assets/fonts/ui.ttf` and `ui_bold.ttf` are Pixelify Sans (SIL Open Font License, see `OFL.txt`).
+To use another font, replace those two files with any `.ttf` or `.otf` and rebuild: the font is
+compiled into the game. Every piece of text gets a dark shadow so it reads over a bright sky or snow.
+
+### Clouds
+
+Three blocky layers: a low grey deck (y 200) that only forms in rain, snow and storms, the puffy
+middle layer (y 236) and thin high wisps (y 300) that drift faster. How much sky they cover follows
+the weather's `clouds` value in `assets/data/weather.ron`: a clear day has a scattering of clouds,
+rain and snow close the sky over.
 
 ## Worlds
 

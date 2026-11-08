@@ -8,6 +8,7 @@ use super::health::{Layer, MAX, MORTAL_AT};
 use super::vitals::{self, CAPACITY, COLD_BELOW, HEAVY_ABOVE, HOT_ABOVE, LIGHT_BELOW};
 use super::{Survival, Toast};
 use crate::player::Player;
+use crate::theme::{self, colors, sizes, Theme};
 
 pub struct SurvivalHudPlugin;
 
@@ -18,7 +19,10 @@ impl Plugin for SurvivalHudPlugin {
 }
 
 const BAR_W: f32 = 170.0;
-const BAR_H: f32 = 9.0;
+const BAR_H: f32 = 14.0;
+/// Food, air, warmth and load bars, and the width of the value after them.
+const METER_W: f32 = 130.0;
+const VALUE_W: f32 = 92.0;
 /// Load gauge runs from 0 to this share of capacity.
 const LOAD_SCALE: f32 = 1.2;
 
@@ -80,16 +84,26 @@ struct DeathScreen;
 struct DeathHint;
 
 fn text(s: impl Into<String>, size: f32, color: Color) -> impl Bundle {
-    (Text::new(s), TextFont { font_size: bevy::text::FontSize::Px(size), ..default() }, TextColor(color), TextShadow { offset: Vec2::splat(1.5), color: Color::srgba(0.0, 0.0, 0.0, 0.85) })
+    theme::text(s, size, color)
 }
 
-fn bar_back() -> impl Bundle {
-    (
-        Node { width: Val::Px(BAR_W), height: Val::Px(BAR_H), border: UiRect::all(Val::Px(1.0)), ..default() },
-        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.5)),
-        BorderColor::all(Color::srgba(1.0, 1.0, 1.0, 0.25)),
-    )
+/// The frame round a bar; what's inside sits within its 2-point edge.
+fn bar_back(theme: &Theme, w: f32) -> impl Bundle {
+    (Node { width: Val::Px(w), height: Val::Px(BAR_H), padding: UiRect::all(Val::Px(3.0)), ..default() }, theme.skin("bar"))
 }
+
+/// The bars' contents go in here, so zones and markers line up with the fill.
+fn bar_inner() -> Node {
+    Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() }
+}
+
+fn hud_panel(theme: &Theme) -> impl Bundle {
+    theme.skin("panel_light")
+}
+
+/// The toast's frame, hidden while there's nothing to say.
+#[derive(Component)]
+struct ToastBox;
 
 fn fill(color: Color) -> impl Bundle {
     (Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() }, BackgroundColor(color))
@@ -118,7 +132,7 @@ fn zone(from: f32, to: f32, color: Color) -> impl Bundle {
 fn marker(g: Gauge) -> impl Bundle {
     (
         Marker(g),
-        Node { position_type: PositionType::Absolute, left: Val::Percent(50.0), width: Val::Px(3.0), top: Val::Px(-3.0), height: Val::Px(BAR_H + 4.0), ..default() },
+        Node { position_type: PositionType::Absolute, left: Val::Percent(50.0), width: Val::Px(3.0), top: Val::Px(-4.0), height: Val::Px(BAR_H + 2.0), ..default() },
         BackgroundColor(Color::WHITE),
     )
 }
@@ -131,7 +145,8 @@ fn full_screen(color: Color) -> impl Bundle {
     )
 }
 
-fn spawn(mut commands: Commands) {
+fn spawn(mut commands: Commands, theme: Res<Theme>) {
+    let theme = &*theme;
     commands.spawn((Dizzy, full_screen(Color::srgba(0.02, 0.03, 0.08, 0.0))));
 
     // Health, outermost bar on top.
@@ -139,24 +154,32 @@ fn spawn(mut commands: Commands) {
         .spawn(Node {
             position_type: PositionType::Absolute,
             left: Val::Px(14.0),
-            bottom: Val::Px(70.0),
+            bottom: Val::Px(14.0),
             flex_direction: FlexDirection::Column,
-            row_gap: Val::Px(5.0),
-            padding: UiRect::all(Val::Px(8.0)),
+            row_gap: Val::Px(6.0),
+            padding: UiRect::axes(Val::Px(12.0), Val::Px(10.0)),
             ..default()
         })
-        .insert(BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.25)))
+        .insert(hud_panel(theme))
         .with_children(|col| {
             for l in Layer::ALL {
                 col.spawn(Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, ..default() }).with_children(|row| {
-                    row.spawn((text(l.name(), 12.0, layer_color(l)), Node { width: Val::Px(58.0), ..default() }));
-                    row.spawn(bar_back()).with_children(|b| {
-                        b.spawn((BarFill(l), fill(layer_color(l))));
-                        if l != Layer::Damage {
-                            b.spawn(tick(MORTAL_AT));
-                        }
+                    row.spawn(theme.icon(match l {
+                        Layer::Damage => "icon_damage",
+                        Layer::Fatigue => "icon_fatigue",
+                        Layer::Blood => "icon_blood",
+                        Layer::Injuries => "icon_injuries",
+                    }));
+                    row.spawn((text(l.name(), sizes::SMALL + 1.0, colors::TEXT), Node { width: Val::Px(70.0), ..default() }));
+                    row.spawn(bar_back(theme, BAR_W)).with_children(|b| {
+                        b.spawn(bar_inner()).with_children(|b| {
+                            b.spawn((BarFill(l), fill(layer_color(l))));
+                            if l != Layer::Damage {
+                                b.spawn(tick(MORTAL_AT));
+                            }
+                        });
                     });
-                    row.spawn((BarNote(l), text("", 11.0, Color::srgb(1.0, 0.45, 0.4))));
+                    row.spawn((BarNote(l), text("", sizes::SMALL, colors::BAD)));
                 });
             }
         });
@@ -166,44 +189,58 @@ fn spawn(mut commands: Commands) {
         .spawn(Node {
             position_type: PositionType::Absolute,
             right: Val::Px(14.0),
-            bottom: Val::Px(70.0),
+            bottom: Val::Px(14.0),
             flex_direction: FlexDirection::Column,
-            row_gap: Val::Px(5.0),
-            padding: UiRect::all(Val::Px(8.0)),
-            align_items: AlignItems::End,
+            row_gap: Val::Px(6.0),
+            padding: UiRect::axes(Val::Px(12.0), Val::Px(10.0)),
+            align_items: AlignItems::Start,
             ..default()
         })
-        .insert(BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.25)))
+        .insert(hud_panel(theme))
         .with_children(|col| {
-            col.spawn((CampText, text("", 11.0, Color::srgba(1.0, 1.0, 1.0, 0.8))));
-            for (m, name, color) in [(Meter::Food, "Food", Color::srgb(0.85, 0.6, 0.3)), (Meter::Air, "Air", Color::srgb(0.6, 0.85, 1.0))] {
+            col.spawn(Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, width: Val::Percent(100.0), ..default() }).with_children(|row| {
+                row.spawn(theme.icon("icon_camp"));
+                row.spawn((CampText, text("", sizes::SMALL, colors::MUTED)));
+            });
+            for (m, name, color, icon) in [(Meter::Food, "Food", Color::srgb(0.9, 0.62, 0.3), "icon_food"), (Meter::Air, "Air", Color::srgb(0.6, 0.85, 1.0), "icon_air")] {
                 col.spawn((MeterRow(m), Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, ..default() })).with_children(|row| {
-                    row.spawn(text(name, 12.0, color));
-                    row.spawn(bar_back()).with_children(|b| {
-                        b.spawn((MeterFill(m), fill(color)));
+                    row.spawn(theme.icon(icon));
+                    row.spawn(bar_back(theme, METER_W)).with_children(|b| {
+                        b.spawn(bar_inner()).with_children(|b| {
+                            b.spawn((MeterFill(m), fill(color)));
+                        });
                     });
+                    row.spawn((text(name, sizes::SMALL + 1.0, colors::TEXT), Node { width: Val::Px(VALUE_W), ..default() }));
                 });
             }
             // Warmth: cold, comfortable and hot zones with a marker.
             col.spawn(Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, ..default() }).with_children(|row| {
-                row.spawn((GaugeText(Gauge::Warmth), text("", 12.0, Color::WHITE)));
-                row.spawn(bar_back()).with_children(|b| {
+                row.spawn(theme.icon("icon_warmth"));
+                row.spawn(bar_back(theme, METER_W)).with_children(|b| {
+                    let mut b = b.spawn(bar_inner());
+                    b.with_children(|b| {
                     b.spawn(zone(0.0, COLD_BELOW / 100.0, Color::srgba(0.3, 0.55, 1.0, 0.6)));
                     b.spawn(zone(COLD_BELOW / 100.0, HOT_ABOVE / 100.0, Color::srgba(0.4, 0.8, 0.4, 0.35)));
                     b.spawn(zone(HOT_ABOVE / 100.0, 1.0, Color::srgba(1.0, 0.4, 0.2, 0.6)));
                     b.spawn(marker(Gauge::Warmth));
+                    });
                 });
+                row.spawn((GaugeText(Gauge::Warmth), text("", sizes::SMALL + 1.0, colors::TEXT), Node { width: Val::Px(VALUE_W), ..default() }));
             });
             // Load: light, the sweet spot, heavy.
             col.spawn(Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, ..default() }).with_children(|row| {
-                row.spawn((GaugeText(Gauge::Load), text("", 12.0, Color::WHITE)));
-                row.spawn(bar_back()).with_children(|b| {
+                row.spawn(theme.icon("icon_load"));
+                row.spawn(bar_back(theme, METER_W)).with_children(|b| {
+                    let mut b = b.spawn(bar_inner());
+                    b.with_children(|b| {
                     b.spawn(zone(0.0, LIGHT_BELOW / LOAD_SCALE, Color::srgba(0.5, 0.75, 1.0, 0.45)));
                     b.spawn(zone(LIGHT_BELOW / LOAD_SCALE, HEAVY_ABOVE / LOAD_SCALE, Color::srgba(0.4, 0.85, 0.4, 0.55)));
                     b.spawn(zone(HEAVY_ABOVE / LOAD_SCALE, 1.0, Color::srgba(1.0, 0.55, 0.2, 0.55)));
                     b.spawn(tick(1.0 / LOAD_SCALE));
                     b.spawn(marker(Gauge::Load));
+                    });
                 });
+                row.spawn((GaugeText(Gauge::Load), text("", sizes::SMALL + 1.0, colors::TEXT), Node { width: Val::Px(VALUE_W), ..default() }));
             });
         });
 
@@ -216,7 +253,9 @@ fn spawn(mut commands: Commands) {
             ..default()
         })
         .with_children(|c| {
-            c.spawn((ToastText, text("", 18.0, Color::WHITE)));
+            c.spawn((ToastBox, Node { padding: UiRect::axes(Val::Px(16.0), Val::Px(8.0)), ..default() }, theme.skin("tooltip"), Visibility::Hidden)).with_children(|b| {
+                b.spawn((ToastText, text("", sizes::LABEL, colors::TEXT)));
+            });
         });
 
     commands.spawn((SleepFade, full_screen(Color::srgba(0.0, 0.0, 0.0, 0.0)), GlobalZIndex(5)));
@@ -238,8 +277,8 @@ fn spawn(mut commands: Commands) {
             GlobalZIndex(6),
         ))
         .with_children(|c| {
-            c.spawn(text("You perished", 44.0, Color::srgb(1.0, 0.85, 0.8)));
-            c.spawn((DeathHint, text("", 16.0, Color::WHITE)));
+            c.spawn((theme.bold(48.0), Text::new("You perished"), TextColor(Color::srgb(1.0, 0.85, 0.8))));
+            c.spawn((DeathHint, text("", sizes::LABEL, colors::TEXT)));
         });
 }
 
@@ -309,17 +348,21 @@ fn update_meters(
         let s2 = match g.0 {
             Gauge::Warmth => {
                 let state = if v.too_cold() {
-                    "freezing"
+                    "freezing "
                 } else if v.too_hot() {
-                    "overheating"
+                    "too hot "
                 } else {
-                    "warmth"
+                    ""
                 };
-                format!("{state}, feels {:.0} C", s.env.feels)
+                format!("{state}{:.0}°C", s.env.feels)
             }
             Gauge::Load => {
                 let pct = (vitals::weight_speed(s.env.carried) - 1.0) * 100.0;
-                format!("load {:.0}/{:.0} kg, {pct:+.0}% speed", s.env.carried, CAPACITY)
+                if pct.abs() >= 0.5 {
+                    format!("{:.0}/{:.0} kg {pct:+.0}%", s.env.carried, CAPACITY)
+                } else {
+                    format!("{:.0}/{:.0} kg", s.env.carried, CAPACITY)
+                }
             }
         };
         if t.0 != s2 {
@@ -328,11 +371,11 @@ fn update_meters(
     }
     if let Ok(mut t) = camp_text.single_mut() {
         let s2 = match camp.bedroll {
-            None => "Bedroll: rolled up (B to make camp)".to_string(),
+            None => "B: make camp".to_string(),
             Some(b) => {
                 let d = b.center().distance(player.pos);
                 if camp.near(player.pos) {
-                    "At camp: Z to sleep, B to roll up".to_string()
+                    "At camp: Z sleep, B pack up".to_string()
                 } else {
                     format!("Camp {d:.0} blocks away")
                 }
@@ -344,8 +387,15 @@ fn update_meters(
     }
 }
 
-fn toasts(time: Res<Time>, mut msgs: MessageReader<Toast>, s: Res<Survival>, mut q: Query<(&mut Text, &mut TextColor), With<ToastText>>, mut age: Local<f32>) {
-    let Ok((mut t, mut c)) = q.single_mut() else { return };
+fn toasts(
+    time: Res<Time>,
+    mut msgs: MessageReader<Toast>,
+    s: Res<Survival>,
+    mut q: Query<&mut Text, With<ToastText>>,
+    mut frame: Query<(&mut Visibility, &mut ImageNode), With<ToastBox>>,
+    mut age: Local<f32>,
+) {
+    let Ok(mut t) = q.single_mut() else { return };
     for m in msgs.read() {
         t.0 = m.0.clone();
         *age = 0.0;
@@ -355,8 +405,14 @@ fn toasts(time: Res<Time>, mut msgs: MessageReader<Toast>, s: Res<Survival>, mut
         t.0 = format!("Eating... {:.0}%", s.eating * 100.0);
         *age = 2.5;
     }
-    let a = (1.0 - (*age - 3.0) / 1.0).clamp(0.0, 1.0);
-    c.0.set_alpha(a);
+    // Shown for 3 seconds, then gone.
+    let show = *age < 3.5 && !t.0.is_empty();
+    if let Ok((mut v, _)) = frame.single_mut() {
+        let want = if show { Visibility::Inherited } else { Visibility::Hidden };
+        if *v != want {
+            *v = want;
+        }
+    }
 }
 
 fn overlays(

@@ -1,12 +1,17 @@
-//! On-screen game UI: the hotbar (shortcuts to what you carry, with counts),
-//! what you hold, and a red flash when you get hurt.
+//! On-screen game UI: the hotbar (shortcuts to what you carry, with counts
+//! and pictures), the name of what you hold, and a red flash when you get
+//! hurt.
 
 use bevy::prelude::*;
 
+use crate::blocks::Blocks;
 use crate::interact::{Hands, Hotbar, Wielded, SLOTS};
+use crate::inventory::grid::Stack;
+use crate::inventory::ui::{icon, IconAtlas};
 use crate::inventory::Inventory;
 use crate::items::Items;
 use crate::player::Damage;
+use crate::theme::{self, colors, sizes, Theme};
 
 pub struct HudPlugin;
 
@@ -16,14 +21,15 @@ impl Plugin for HudPlugin {
     }
 }
 
+/// Hotbar slot size in points.
+pub const SLOT: f32 = 58.0;
+
 #[derive(Component)]
 struct Slot(usize);
 
+/// Holds a slot's picture and count; rebuilt when the slot changes.
 #[derive(Component)]
-struct SlotTag(usize);
-
-#[derive(Component)]
-struct SlotTitle(usize);
+struct SlotContent(usize);
 
 #[derive(Component)]
 struct HandsLine;
@@ -31,9 +37,7 @@ struct HandsLine;
 #[derive(Component)]
 struct HurtFlash;
 
-const RIGHT: Color = Color::srgb(1.0, 0.82, 0.3);
-
-fn spawn_hud(mut commands: Commands, hotbar: Option<Res<Hotbar>>) {
+fn spawn_hud(mut commands: Commands, hotbar: Option<Res<Hotbar>>, theme: Res<Theme>) {
     if hotbar.is_none() {
         return;
     }
@@ -46,7 +50,7 @@ fn spawn_hud(mut commands: Commands, hotbar: Option<Res<Hotbar>>) {
     commands
         .spawn(Node {
             position_type: PositionType::Absolute,
-            bottom: Val::Px(10.0),
+            bottom: Val::Px(8.0),
             width: Val::Percent(100.0),
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::Center,
@@ -54,40 +58,15 @@ fn spawn_hud(mut commands: Commands, hotbar: Option<Res<Hotbar>>) {
             ..default()
         })
         .with_children(|root| {
-            root.spawn((
-                HandsLine,
-                Text::new(""),
-                TextFont { font_size: bevy::text::FontSize::Px(14.0), ..default() },
-                TextColor(Color::WHITE),
-                TextShadow { offset: Vec2::splat(1.5), color: Color::srgba(0.0, 0.0, 0.0, 0.85) },
-            ));
-            root.spawn(Node { column_gap: Val::Px(4.0), ..default() }).with_children(|row| {
+            root.spawn((HandsLine, theme::text("", sizes::LABEL, colors::TEXT), Node { margin: UiRect::bottom(Val::Px(20.0)), ..default() }));
+            root.spawn((Node { column_gap: Val::Px(2.0), padding: UiRect::all(Val::Px(6.0)), ..default() }, theme.skin("panel_light"))).with_children(|row| {
                 for i in 0..SLOTS {
-                    row.spawn((
-                        Slot(i),
-                        Node {
-                            width: Val::Px(70.0),
-                            height: Val::Px(46.0),
-                            border: UiRect::all(Val::Px(2.0)),
-                            padding: UiRect::all(Val::Px(3.0)),
-                            flex_direction: FlexDirection::Column,
-                            ..default()
-                        },
-                        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.45)),
-                        BorderColor::all(Color::srgba(1.0, 1.0, 1.0, 0.15)),
-                    ))
-                    .with_children(|s| {
+                    row.spawn((Slot(i), Node { width: Val::Px(SLOT), height: Val::Px(SLOT), ..default() }, theme.skin("slot"))).with_children(|s| {
+                        s.spawn((SlotContent(i), Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() }));
                         s.spawn((
-                            SlotTag(i),
-                            Text::new(format!("{}", i + 1)),
-                            TextFont { font_size: bevy::text::FontSize::Px(11.0), ..default() },
-                            TextColor(Color::srgba(1.0, 1.0, 1.0, 0.7)),
-                        ));
-                        s.spawn((
-                            SlotTitle(i),
-                            Text::new(""),
-                            TextFont { font_size: bevy::text::FontSize::Px(11.0), ..default() },
-                            TextColor(Color::WHITE),
+                            theme::text(format!("{}", i + 1), sizes::SMALL, colors::MUTED),
+                            Node { position_type: PositionType::Absolute, left: Val::Px(5.0), top: Val::Px(2.0), ..default() },
+                            GlobalZIndex(1),
                         ));
                     });
                 }
@@ -97,44 +76,42 @@ fn spawn_hud(mut commands: Commands, hotbar: Option<Res<Hotbar>>) {
 
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn update_hotbar(
-    hands: Res<Hands>,
-    hotbar: Res<Hotbar>,
-    items: Res<Items>,
-    inv: Res<Inventory>,
-    wielded: Res<Wielded>,
-    mut slots: Query<(&Slot, &mut BorderColor)>,
-    mut tags: Query<(&SlotTag, &mut Text, &mut TextColor), (Without<HandsLine>, Without<SlotTitle>)>,
-    mut titles: Query<(&SlotTitle, &mut Text, &mut TextColor), (Without<HandsLine>, Without<SlotTag>)>,
-    mut line: Query<&mut Text, (With<HandsLine>, Without<SlotTag>, Without<SlotTitle>)>,
+    mut commands: Commands,
+    theme: Res<Theme>,
+    (hands, hotbar, items, inv, wielded): (Res<Hands>, Res<Hotbar>, Res<Items>, Res<Inventory>, Res<Wielded>),
+    blocks: Res<Blocks>,
+    atlas: Option<Res<IconAtlas>>,
+    mut slots: Query<(&Slot, &mut ImageNode)>,
+    contents: Query<(Entity, &SlotContent)>,
+    mut line: Query<&mut Text, With<HandsLine>>,
+    mut ready: Local<bool>,
 ) {
-    if !(hands.is_changed() || hotbar.is_changed() || inv.is_changed() || wielded.is_changed()) {
+    let Some(atlas) = atlas else { return };
+    if *ready && !(hands.is_changed() || hotbar.is_changed() || inv.is_changed() || wielded.is_changed()) {
         return;
     }
-    for (t, mut text, mut color) in &mut titles {
-        let (label, c) = match hotbar.slots.get(t.0).copied().flatten() {
-            Some(id) => {
-                let n = inv.count(id);
-                let it = items.get(id);
-                let label = if it.stack > 1 || n != 1 { format!("{}\n{n}", it.title) } else { it.title.clone() };
-                (label, if n > 0 { Color::WHITE } else { Color::srgba(1.0, 1.0, 1.0, 0.35) })
+    *ready = true;
+    for (e, c) in &contents {
+        commands.entity(e).despawn_related::<Children>();
+        let Some(id) = hotbar.slots.get(c.0).copied().flatten() else { continue };
+        let n = inv.count(id);
+        commands.entity(e).with_children(|p| {
+            // Dim the picture when you have none left.
+            p.spawn(Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() }).with_children(|q| {
+                icon(q, &items, &blocks, &atlas, Stack::new(id, n.clamp(1, u16::MAX as u32) as u16), SLOT, SLOT);
+            });
+            if n == 0 {
+                p.spawn((Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() }, BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6))));
             }
-            None => (String::new(), Color::WHITE),
-        };
-        text.0 = label;
-        color.0 = c;
+        });
     }
-    for (s, mut border) in &mut slots {
-        let c = if hands.right == Some(s.0) { RIGHT } else { Color::srgba(1.0, 1.0, 1.0, 0.15) };
-        *border = BorderColor::all(c);
-    }
-    for (t, mut text, mut color) in &mut tags {
-        text.0 = format!("{}", t.0 + 1);
-        color.0 = if hands.right == Some(t.0) { RIGHT } else { Color::srgba(1.0, 1.0, 1.0, 0.7) };
+    for (s, mut img) in &mut slots {
+        *img = theme.image(if hands.right == Some(s.0) { "slot_selected" } else { "slot" });
     }
     if let Ok(mut l) = line.single_mut() {
         l.0 = match wielded.0 {
             Some(i) => items.get(i).title.clone(),
-            None => "empty hand   (Tab: inventory)".into(),
+            None => "Empty hand   (Tab: inventory)".into(),
         };
     }
 }
