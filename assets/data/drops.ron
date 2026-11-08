@@ -1,0 +1,17 @@
+// What breaking a block gives you: block name -> [(item, count, chance 0..1)].
+// A block that isn't listed drops its own item (the item that places it), if there is one.
+// An empty list drops nothing.
+{
+    "stone": [("cobblestone", 1, 1.0)],
+    "grass": [("dirt", 1, 1.0), ("plant_fiber", 1, 0.5), ("swamp_reed", 1, 0.08)],
+    "moss": [("moss", 1, 1.0), ("plant_fiber", 1, 0.35)],
+    "leaves": [("stick", 1, 0.5), ("plant_fiber", 1, 0.3)],
+    "swamp_leaves": [("stick", 1, 0.4), ("plant_fiber", 1, 0.3), ("marsh_berries", 1, 0.12)],
+    "gravel": [("gravel", 1, 1.0), ("flint", 1, 0.2)],
+    "coal_ore": [("coal", 1, 1.0)],
+    "iron_ore": [("raw_iron", 1, 1.0)],
+    "deeprock": [("cobblestone", 1, 1.0)],
+    "snow": [],
+    "ice": [],
+    "water": [],
+}

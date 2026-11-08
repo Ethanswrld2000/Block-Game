@@ -10,8 +10,8 @@ use voxel::{BlockDef, Face};
 
 use crate::blocks::{Blocks, VoxelMaterial};
 use crate::camera::FlyCamera;
-use crate::interact::{Hand, HandAnim, Hands, Hotbar, Mining};
-use crate::items::{ItemKind, Items};
+use crate::interact::{Hand, HandAnim, Mining, Wielded};
+use crate::items::{ItemId, ItemKind, Items};
 use crate::player::{MoveMode, Player};
 use crate::torches::{Flicker, TorchAssets, TORCH_COLOR, TORCH_LUMENS, TORCH_RANGE};
 
@@ -30,7 +30,7 @@ struct HandRoot(Hand);
 #[derive(Component)]
 struct Held {
     hand: Hand,
-    showing: Option<Option<usize>>,
+    showing: Option<Option<ItemId>>,
 }
 
 const SKIN: Color = Color::srgb(0.86, 0.66, 0.5);
@@ -116,8 +116,7 @@ fn block_mesh(def: &BlockDef, size: f32) -> Mesh {
 #[allow(clippy::too_many_arguments)]
 fn update_held(
     mut commands: Commands,
-    hands: Res<Hands>,
-    hotbar: Res<Hotbar>,
+    wielded: Res<Wielded>,
     items: Res<Items>,
     blocks: Res<Blocks>,
     torch: Option<Res<TorchAssets>>,
@@ -127,13 +126,14 @@ fn update_held(
 ) {
     let (Some(voxel_mat), Some(torch)) = (blocks.material.clone(), torch) else { return };
     for (e, mut h) in &mut held {
-        let slot = hands.slot(h.hand);
-        if h.showing == Some(slot) {
+        // One hand for now: the right hand holds what's wielded.
+        let id = if h.hand == Hand::Right { wielded.0 } else { None };
+        if h.showing == Some(id) {
             continue;
         }
-        h.showing = Some(slot);
+        h.showing = Some(id);
         commands.entity(e).despawn_children();
-        let Some(id) = hands.item(h.hand, &hotbar) else { continue };
+        let Some(id) = id else { continue };
         let item = items.get(id);
         commands.entity(e).with_children(|c| match &item.kind {
             ItemKind::Block(b) => {
@@ -144,6 +144,11 @@ fn update_held(
                     Transform::from_xyz(0.0, 0.0, -0.12).with_rotation(Quat::from_rotation_x(-0.6) * Quat::from_rotation_y(0.5)),
                     NotShadowCaster,
                 ));
+            }
+            _ if item.model.is_empty() => {
+                // No model: a small bundle in the item's colour.
+                let mat = materials.add(StandardMaterial { base_color: item.color, perceptual_roughness: 0.95, ..default() });
+                c.spawn((Mesh3d(meshes.add(Cuboid::new(0.16, 0.12, 0.2))), MeshMaterial3d(mat), Transform::from_xyz(0.0, 0.0, -0.12), NotShadowCaster));
             }
             _ => {
                 for b in &item.model {

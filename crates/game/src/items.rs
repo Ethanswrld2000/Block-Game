@@ -1,13 +1,16 @@
-//! Items you can hold, from `assets/data/items.ron`: tools, placeable blocks
-//! and torches, plus how fast each tool breaks each material.
+//! Items, from `assets/data/items.ron`: tools, placeable blocks, torches,
+//! food, clothes and armor, bags and crafting materials. Each item has a size
+//! in inventory cells, a stack size and a weight.
 
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use voxel::{BlockDef, BlockId, BlockRegistry};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+use crate::survival::health::Layer;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ItemId(pub u16);
 
 #[derive(Deserialize)]
@@ -23,6 +26,14 @@ struct ItemSpec {
     kind: KindSpec,
     #[serde(default = "default_mass")]
     mass: f32,
+    /// Cells taken in a grid, (width, height).
+    #[serde(default = "one_by_one")]
+    size: (u8, u8),
+    #[serde(default)]
+    stack: Option<u16>,
+    /// Icon colour for items without a block texture.
+    #[serde(default)]
+    color: Option<(f32, f32, f32)>,
     #[serde(default)]
     model: Vec<ModelBox>,
 }
@@ -31,12 +42,55 @@ fn default_mass() -> f32 {
     0.5
 }
 
+fn one_by_one() -> (u8, u8) {
+    (1, 1)
+}
+
 #[derive(Deserialize)]
 enum KindSpec {
     Tool { speeds: HashMap<String, f32> },
     Block(String),
     Torch,
     Food { tier: u8, satiety: f32 },
+    Wear {
+        slot: WearSlot,
+        #[serde(default)]
+        insulation: f32,
+        #[serde(default)]
+        protection: HashMap<Layer, f32>,
+    },
+    Bag { grid: (u8, u8) },
+    Material,
+}
+
+/// Where something is worn. Clothes and armor go on separate layers.
+#[derive(Deserialize, Serialize, Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum WearSlot {
+    Head,
+    HeadArmor,
+    Body,
+    BodyArmor,
+    Legs,
+    Feet,
+    /// The bag on your back.
+    Back,
+}
+
+impl WearSlot {
+    pub const ALL: [WearSlot; 7] =
+        [WearSlot::Head, WearSlot::HeadArmor, WearSlot::Body, WearSlot::BodyArmor, WearSlot::Legs, WearSlot::Feet, WearSlot::Back];
+
+    pub fn title(self) -> &'static str {
+        match self {
+            WearSlot::Head => "Head",
+            WearSlot::HeadArmor => "Helmet",
+            WearSlot::Body => "Body",
+            WearSlot::BodyArmor => "Body armor",
+            WearSlot::Legs => "Legs",
+            WearSlot::Feet => "Feet",
+            WearSlot::Back => "Back",
+        }
+    }
 }
 
 /// One box of a held item's model, in hand space (metres, -Z points away).
@@ -54,6 +108,12 @@ pub enum ItemKind {
     Torch,
     /// Eaten by holding right click. `tier` is a tier in food_tiers.ron.
     Food { tier: u8, satiety: f32 },
+    /// Clothes and armor: warmth in °C, and the share of a blow kept off each health bar.
+    Wear { slot: WearSlot, insulation: f32, protection: HashMap<Layer, f32> },
+    /// Worn on the back; holds a grid of this size.
+    Bag { grid: (u8, u8) },
+    /// Crafting materials.
+    Material,
 }
 
 #[derive(Debug, Clone)]
@@ -61,9 +121,24 @@ pub struct Item {
     pub name: String,
     pub title: String,
     pub kind: ItemKind,
-    /// Weight in kg.
+    /// Weight in kg, per item.
     pub mass: f32,
+    /// Cells in a grid, (width, height), unrotated.
+    pub size: (u8, u8),
+    /// How many fit in one stack.
+    pub stack: u16,
+    pub color: Color,
     pub model: Vec<ModelBox>,
+}
+
+impl Item {
+    pub fn wear_slot(&self) -> Option<WearSlot> {
+        match self.kind {
+            ItemKind::Wear { slot, .. } => Some(slot),
+            ItemKind::Bag { .. } => Some(WearSlot::Back),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Resource, Debug, Clone)]
@@ -74,7 +149,10 @@ pub struct Items {
 
 impl Items {
     pub fn from_ron(text: &str, blocks: &BlockRegistry) -> Result<Self, String> {
-        let spec: ItemsSpec = ron::from_str(text).map_err(|e| format!("items.ron: {e}"))?;
+        let spec: ItemsSpec = ron::Options::default()
+            .with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME)
+            .from_str(text)
+            .map_err(|e| format!("items.ron: {e}"))?;
         let mut list = Vec::new();
         for s in spec.items {
             let kind = match s.kind {
@@ -84,11 +162,34 @@ impl Items {
                 ),
                 KindSpec::Torch => ItemKind::Torch,
                 KindSpec::Food { tier, satiety } => ItemKind::Food { tier, satiety },
+                KindSpec::Wear { slot, insulation, protection } => {
+                    if slot == WearSlot::Back {
+                        return Err(format!("item '{}': things worn on the back are Bag items", s.name));
+                    }
+                    ItemKind::Wear { slot, insulation, protection }
+                }
+                KindSpec::Bag { grid } => ItemKind::Bag { grid },
+                KindSpec::Material => ItemKind::Material,
             };
             if list.iter().any(|i: &Item| i.name == s.name) {
                 return Err(format!("item '{}' is defined twice", s.name));
             }
-            list.push(Item { name: s.name, title: s.title, kind, mass: s.mass, model: s.model });
+            if s.size.0 == 0 || s.size.1 == 0 {
+                return Err(format!("item '{}' has an empty size", s.name));
+            }
+            let stack = s.stack.unwrap_or(match kind {
+                ItemKind::Block(_) => 32,
+                ItemKind::Torch => 16,
+                ItemKind::Food { .. } => 8,
+                ItemKind::Material => 32,
+                _ => 1,
+            });
+            let color = s
+                .color
+                .or_else(|| s.model.last().map(|m| m.color))
+                .map(|(r, g, b)| Color::srgb(r, g, b))
+                .unwrap_or(Color::srgb(0.5, 0.5, 0.5));
+            list.push(Item { name: s.name, title: s.title, kind, mass: s.mass, size: s.size, stack: stack.max(1), color, model: s.model });
         }
         Ok(Self { hand: spec.hand, list })
     }
@@ -103,6 +204,11 @@ impl Items {
 
     pub fn ids(&self) -> impl Iterator<Item = ItemId> {
         (0..self.list.len()).map(|i| ItemId(i as u16))
+    }
+
+    /// The item that places this block, if any.
+    pub fn for_block(&self, block: BlockId) -> Option<ItemId> {
+        self.list.iter().position(|i| matches!(i.kind, ItemKind::Block(b) if b == block)).map(|i| ItemId(i as u16))
     }
 
     /// Mining speed of what is in the hand (nothing, a tool, or anything
@@ -138,11 +244,11 @@ fn load_items(mut commands: Commands, blocks: Res<crate::blocks::Blocks>) {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use voxel::TileSheet;
 
-    fn load() -> (BlockRegistry, Items) {
+    pub fn load() -> (BlockRegistry, Items) {
         let tiles = TileSheet::from_ron(include_str!("../../../assets/textures/blocks.ron")).unwrap();
         let blocks = BlockRegistry::from_ron(include_str!("../../../assets/data/blocks.ron"), &tiles).unwrap();
         let items = Items::from_ron(include_str!("../../../assets/data/items.ron"), &blocks).unwrap();
@@ -169,5 +275,14 @@ mod tests {
         let (blocks, items) = load();
         assert_eq!(items.break_time(None, blocks.get(blocks.expect("water"))), None);
         assert_eq!(items.break_time(None, blocks.get(blocks.expect("torch"))), Some(0.0));
+    }
+
+    #[test]
+    fn wearables_and_bags() {
+        let (_, items) = load();
+        let satchel = items.get(items.id("reed_satchel").unwrap());
+        assert_eq!(satchel.wear_slot(), Some(WearSlot::Back));
+        let coat = items.get(items.id("fur_coat").unwrap());
+        assert!(matches!(coat.kind, ItemKind::Wear { slot: WearSlot::Body, insulation, .. } if insulation > 8.0));
     }
 }

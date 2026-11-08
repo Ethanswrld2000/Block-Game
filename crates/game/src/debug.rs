@@ -56,10 +56,16 @@ fn spawn_overlay(mut commands: Commands) {
     ));
 }
 
-fn toggle_overlay(keys: Res<ButtonInput<KeyCode>>, mut q: Query<&mut Visibility, With<DebugText>>) {
+/// F3 shows or hides the overlay; it steps aside while a screen like the inventory is open.
+fn toggle_overlay(keys: Res<ButtonInput<KeyCode>>, menus: Res<crate::camera::Menus>, mut shown: Local<Option<bool>>, mut q: Query<&mut Visibility, With<DebugText>>) {
+    let on = shown.get_or_insert(true);
     if keys.just_pressed(KeyCode::F3) {
-        for mut v in &mut q {
-            v.toggle_visible_hidden();
+        *on = !*on;
+    }
+    let want = if *on && !menus.open { Visibility::Inherited } else { Visibility::Hidden };
+    for mut v in &mut q {
+        if *v != want {
+            *v = want;
         }
     }
 }
@@ -157,8 +163,8 @@ fn update_overlay(
              target {looking}\n\
              move   {state}\n\
              F3 hide | click: capture mouse | Esc: release | hold T: fast time\n\
-             1-9 or wheel: pick item | left click: mine | right click: place / hold to eat | Shift: sprint | Ctrl/C: crouch\n\
-             B: make or pack up camp | Z: sleep at camp | test: F6 pack weight, F7 stab, F8 club blow",
+             1-9 or wheel: pick item | left click: mine | right click: place, open chest, hold to eat | Shift: sprint | Ctrl/C: crouch\n\
+             Tab: inventory | B: make or pack up camp | Z: sleep at camp | test: F7 stab, F8 club blow, F9 one of everything",
             p.x, p.y, p.z, chunk.x, chunk.y, chunk.z,
             sky.describe(),
             stats.loaded, stats.meshed, stats.queued, stats.unsaved,

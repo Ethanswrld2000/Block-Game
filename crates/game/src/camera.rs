@@ -13,7 +13,8 @@ pub struct FlyCameraPlugin;
 
 impl Plugin for FlyCameraPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_camera)
+        app.init_resource::<Menus>()
+            .add_systems(Startup, spawn_camera)
             .add_systems(
             Update,
             (look, fly.run_if(resource_equals(crate::player::MoveMode::Fly))).chain(),
@@ -22,6 +23,12 @@ impl Plugin for FlyCameraPlugin {
         // doesn't also break a block.
         .add_systems(Update, grab_cursor.after(crate::interact::InteractSet));
     }
+}
+
+/// A screen such as the inventory is open: the mouse is free and doesn't turn the view.
+#[derive(Resource, Default, Debug)]
+pub struct Menus {
+    pub open: bool,
 }
 
 #[derive(Component)]
@@ -55,7 +62,15 @@ pub fn grab_cursor(
     mut cursor: Single<&mut CursorOptions, With<PrimaryWindow>>,
     mouse: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
+    menus: Res<Menus>,
 ) {
+    if menus.open {
+        if cursor.grab_mode != CursorGrabMode::None {
+            cursor.grab_mode = CursorGrabMode::None;
+            cursor.visible = true;
+        }
+        return;
+    }
     if mouse.just_pressed(MouseButton::Left) {
         cursor.grab_mode = CursorGrabMode::Locked;
         cursor.visible = false;
@@ -69,9 +84,10 @@ pub fn grab_cursor(
 pub fn look(
     motion: Res<AccumulatedMouseMotion>,
     cursor: Single<&CursorOptions, With<PrimaryWindow>>,
+    menus: Res<Menus>,
     mut q: Query<(&mut Transform, &mut FlyCamera)>,
 ) {
-    if cursor.grab_mode == CursorGrabMode::None || motion.delta == Vec2::ZERO {
+    if menus.open || cursor.grab_mode == CursorGrabMode::None || motion.delta == Vec2::ZERO {
         return;
     }
     for (mut tf, mut cam) in &mut q {

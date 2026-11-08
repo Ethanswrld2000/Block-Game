@@ -1,9 +1,10 @@
-//! On-screen game UI: the hotbar with what you hold, and a red flash
-//! when you get hurt.
+//! On-screen game UI: the hotbar (shortcuts to what you carry, with counts),
+//! what you hold, and a red flash when you get hurt.
 
 use bevy::prelude::*;
 
-use crate::interact::{Hands, Hotbar, PAGE};
+use crate::interact::{Hands, Hotbar, Wielded, SLOTS};
+use crate::inventory::Inventory;
 use crate::items::Items;
 use crate::player::Damage;
 
@@ -58,10 +59,10 @@ fn spawn_hud(mut commands: Commands, hotbar: Option<Res<Hotbar>>) {
                 Text::new(""),
                 TextFont { font_size: bevy::text::FontSize::Px(14.0), ..default() },
                 TextColor(Color::WHITE),
-                TextShadow::default(),
+                TextShadow { offset: Vec2::splat(1.5), color: Color::srgba(0.0, 0.0, 0.0, 0.85) },
             ));
             root.spawn(Node { column_gap: Val::Px(4.0), ..default() }).with_children(|row| {
-                for i in 0..PAGE {
+                for i in 0..SLOTS {
                     row.spawn((
                         Slot(i),
                         Node {
@@ -94,45 +95,47 @@ fn spawn_hud(mut commands: Commands, hotbar: Option<Res<Hotbar>>) {
         });
 }
 
-#[allow(clippy::type_complexity)]
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn update_hotbar(
     hands: Res<Hands>,
     hotbar: Res<Hotbar>,
     items: Res<Items>,
-    mut slots: Query<(&Slot, &mut BorderColor, &mut Visibility)>,
+    inv: Res<Inventory>,
+    wielded: Res<Wielded>,
+    mut slots: Query<(&Slot, &mut BorderColor)>,
     mut tags: Query<(&SlotTag, &mut Text, &mut TextColor), (Without<HandsLine>, Without<SlotTitle>)>,
-    mut titles: Query<(&SlotTitle, &mut Text), (Without<HandsLine>, Without<SlotTag>)>,
+    mut titles: Query<(&SlotTitle, &mut Text, &mut TextColor), (Without<HandsLine>, Without<SlotTag>)>,
     mut line: Query<&mut Text, (With<HandsLine>, Without<SlotTag>, Without<SlotTitle>)>,
 ) {
-    if !hands.is_changed() {
+    if !(hands.is_changed() || hotbar.is_changed() || inv.is_changed() || wielded.is_changed()) {
         return;
     }
-    let page = hands.right.unwrap_or(0) / PAGE * PAGE;
-    for (t, mut text) in &mut titles {
-        text.0 = hotbar.slots.get(page + t.0).map(|i| items.get(*i).title.clone()).unwrap_or_default();
-    }
-    for (s, mut border, mut vis) in &mut slots {
-        *vis = if page + s.0 < hotbar.slots.len() { Visibility::Inherited } else { Visibility::Hidden };
-        let c = if hands.right == Some(page + s.0) {
-            RIGHT
-        } else {
-            Color::srgba(1.0, 1.0, 1.0, 0.15)
-        };
-        *border = BorderColor::all(c);
-    }
-    for (t, mut text, mut color) in &mut tags {
-        let (label, c) = if hands.right == Some(page + t.0) {
-            (format!("{}", t.0 + 1), RIGHT)
-        } else {
-            (format!("{}", t.0 + 1), Color::srgba(1.0, 1.0, 1.0, 0.7))
+    for (t, mut text, mut color) in &mut titles {
+        let (label, c) = match hotbar.slots.get(t.0).copied().flatten() {
+            Some(id) => {
+                let n = inv.count(id);
+                let it = items.get(id);
+                let label = if it.stack > 1 || n != 1 { format!("{}\n{n}", it.title) } else { it.title.clone() };
+                (label, if n > 0 { Color::WHITE } else { Color::srgba(1.0, 1.0, 1.0, 0.35) })
+            }
+            None => (String::new(), Color::WHITE),
         };
         text.0 = label;
         color.0 = c;
     }
-    let name = |h: Option<crate::items::ItemId>| h.map(|i| items.get(i).title.clone()).unwrap_or_else(|| "empty hand".into());
+    for (s, mut border) in &mut slots {
+        let c = if hands.right == Some(s.0) { RIGHT } else { Color::srgba(1.0, 1.0, 1.0, 0.15) };
+        *border = BorderColor::all(c);
+    }
+    for (t, mut text, mut color) in &mut tags {
+        text.0 = format!("{}", t.0 + 1);
+        color.0 = if hands.right == Some(t.0) { RIGHT } else { Color::srgba(1.0, 1.0, 1.0, 0.7) };
+    }
     if let Ok(mut l) = line.single_mut() {
-        let pages = hotbar.slots.len().div_ceil(PAGE);
-        l.0 = format!("{}   (page {}/{pages}, wheel for more)", name(hands.item(crate::interact::Hand::Right, &hotbar)), page / PAGE + 1);
+        l.0 = match wielded.0 {
+            Some(i) => items.get(i).title.clone(),
+            None => "empty hand   (Tab: inventory)".into(),
+        };
     }
 }
 

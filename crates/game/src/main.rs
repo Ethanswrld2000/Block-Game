@@ -13,6 +13,7 @@ mod debug;
 mod hands;
 mod hud;
 mod interact;
+mod inventory;
 mod items;
 mod save;
 mod sky;
@@ -61,6 +62,7 @@ fn main() {
             torches::TorchPlugin,
             hud::HudPlugin,
             survival::SurvivalPlugin,
+            inventory::InventoryPlugin,
         ))
         .run();
 }
