@@ -49,7 +49,7 @@ pub struct Settings {
     pub ambience: f32,
     /// The F3 overlay at start.
     pub debug_overlay: bool,
-    /// 0 off, 1 fast, 2 fancy.
+    /// 0 off, 1 on (three layers).
     pub clouds: u8,
 }
 
@@ -93,7 +93,7 @@ impl Knob {
             Knob::Fov => format!("{:.0}°", s.fov),
             Knob::Volume => format!("{:.0}%", s.volume * 100.0),
             Knob::Ambience => format!("{:.0}%", s.ambience * 100.0),
-            Knob::Clouds => ["off", "fast", "fancy"][s.clouds.min(2) as usize].into(),
+            Knob::Clouds => if s.clouds > 0 { "on" } else { "off" }.into(),
             Knob::DebugOverlay => (if s.debug_overlay { "on" } else { "off" }).into(),
         }
     }
@@ -105,7 +105,7 @@ impl Knob {
             Knob::Fov => s.fov = (s.fov + 5.0 * dir).clamp(50.0, 110.0),
             Knob::Volume => s.volume = (s.volume + 0.1 * dir).clamp(0.0, 1.0),
             Knob::Ambience => s.ambience = (s.ambience + 0.1 * dir).clamp(0.0, 1.0),
-            Knob::Clouds => s.clouds = (s.clouds as i32 + dir as i32).clamp(0, 2) as u8,
+            Knob::Clouds => s.clouds = (s.clouds as i32 + dir as i32).clamp(0, 1) as u8,
             Knob::DebugOverlay => s.debug_overlay = !s.debug_overlay,
         }
     }
