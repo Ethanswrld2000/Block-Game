@@ -9,19 +9,26 @@
 //            when: Day, Night or Any; at: Surface or Barrow; group: (min, max); weight
 //   drops:   [(item, count, chance)]
 //   glow:    a ghostly light colour (sRGB), drawn see-through
+//   skin:    a PNG in assets/textures/creatures/ painted onto the model (skins: [...] picks one
+//            at random per creature). `cargo run --bin creature_skins` writes a starter PNG and a
+//            guide for any listed skin that doesn't exist yet. Without a skin the boxes use `color`.
+//   model:   boxes: name (for animation later), size, offset, color (flat colour / starter fill),
+//            uv: (x, y) to pin the box's patch in the skin (otherwise packed in list order:
+//            add new boxes at the end so painted ones don't move)
 [
     (
         name: "marsh_boar", title: "Marsh Boar", temper: Neutral, health: 24.0, speed: 1.8, run: 4.6,
         size: (0.9, 0.9),
+        skin: "marsh_boar",
         model: [
-            (size: (0.8, 0.6, 1.2), offset: (0.0, 0.55, 0.0), color: (0.36, 0.27, 0.2)),
-            (size: (0.5, 0.45, 0.45), offset: (0.0, 0.6, -0.75), color: (0.3, 0.22, 0.16)),
-            (size: (0.08, 0.08, 0.2), offset: (0.17, 0.5, -1.0), color: (0.9, 0.86, 0.75)),
-            (size: (0.08, 0.08, 0.2), offset: (-0.17, 0.5, -1.0), color: (0.9, 0.86, 0.75)),
-            (size: (0.18, 0.3, 0.18), offset: (0.25, 0.15, 0.4), color: (0.25, 0.18, 0.13)),
-            (size: (0.18, 0.3, 0.18), offset: (-0.25, 0.15, 0.4), color: (0.25, 0.18, 0.13)),
-            (size: (0.18, 0.3, 0.18), offset: (0.25, 0.15, -0.4), color: (0.25, 0.18, 0.13)),
-            (size: (0.18, 0.3, 0.18), offset: (-0.25, 0.15, -0.4), color: (0.25, 0.18, 0.13)),
+            (name: "body",            size: (0.8, 0.6, 1.2), offset: (0.0, 0.55, 0.0), color: (0.36, 0.27, 0.2)),
+            (name: "head",            size: (0.5, 0.45, 0.45), offset: (0.0, 0.6, -0.75), color: (0.3, 0.22, 0.16)),
+            (name: "tusk_right",      size: (0.08, 0.08, 0.2), offset: (0.17, 0.5, -1.0), color: (0.9, 0.86, 0.75)),
+            (name: "tusk_left",       size: (0.08, 0.08, 0.2), offset: (-0.17, 0.5, -1.0), color: (0.9, 0.86, 0.75)),
+            (name: "leg_back_right",  size: (0.18, 0.3, 0.18), offset: (0.25, 0.15, 0.4), color: (0.25, 0.18, 0.13)),
+            (name: "leg_back_left",   size: (0.18, 0.3, 0.18), offset: (-0.25, 0.15, 0.4), color: (0.25, 0.18, 0.13)),
+            (name: "leg_front_right", size: (0.18, 0.3, 0.18), offset: (0.25, 0.15, -0.4), color: (0.25, 0.18, 0.13)),
+            (name: "leg_front_left",  size: (0.18, 0.3, 0.18), offset: (-0.25, 0.15, -0.4), color: (0.25, 0.18, 0.13)),
         ],
         attack: Some((damage: 7.0, cause: Blunt, reach: 1.7, every: 1.3)),
         spawn: Some((biomes: ["great_swamp", "mossy_woods"], when: Day, at: Surface, group: (1, 3), weight: 3.0)),
@@ -30,16 +37,17 @@
     (
         name: "fen_stag", title: "Fen Stag", temper: Skittish, health: 18.0, speed: 2.0, run: 7.0,
         size: (0.8, 1.6),
+        skin: "fen_stag",
         model: [
-            (size: (0.6, 0.6, 1.2), offset: (0.0, 1.0, 0.0), color: (0.55, 0.42, 0.3)),
-            (size: (0.3, 0.6, 0.3), offset: (0.0, 1.45, -0.65), color: (0.5, 0.38, 0.27)),
-            (size: (0.6, 0.06, 0.06), offset: (0.0, 1.85, -0.65), color: (0.85, 0.8, 0.68)),
-            (size: (0.06, 0.3, 0.06), offset: (0.27, 2.0, -0.65), color: (0.85, 0.8, 0.68)),
-            (size: (0.06, 0.3, 0.06), offset: (-0.27, 2.0, -0.65), color: (0.85, 0.8, 0.68)),
-            (size: (0.14, 0.7, 0.14), offset: (0.2, 0.35, 0.45), color: (0.42, 0.32, 0.22)),
-            (size: (0.14, 0.7, 0.14), offset: (-0.2, 0.35, 0.45), color: (0.42, 0.32, 0.22)),
-            (size: (0.14, 0.7, 0.14), offset: (0.2, 0.35, -0.45), color: (0.42, 0.32, 0.22)),
-            (size: (0.14, 0.7, 0.14), offset: (-0.2, 0.35, -0.45), color: (0.42, 0.32, 0.22)),
+            (name: "body",            size: (0.6, 0.6, 1.2), offset: (0.0, 1.0, 0.0), color: (0.55, 0.42, 0.3)),
+            (name: "head",            size: (0.3, 0.6, 0.3), offset: (0.0, 1.45, -0.65), color: (0.5, 0.38, 0.27)),
+            (name: "antler_bar",      size: (0.6, 0.06, 0.06), offset: (0.0, 1.85, -0.65), color: (0.85, 0.8, 0.68)),
+            (name: "antler_right",    size: (0.06, 0.3, 0.06), offset: (0.27, 2.0, -0.65), color: (0.85, 0.8, 0.68)),
+            (name: "antler_left",     size: (0.06, 0.3, 0.06), offset: (-0.27, 2.0, -0.65), color: (0.85, 0.8, 0.68)),
+            (name: "leg_back_right",  size: (0.14, 0.7, 0.14), offset: (0.2, 0.35, 0.45), color: (0.42, 0.32, 0.22)),
+            (name: "leg_back_left",   size: (0.14, 0.7, 0.14), offset: (-0.2, 0.35, 0.45), color: (0.42, 0.32, 0.22)),
+            (name: "leg_front_right", size: (0.14, 0.7, 0.14), offset: (0.2, 0.35, -0.45), color: (0.42, 0.32, 0.22)),
+            (name: "leg_front_left",  size: (0.14, 0.7, 0.14), offset: (-0.2, 0.35, -0.45), color: (0.42, 0.32, 0.22)),
         ],
         spawn: Some((biomes: ["great_swamp", "meadow", "pine_hills", "mossy_woods"], when: Day, at: Surface, group: (1, 2), weight: 2.0)),
         drops: [("raw_meat", 2, 1.0), ("hide", 1, 1.0), ("fur", 1, 0.6)],
@@ -47,12 +55,13 @@
     (
         name: "bog_lurker", title: "Bog Lurker", temper: Hostile, health: 20.0, speed: 1.6, run: 4.2,
         size: (1.0, 0.7),
+        skin: "bog_lurker",
         model: [
-            (size: (1.0, 0.45, 1.5), offset: (0.0, 0.3, 0.0), color: (0.2, 0.28, 0.17)),
-            (size: (0.7, 0.3, 0.6), offset: (0.0, 0.35, -0.95), color: (0.17, 0.24, 0.14)),
-            (size: (0.12, 0.1, 0.1), offset: (0.22, 0.52, -1.05), color: (0.95, 0.85, 0.3)),
-            (size: (0.12, 0.1, 0.1), offset: (-0.22, 0.52, -1.05), color: (0.95, 0.85, 0.3)),
-            (size: (0.3, 0.15, 0.7), offset: (0.0, 0.22, 1.0), color: (0.18, 0.25, 0.15)),
+            (name: "body",            size: (1.0, 0.45, 1.5), offset: (0.0, 0.3, 0.0), color: (0.2, 0.28, 0.17)),
+            (name: "head",            size: (0.7, 0.3, 0.6), offset: (0.0, 0.35, -0.95), color: (0.17, 0.24, 0.14)),
+            (name: "eye_right",       size: (0.12, 0.1, 0.1), offset: (0.22, 0.52, -1.05), color: (0.95, 0.85, 0.3)),
+            (name: "eye_left",        size: (0.12, 0.1, 0.1), offset: (-0.22, 0.52, -1.05), color: (0.95, 0.85, 0.3)),
+            (name: "tail",            size: (0.3, 0.15, 0.7), offset: (0.0, 0.22, 1.0), color: (0.18, 0.25, 0.15)),
         ],
         attack: Some((damage: 8.0, cause: Piercing, reach: 1.6, every: 1.6)),
         spawn: Some((biomes: ["great_swamp"], when: Night, at: Surface, group: (1, 2), weight: 2.0)),
@@ -61,10 +70,11 @@
     (
         name: "ancestral_spirit", title: "Ancestral Spirit", temper: Spirit, health: 12.0, speed: 1.2, run: 2.6,
         size: (0.7, 1.8),
+        skin: "ancestral_spirit",
         model: [
-            (size: (0.6, 1.0, 0.4), offset: (0.0, 0.9, 0.0), color: (0.7, 0.9, 1.0)),
-            (size: (0.42, 0.42, 0.42), offset: (0.0, 1.62, 0.0), color: (0.8, 0.95, 1.0)),
-            (size: (0.4, 0.5, 0.3), offset: (0.0, 0.25, 0.05), color: (0.55, 0.8, 1.0)),
+            (name: "body",            size: (0.6, 1.0, 0.4), offset: (0.0, 0.9, 0.0), color: (0.7, 0.9, 1.0)),
+            (name: "head",            size: (0.42, 0.42, 0.42), offset: (0.0, 1.62, 0.0), color: (0.8, 0.95, 1.0)),
+            (name: "wisp",            size: (0.4, 0.5, 0.3), offset: (0.0, 0.25, 0.05), color: (0.55, 0.8, 1.0)),
         ],
         attack: Some((damage: 4.0, cause: Chill, reach: 1.8, every: 2.5)),
         spawn: Some((biomes: [], when: Night, at: Surface, group: (1, 1), weight: 2.5)),
@@ -74,14 +84,15 @@
     (
         name: "barrow_wight", title: "Barrow Wight", temper: Hostile, health: 30.0, speed: 1.4, run: 3.6,
         size: (0.7, 1.9),
+        skin: "barrow_wight",
         model: [
-            (size: (0.55, 0.85, 0.35), offset: (0.0, 1.15, 0.0), color: (0.32, 0.33, 0.3)),
-            (size: (0.38, 0.38, 0.38), offset: (0.0, 1.75, 0.0), color: (0.75, 0.74, 0.66)),
-            (size: (0.08, 0.06, 0.04), offset: (0.09, 1.78, -0.2), color: (0.4, 0.9, 1.0)),
-            (size: (0.08, 0.06, 0.04), offset: (-0.09, 1.78, -0.2), color: (0.4, 0.9, 1.0)),
-            (size: (0.18, 0.75, 0.18), offset: (0.15, 0.37, 0.0), color: (0.28, 0.28, 0.26)),
-            (size: (0.18, 0.75, 0.18), offset: (-0.15, 0.37, 0.0), color: (0.28, 0.28, 0.26)),
-            (size: (0.05, 0.05, 0.8), offset: (0.38, 1.05, -0.35), color: (0.55, 0.55, 0.58)),
+            (name: "body",            size: (0.55, 0.85, 0.35), offset: (0.0, 1.15, 0.0), color: (0.32, 0.33, 0.3)),
+            (name: "head",            size: (0.38, 0.38, 0.38), offset: (0.0, 1.75, 0.0), color: (0.75, 0.74, 0.66)),
+            (name: "eye_right",       size: (0.08, 0.06, 0.04), offset: (0.09, 1.78, -0.2), color: (0.4, 0.9, 1.0)),
+            (name: "eye_left",        size: (0.08, 0.06, 0.04), offset: (-0.09, 1.78, -0.2), color: (0.4, 0.9, 1.0)),
+            (name: "leg_right",       size: (0.18, 0.75, 0.18), offset: (0.15, 0.37, 0.0), color: (0.28, 0.28, 0.26)),
+            (name: "leg_left",        size: (0.18, 0.75, 0.18), offset: (-0.15, 0.37, 0.0), color: (0.28, 0.28, 0.26)),
+            (name: "blade",           size: (0.05, 0.05, 0.8), offset: (0.38, 1.05, -0.35), color: (0.55, 0.55, 0.58)),
         ],
         attack: Some((damage: 10.0, cause: Piercing, reach: 1.9, every: 1.5)),
         spawn: Some((biomes: [], when: Any, at: Barrow, group: (3, 3), weight: 1.0)),
@@ -90,12 +101,13 @@
     (
         name: "villager", title: "Villager", temper: Villager, health: 20.0, speed: 1.6, run: 4.0,
         size: (0.6, 1.8),
+        skins: ["villager_a", "villager_b", "villager_c"],
         model: [
-            (size: (0.5, 0.75, 0.3), offset: (0.0, 1.05, 0.0), color: (0.45, 0.5, 0.32)),
-            (size: (0.36, 0.36, 0.36), offset: (0.0, 1.62, 0.0), color: (0.82, 0.64, 0.48)),
-            (size: (0.4, 0.1, 0.4), offset: (0.0, 1.84, 0.0), color: (0.7, 0.64, 0.4)),
-            (size: (0.18, 0.7, 0.2), offset: (0.13, 0.35, 0.0), color: (0.4, 0.33, 0.24)),
-            (size: (0.18, 0.7, 0.2), offset: (-0.13, 0.35, 0.0), color: (0.4, 0.33, 0.24)),
+            (name: "body",            size: (0.5, 0.75, 0.3), offset: (0.0, 1.05, 0.0), color: (0.45, 0.5, 0.32)),
+            (name: "head",            size: (0.36, 0.36, 0.36), offset: (0.0, 1.62, 0.0), color: (0.82, 0.64, 0.48)),
+            (name: "hat",             size: (0.4, 0.1, 0.4), offset: (0.0, 1.84, 0.0), color: (0.7, 0.64, 0.4)),
+            (name: "leg_right",       size: (0.18, 0.7, 0.2), offset: (0.13, 0.35, 0.0), color: (0.4, 0.33, 0.24)),
+            (name: "leg_left",        size: (0.18, 0.7, 0.2), offset: (-0.13, 0.35, 0.0), color: (0.4, 0.33, 0.24)),
         ],
         drops: [],
     ),
