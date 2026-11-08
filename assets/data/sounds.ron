@@ -27,6 +27,6 @@
         "wind_loop": 0.5,
         "rain_loop": 0.5,
         "levitate_loop": 0.35,
-        "night_loop": 0.4,
+        "night_loop": 0.25,
     },
 )
