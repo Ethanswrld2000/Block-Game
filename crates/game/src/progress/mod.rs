@@ -78,13 +78,13 @@ impl Progress {
 pub const BASE_FOCUS: f32 = 60.0;
 const BASE_REGEN: f32 = 2.0;
 /// Focus per second while levitating (before skills).
-const LEVITATE_DRAIN: f32 = 2.4;
+const LEVITATE_DRAIN: f32 = 1.8;
 const LIGHT_DRAIN: f32 = 0.8;
 const WARMTH_DRAIN: f32 = 1.2;
 /// How much warmer the Warmth spell makes cold feel.
 pub const WARMTH_SPELL: f32 = 14.0;
 /// Levitation: climbing and sinking speed, blocks/s.
-pub const LEVITATE_UP: f32 = 7.0;
+pub const LEVITATE_UP: f32 = 10.0;
 pub const LEVITATE_DOWN: f32 = 4.0;
 
 /// The spells running now.
@@ -209,6 +209,8 @@ fn cast(
         + if spells.light { LIGHT_DRAIN } else { 0.0 }
         + if spells.warmth { WARMTH_DRAIN } else { 0.0 };
     let p = progress.bypass_change_detection();
+    // Like the clock, focus stands still during a screenshot run.
+    let drain = if screenshot_run() { 0.0 } else { drain };
     if drain > 0.0 {
         p.focus -= drain * dt;
     } else {
@@ -268,7 +270,7 @@ fn follow_light(
     }
 }
 
-fn load_progress(dir: Res<SaveDir>, tree: Res<Tree>, mut progress: ResMut<Progress>, mut perks: ResMut<Perks>) {
+fn load_progress(dir: Res<SaveDir>, tree: Res<Tree>, mut progress: ResMut<Progress>, mut perks: ResMut<Perks>, mut spells: ResMut<Spells>) {
     if !screenshot_run()
         && let Ok(text) = std::fs::read_to_string(dir.file("progress.ron"))
     {
@@ -286,6 +288,12 @@ fn load_progress(dir: Res<SaveDir>, tree: Res<Tree>, mut progress: ResMut<Progre
         }
     }
     *perks = progress.learned.perks(&tree);
+    // `BLOCKGAME_CAST=levitate,light,warmth` starts with those spells running (for screenshots).
+    if let Ok(list) = std::env::var("BLOCKGAME_CAST") {
+        spells.levitate = list.contains("levitate");
+        spells.light = list.contains("light");
+        spells.warmth = list.contains("warmth");
+    }
 }
 
 fn store(dir: &SaveDir, p: &Progress) {
@@ -311,5 +319,29 @@ fn save_progress(time: Res<Time>, mut timer: Local<f32>, dir: Res<SaveDir>, p: R
 fn save_progress_on_exit(mut exit: MessageReader<AppExit>, dir: Res<SaveDir>, p: Res<Progress>) {
     if exit.read().next().is_some() && !screenshot_run() {
         store(&dir, &p);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Balance: with the first two nodes (Wanderer, Mystic) a full focus bar
+    /// lifts you from sea level to the lowest sky islands.
+    #[test]
+    fn levitation_reaches_the_sky_islands() {
+        let tree = Tree::from_ron(include_str!("../../../../assets/data/skills.ron")).unwrap();
+        let prog = Progression::from_ron(include_str!("../../../../assets/data/progression.ron")).unwrap();
+        let mut p = Progress::new(&prog);
+        p.learned.points += prog.points; // level 2
+        p.learned.take(&tree, skills::Node::Major(tree.root)).unwrap();
+        let mystic = tree.majors.iter().position(|m| m.name == "mystic").unwrap();
+        p.learned.take(&tree, skills::Node::Major(mystic)).unwrap();
+        let perks = p.learned.perks(&tree);
+        assert!(perks.spells.contains(&Spell::Levitation));
+        let seconds = perks.max_focus() / (LEVITATE_DRAIN * (1.0 - perks.levitate_cost));
+        let climb = seconds * LEVITATE_UP;
+        let lowest_island_top = (worldgen::SKY_MIN + 40) as f32;
+        assert!(climb > lowest_island_top - worldgen::SEA_LEVEL as f32, "climbs {climb:.0} blocks");
     }
 }

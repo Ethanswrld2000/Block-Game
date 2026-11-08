@@ -166,7 +166,7 @@ struct TreeView {
 
 impl Default for TreeView {
     fn default() -> Self {
-        Self { open: false, pan: Vec2::new(0.0, -160.0), zoom: 0.7, hover: None, dragged: 0.0, message: String::new(), built: false }
+        Self { open: false, pan: Vec2::new(0.0, -170.0), zoom: 0.6, hover: None, dragged: 0.0, message: String::new(), built: false }
     }
 }
 
@@ -196,7 +196,7 @@ fn spawn_screen(mut commands: Commands, tree: Res<Tree>) {
         .spawn((
             Screen,
             Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), overflow: Overflow::clip(), ..default() },
-            BackgroundColor(Color::srgba(0.03, 0.04, 0.06, 0.985)),
+            BackgroundColor(Color::srgb(0.03, 0.04, 0.06)),
             GlobalZIndex(20),
             Visibility::Hidden,
         ))
@@ -407,7 +407,7 @@ fn layout(
     for (l, mut node) in &mut labels {
         let c = at(l.0);
         node.left = Val::Px(c.x - 50.0);
-        node.top = Val::Px(c.y + radius(l.0, view.zoom) + 4.0);
+        node.top = Val::Px(c.y + super::skills::RING_RADIUS * view.zoom + 14.0);
         node.width = Val::Px(100.0);
         node.justify_content = JustifyContent::Center;
     }
