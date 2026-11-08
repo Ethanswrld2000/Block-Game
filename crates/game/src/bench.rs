@@ -3,7 +3,8 @@
 //! flies a fixed route (out over the swamp, up through the clouds to the sky
 //! islands, back down) for that many seconds, turning as it goes. It logs
 //! frame-time statistics every 10 seconds and at the end, then quits.
-//! Settings and saves are left alone.
+//! Settings and saves are left alone. Vsync is off during the run, and
+//! `BLOCKGAME_NO_CLOUDS=1` leaves the clouds out to compare.
 
 use bevy::prelude::*;
 
@@ -16,8 +17,17 @@ impl Plugin for BenchPlugin {
     fn build(&self, app: &mut App) {
         if let Some(secs) = std::env::var("BLOCKGAME_BENCH").ok().and_then(|v| v.parse::<f32>().ok()) {
             app.insert_resource(Bench { secs, state: State::Loading, frames: Vec::new(), start: Vec3::ZERO, t: 0.0, idle: 0, report_at: 10.0 })
+                .add_systems(Startup, no_vsync)
                 .add_systems(Update, run.after(crate::settings::SettingsPlugin::APPLY));
         }
+    }
+}
+
+/// Without vsync the frame rate isn't capped at the display's, so the
+/// headroom shows (`BLOCKGAME_VSYNC=1` keeps it, to see what you'd get).
+fn no_vsync(mut window: Single<&mut Window, With<bevy::window::PrimaryWindow>>) {
+    if std::env::var_os("BLOCKGAME_VSYNC").is_none() {
+        window.present_mode = bevy::window::PresentMode::AutoNoVsync;
     }
 }
 

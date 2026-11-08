@@ -52,7 +52,7 @@ fn density(p: vec3<f32>, octaves: i32) -> f32 {
     let shape = clamp(h * 6.0, 0.0, 1.0) * clamp((1.0 - h) * 2.2, 0.0, 1.0);
     let q = vec3<f32>(p.x - clouds.wind.x, p.y * 1.8, p.z - clouds.wind.y) * 0.0045;
     let n = fbm(q, octaves);
-    let threshold = 0.78 - clouds.slab.z * 0.45;
+    let threshold = 0.84 - clouds.slab.z * 0.5;
     return max(n * shape - threshold * mix(1.0, 0.6, shape), 0.0) * 9.0 * clouds.slab.w;
 }
 
@@ -80,7 +80,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         discard;
     }
     // Fewer, longer steps far away.
-    let steps = 28;
+    let steps = 22;
     let dt = (t1 - t0) / f32(steps);
     t0 += dt * hash(vec3<f32>(in.position.xy, clouds.wind.z * 7.0));
     let sun = clouds.sun_dir.xyz;
@@ -97,8 +97,8 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
                 first = t0 + dt * f32(i);
             }
             // How much cloud lies between here and the sun.
-            let toward = density(p + sun * 18.0, 2) + density(p + sun * 40.0, 2) * 0.6;
-            let lit = exp(-toward * 14.0);
+            let toward = density(p + sun * 24.0, 2);
+            let lit = exp(-toward * 22.0);
             let h = clamp((p.y - base) / (top - base), 0.0, 1.0);
             let col = clouds.ambient.rgb * (0.55 + 0.45 * h) + clouds.sun_color.rgb * lit * 0.9;
             let a = 1.0 - exp(-d * dt);
