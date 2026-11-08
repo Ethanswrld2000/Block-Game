@@ -119,6 +119,7 @@ fn notice(
     seasons: Res<Seasons>,
     mut here: ResMut<Here>,
     mut cards: MessageWriter<ShowCard>,
+    (mut progress, prog, mut gain): (ResMut<crate::progress::Progress>, Res<crate::progress::xp::Progression>, MessageWriter<crate::progress::GainXp>),
 ) {
     let Some(generator) = generator else { return };
     let wg = &generator.0;
@@ -148,6 +149,10 @@ fn notice(
         if let Some((key, title, subtitle)) = card
             && here.shown.get(&key).is_none_or(|t| now - t > AGAIN)
         {
+            if progress.found.insert(key.clone()) {
+                let xp = if key.starts_with("barrow") { prog.xp.barrow } else { prog.xp.village };
+                gain.write(crate::progress::GainXp { xp, why: format!("Found {title}") });
+            }
             here.shown.insert(key, now);
             cards.write(ShowCard { title, subtitle });
             // Arriving in a village counts as arriving in its region too.
@@ -168,6 +173,10 @@ fn notice(
         here.biome = Some(name.clone());
         let key = format!("biome:{name}");
         if here.shown.get(&key).is_none_or(|t| now - t > AGAIN) {
+            if progress.found.insert(key.clone()) && progress.found.len() > 1 {
+                // (The region you start in isn't a find.)
+                gain.write(crate::progress::GainXp { xp: prog.xp.region, why: format!("Reached {}", biome.title) });
+            }
             here.shown.insert(key, now);
             let sp = seasons.at(&clock);
             let season = &seasons.list[sp.current].title;

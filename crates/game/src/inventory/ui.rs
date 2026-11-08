@@ -278,6 +278,7 @@ fn click(
     mut inv: ResMut<Inventory>,
     mut chests: ResMut<Chests>,
     mut spill: MessageWriter<Spill>,
+    (mut gain, prog): (MessageWriter<crate::progress::GainXp>, Option<Res<crate::progress::xp::Progression>>),
 ) {
     if !ui.open {
         return;
@@ -400,6 +401,11 @@ fn click(
                         }
                     }
                 }
+            }
+            if made > 0
+                && let Some(prog) = &prog
+            {
+                gain.write(crate::progress::GainXp { xp: prog.xp.craft * made as f32, why: String::new() });
             }
             ui.message = if made == 0 {
                 "Missing parts".into()

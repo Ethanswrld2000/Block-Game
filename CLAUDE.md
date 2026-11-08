@@ -91,12 +91,24 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   villages, barrows and regions), chest loot (`assets/data/loot.ron`, rolled on first open;
   placed chests start empty via `interact::Placed`), season weather (`cold_snap`, `gale` with
   wind push in `player`, `DamageCause::Chill` -> Fatigue). Creatures ignore a flying player.
+- Phase 9 (progression and polish): `game::progress` (pure `xp` levels from
+  `assets/data/progression.ron`; pure `skills` tree from `assets/data/skills.ron`: majors with
+  weighted links, rings of 8 minors, taking a minor closes its neighbours, `Perks` sums the
+  rewards; `Spells` Levitation/Light/Warmth on G/X/V burn focus; `GainXp` message from mining,
+  kills, crafting, `places` finds and the first sky island; K opens the map screen in `progress::ui`;
+  saved to `progress.ron`), `player::Body.levitate/feather`, `game::sound` (placeholder oggs from
+  `tools/gen_placeholder_sounds.py`, material sounds in `assets/data/sounds.ron`, loops follow
+  weather/night/levitation), `game::settings` (Esc pause menu, `saves/settings.ron` shared by all
+  worlds: view distance, mouse, FOV, volume, ambience, clouds off/fast/fancy, debug overlay),
+  `game::clouds` raymarched in a slab y 236-290 (`assets/shaders/clouds.wesl`, two planes),
+  `game::bench` (`BLOCKGAME_BENCH=60` flies a fixed route with vsync off and logs frame times;
+  `BLOCKGAME_NO_CLOUDS=1`, `BLOCKGAME_VSYNC=1`).
 - Known gaps: vertices are 40 bytes, not the packed 8-byte format (performance pass); no thunder
   sound or snow cover yet; no block light propagation (torches are real point lights); items on the
   ground and creatures are not saved; creatures walk straight at goals (no pathfinding, villagers
   don't climb into huts: they vanish at the door at night); creature models are untextured boxes.
 - Revisit (Ethan): the inventory screen works but its UX needs improving.
-- Next: phase 9 per the plan doc.
+- Next: all nine planned phases are built; ask Ethan what comes next.
 
 ## Testing without a screen
 
@@ -104,7 +116,8 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
 `BLOCKGAME_CAMERA=x,y,z,yaw,pitch` (or `x,y,z,@tx,ty,tz` to look at a point) places the camera first.
 `BLOCKGAME_TIME=day:hour` and `BLOCKGAME_WEATHER=rain` set the scene; the clock stands still during a screenshot run.
 With `BLOCKGAME_CAMERA` the shot is taken flying (`BLOCKGAME_WALK=1` stands there instead); without it, from the player standing at spawn.
-`BLOCKGAME_SLOT=n` starts with hotbar slot n in hand; `BLOCKGAME_LOOK=fen_stag` turns the camera to the nearest creature of a kind.
+`BLOCKGAME_SLOT=n` starts with hotbar slot n in hand; `BLOCKGAME_SKILLS=n` gives n points and learns Wanderer and Mystic;
+`BLOCKGAME_CAST=levitate,light` starts spells; `BLOCKGAME_SKILLTREE=1` opens the tree; `BLOCKGAME_LOOK=fen_stag` turns the camera to the nearest creature of a kind.
 The home village's name and position are logged at startup.
 In the cloud container: `BEVY_ASSET_ROOT=$PWD BLOCKGAME_SCREENSHOT=/tmp/s.png WGPU_BACKEND=vulkan xvfb-run -s "-screen 0 1280x720x24" ./target/debug/block-game`
 (needs `mesa-vulkan-drivers xvfb libxkbcommon-x11-0`).

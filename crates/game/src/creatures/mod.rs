@@ -237,6 +237,7 @@ fn take_strikes(
     mut spill: MessageWriter<crate::inventory::Spill>,
     mut toast: MessageWriter<crate::survival::Toast>,
     mut dice: ResMut<Dice>,
+    (mut gain, prog): (MessageWriter<crate::progress::GainXp>, Res<crate::progress::xp::Progression>),
 ) {
     let Some(kinds) = kinds else { return };
     for s in strikes.read() {
@@ -265,6 +266,9 @@ fn take_strikes(
                 None => format!("{} slain", k.title),
             };
             toast.write(crate::survival::Toast(msg));
+            if villager.is_none() {
+                gain.write(crate::progress::GainXp { xp: k.health * prog.xp.kill, why: String::new() });
+            }
             commands.entity(s.entity).despawn();
         }
     }
@@ -280,10 +284,10 @@ pub fn ground_near(world: &World, blocks: &Blocks, x: i32, z: i32, from: i32, to
     }).map(|y| y + 1)
 }
 
-/// Light sources a spirit keeps away from: placed torches, and a torch in your hand.
-fn lights(torches: &Torches, player: &Player, wielded: &Wielded, items: &Items) -> Vec<Vec3> {
+/// Light sources a spirit keeps away from: placed torches, a torch in your hand, the Light spell.
+fn lights(torches: &Torches, player: &Player, wielded: &Wielded, items: &Items, spell: bool) -> Vec<Vec3> {
     let mut l: Vec<Vec3> = torches.positions().map(|p| Vec3::new(p.x as f32 + 0.5, p.y as f32 + 0.5, p.z as f32 + 0.5)).collect();
-    if wielded.0.is_some_and(|i| matches!(items.get(i).kind, ItemKind::Torch)) {
+    if spell || wielded.0.is_some_and(|i| matches!(items.get(i).kind, ItemKind::Torch)) {
         l.push(player.pos + Vec3::Y);
     }
     l
@@ -302,7 +306,7 @@ fn spawn_around(
     clock: Res<WorldClock>,
     (player, mode): (Res<Player>, Res<MoveMode>),
     torches: Res<Torches>,
-    wielded: Res<Wielded>,
+    (wielded, spells): (Res<Wielded>, Res<crate::progress::Spells>),
     items: Res<Items>,
     q: Query<&Creature>,
     mut dice: ResMut<Dice>,
@@ -325,7 +329,7 @@ fn spawn_around(
             Temper::Villager => {}
         }
     }
-    let lights = lights(&torches, &player, &wielded, &items);
+    let lights = lights(&torches, &player, &wielded, &items, spells.light);
     let rng = &mut dice.0;
     // A few tries per tick; many land on water or unloaded ground.
     for _ in 0..4 {
@@ -513,7 +517,7 @@ fn spirits(
     mode: Res<MoveMode>,
     s: Res<Survival>,
     torches: Res<Torches>,
-    wielded: Res<Wielded>,
+    (wielded, spells): (Res<Wielded>, Res<crate::progress::Spells>),
     items: Res<Items>,
     mut hits: MessageWriter<Damage>,
     mut q: Query<(Entity, &mut Transform, &mut Creature)>,
@@ -522,7 +526,7 @@ fn spirits(
     let Some(kinds) = kinds else { return };
     let dt = time.delta_secs();
     let night = brain::spirit_hours(clock.hour());
-    let lights = lights(&torches, &player, &wielded, &items);
+    let lights = lights(&torches, &player, &wielded, &items, spells.light);
     let target = (*mode == MoveMode::Walk && s.dead_for.is_none() && player.ready).then_some(player.pos + Vec3::Y * 0.3);
     let t = time.elapsed_secs();
     for (e, mut tf, mut c) in &mut q {

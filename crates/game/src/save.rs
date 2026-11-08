@@ -50,6 +50,11 @@ impl SaveDir {
         Self { root: Arc::new(dir), chunks: Arc::new(chunks) }
     }
 
+    /// A file shared by all worlds, next to the world folders (`settings.ron`).
+    pub fn shared_file(&self, name: &str) -> PathBuf {
+        self.root.parent().map_or_else(|| PathBuf::from(name), |p| p.join(name))
+    }
+
     /// A file in the world's folder, such as `time.ron`.
     pub fn file(&self, name: &str) -> PathBuf {
         self.root.join(name)

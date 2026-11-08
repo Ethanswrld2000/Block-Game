@@ -197,6 +197,7 @@ fn tick_body(
     wielded: Res<Wielded>,
     inv: Res<Inventory>,
     items: Res<Items>,
+    (perks, spells): (Res<crate::progress::skills::Perks>, Res<crate::progress::Spells>),
     mut s: ResMut<Survival>,
 ) {
     let held = wielded.0;
@@ -206,12 +207,16 @@ fn tick_body(
     let sun = crate::sky::sun_direction(clock.time, daylight).y;
     let carried = inv.mass(&items) + if camp.bedroll.is_none() { BEDROLL_MASS } else { 0.0 };
     let raw = feels_like(&climate, &conditions, sun, player.in_water, eye, &torches, holding_torch);
-    let air = if player.head_in_water { 0.0 } else { vitals::air_at(eye.y) * conditions.air };
+    let air = if player.head_in_water { 0.0 } else { perks.breathe(vitals::air_at(eye.y) * conditions.air) };
+    let mut feels = perks.feel(vitals::clothed(raw, inv.insulation(&items)), vitals::COMFORT_LOW + 6.0);
+    if spells.warmth {
+        feels = perks_warm(feels);
+    }
     let env = Env {
         air,
-        feels: vitals::clothed(raw, inv.insulation(&items)),
+        feels,
         sprinting: player.sprinting && *mode == MoveMode::Walk,
-        carried,
+        carried: perks.carried(carried, vitals::CAPACITY),
     };
     s.env = env;
     // Flying is for looking around: the body waits.
@@ -251,6 +256,11 @@ fn die_and_respawn(
     toast.write(Toast(if camp.bedroll.is_some() { "You wake at your camp".into() } else { "You wake at the edge of the swamp".into() }));
 }
 
+/// The Warmth spell takes the edge off the cold (but never makes you hot).
+fn perks_warm(feels: f32) -> f32 {
+    if feels >= vitals::COMFORT_HIGH - 4.0 { feels } else { (feels + crate::progress::WARMTH_SPELL).min(vitals::COMFORT_HIGH - 4.0) }
+}
+
 fn set_body(s: Res<Survival>, sleep: Res<camp::Sleep>, mut body: ResMut<Body>) {
     let v = &s.vitals;
     *body = Body {
@@ -258,6 +268,7 @@ fn set_body(s: Res<Survival>, sleep: Res<camp::Sleep>, mut body: ResMut<Body>) {
         fall: vitals::weight_fall(s.env.carried),
         dizzy: v.dizzy(),
         frozen: v.health.is_dead() || sleep.active(),
+        ..default()
     };
 }
 

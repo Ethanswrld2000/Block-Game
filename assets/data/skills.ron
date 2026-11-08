@@ -1,0 +1,112 @@
+// The skill tree. Each major node is ringed by 8 minor nodes; a point spent on a major opens
+// its ring. Every edge has a weight: the points it costs to take the node at its end.
+// Taking a minor closes the two next to it in the ring, so at most four of the eight can be had.
+//
+//   majors: name, title, pos (map units), cost of the ring edges are on each minor,
+//           gives: what taking it grants
+//   links:  (from, to, weight) between majors; a major can be taken once a linked one is
+//   root:   the major every character can take first (costs 1)
+//
+// Gives: Carry(kg), Air(share of thin air made up), Cold(°C of cold shrugged off),
+//        Speed(+share), Mining(+share), Damage(+share), Focus(max), FocusRegen(per s),
+//        Spell(Levitation | Light | Warmth), LevitateCost(-share of focus drain)
+(
+    root: "wanderer",
+    majors: [
+        (
+            name: "wanderer", title: "Wanderer", pos: (0.0, 0.0),
+            gives: [Carry(4.0)],
+            ring: [
+                (title: "Long Stride", cost: 1, gives: [Speed(0.05)]),
+                (title: "Pack Mule", cost: 1, gives: [Carry(6.0)]),
+                (title: "Deep Lungs", cost: 1, gives: [Air(0.15)]),
+                (title: "Thick Skin", cost: 1, gives: [Cold(3.0)]),
+                (title: "Quick Feet", cost: 2, gives: [Speed(0.08)]),
+                (title: "Forager", cost: 1, gives: [Carry(3.0), Speed(0.02)]),
+                (title: "Steady Breath", cost: 2, gives: [Air(0.25)]),
+                (title: "Hardy", cost: 2, gives: [Cold(5.0)]),
+            ],
+        ),
+        (
+            name: "mystic", title: "Mystic", pos: (0.0, -330.0),
+            gives: [Spell(Levitation), Focus(20.0)],
+            ring: [
+                (title: "Inner Light", cost: 2, gives: [Spell(Light)]),
+                (title: "Deep Well", cost: 1, gives: [Focus(25.0)]),
+                (title: "Feather Soul", cost: 1, gives: [LevitateCost(0.2)]),
+                (title: "Quiet Mind", cost: 1, gives: [FocusRegen(1.0)]),
+                (title: "Hearthsong", cost: 2, gives: [Spell(Warmth)]),
+                (title: "Wide Well", cost: 2, gives: [Focus(40.0)]),
+                (title: "Drifting", cost: 2, gives: [LevitateCost(0.3)]),
+                (title: "Still Waters", cost: 2, gives: [FocusRegen(2.0)]),
+            ],
+        ),
+        (
+            name: "hunter", title: "Hunter", pos: (330.0, 80.0),
+            gives: [Damage(0.15)],
+            ring: [
+                (title: "Keen Edge", cost: 1, gives: [Damage(0.1)]),
+                (title: "Light Step", cost: 1, gives: [Speed(0.05)]),
+                (title: "Heavy Hand", cost: 2, gives: [Damage(0.2)]),
+                (title: "Tracker", cost: 1, gives: [Speed(0.04), Carry(2.0)]),
+                (title: "Killer", cost: 2, gives: [Damage(0.25)]),
+                (title: "Furs", cost: 1, gives: [Cold(4.0)]),
+                (title: "Brute", cost: 2, gives: [Damage(0.15), Carry(4.0)]),
+                (title: "Runner", cost: 2, gives: [Speed(0.1)]),
+            ],
+        ),
+        (
+            name: "delver", title: "Delver", pos: (-330.0, 80.0),
+            gives: [Mining(0.15)],
+            ring: [
+                (title: "Stonecutter", cost: 1, gives: [Mining(0.1)]),
+                (title: "Mole", cost: 1, gives: [Air(0.2)]),
+                (title: "Strong Back", cost: 1, gives: [Carry(6.0)]),
+                (title: "Quarry", cost: 2, gives: [Mining(0.25)]),
+                (title: "Cave Lungs", cost: 2, gives: [Air(0.3)]),
+                (title: "Hauler", cost: 2, gives: [Carry(10.0)]),
+                (title: "Seam Sense", cost: 2, gives: [Mining(0.2), Air(0.1)]),
+                (title: "Tunnel Rat", cost: 1, gives: [Mining(0.08), Speed(0.03)]),
+            ],
+        ),
+        (
+            name: "hearthkeeper", title: "Hearthkeeper", pos: (0.0, 330.0),
+            gives: [Cold(6.0)],
+            ring: [
+                (title: "Ember Heart", cost: 1, gives: [Cold(4.0)]),
+                (title: "Wool", cost: 1, gives: [Cold(3.0), Carry(2.0)]),
+                (title: "Winter Born", cost: 2, gives: [Cold(8.0)]),
+                (title: "Kindling", cost: 2, gives: [Spell(Warmth)]),
+                (title: "Thick Blood", cost: 1, gives: [Cold(5.0)]),
+                (title: "Patient", cost: 1, gives: [FocusRegen(1.0)]),
+                (title: "Frostwalker", cost: 2, gives: [Cold(6.0), Speed(0.04)]),
+                (title: "Lamplighter", cost: 2, gives: [Spell(Light)]),
+            ],
+        ),
+        (
+            name: "skywalker", title: "Skywalker", pos: (0.0, -660.0),
+            gives: [LevitateCost(0.25), Air(0.3)],
+            ring: [
+                (title: "Thin Air", cost: 2, gives: [Air(0.3)]),
+                (title: "Cloud Step", cost: 2, gives: [LevitateCost(0.2)]),
+                (title: "High Well", cost: 2, gives: [Focus(50.0)]),
+                (title: "Updraft", cost: 3, gives: [LevitateCost(0.3)]),
+                (title: "Sky Born", cost: 2, gives: [Cold(6.0), Air(0.2)]),
+                (title: "Gale Rider", cost: 2, gives: [Speed(0.08)]),
+                (title: "Starlit", cost: 3, gives: [FocusRegen(3.0)]),
+                (title: "Weightless", cost: 3, gives: [Carry(12.0)]),
+            ],
+        ),
+    ],
+    links: [
+        ("wanderer", "mystic", 1),
+        ("wanderer", "hunter", 2),
+        ("wanderer", "delver", 2),
+        ("wanderer", "hearthkeeper", 2),
+        ("mystic", "skywalker", 3),
+        ("hunter", "hearthkeeper", 3),
+        ("delver", "hearthkeeper", 3),
+        ("hunter", "mystic", 3),
+        ("delver", "mystic", 3),
+    ],
+)

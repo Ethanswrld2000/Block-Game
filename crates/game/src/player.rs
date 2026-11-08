@@ -101,11 +101,15 @@ pub struct Body {
     pub dizzy: f32,
     /// No moving at all (dead, or asleep).
     pub frozen: bool,
+    /// The Levitation spell: no gravity; Space rises, Ctrl/C sinks.
+    pub levitate: bool,
+    /// Falling gently (focus ran out while levitating).
+    pub feather: bool,
 }
 
 impl Default for Body {
     fn default() -> Self {
-        Self { speed: 1.0, fall: 1.0, dizzy: 0.0, frozen: false }
+        Self { speed: 1.0, fall: 1.0, dizzy: 0.0, frozen: false, levitate: false, feather: false }
     }
 }
 
@@ -328,8 +332,18 @@ fn walk(
         if jump {
             p.vel.y = p.vel.y.max(3.8);
         }
+    } else if body.levitate {
+        let up = if jump {
+            crate::progress::LEVITATE_UP
+        } else if want_crouch {
+            -crate::progress::LEVITATE_DOWN
+        } else {
+            0.0
+        };
+        p.vel.y += (up - p.vel.y) * (dt * 4.0).min(1.0);
     } else {
-        p.vel.y = (p.vel.y - GRAVITY * dt).max(-MAX_FALL);
+        let max_fall = if body.feather { 5.0 } else { MAX_FALL };
+        p.vel.y = (p.vel.y - GRAVITY * dt).max(-max_fall);
         if jump && p.on_ground {
             p.vel.y = JUMP_SPEED;
         }

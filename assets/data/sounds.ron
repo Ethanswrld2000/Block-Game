@@ -1,0 +1,32 @@
+// Which sounds a block's material makes. Footsteps pick one of `<step>_0`, `_1`, `_2`
+// at random; mining plays `dig` with every blow. Files live in assets/sounds/
+// (placeholders from tools/gen_placeholder_sounds.py; replace any by name).
+(
+    materials: {
+        "soil": (step: "step_soft", dig: "dig_soft"),
+        "stone": (step: "step_hard", dig: "dig_hard"),
+        "ore": (step: "step_hard", dig: "dig_hard"),
+        "wood": (step: "step_wood", dig: "dig_wood"),
+        "plant": (step: "step_plant", dig: "dig_plant"),
+    },
+    fallback: (step: "step_soft", dig: "dig_soft"),
+    // Loudness of each sound before the volume setting, 0..1.
+    volumes: {
+        "step": 0.35,
+        "dig": 0.5,
+        "break": 0.6,
+        "place": 0.5,
+        "hit": 0.7,
+        "creature_hurt": 0.5,
+        "hurt": 0.7,
+        "spirit": 0.45,
+        "spell_on": 0.5,
+        "spell_off": 0.4,
+        "level_up": 0.6,
+        "thunder": 0.9,
+        "wind_loop": 0.5,
+        "rain_loop": 0.5,
+        "levitate_loop": 0.35,
+        "night_loop": 0.4,
+    },
+)

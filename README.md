@@ -15,7 +15,7 @@ Tools in Software Update, or put
 
 ## Controls
 
-- Click the window to capture the mouse, Esc to release it
+- Click the window to capture the mouse; Esc pauses (Resume, Settings, Save and quit)
 - WASD walk, Space jump (or swim up), Shift sprint, Ctrl or C crouch (you won't walk off edges)
 - F switches between walking and flying. Flying: Space up, Shift down, Ctrl fast,
   mouse wheel changes flying speed, blocks break instantly
@@ -28,6 +28,8 @@ Tools in Software Update, or put
   Q throws it away; click a recipe to craft it
 - B unrolls your bedroll on a clear, flat 2x2 patch (your camp), or packs it up when you're beside it
 - Z sleeps at camp, at night or when worn out
+- K opens the skill tree; G, X and V cast Levitation, Light and Warmth once you've learned them
+  (while levitating, Space rises and Ctrl/C sinks)
 - Test keys: F7 is a stab, F8 a club blow, F9 gives you one of everything
 - `-` / `=` change the view distance; hold T to fast-forward time; F4 changes the weather
 - F3 toggles the debug overlay
@@ -79,6 +81,27 @@ chests hold old coins and gear. Walking into a village, a barrow or a new region
 
 Seasons bring their own weather: gales in spring and autumn push you along and thin the air, and
 cold snaps in autumn and winter bite hard.
+
+## Growing stronger
+
+Mining, hunting, crafting and finding new places earn experience; each level gives a skill point.
+The skill tree (K) is a map of major nodes, each ringed by eight smaller ones. Every edge has a cost
+in points, a major opens its ring, and taking a ring node closes the two beside it, so no two
+characters grow quite alike. The Wanderer is where everyone starts; the Mystic next to it teaches
+Levitation, enough to reach the sky islands on one full bar of focus. Light keeps spirits back
+like a torch, and Warmth takes the edge off the cold (it is freezing up among the islands). Focus
+refills while no spell is running.
+
+## Settings
+
+Esc, then Settings: view distance, mouse speed, field of view, volume, ambience and the debug
+overlay. They're saved in `saves/settings.ron` and shared by every world.
+
+## Sound
+
+`assets/sounds/` holds placeholder sounds made by `tools/gen_placeholder_sounds.py`. Swap in real
+recordings by name. `assets/data/sounds.ron` says which footsteps and mining sounds each kind of
+ground makes.
 
 ## Art
 

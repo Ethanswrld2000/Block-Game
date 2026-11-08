@@ -1,0 +1,21 @@
+// Experience. Levels need `base + step * level` XP each; every level gives `points` skill points.
+// A new character starts with `start_points`.
+(
+    base: 60.0,
+    step: 30.0,
+    points: 1,
+    start_points: 1,
+    xp: (
+        // per point of block hardness mined, capped at `mine_cap` per block
+        mine: 0.6,
+        mine_cap: 4.0,
+        // per point of a creature's health
+        kill: 0.5,
+        craft: 2.0,
+        village: 30.0,
+        barrow: 40.0,
+        region: 20.0,
+        // first time standing on a sky island
+        sky_island: 60.0,
+    ),
+)
