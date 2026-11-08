@@ -48,11 +48,13 @@ pub struct Settings {
     pub ambience: f32,
     /// The F3 overlay at start.
     pub debug_overlay: bool,
+    /// 0 off, 1 fast, 2 fancy.
+    pub clouds: u8,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { view_distance: 12, sensitivity: 1.0, fov: 70.0, volume: 0.8, ambience: 0.7, debug_overlay: true }
+        Self { view_distance: 12, sensitivity: 1.0, fov: 70.0, volume: 0.8, ambience: 0.7, debug_overlay: true, clouds: 1 }
     }
 }
 
@@ -64,11 +66,12 @@ enum Knob {
     Fov,
     Volume,
     Ambience,
+    Clouds,
     DebugOverlay,
 }
 
 impl Knob {
-    const ALL: [Knob; 6] = [Knob::ViewDistance, Knob::Sensitivity, Knob::Fov, Knob::Volume, Knob::Ambience, Knob::DebugOverlay];
+    const ALL: [Knob; 7] = [Knob::ViewDistance, Knob::Sensitivity, Knob::Fov, Knob::Volume, Knob::Ambience, Knob::Clouds, Knob::DebugOverlay];
 
     fn label(self) -> &'static str {
         match self {
@@ -77,6 +80,7 @@ impl Knob {
             Knob::Fov => "Field of view",
             Knob::Volume => "Volume",
             Knob::Ambience => "Ambience",
+            Knob::Clouds => "Clouds",
             Knob::DebugOverlay => "Debug overlay (F3)",
         }
     }
@@ -88,6 +92,7 @@ impl Knob {
             Knob::Fov => format!("{:.0}°", s.fov),
             Knob::Volume => format!("{:.0}%", s.volume * 100.0),
             Knob::Ambience => format!("{:.0}%", s.ambience * 100.0),
+            Knob::Clouds => ["off", "fast", "fancy"][s.clouds.min(2) as usize].into(),
             Knob::DebugOverlay => (if s.debug_overlay { "on" } else { "off" }).into(),
         }
     }
@@ -99,6 +104,7 @@ impl Knob {
             Knob::Fov => s.fov = (s.fov + 5.0 * dir).clamp(50.0, 110.0),
             Knob::Volume => s.volume = (s.volume + 0.1 * dir).clamp(0.0, 1.0),
             Knob::Ambience => s.ambience = (s.ambience + 0.1 * dir).clamp(0.0, 1.0),
+            Knob::Clouds => s.clouds = (s.clouds as i32 + dir as i32).clamp(0, 2) as u8,
             Knob::DebugOverlay => s.debug_overlay = !s.debug_overlay,
         }
     }

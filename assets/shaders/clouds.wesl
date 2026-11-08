@@ -79,13 +79,14 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     if (t1 <= t0) {
         discard;
     }
-    // Fewer, longer steps far away.
-    let steps = 22;
+    // Fast: fewer steps and less detail; fancy: more of both.
+    let fancy = clouds.sun_color.w > 0.5;
+    let steps = select(12, 24, fancy);
     let dt = (t1 - t0) / f32(steps);
     t0 += dt * hash(vec3<f32>(in.position.xy, clouds.wind.z * 7.0));
     let sun = clouds.sun_dir.xyz;
     let near = length(ro.xz - (ro + rd * t0).xz) < 900.0;
-    let octaves = select(3, 4, near);
+    let octaves = select(select(2, 3, near), select(3, 4, near), fancy);
     var trans = 1.0;
     var light = vec3<f32>(0.0);
     var first = -1.0;
