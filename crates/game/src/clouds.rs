@@ -72,6 +72,10 @@ struct CloudPlane {
 }
 
 fn spawn_clouds(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<CloudMaterial>>) {
+    // `BLOCKGAME_NO_CLOUDS=1` leaves them out (to measure what they cost).
+    if std::env::var_os("BLOCKGAME_NO_CLOUDS").is_some() {
+        return;
+    }
     let mesh = meshes.add(Plane3d::default().mesh().size(REACH * 2.0, REACH * 2.0));
     for top in [false, true] {
         let material = materials.add(CloudMaterial {
