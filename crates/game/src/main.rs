@@ -23,6 +23,7 @@ mod save;
 mod settings;
 mod sky;
 mod sound;
+mod theme;
 mod survival;
 mod torches;
 mod weather;
@@ -44,6 +45,7 @@ fn main() {
                 // Pixel-art textures: no blurring between texels.
                 .set(ImagePlugin::default_nearest()),
         )
+        .add_plugins(theme::ThemePlugin)
         .add_plugins((
             blocks::BlocksPlugin,
             camera::FlyCameraPlugin,

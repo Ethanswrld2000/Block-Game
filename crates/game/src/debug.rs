@@ -26,7 +26,7 @@ impl Plugin for DebugOverlayPlugin {
 #[derive(Component)]
 struct DebugText;
 
-fn spawn_overlay(mut commands: Commands) {
+fn spawn_overlay(mut commands: Commands, theme: Res<crate::theme::Theme>) {
     commands.spawn((
         DebugText,
         Text::new(""),
@@ -36,23 +36,24 @@ fn spawn_overlay(mut commands: Commands) {
             position_type: PositionType::Absolute,
             top: Val::Px(8.0),
             left: Val::Px(8.0),
-            padding: UiRect::all(Val::Px(6.0)),
+            padding: UiRect::axes(Val::Px(12.0), Val::Px(10.0)),
             ..default()
         },
-        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.45)),
+        theme.skin("panel_light"),
     ));
     // Crosshair.
+    let size = theme.size("crosshair");
     commands.spawn((
+        theme.image("crosshair").with_color(Color::srgba(1.0, 1.0, 1.0, 0.85)),
         Node {
             position_type: PositionType::Absolute,
             left: Val::Percent(50.0),
             top: Val::Percent(50.0),
-            width: Val::Px(4.0),
-            height: Val::Px(4.0),
-            margin: UiRect { left: Val::Px(-2.0), top: Val::Px(-2.0), ..default() },
+            width: Val::Px(size.x),
+            height: Val::Px(size.y),
+            margin: UiRect { left: Val::Px(-size.x / 2.0), top: Val::Px(-size.y / 2.0), ..default() },
             ..default()
         },
-        BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.8)),
     ));
 }
 

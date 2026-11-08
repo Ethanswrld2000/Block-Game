@@ -23,8 +23,9 @@ use crate::player::Player;
 use crate::survival::camp::{Camp, Sleep};
 use crate::survival::health::Layer;
 use crate::survival::Survival;
+use crate::theme::{self, colors, sizes, Theme};
 
-const CELL: f32 = 38.0;
+const CELL: f32 = 46.0;
 
 pub struct InventoryUiPlugin;
 
@@ -33,7 +34,7 @@ impl Plugin for InventoryUiPlugin {
         app.init_resource::<InvUi>()
             .add_systems(Startup, icon_atlas)
             .add_systems(PostStartup, open_for_screenshot)
-            .add_systems(Update, (open_close, hover, click, keys, rebuild, follow_cursor).chain().after(crate::interact::InteractSet));
+            .add_systems(Update, (open_close, hover, scroll, click, keys, rebuild, follow_cursor).chain().after(crate::interact::InteractSet));
     }
 }
 
@@ -73,10 +74,15 @@ struct InvUi {
     hover: Option<Hover>,
     dirty: bool,
     message: String,
+    /// How far the crafting list is scrolled, in points.
+    scroll: f32,
+    /// The cursor is over the crafting list.
+    over_list: bool,
 }
 
+/// Block textures as a grid, for item pictures.
 #[derive(Resource)]
-struct IconAtlas(Handle<TextureAtlasLayout>);
+pub(crate) struct IconAtlas(pub Handle<TextureAtlasLayout>);
 
 #[derive(Component)]
 struct InvRoot;
@@ -87,10 +93,14 @@ enum Zone {
     Grid(GridRef, u8, u8),
     Slot(WearSlot),
     Recipe(usize),
+    RecipeList,
 }
 
 #[derive(Component)]
 struct HeldIcon;
+
+#[derive(Component)]
+struct Tooltip;
 
 #[derive(Component)]
 struct HintText;
@@ -209,11 +219,16 @@ fn hover(
         return;
     };
     let mut found = None;
+    let mut over_list = false;
     for (z, node, tf) in &zones {
         if !node.contains_point(*tf, p) {
             continue;
         }
         found = Some(match *z {
+            Zone::RecipeList => {
+                over_list = true;
+                continue;
+            }
             Zone::Grid(g, w, h) => {
                 let Some(n) = node.normalize_point(*tf, p) else { continue };
                 let x = (((n.x + 0.5) * w as f32).floor() as i32).clamp(0, w as i32 - 1) as u8;
@@ -223,6 +238,9 @@ fn hover(
             Zone::Slot(s) => Hover::Slot(s),
             Zone::Recipe(i) => Hover::Recipe(i),
         });
+    }
+    if ui.over_list != over_list {
+        ui.over_list = over_list;
     }
     if ui.hover != found {
         ui.hover = found;
@@ -471,127 +489,131 @@ fn keys(
 }
 
 fn text(s: impl Into<String>, size: f32, color: Color) -> impl Bundle {
-    (Text::new(s), TextFont { font_size: bevy::text::FontSize::Px(size), ..default() }, TextColor(color))
+    theme::text(s, size, color)
 }
 
 fn darker(c: Color, k: f32) -> Color {
     let l = c.to_linear();
-    Color::linear_rgba(l.red * k, l.green * k, l.blue * k, 0.95)
+    Color::linear_rgba(l.red * k, l.green * k, l.blue * k, 1.0)
 }
 
-/// An item's picture: its block texture, or a coloured tile with its name.
-fn icon(c: &mut ChildSpawnerCommands, items: &Items, blocks: &Blocks, atlas: &IconAtlas, stack: Stack, w: f32, h: f32) {
+/// Height of a crafting row, and the gap between rows.
+const RECIPE_ROW: f32 = 46.0;
+const RECIPE_GAP: f32 = 4.0;
+/// How tall the crafting list is before it scrolls.
+const RECIPE_VIEW: f32 = 430.0;
+
+/// An item's picture: its block texture, or its name on a tile of its colour,
+/// with the count in the corner.
+pub(crate) fn icon(c: &mut ChildSpawnerCommands, items: &Items, blocks: &Blocks, atlas: &IconAtlas, stack: Stack, w: f32, h: f32) {
     let item = items.get(stack.item);
     if let ItemKind::Block(b) = item.kind {
         let index = blocks.registry.get(b).textures[4] as usize;
-        let side = w.min(h) - 10.0;
+        let side = (w.min(h) - 16.0).max(8.0);
         c.spawn((
             ImageNode::from_atlas_image(blocks.sheet.clone(), TextureAtlas { layout: atlas.0.clone(), index }),
             Node { width: Val::Px(side), height: Val::Px(side), margin: UiRect::all(Val::Auto), ..default() },
         ));
     } else {
+        let size = if w < 50.0 { 11.0 } else { sizes::SMALL };
         c.spawn((
-            text(item.title.clone(), 10.0, Color::WHITE),
-            Node { margin: UiRect::all(Val::Px(3.0)), max_width: Val::Px(w - 6.0), ..default() },
-            TextShadow { offset: Vec2::splat(1.5), color: Color::srgba(0.0, 0.0, 0.0, 0.85) },
+            text(item.title.clone(), size, colors::TEXT),
+            TextLayout::justify(Justify::Center),
+            Node { margin: UiRect::all(Val::Auto), max_width: Val::Px(w - 8.0), ..default() },
         ));
     }
     if stack.count > 1 {
         c.spawn((
-            text(format!("{}", stack.count), 11.0, Color::WHITE),
-            TextShadow { offset: Vec2::splat(1.5), color: Color::srgba(0.0, 0.0, 0.0, 0.85) },
-            Node { position_type: PositionType::Absolute, right: Val::Px(3.0), bottom: Val::Px(1.0), ..default() },
+            text(format!("{}", stack.count), sizes::BODY, colors::TEXT),
+            Node { position_type: PositionType::Absolute, right: Val::Px(5.0), bottom: Val::Px(2.0), ..default() },
         ));
     }
 }
 
 #[allow(clippy::too_many_arguments)]
-fn grid_node(p: &mut ChildSpawnerCommands, title: String, grid: &Grid, g: GridRef, items: &Items, blocks: &Blocks, atlas: &IconAtlas, hover: Option<Hover>, held: Option<Held>) {
-    p.spawn(text(title, 13.0, Color::srgb(0.9, 0.86, 0.7)));
-    p.spawn((
-        Zone::Grid(g, grid.w, grid.h),
-        Node { width: Val::Px(grid.w as f32 * CELL), height: Val::Px(grid.h as f32 * CELL), margin: UiRect::bottom(Val::Px(10.0)), ..default() },
-        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.35)),
-    ))
-    .with_children(|gn| {
-        // Where the held item would land.
-        let preview = match (hover, held) {
-            (Some(Hover::Cell(hg, x, y)), Some(h)) if hg == g => {
-                let (w, hh) = dims(items, h.stack.item, h.rotated);
-                let ok = grid.fits(items, h.stack.item, x, y, h.rotated, None)
-                    || grid.at(items, x, y).is_some_and(|i| grid.items[i].stack.item == h.stack.item);
-                Some((x, y, w, hh, ok))
-            }
-            _ => None,
-        };
-        for y in 0..grid.h {
-            for x in 0..grid.w {
-                let lit = preview.is_some_and(|(px, py, w, h, _)| x >= px && x < px + w && y >= py && y < py + h);
-                let bg = match preview {
-                    Some((.., ok)) if lit => {
-                        if ok { Color::srgba(0.3, 0.8, 0.3, 0.35) } else { Color::srgba(0.9, 0.25, 0.2, 0.35) }
+fn grid_node(p: &mut ChildSpawnerCommands, theme: &Theme, title: String, grid: &Grid, g: GridRef, items: &Items, blocks: &Blocks, atlas: &IconAtlas, hover: Option<Hover>, held: Option<Held>) {
+    p.spawn((theme.bold(sizes::LABEL), Text::new(title), TextColor(colors::HEADING), Node { margin: UiRect::bottom(Val::Px(2.0)), ..default() }));
+    p.spawn((Node { padding: UiRect::all(Val::Px(4.0)), margin: UiRect::bottom(Val::Px(10.0)), ..default() }, theme.skin("inset"))).with_children(|frame| {
+        frame
+            .spawn((Zone::Grid(g, grid.w, grid.h), Node { width: Val::Px(grid.w as f32 * CELL), height: Val::Px(grid.h as f32 * CELL), ..default() }))
+            .with_children(|gn| {
+                // Where the held item would land.
+                let preview = match (hover, held) {
+                    (Some(Hover::Cell(hg, x, y)), Some(h)) if hg == g => {
+                        let (w, hh) = dims(items, h.stack.item, h.rotated);
+                        let ok = grid.fits(items, h.stack.item, x, y, h.rotated, None)
+                            || grid.at(items, x, y).is_some_and(|i| grid.items[i].stack.item == h.stack.item);
+                        Some((x, y, w, hh, ok))
                     }
-                    _ => Color::srgba(1.0, 1.0, 1.0, 0.04),
+                    _ => None,
                 };
-                gn.spawn((
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(x as f32 * CELL),
-                        top: Val::Px(y as f32 * CELL),
-                        width: Val::Px(CELL),
-                        height: Val::Px(CELL),
-                        border: UiRect::all(Val::Px(1.0)),
-                        ..default()
-                    },
-                    BackgroundColor(bg),
-                    BorderColor::all(Color::srgba(1.0, 1.0, 1.0, 0.12)),
-                ));
-            }
-        }
-        for p in &grid.items {
-            let (w, h) = dims(items, p.stack.item, p.rotated);
-            let (pw, ph) = (w as f32 * CELL, h as f32 * CELL);
-            let hovered = matches!(hover, Some(Hover::Cell(hg, x, y)) if hg == g && grid.at(items, x, y).is_some_and(|i| grid.items[i] == *p));
-            gn.spawn((
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: Val::Px(p.x as f32 * CELL + 1.0),
-                    top: Val::Px(p.y as f32 * CELL + 1.0),
-                    width: Val::Px(pw - 2.0),
-                    height: Val::Px(ph - 2.0),
-                    border: UiRect::all(Val::Px(1.0)),
-                    overflow: Overflow::clip(),
-                    ..default()
-                },
-                BackgroundColor(darker(items.get(p.stack.item).color, 0.75)),
-                BorderColor::all(if hovered { Color::srgb(1.0, 0.85, 0.35) } else { Color::srgba(1.0, 1.0, 1.0, 0.35) }),
-            ))
-            .with_children(|c| icon(c, items, blocks, atlas, p.stack, pw, ph));
-        }
+                for y in 0..grid.h {
+                    for x in 0..grid.w {
+                        let lit = preview.is_some_and(|(px, py, w, h, _)| x >= px && x < px + w && y >= py && y < py + h);
+                        let cell = Node {
+                            position_type: PositionType::Absolute,
+                            left: Val::Px(x as f32 * CELL),
+                            top: Val::Px(y as f32 * CELL),
+                            width: Val::Px(CELL),
+                            height: Val::Px(CELL),
+                            ..default()
+                        };
+                        match preview {
+                            Some((.., ok)) if lit => {
+                                let tint = if ok { Color::srgb(0.55, 1.0, 0.55) } else { Color::srgb(1.0, 0.45, 0.4) };
+                                gn.spawn((cell, theme.skin_tinted("slot_hover", tint)));
+                            }
+                            _ => {
+                                gn.spawn((cell, theme.skin("slot")));
+                            }
+                        }
+                    }
+                }
+                for p in &grid.items {
+                    let (w, h) = dims(items, p.stack.item, p.rotated);
+                    let (pw, ph) = (w as f32 * CELL, h as f32 * CELL);
+                    let hovered = matches!(hover, Some(Hover::Cell(hg, x, y)) if hg == g && grid.at(items, x, y).is_some_and(|i| grid.items[i] == *p));
+                    let color = items.get(p.stack.item).color;
+                    gn.spawn((
+                        Node {
+                            position_type: PositionType::Absolute,
+                            left: Val::Px(p.x as f32 * CELL + 1.0),
+                            top: Val::Px(p.y as f32 * CELL + 1.0),
+                            width: Val::Px(pw - 2.0),
+                            height: Val::Px(ph - 2.0),
+                            overflow: Overflow::clip(),
+                            ..default()
+                        },
+                        theme.skin_tinted("item", darker(color, if hovered { 0.95 } else { 0.7 })),
+                        Outline { width: Val::Px(if hovered { 2.0 } else { 0.0 }), offset: Val::Px(0.0), color: colors::GOLD },
+                    ))
+                    .with_children(|c| icon(c, items, blocks, atlas, p.stack, pw, ph));
+                }
+            });
     });
 }
 
-fn describe(items: &Items, id: crate::items::ItemId) -> String {
+/// An item's name and what it's for.
+fn describe(items: &Items, id: crate::items::ItemId) -> (String, String) {
     let it = items.get(id);
-    let mut s = format!("{}  ({:.1} kg, {}x{}", it.title, it.mass, it.size.0, it.size.1);
+    let mut s = format!("{:.1} kg, takes {}x{}", it.mass, it.size.0, it.size.1);
     if it.stack > 1 {
         s.push_str(&format!(", stacks to {}", it.stack));
     }
-    s.push(')');
     match &it.kind {
         ItemKind::Wear { slot, insulation, protection } => {
             s.push_str(&format!("\nWorn on: {}", slot.title()));
             if *insulation > 0.0 {
-                s.push_str(&format!(", warmth +{insulation:.0} C"));
+                s.push_str(&format!("\nWarmth +{insulation:.0}°C"));
             }
             for l in Layer::ALL {
                 if let Some(p) = protection.get(&l) {
-                    s.push_str(&format!(", {} -{:.0}%", l.name(), p * 100.0));
+                    s.push_str(&format!("\n{} -{:.0}%", l.name(), p * 100.0));
                 }
             }
         }
         ItemKind::Bag { grid } => s.push_str(&format!("\nWorn on your back; holds {}x{}", grid.0, grid.1)),
-        ItemKind::Food { tier, satiety } => s.push_str(&format!("\nFood, tier {tier}, +{satiety:.0} food. Hold right click to eat")),
+        ItemKind::Food { tier, satiety } => s.push_str(&format!("\nFood, tier {tier}, +{satiety:.0} food\nHold right click to eat")),
         ItemKind::Tool { speeds } => {
             let mut v: Vec<_> = speeds.iter().collect();
             v.sort_by(|a, b| a.0.cmp(b.0));
@@ -599,20 +621,34 @@ fn describe(items: &Items, id: crate::items::ItemId) -> String {
             s.push_str(&v.iter().map(|(m, x)| format!("{m} x{x}")).collect::<Vec<_>>().join(", "));
         }
         ItemKind::Block(_) => s.push_str("\nRight click to place"),
-        ItemKind::Torch => s.push_str("\nLight; right click to place"),
+        ItemKind::Torch => s.push_str("\nGives light; right click to place"),
         ItemKind::Material => s.push_str("\nCrafting material"),
     }
-    s
+    if it.damage > 1.0 {
+        s.push_str(&format!("\nHits for {:.0}", it.damage));
+    }
+    (it.title.clone(), s)
+}
+
+/// A heading for a column.
+fn heading(p: &mut ChildSpawnerCommands, theme: &Theme, s: &str) {
+    p.spawn((theme.bold(sizes::LABEL), Text::new(s), TextColor(colors::HEADING), Node { margin: UiRect::bottom(Val::Px(2.0)), ..default() }));
+}
+
+/// A line with an icon in front.
+fn icon_line(p: &mut ChildSpawnerCommands, theme: &Theme, icon_name: &str, s: String, color: Color) {
+    p.spawn(Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, ..default() }).with_children(|r| {
+        r.spawn(theme.icon(icon_name));
+        r.spawn(text(s, sizes::BODY, color));
+    });
 }
 
 #[allow(clippy::too_many_arguments)]
 fn rebuild(
     mut commands: Commands,
     mut ui: ResMut<InvUi>,
-    inv: Res<Inventory>,
-    chests: Res<Chests>,
-    items: Res<Items>,
-    blocks: Res<Blocks>,
+    theme: Res<Theme>,
+    (inv, chests, items, blocks): (Res<Inventory>, Res<Chests>, Res<Items>, Res<Blocks>),
     atlas: Option<Res<IconAtlas>>,
     recipes: Option<Res<Recipes>>,
     camp: Res<Camp>,
@@ -630,6 +666,7 @@ fn rebuild(
     let (Some(atlas), true) = (atlas, ui.open) else { return };
     let (hover, held) = (ui.hover, ui.held);
     let at_camp = camp.near(player.pos);
+    let theme = &*theme;
     commands
         .spawn((
             InvRoot,
@@ -637,102 +674,158 @@ fn rebuild(
                 position_type: PositionType::Absolute,
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
-                flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
                 justify_content: JustifyContent::Center,
-                row_gap: Val::Px(10.0),
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.02, 0.03, 0.02, 0.86)),
+            BackgroundColor(Color::srgba(0.0, 0.01, 0.0, 0.8)),
             GlobalZIndex(20),
         ))
         .with_children(|root| {
-            root.spawn(Node { column_gap: Val::Px(26.0), align_items: AlignItems::Start, ..default() }).with_children(|row| {
-                // Worn.
-                row.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(4.0), width: Val::Px(210.0), ..default() }).with_children(|col| {
-                    col.spawn(text("Worn", 13.0, Color::srgb(0.9, 0.86, 0.7)));
-                    for slot in WearSlot::ALL {
-                        let worn = inv.worn.get(&slot);
-                        let hovered = hover == Some(Hover::Slot(slot));
-                        col.spawn((
-                            Zone::Slot(slot),
-                            Node { width: Val::Px(210.0), height: Val::Px(30.0), border: UiRect::all(Val::Px(1.0)), padding: UiRect::horizontal(Val::Px(6.0)), align_items: AlignItems::Center, ..default() },
-                            BackgroundColor(match worn {
-                                Some(i) => darker(items.get(*i).color, 0.6),
-                                None => Color::srgba(0.0, 0.0, 0.0, 0.35),
-                            }),
-                            BorderColor::all(if hovered { Color::srgb(1.0, 0.85, 0.35) } else { Color::srgba(1.0, 1.0, 1.0, 0.2) }),
-                        ))
-                        .with_children(|c| {
-                            let label = match worn {
-                                Some(i) => format!("{}: {}", slot.title(), items.get(*i).title),
-                                None => format!("{}: -", slot.title()),
-                            };
-                            c.spawn(text(label, 12.0, if worn.is_some() { Color::WHITE } else { Color::srgba(1.0, 1.0, 1.0, 0.5) }));
-                        });
-                    }
-                    let mut stats = format!(
-                        "\nClothes warmth: +{:.0} C\nFeels like: {:.0} C (dressed)\nLoad: {:.1} kg of {:.0}\n",
-                        inv.insulation(&items),
-                        s.env.feels,
-                        s.env.carried,
-                        crate::survival::vitals::CAPACITY
-                    );
-                    let prot: Vec<String> = Layer::ALL
-                        .iter()
-                        .filter_map(|l| {
-                            let p = inv.protection(&items, *l);
-                            (p > 0.0).then(|| format!("{} -{:.0}%", l.name(), p * 100.0))
-                        })
-                        .collect();
-                    stats.push_str(&format!("Protection: {}", if prot.is_empty() { "none".into() } else { prot.join(", ") }));
-                    col.spawn(text(stats, 12.0, Color::srgba(1.0, 1.0, 1.0, 0.85)));
-                });
-                // Grids.
-                row.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(3.0), ..default() }).with_children(|col| {
-                    grid_node(col, "Pockets".into(), &inv.pockets, GridRef::Pockets, &items, &blocks, &atlas, hover, held);
-                    match (&inv.bag, inv.worn.get(&WearSlot::Back)) {
-                        (Some(b), Some(i)) => grid_node(col, format!("Bag: {}", items.get(*i).title), b, GridRef::Bag, &items, &blocks, &atlas, hover, held),
-                        _ => {
-                            col.spawn(text("No bag (wear one on your back)", 12.0, Color::srgba(1.0, 1.0, 1.0, 0.5)));
-                        }
-                    }
-                    if let Some(c) = ui.chest
-                        && let Some(g) = chests.map.get(&c)
-                    {
-                        grid_node(col, "Chest".into(), g, GridRef::Chest(c), &items, &blocks, &atlas, hover, held);
-                    }
-                });
-                // Crafting.
-                row.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(2.0), width: Val::Px(330.0), ..default() }).with_children(|col| {
-                    col.spawn(text("Crafting (click; Shift-click makes 5)", 13.0, Color::srgb(0.9, 0.86, 0.7)));
-                    if let Some(r) = &recipes {
-                        for (i, rec) in r.list.iter().enumerate() {
-                            let can = rec.have_parts(&inv) && (rec.at == Station::Hand || at_camp);
-                            let hovered = hover == Some(Hover::Recipe(i));
-                            let needs: Vec<String> = rec.needs.iter().map(|n| format!("{} {}", n.count, items.get(n.item).title)).collect();
-                            let mut label = format!("{}{}  <  {}", if rec.makes.count > 1 { format!("{} ", rec.makes.count) } else { String::new() }, items.get(rec.makes.item).title, needs.join(", "));
-                            if rec.at == Station::Camp {
-                                label.push_str("  (at camp)");
+            root.spawn((Node { flex_direction: FlexDirection::Column, padding: UiRect::all(Val::Px(18.0)), row_gap: Val::Px(12.0), ..default() }, theme.skin("panel")))
+                .with_children(|win| {
+                    // Title bar.
+                    win.spawn(Node { justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center, ..default() }).with_children(|bar| {
+                        bar.spawn((theme.bold(sizes::HEADING), Text::new(if ui.chest.is_some() { "Inventory and chest" } else { "Inventory" }), TextColor(colors::HEADING)));
+                        bar.spawn(text("Tab to close", sizes::SMALL, colors::MUTED));
+                    });
+                    win.spawn((Node { height: Val::Px(8.0), ..default() }, theme.skin("divider")));
+                    win.spawn(Node { column_gap: Val::Px(22.0), align_items: AlignItems::Start, ..default() }).with_children(|row| {
+                        // Worn.
+                        row.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(4.0), width: Val::Px(250.0), ..default() }).with_children(|col| {
+                            heading(col, theme, "Worn");
+                            for slot in WearSlot::ALL {
+                                let worn = inv.worn.get(&slot);
+                                let hovered = hover == Some(Hover::Slot(slot));
+                                let node = Node {
+                                    width: Val::Percent(100.0),
+                                    height: Val::Px(40.0),
+                                    padding: UiRect::horizontal(Val::Px(10.0)),
+                                    align_items: AlignItems::Center,
+                                    justify_content: JustifyContent::SpaceBetween,
+                                    ..default()
+                                };
+                                let mut e = match worn {
+                                    Some(i) => col.spawn((Zone::Slot(slot), node, theme.skin_tinted("item", darker(items.get(*i).color, 0.7)))),
+                                    None => col.spawn((Zone::Slot(slot), node, theme.skin(if hovered { "slot_hover" } else { "slot" }))),
+                                };
+                                if hovered {
+                                    e.insert(Outline { width: Val::Px(2.0), offset: Val::Px(0.0), color: colors::GOLD });
+                                }
+                                e.with_children(|c| {
+                                    c.spawn(text(slot.title(), sizes::SMALL, colors::MUTED));
+                                    match worn {
+                                        Some(i) => c.spawn(text(items.get(*i).title.clone(), sizes::BODY, colors::TEXT)),
+                                        None => c.spawn(text("empty", sizes::BODY, colors::FAINT)),
+                                    };
+                                });
                             }
+                            // What you're wearing adds up to.
                             col.spawn((
-                                Zone::Recipe(i),
-                                Node { padding: UiRect::axes(Val::Px(4.0), Val::Px(1.0)), ..default() },
-                                BackgroundColor(if hovered { Color::srgba(1.0, 0.85, 0.35, 0.25) } else { Color::NONE }),
+                                Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(6.0), padding: UiRect::all(Val::Px(10.0)), margin: UiRect::top(Val::Px(8.0)), ..default() },
+                                theme.skin("inset"),
                             ))
-                            .with_children(|c| {
-                                c.spawn(text(label, 11.0, if can { Color::srgb(0.75, 1.0, 0.7) } else { Color::srgba(1.0, 1.0, 1.0, 0.38) }));
+                            .with_children(|st| {
+                                icon_line(st, theme, "icon_warmth", format!("Clothes +{:.0}°C, feels {:.0}°C", inv.insulation(&items), s.env.feels), colors::TEXT);
+                                let heavy = s.env.carried > crate::survival::vitals::CAPACITY;
+                                icon_line(st, theme, "icon_load", format!("Load {:.1} of {:.0} kg", s.env.carried, crate::survival::vitals::CAPACITY), if heavy { colors::BAD } else { colors::TEXT });
+                                let prot: Vec<String> = Layer::ALL
+                                    .iter()
+                                    .filter_map(|l| {
+                                        let p = inv.protection(&items, *l);
+                                        (p > 0.0).then(|| format!("{} -{:.0}%", l.name(), p * 100.0))
+                                    })
+                                    .collect();
+                                icon_line(st, theme, "icon_injuries", if prot.is_empty() { "No armour".into() } else { prot.join(", ") }, colors::TEXT);
                             });
-                        }
-                    }
+                        });
+                        // Grids.
+                        row.spawn(Node { flex_direction: FlexDirection::Column, ..default() }).with_children(|col| {
+                            grid_node(col, theme, "Pockets".into(), &inv.pockets, GridRef::Pockets, &items, &blocks, &atlas, hover, held);
+                            match (&inv.bag, inv.worn.get(&WearSlot::Back)) {
+                                (Some(b), Some(i)) => grid_node(col, theme, items.get(*i).title.clone(), b, GridRef::Bag, &items, &blocks, &atlas, hover, held),
+                                _ => {
+                                    heading(col, theme, "Bag");
+                                    col.spawn(text("No bag. Wear one on your back\nto carry more.", sizes::BODY, colors::FAINT));
+                                }
+                            }
+                            if let Some(c) = ui.chest
+                                && let Some(g) = chests.map.get(&c)
+                            {
+                                grid_node(col, theme, "Chest".into(), g, GridRef::Chest(c), &items, &blocks, &atlas, hover, held);
+                            }
+                        });
+                        // Crafting: what you can make now first.
+                        row.spawn(Node { flex_direction: FlexDirection::Column, width: Val::Px(380.0), ..default() }).with_children(|col| {
+                            col.spawn(Node { justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center, ..default() }).with_children(|h| {
+                                heading(h, theme, "Crafting");
+                                h.spawn(text(if at_camp { "at camp" } else { "Shift: make 5" }, sizes::SMALL, colors::MUTED));
+                            });
+                            let Some(r) = &recipes else { return };
+                            let mut order: Vec<(usize, bool)> =
+                                r.list.iter().enumerate().map(|(i, rec)| (i, rec.have_parts(&inv) && (rec.at == Station::Hand || at_camp))).collect();
+                            order.sort_by_key(|(i, can)| (!*can, r.list[*i].at == Station::Camp, *i));
+                            let rows = order.len() as f32;
+                            let max_scroll = (rows * (RECIPE_ROW + RECIPE_GAP) + 8.0 - RECIPE_VIEW).max(0.0);
+                            ui.scroll = ui.scroll.clamp(0.0, max_scroll);
+                            col.spawn((
+                                Zone::RecipeList,
+                                Node {
+                                    flex_direction: FlexDirection::Column,
+                                    row_gap: Val::Px(RECIPE_GAP),
+                                    padding: UiRect::all(Val::Px(4.0)),
+                                    height: Val::Px(RECIPE_VIEW),
+                                    overflow: Overflow::scroll_y(),
+                                    ..default()
+                                },
+                                ScrollPosition(Vec2::new(0.0, ui.scroll)),
+                                theme.skin("inset"),
+                            ))
+                            .with_children(|list| {
+                                for (i, can) in order {
+                                    let rec = &r.list[i];
+                                    let hovered = hover == Some(Hover::Recipe(i));
+                                    let skin = match (can, hovered) {
+                                        (true, true) => "button_hover",
+                                        (true, false) => "button",
+                                        (false, true) => "slot_hover",
+                                        (false, false) => "button_off",
+                                    };
+                                    let needs: Vec<String> = rec.needs.iter().map(|n| format!("{} {}", n.count, items.get(n.item).title)).collect();
+                                    let mut needs = needs.join(", ");
+                                    if rec.at == Station::Camp {
+                                        needs.push_str("  · at camp");
+                                    }
+                                    let title = if rec.makes.count > 1 { format!("{} x{}", items.get(rec.makes.item).title, rec.makes.count) } else { items.get(rec.makes.item).title.clone() };
+                                    list.spawn((
+                                        Zone::Recipe(i),
+                                        Node {
+                                            min_height: Val::Px(RECIPE_ROW),
+                                            flex_shrink: 0.0,
+                                            padding: UiRect::axes(Val::Px(10.0), Val::Px(4.0)),
+                                            flex_direction: FlexDirection::Column,
+                                            justify_content: JustifyContent::Center,
+                                            ..default()
+                                        },
+                                        theme.skin(skin),
+                                    ))
+                                    .with_children(|c| {
+                                        c.spawn(text(title, sizes::BODY, if can { colors::TEXT } else { colors::MUTED }));
+                                        c.spawn(text(needs, sizes::SMALL, if can { colors::GOOD } else { colors::FAINT }));
+                                    });
+                                }
+                            });
+                        });
+                    });
+                    // Messages and controls.
+                    win.spawn((Node { height: Val::Px(8.0), ..default() }, theme.skin("divider")));
+                    win.spawn((HintText, text(ui.message.clone(), sizes::BODY, colors::GOLD)));
+                    win.spawn((
+                        text("Click: pick up / put down    R: turn    Right click: move across or wear    Shift-click: half a stack    1-9: put on hotbar    Q: throw away", sizes::SMALL, colors::MUTED),
+                        Node { max_width: Val::Px(1080.0), ..default() },
+                    ));
                 });
-            });
-            // What's under the cursor, messages and controls.
-            let mut hint = String::new();
-            if !ui.message.is_empty() {
-                hint.push_str(&ui.message);
-                hint.push('\n');
-            }
+            // A card about what's under the cursor.
             let hovered_item = match hover {
                 Some(Hover::Cell(g, x, y)) => {
                     let grid = match g {
@@ -743,23 +836,40 @@ fn rebuild(
                     grid.and_then(|gr| gr.at(&items, x, y).map(|i| gr.items[i].stack.item))
                 }
                 Some(Hover::Slot(s)) => inv.worn.get(&s).copied(),
-                _ => None,
+                Some(Hover::Recipe(i)) => recipes.as_ref().and_then(|r| r.list.get(i)).map(|r| r.makes.item),
+                None => None,
             };
-            if let Some(id) = held.map(|h| h.stack.item).or(hovered_item) {
-                hint.push_str(&describe(&items, id));
-                hint.push('\n');
+            if held.is_none()
+                && let Some(id) = hovered_item
+            {
+                let (title, body) = describe(&items, id);
+                root.spawn((
+                    Tooltip,
+                    Node {
+                        position_type: PositionType::Absolute,
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(4.0),
+                        padding: UiRect::axes(Val::Px(12.0), Val::Px(10.0)),
+                        max_width: Val::Px(320.0),
+                        ..default()
+                    },
+                    theme.skin("tooltip"),
+                    GlobalZIndex(31),
+                ))
+                .with_children(|t| {
+                    t.spawn((theme.bold(sizes::LABEL), Text::new(title), TextColor(colors::HEADING)));
+                    t.spawn(text(body, sizes::SMALL + 1.0, colors::TEXT));
+                });
             }
-            hint.push_str("Click: pick up / put down   R: turn   Right click: move across or wear   Shift-click: half a stack   1-9: put on hotbar   Q: throw away   Tab: close");
-            root.spawn((HintText, text(hint, 12.0, Color::srgba(1.0, 1.0, 1.0, 0.85)), Node { max_width: Val::Px(1000.0), ..default() }));
             // The held item, following the cursor.
             if let Some(h) = held {
                 let (w, hh) = dims(&items, h.stack.item, h.rotated);
                 let (pw, ph) = (w as f32 * CELL, hh as f32 * CELL);
                 root.spawn((
                     HeldIcon,
-                    Node { position_type: PositionType::Absolute, width: Val::Px(pw - 2.0), height: Val::Px(ph - 2.0), border: UiRect::all(Val::Px(1.0)), overflow: Overflow::clip(), ..default() },
-                    BackgroundColor(darker(items.get(h.stack.item).color, 0.9).with_alpha(0.8)),
-                    BorderColor::all(Color::srgb(1.0, 0.85, 0.35)),
+                    Node { position_type: PositionType::Absolute, width: Val::Px(pw - 2.0), height: Val::Px(ph - 2.0), overflow: Overflow::clip(), ..default() },
+                    theme.skin_tinted("item", darker(items.get(h.stack.item).color, 0.95)),
+                    Outline { width: Val::Px(2.0), offset: Val::Px(0.0), color: colors::GOLD },
                     GlobalZIndex(30),
                 ))
                 .with_children(|c| icon(c, &items, &blocks, &atlas, h.stack, pw, ph));
@@ -767,12 +877,42 @@ fn rebuild(
         });
 }
 
-fn follow_cursor(window: Single<&Window, With<PrimaryWindow>>, mut q: Query<&mut Node, With<HeldIcon>>) {
+/// The mouse wheel scrolls the crafting list.
+fn scroll(mut wheel: MessageReader<bevy::input::mouse::MouseWheel>, mut ui: ResMut<InvUi>, mut lists: Query<&mut ScrollPosition, With<Zone>>) {
+    let mut dy = 0.0;
+    for w in wheel.read() {
+        dy -= match w.unit {
+            bevy::input::mouse::MouseScrollUnit::Line => w.y * (RECIPE_ROW + RECIPE_GAP),
+            bevy::input::mouse::MouseScrollUnit::Pixel => w.y,
+        };
+    }
+    if dy == 0.0 || !ui.open || !ui.over_list {
+        return;
+    }
+    ui.scroll = (ui.scroll + dy).max(0.0);
+    for mut s in &mut lists {
+        s.0.y = ui.scroll;
+    }
+    // Rebuilding clamps it to the list's length.
+    ui.dirty = true;
+}
+
+#[allow(clippy::type_complexity)]
+fn follow_cursor(window: Single<&Window, With<PrimaryWindow>>, mut held: Query<&mut Node, (With<HeldIcon>, Without<Tooltip>)>, mut tips: Query<(&mut Node, &ComputedNode), With<Tooltip>>) {
     let Some(p) = window.cursor_position() else { return };
-    for mut n in &mut q {
+    for mut n in &mut held {
         // The cursor holds the item by its top-left cell.
         n.left = Val::Px(p.x - CELL * 0.5);
         n.top = Val::Px(p.y - CELL * 0.5);
+    }
+    let (ww, wh) = (window.width(), window.height());
+    for (mut n, c) in &mut tips {
+        let size = c.size() * c.inverse_scale_factor();
+        // Beside the cursor, kept on screen.
+        let x = if p.x + 22.0 + size.x > ww { p.x - 14.0 - size.x } else { p.x + 22.0 };
+        let y = (p.y + 10.0).min(wh - size.y - 8.0).max(8.0);
+        n.left = Val::Px(x);
+        n.top = Val::Px(y);
     }
 }
 
