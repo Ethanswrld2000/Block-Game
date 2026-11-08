@@ -45,6 +45,8 @@ impl Canvas<'_> {
 pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) {
     let o = pos.origin();
     let mut canvas = Canvas { origin: [o.x, o.y, o.z], dense };
+    // No trees through the middle of a village.
+    let villages = wg.villages_in(o.x - REACH, o.z - REACH, o.x + CHUNK_SIZE_I32 + REACH, o.z + CHUNK_SIZE_I32 + REACH);
     for tz in o.z - REACH..o.z + CHUNK_SIZE_I32 + REACH {
         for tx in o.x - REACH..o.x + CHUNK_SIZE_I32 + REACH {
             let h = hash2(wg.seed ^ 0x7EE5, tx, tz);
@@ -54,7 +56,7 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) {
             }
             let col = wg.column(tx, tz);
             let biome = wg.biomes.get(col.biome);
-            if roll >= biome.tree_chance || col.climate.overhang > 0.02 {
+            if roll >= biome.tree_chance || col.climate.overhang > 0.02 || crate::structures::in_village(&villages, tx, tz) {
                 continue;
             }
             let ground = col.height;

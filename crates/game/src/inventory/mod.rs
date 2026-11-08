@@ -11,8 +11,11 @@
 pub mod crafting;
 pub mod drops;
 pub mod grid;
+pub mod loot;
 mod ui;
 mod world_items;
+
+pub use world_items::Spill;
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -187,9 +190,12 @@ fn setup_data(mut commands: Commands, items: Res<Items>, blocks: Res<crate::bloc
     let drops = Drops::from_ron(include_str!("../../../../assets/data/drops.ron"), &blocks.registry, &items).unwrap_or_else(|e| panic!("{e}"));
     commands.insert_resource(recipes);
     commands.insert_resource(drops);
+    let loot = loot::Loot::from_ron(include_str!("../../../../assets/data/loot.ron"), &items).unwrap_or_else(|e| panic!("{e}"));
+    commands.insert_resource(loot);
 }
 
 /// Mined blocks drop their items into your pockets, or onto the ground if full.
+#[allow(clippy::too_many_arguments)]
 fn collect_mined(
     mut mined: MessageReader<Mined>,
     items: Res<Items>,
@@ -198,7 +204,14 @@ fn collect_mined(
     mut chests: ResMut<Chests>,
     mut spill: MessageWriter<world_items::Spill>,
     mut roll: Local<u64>,
+    mut placed: MessageReader<crate::interact::Placed>,
 ) {
+    // Chests you place start empty (found ones fill with loot when first opened).
+    for p in placed.read() {
+        if items.for_block(p.block).is_some_and(|i| items.get(i).name == "chest") {
+            chests.grid(p.pos);
+        }
+    }
     let Some(drops) = drops else { return };
     for m in mined.read() {
         let mut got = Vec::new();

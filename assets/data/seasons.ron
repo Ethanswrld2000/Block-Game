@@ -10,7 +10,7 @@
             name: "spring", title: "Spring",
             temperature: 0.0, daylight: 0.5,
             foliage: (color: (0.45, 0.85, 0.3), amount: 0.15),
-            weather: { "clear": 4, "overcast": 3, "rain": 4, "storm": 1, "mist": 2 },
+            weather: { "clear": 4, "overcast": 3, "rain": 4, "storm": 1, "mist": 2, "gale": 1 },
         ),
         (
             name: "summer", title: "Summer",
@@ -22,13 +22,13 @@
             name: "autumn", title: "Autumn",
             temperature: -0.15, daylight: 0.48,
             foliage: (color: (1.0, 0.42, 0.08), amount: 0.75),
-            weather: { "clear": 3, "overcast": 4, "rain": 3, "storm": 1, "mist": 3 },
+            weather: { "clear": 3, "overcast": 4, "rain": 3, "storm": 1, "mist": 3, "gale": 2, "cold_snap": 1 },
         ),
         (
             name: "winter", title: "Winter",
             temperature: -0.45, daylight: 0.4,
             foliage: (color: (0.82, 0.86, 0.84), amount: 0.5),
-            weather: { "clear": 3, "overcast": 4, "rain": 4, "storm": 0, "mist": 2 },
+            weather: { "clear": 3, "overcast": 4, "rain": 4, "storm": 0, "mist": 2, "cold_snap": 3 },
         ),
     ],
 )

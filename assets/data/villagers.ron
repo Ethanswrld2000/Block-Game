@@ -1,0 +1,24 @@
+// What villagers say when you right click them, by the time of day.
+// "{village}" is replaced by the village's name, "{name}" by theirs.
+(
+    morning: [
+        "Mist's lifting. Good day for the reeds.",
+        "Welcome to {village}. Mind the boards, they're slick.",
+        "The herons came back early this year.",
+    ],
+    day: [
+        "Peat for the fire, fish for the pot. That's {village}.",
+        "If you go into the old barrows, take a torch. Take two.",
+        "Fen stags spook easy. Boars don't.",
+        "I'm {name}. Stay as long as you like.",
+    ],
+    evening: [
+        "Sit by the fire a while.",
+        "Lights out soon. The ancestors walk at night.",
+        "Keep a torch burning tonight.",
+    ],
+    night: [
+        "Shh. They're out there.",
+        "Get inside, or get a torch lit.",
+    ],
+)

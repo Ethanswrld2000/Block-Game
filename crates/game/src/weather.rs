@@ -186,6 +186,31 @@ fn hash(a: u64, b: u64) -> f32 {
     (x >> 40) as f32 / (1u64 << 24) as f32
 }
 
+/// The direction the wind blows (clouds, rain and gusts that push you).
+pub const WIND_DIR: Vec2 = Vec2::new(0.944, 0.33);
+
+/// Pick the next weather by the season's chances, and when it ends (total
+/// days). Depends only on the seed and the hour, so a world's weather repeats.
+pub fn roll_weather(kinds: &WeatherKinds, season: &crate::clock::Season, seed: u64, now: f64) -> (Option<usize>, f64) {
+    let weights: Vec<f32> = kinds.list.iter().map(|k| season.weather.get(&k.name).copied().unwrap_or(0.0)).collect();
+    let total: f32 = weights.iter().sum();
+    let slot = (now * 24.0) as u64;
+    let mut pick = None;
+    if total > 0.0 {
+        let mut roll = hash(seed, slot) * total;
+        for (i, w) in weights.iter().enumerate() {
+            if roll < *w {
+                pick = Some(i);
+                break;
+            }
+            roll -= w;
+        }
+    }
+    let k = &kinds.list[pick.unwrap_or(0)];
+    let hours = k.hours.0 + (k.hours.1 - k.hours.0) * hash(seed ^ 0xAB, slot);
+    (pick, now + hours as f64 / 24.0)
+}
+
 fn change_weather(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
@@ -202,27 +227,17 @@ fn change_weather(
         next = Some((state.current + 1) % kinds.list.len());
         state.forced = false;
     } else if !state.forced && state.until.is_none_or(|u| now >= u) {
-        // Pick by the season's chances. The roll depends on the seed and the
-        // hour, so the same world has the same weather.
         let season = &seasons.list[seasons.at(&clock).current];
-        let weights: Vec<f32> = kinds.list.iter().map(|k| season.weather.get(&k.name).copied().unwrap_or(0.0)).collect();
-        let total: f32 = weights.iter().sum();
-        let slot = (now * 24.0) as u64;
-        if state.until.is_some() && total > 0.0 {
-            let mut roll = hash(seed, slot) * total;
-            let mut pick = 0;
-            for (i, w) in weights.iter().enumerate() {
-                if roll < *w {
-                    pick = i;
-                    break;
-                }
-                roll -= w;
-            }
-            next = Some(pick);
+        let (pick, until) = roll_weather(&kinds, season, seed, now);
+        // The very first roll keeps the starting weather and only sets how long it lasts.
+        if state.until.is_some() {
+            next = pick;
+            state.until = Some(until);
+        } else {
+            let k = &kinds.list[state.current];
+            let slot = (now * 24.0) as u64;
+            state.until = Some(now + (k.hours.0 + (k.hours.1 - k.hours.0) * hash(seed ^ 0xAB, slot)) as f64 / 24.0);
         }
-        let k = &kinds.list[next.unwrap_or(state.current)];
-        let hours = k.hours.0 + (k.hours.1 - k.hours.0) * hash(seed ^ 0xAB, slot);
-        state.until = Some(now + hours as f64 / 24.0);
     }
     if let Some(n) = next
         && n != state.current
@@ -291,6 +306,30 @@ mod tests {
         for k in &kinds.list {
             assert!(k.visibility > 0.0 && k.hours.0 <= k.hours.1, "{}", k.name);
         }
+    }
+
+    #[test]
+    fn a_month_of_weather_follows_the_seasons() {
+        // Forty days (one of each season), weather rolled the way the game does.
+        let kinds = WeatherKinds::from_ron(include_str!("../../../assets/data/weather.ron")).unwrap();
+        let seasons = Seasons::from_ron(include_str!("../../../assets/data/seasons.ron")).unwrap();
+        let mut seen: Vec<std::collections::BTreeSet<String>> = vec![Default::default(); seasons.list.len()];
+        let mut now = 0.0f64;
+        while now < 40.0 {
+            let clock = WorldClock { day: now as u32, time: now.fract() as f32, speed: 1.0 };
+            let s = seasons.at(&clock).current;
+            let (pick, until) = roll_weather(&kinds, &seasons.list[s], 7, now);
+            seen[s].insert(kinds.list[pick.unwrap()].name.clone());
+            now = until;
+        }
+        for (i, s) in seen.iter().enumerate() {
+            assert!(s.len() >= 3, "{}: {:?}", seasons.list[i].name, s);
+        }
+        let season = |n: &str| &seen[seasons.list.iter().position(|s| s.name == n).unwrap()];
+        assert!(season("winter").contains("cold_snap"), "{:?}", season("winter"));
+        assert!(!season("winter").contains("storm"));
+        assert!(!season("summer").contains("cold_snap") && !season("spring").contains("cold_snap"));
+        assert!(!season("summer").contains("gale") && !season("winter").contains("gale"));
     }
 
     #[test]

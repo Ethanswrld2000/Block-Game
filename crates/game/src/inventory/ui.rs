@@ -131,6 +131,9 @@ fn open_close(
     mut chests: ResMut<Chests>,
     mut spill: MessageWriter<Spill>,
     mut cursor: Single<&mut CursorOptions, With<PrimaryWindow>>,
+    loot: Option<Res<super::loot::Loot>>,
+    generator: Option<Res<crate::world::Generator>>,
+    mut seed: Local<u64>,
 ) {
     let busy = s.vitals.health.is_dead() || sleep.active();
     let mut want = ui.open;
@@ -142,6 +145,17 @@ fn open_close(
     for m in chest_msgs.read() {
         want = true;
         ui.chest = Some(m.0);
+        if !chests.map.contains_key(&m.0)
+            && let (Some(loot), Some(generator)) = (&loot, &generator)
+        {
+            // A chest found in the world: fill it the first time it's opened.
+            let p = m.0;
+            let in_barrow = generator.0.barrows_in(p.x - 1, p.z - 1, p.x + 1, p.z + 1).iter().any(|b| b.contains(p.x, p.y, p.z));
+            *seed = seed.wrapping_add(0x9E37_79B9_7F4A_7C15) ^ (p.x as u64).wrapping_mul(31) ^ (p.z as u64).wrapping_mul(1_000_003);
+            let mut rng = crate::creatures::brain::Rng(*seed | 1);
+            let grid = chests.grid(p);
+            loot.fill(if in_barrow { "barrow" } else { "village" }, &items, grid, || rng.unit());
+        }
         chests.grid(m.0);
         ui.dirty = true;
     }

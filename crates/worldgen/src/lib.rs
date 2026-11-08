@@ -12,14 +12,16 @@
 //! 4. **Biome** per column from data (`biomes.ron`), picking surface blocks.
 //! 5. **Caves**: big chambers plus long tunnels, from 3D noise sampled on a
 //!    coarse grid and interpolated (cheap).
-//! 6. **Ores, trees, sky islands.**
+//! 6. **Ores, trees, villages and barrows (`structures`), sky islands.**
 
 mod biome;
 mod islands;
+mod structures;
 mod trees;
 mod util;
 
 pub use biome::{Biome, Biomes, TreeKind};
+pub use structures::{person_name, Barrow, Hut, Village, VILLAGE_RADIUS};
 
 use fastnoise_lite::{FastNoiseLite, FractalType};
 use voxel::chunk::{index, CHUNK_VOLUME};
@@ -72,6 +74,11 @@ struct Ids {
     skystone: BlockId,
     cloud_moss: BlockId,
     snow: BlockId,
+    cobblestone: BlockId,
+    planks: BlockId,
+    peat: BlockId,
+    torch: BlockId,
+    chest: BlockId,
 }
 
 /// The world generator. Build once, share between threads with `Arc`.
@@ -92,6 +99,10 @@ pub struct WorldGen {
     island_shape: FastNoiseLite,
     pub biomes: Biomes,
     ids: Ids,
+    structures: structures::Cache,
+    spawn: [i32; 3],
+    /// Centre of the home village, near spawn.
+    home: (i32, i32),
 }
 
 impl WorldGen {
@@ -111,9 +122,14 @@ impl WorldGen {
             skystone: b("skystone")?,
             cloud_moss: b("cloud_moss")?,
             snow: b("snow")?,
+            cobblestone: b("cobblestone")?,
+            planks: b("planks")?,
+            peat: b("peat")?,
+            torch: b("torch")?,
+            chest: b("chest")?,
         };
         use FractalType::{Ridged, FBm};
-        Ok(Self {
+        let mut wg = Self {
             seed,
             warp_x: noise(seed, 1, 0.004, 2, FBm),
             warp_z: noise(seed, 2, 0.004, 2, FBm),
@@ -130,7 +146,30 @@ impl WorldGen {
             island_shape: noise(seed, 13, 0.04, 2, FBm),
             biomes: Biomes::from_ron(biomes_ron, blocks)?,
             ids,
-        })
+            structures: structures::Cache::default(),
+            spawn: [0, 0, 0],
+            home: (0, 0),
+        };
+        wg.spawn = wg.search_spawn();
+        wg.home = wg.search_home();
+        Ok(wg)
+    }
+
+    /// Dry, flat ground 50-90 blocks from spawn for the home village.
+    fn search_home(&self) -> (i32, i32) {
+        let [sx, _, sz] = self.spawn;
+        for ring in 0..6 {
+            let r = 50.0 + ring as f32 * 8.0;
+            for s in 0..16 {
+                let a = s as f32 / 16.0 * std::f32::consts::TAU + ring as f32 * 0.3;
+                let (x, z) = (sx + (a.cos() * r) as i32, sz + (a.sin() * r) as i32);
+                let col = self.column(x, z);
+                if col.height >= SEA_LEVEL && col.climate.overhang < 0.01 {
+                    return (x, z);
+                }
+            }
+        }
+        (sx + 60, sz)
     }
 
     pub fn seed(&self) -> u64 {
@@ -198,6 +237,10 @@ impl WorldGen {
 
     /// A spawn point in the Great Swamp, on dry ground, near the origin.
     pub fn find_spawn(&self) -> [i32; 3] {
+        self.spawn
+    }
+
+    fn search_spawn(&self) -> [i32; 3] {
         let swamp = self.biomes.spawn;
         // Spiral search on a coarse grid, out to ~6 km.
         for ring in 0..200i32 {
@@ -245,6 +288,7 @@ impl WorldGen {
             any = true;
             self.fill_terrain(pos, &cols, &mut dense);
             trees::place(self, pos, &mut dense);
+            structures::place(self, pos, &mut dense);
         }
         if island_chunk {
             any |= islands::place(self, pos, &mut dense);

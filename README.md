@@ -20,8 +20,9 @@ Tools in Software Update, or put
 - F switches between walking and flying. Flying: Space up, Shift down, Ctrl fast,
   mouse wheel changes flying speed, blocks break instantly
 - Keys 1-9 or the mouse wheel pick what you hold from the hotbar
-- Hold left click to mine (what you break goes into your pockets); right click places the block or
-  torch you're holding, opens a chest, or (held down) eats food
+- Hold left click to mine (what you break goes into your pockets) or to hit the creature in front of
+  you; right click places the block or torch you're holding, opens a chest, talks to a villager, or
+  (held down) eats food
 - Tab opens the inventory: click to pick up and put down, R turns what you hold, right click moves
   things to and from a chest or puts clothes on, hover and press 1-9 to put something on the hotbar,
   Q throws it away; click a recipe to craft it
@@ -40,8 +41,8 @@ Items take space by their size: a pickaxe fills 2x3 cells, a berry one. You have
 bag on your back (a reed satchel to start; a hide pack is bigger). Clothes keep you warm and armor
 keeps part of each blow off the bar it lands on. Everything you carry and wear counts toward your
 load. Craft from what you gather: logs into planks and sticks, grass and leaves give plant fiber for
-cordage, and stone, sticks and cordage make tools. Chests (8 planks) hold more. Hide and fur clothes
-need creatures, which come in a later phase.
+cordage, and stone, sticks and cordage make tools. Chests (8 planks) hold more. Hide, fur and meat come
+from hunting.
 
 ## Staying alive
 
@@ -59,6 +60,25 @@ little, and restores Damage when nothing is mortal. Carrying little makes you fa
 load slows you and makes falls hurt more. Air runs short underwater, deep underground, high on the
 sky islands and in swamp mist; warmth follows the climate, the weather, the time of day and
 torches nearby.
+
+## The living world
+
+Marsh boars and fen stags roam by day: stags bolt when you come close (crouch to creep up), boars
+leave you alone until you hit them. At night bog lurkers hunt the swamp, and ancestral spirits
+drift through walls towards you and touch you with cold, wearing down Fatigue. Spirits won't come
+within a few steps of a torch, placed or in your hand, and fade at dawn. Whatever you hold is your
+weapon: tools hit harder than fists, and a flint spear (flint, sticks, cordage) harder still.
+Creatures drop hide, fur, meat and spirit embers; roast meat at camp, and three embers with plant
+fiber make an ember herb.
+
+Villages of stilt huts stand on the high ground; one is always within a short walk of where you
+start. Each hut has someone living in it, who spends the night indoors, gathers at the plaza in the
+morning and evening and goes about the village by day; right click to talk. Barrows are old graves
+under standing stones, with a stair down to a hall where wights wake when you come near; their
+chests hold old coins and gear. Walking into a village, a barrow or a new region shows its name.
+
+Seasons bring their own weather: gales in spring and autumn push you along and thin the air, and
+cold snaps in autumn and winter bite hard.
 
 ## Art
 

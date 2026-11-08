@@ -79,6 +79,8 @@ pub enum DamageCause {
     Fall,
     /// A fall from higher than `HEAVY_FALL` blocks: straight to Injuries.
     HeavyFall,
+    /// The cold touch of a spirit: wears down Fatigue.
+    Chill,
     /// Stabs and arrows: start at Blood and bleed.
     Piercing,
     /// Clubs, fists, falling rocks.
@@ -195,7 +197,7 @@ fn cell(world: &World, blocks: &Blocks, p: BlockPos, water: Option<voxel::BlockI
 }
 
 /// Blocks overlapped by a box.
-fn blocks_in(min: Vec3, max: Vec3) -> impl Iterator<Item = BlockPos> {
+pub(crate) fn blocks_in(min: Vec3, max: Vec3) -> impl Iterator<Item = BlockPos> {
     let (a, b) = (min.floor().as_ivec3(), (max - Vec3::splat(1e-4)).floor().as_ivec3());
     (a.y..=b.y).flat_map(move |y| (a.z..=b.z).flat_map(move |z| (a.x..=b.x).map(move |x| BlockPos::new(x, y, z))))
 }
@@ -244,6 +246,7 @@ fn walk(
     blocks: Res<Blocks>,
     cam: Query<&FlyCamera>,
     body: Res<Body>,
+    conditions: Res<crate::weather::Conditions>,
     mut player: ResMut<Player>,
     mut damage: MessageWriter<Damage>,
 ) {
@@ -305,7 +308,13 @@ fn walk(
     // Quick to start and stop on the ground; little control in the air.
     let accel = if p.on_ground { 45.0 } else if p.in_water { 12.0 } else { 9.0 };
     let horiz = Vec2::new(p.vel.x, p.vel.z);
-    let target = Vec2::new(wish.x, wish.z) * speed;
+    // Strong wind pushes you about when nothing overhead shelters you.
+    let gust = (conditions.wind - 8.0).max(0.0) * 0.15;
+    let sheltered = gust == 0.0
+        || p.in_water
+        || (2..26).any(|dy| matches!(cell(&world, &blocks, BlockPos::new(feet.x, feet.y + dy, feet.z), water), Cell::Solid | Cell::Unknown));
+    let push = if sheltered { Vec2::ZERO } else { crate::weather::WIND_DIR * gust };
+    let target = Vec2::new(wish.x, wish.z) * speed + push;
     let new = horiz.move_towards(target, accel * dt);
     p.vel.x = new.x;
     p.vel.z = new.y;

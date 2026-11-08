@@ -80,16 +80,31 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `interact` writes `Mined`/`OpenChest` messages. Survival reads weight, clothes warmth
   (`vitals::clothed`) and armor from the inventory. `camera::Menus.open` frees the mouse.
   Saves: `inventory.ron`, `chests.ron`. `BLOCKGAME_INVENTORY=1` opens the screen for screenshots.
+- Phase 8 (living world): done. `worldgen::structures` (villages of stilt huts every ~640 blocks,
+  one always 50-90 blocks from spawn; barrows with a stair, hall and side rooms; names from
+  syllables), `game::creatures` (kinds in `assets/data/creatures.ron`: temper Skittish/Neutral/
+  Hostile/Spirit/Villager, box models, attacks with a `DamageCause`, spawn rules, drops; `brain` has
+  the pure rules; ring spawner with caps; barrow wights once a day per barrow; spirits ignore walls,
+  keep `brain::TORCH_FEAR` from placed or held torches, fade at dawn), `creatures::villagers`
+  (one per hut, `brain::plan` schedule, talk lines in `assets/data/villagers.ron`), combat via
+  `interact::{Aimed, Strike, UseCreature}` (items have `damage`), `game::places` (title cards for
+  villages, barrows and regions), chest loot (`assets/data/loot.ron`, rolled on first open;
+  placed chests start empty via `interact::Placed`), season weather (`cold_snap`, `gale` with
+  wind push in `player`, `DamageCause::Chill` -> Fatigue). Creatures ignore a flying player.
 - Known gaps: vertices are 40 bytes, not the packed 8-byte format (performance pass); no thunder
-  sound or snow cover yet; ancestral spirits come with creatures; no block light propagation
-  (torches are real point lights); items on the ground are not saved; hide and fur only come from F9 until creatures.
-- Next: phase 8 per the plan doc.
+  sound or snow cover yet; no block light propagation (torches are real point lights); items on the
+  ground and creatures are not saved; creatures walk straight at goals (no pathfinding, villagers
+  don't climb into huts: they vanish at the door at night); creature models are untextured boxes.
+- Revisit (Ethan): the inventory screen works but its UX needs improving.
+- Next: phase 9 per the plan doc.
 
 ## Testing without a screen
 
 `BLOCKGAME_SCREENSHOT=shot.png cargo run` waits for chunk loading to settle, saves a screenshot and quits.
 `BLOCKGAME_CAMERA=x,y,z,yaw,pitch` (or `x,y,z,@tx,ty,tz` to look at a point) places the camera first.
 `BLOCKGAME_TIME=day:hour` and `BLOCKGAME_WEATHER=rain` set the scene; the clock stands still during a screenshot run.
-With `BLOCKGAME_CAMERA` the shot is taken flying; without it, from the player standing at spawn.
+With `BLOCKGAME_CAMERA` the shot is taken flying (`BLOCKGAME_WALK=1` stands there instead); without it, from the player standing at spawn.
+`BLOCKGAME_SLOT=n` starts with hotbar slot n in hand; `BLOCKGAME_LOOK=fen_stag` turns the camera to the nearest creature of a kind.
+The home village's name and position are logged at startup.
 In the cloud container: `BEVY_ASSET_ROOT=$PWD BLOCKGAME_SCREENSHOT=/tmp/s.png WGPU_BACKEND=vulkan xvfb-run -s "-screen 0 1280x720x24" ./target/debug/block-game`
 (needs `mesa-vulkan-drivers xvfb libxkbcommon-x11-0`).

@@ -18,13 +18,16 @@
     (makes: ("bark_helm", 1), needs: [("log", 2), ("cordage", 2)]),
     (makes: ("bark_vest", 1), needs: [("log", 4), ("cordage", 3)]),
     (makes: ("chest", 1), needs: [("planks", 8)]),
-    // Hide and fur come from creatures (a later phase).
+    // Hide and fur come from creatures.
     (makes: ("hide_boots", 1), needs: [("hide", 1), ("cordage", 1)]),
     (makes: ("hide_leggings", 1), needs: [("hide", 2), ("cordage", 1)]),
     (makes: ("hide_jerkin", 1), needs: [("hide", 3), ("cordage", 2)]),
     (makes: ("hide_pack", 1), needs: [("hide", 3), ("cordage", 4), ("stick", 2)]),
     (makes: ("fur_hood", 1), needs: [("fur", 1), ("cordage", 1)]),
     (makes: ("fur_coat", 1), needs: [("fur", 3), ("hide", 1), ("cordage", 2)]),
-    // Cooking happens at camp.
+    (makes: ("flint_spear", 1), needs: [("stick", 2), ("flint", 2), ("cordage", 1)]),
+    // Cooking and spirit work happen at camp.
+    (makes: ("roast_meat", 1), needs: [("raw_meat", 1)], at: Camp),
+    (makes: ("ember_herb", 1), needs: [("spirit_ember", 3), ("plant_fiber", 2)], at: Camp),
     (makes: ("peat_stew", 1), needs: [("swamp_reed", 3), ("marsh_berries", 2), ("smoked_fish", 1)], at: Camp),
 ]

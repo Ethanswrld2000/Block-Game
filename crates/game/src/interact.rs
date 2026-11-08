@@ -31,10 +31,18 @@ impl Plugin for InteractPlugin {
             .init_resource::<Mining>()
             .init_resource::<HandAnim>()
             .init_resource::<Wielded>()
-            .insert_resource(Hands { right: Some(0), left: None })
+            .init_resource::<Aimed>()
+            // `BLOCKGAME_SLOT=n` starts with hotbar slot n in hand (for screenshots).
+            .insert_resource(Hands {
+                right: Some(std::env::var("BLOCKGAME_SLOT").ok().and_then(|s| s.parse::<usize>().ok()).map_or(0, |n| n.clamp(1, SLOTS) - 1)),
+                left: None,
+            })
             .insert_resource(Hotbar { slots: vec![None; SLOTS] })
             .add_message::<Mined>()
             .add_message::<OpenChest>()
+            .add_message::<Placed>()
+            .add_message::<Strike>()
+            .add_message::<UseCreature>()
             .add_systems(
                 Update,
                 (choose_items, wield, find_target, use_hands, animate_swings, draw_target)
@@ -87,6 +95,46 @@ pub struct Mined {
 #[derive(Message, Debug, Clone, Copy)]
 pub struct OpenChest(pub BlockPos);
 
+/// A block was placed by the player.
+#[derive(Message, Debug, Clone, Copy)]
+pub struct Placed {
+    pub pos: BlockPos,
+    pub block: BlockId,
+}
+
+/// The creature under the crosshair (set by `creatures`) and how far away.
+#[derive(Resource, Debug, Default, Clone, Copy)]
+pub struct Aimed {
+    pub entity: Option<Entity>,
+    pub dist: f32,
+}
+
+/// You hit a creature.
+#[derive(Message, Debug, Clone, Copy)]
+pub struct Strike {
+    pub entity: Entity,
+    pub damage: f32,
+    /// Which way the blow pushes it.
+    pub dir: Vec3,
+}
+
+/// Right click on a creature (villagers talk).
+#[derive(Message, Debug, Clone, Copy)]
+pub struct UseCreature(pub Entity);
+
+/// Seconds between blows.
+pub const STRIKE_COOLDOWN: f32 = 0.45;
+
+/// Where a ray enters a box, if it does (distance along the unit `dir`).
+pub fn ray_box(origin: Vec3, dir: Vec3, min: Vec3, max: Vec3) -> Option<f32> {
+    let inv = dir.recip();
+    let t1 = (min - origin) * inv;
+    let t2 = (max - origin) * inv;
+    let near = t1.min(t2).max_element();
+    let far = t1.max(t2).min_element();
+    (far >= near.max(0.0)).then_some(near.max(0.0))
+}
+
 /// What each hand holds: an index into the hotbar, or nothing. Only the
 /// right hand is used for now; `left` stays `None` until the off-hand slot.
 #[derive(Resource, Debug, Clone, Copy)]
@@ -129,6 +177,7 @@ pub struct HandAnim {
     /// Eating progress, 0..1 (set by `survival`): the hand comes up to the mouth.
     pub eat: f32,
     place_cooldown: f32,
+    strike_cooldown: f32,
 }
 
 impl HandAnim {
@@ -208,7 +257,7 @@ fn remesh_around(world: &mut World, blocks: &Blocks, p: BlockPos) {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn use_hands(
     time: Res<Time>,
     mouse: Res<ButtonInput<MouseButton>>,
@@ -217,8 +266,14 @@ fn use_hands(
     wielded: Res<Wielded>,
     items: Res<Items>,
     mut inv: ResMut<Inventory>,
-    mut mined: MessageWriter<Mined>,
-    mut open_chest: MessageWriter<OpenChest>,
+    (mut mined, mut open_chest, mut placed, mut strikes, mut use_creature): (
+        MessageWriter<Mined>,
+        MessageWriter<OpenChest>,
+        MessageWriter<Placed>,
+        MessageWriter<Strike>,
+        MessageWriter<UseCreature>,
+    ),
+    (aimed, cam): (Res<Aimed>, Single<&Transform, With<FlyCamera>>),
     blocks: Res<Blocks>,
     mode: Res<MoveMode>,
     player: Res<Player>,
@@ -229,6 +284,7 @@ fn use_hands(
 ) {
     let dt = time.delta_secs();
     anim.place_cooldown -= dt;
+    anim.strike_cooldown -= dt;
     // Clicks only act while the mouse is captured (the first click captures it).
     if cursor.grab_mode == CursorGrabMode::None || body.frozen {
         mining.block = None;
@@ -238,6 +294,29 @@ fn use_hands(
     let hand = Hand::Right;
     let item = wielded.0;
     let kind = item.map(|i| &items.get(i).kind);
+
+    // A creature in front of the block you aim at takes the click.
+    let block_dist = target.hit.and_then(|h| {
+        let min = Vec3::new(h.block.x as f32, h.block.y as f32, h.block.z as f32);
+        ray_box(cam.translation, cam.forward().as_vec3(), min, min + Vec3::ONE)
+    });
+    if let Some(e) = aimed.entity
+        && block_dist.is_none_or(|d| aimed.dist < d)
+    {
+        mining.block = None;
+        if mouse.just_pressed(MouseButton::Right) {
+            use_creature.write(UseCreature(e));
+        }
+        if mouse.pressed(MouseButton::Left) && anim.strike_cooldown <= 0.0 {
+            anim.start(hand);
+            anim.strike_cooldown = STRIKE_COOLDOWN;
+            let damage = item.map_or(crate::items::FIST_DAMAGE, |i| items.get(i).damage);
+            let mut dir = cam.forward().as_vec3();
+            dir.y = 0.0;
+            strikes.write(Strike { entity: e, damage, dir: dir.normalize_or_zero() });
+        }
+        return;
+    }
 
     // Right click on a chest opens it (whatever you hold).
     let chest = blocks.registry.id("chest");
@@ -265,6 +344,7 @@ fn use_hands(
         // Never inside yourself (solid blocks only; a torch can go at your feet).
         let blocks_player = blocks.registry.get(place).solid && player.overlaps(into);
         if free && !blocks_player && item.is_some_and(|i| inv.take(i, 1)) && world.set_block(into, place) {
+            placed.write(Placed { pos: into, block: place });
             remesh_around(&mut world, &blocks, into);
             anim.start(hand);
             anim.place_cooldown = PLACE_REPEAT;

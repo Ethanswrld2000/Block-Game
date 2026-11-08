@@ -5,7 +5,8 @@
 //! `BLOCKGAME_CAMERA="x,y,z,yaw,pitch"` (degrees) places the camera first,
 //! relative to the spawn point if prefixed with `~` (e.g. `~0,~80,~0,45,-30`).
 //! `x,y,z,@tx,ty,tz` points the camera at a target instead. A placed camera
-//! flies; without one the shot is from the player standing at spawn.
+//! flies (`BLOCKGAME_WALK=1` stands there instead); without one the shot is
+//! from the player standing at spawn.
 
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{save_to_disk, Screenshot};
@@ -36,9 +37,14 @@ fn place_camera(
     spec: Res<CameraSpec>,
     mut mode: ResMut<crate::player::MoveMode>,
     mut cam: Query<(&mut Transform, &mut crate::camera::FlyCamera)>,
+    mut player: ResMut<crate::player::Player>,
 ) {
-    // A placed camera is a flying one.
-    *mode = crate::player::MoveMode::Fly;
+    // A placed camera is a flying one, unless `BLOCKGAME_WALK=1`: then you
+    // stand there (on the ground below) looking that way.
+    let walk = std::env::var("BLOCKGAME_WALK").is_ok_and(|v| v == "1");
+    if !walk {
+        *mode = crate::player::MoveMode::Fly;
+    }
     let parts: Vec<&str> = spec.0.split(',').map(str::trim).collect();
     for (mut tf, mut fc) in &mut cam {
         let spawn = tf.translation - Vec3::Y * crate::player::EYE;
@@ -61,6 +67,9 @@ fn place_camera(
             fc.pitch = parts.get(4).and_then(|v| v.parse::<f32>().ok()).unwrap_or(-20.0).to_radians();
         }
         tf.rotation = Quat::from_euler(EulerRot::YXZ, fc.yaw, fc.pitch, 0.0);
+        if walk {
+            player.pos = tf.translation - Vec3::Y * crate::player::EYE;
+        }
     }
 }
 
