@@ -273,7 +273,7 @@ fn use_hands(
         MessageWriter<Strike>,
         MessageWriter<UseCreature>,
     ),
-    (aimed, cam): (Res<Aimed>, Single<&Transform, With<FlyCamera>>),
+    (aimed, cam, perks): (Res<Aimed>, Single<&Transform, With<FlyCamera>>, Res<crate::progress::skills::Perks>),
     blocks: Res<Blocks>,
     mode: Res<MoveMode>,
     player: Res<Player>,
@@ -310,7 +310,7 @@ fn use_hands(
         if mouse.pressed(MouseButton::Left) && anim.strike_cooldown <= 0.0 {
             anim.start(hand);
             anim.strike_cooldown = STRIKE_COOLDOWN;
-            let damage = item.map_or(crate::items::FIST_DAMAGE, |i| items.get(i).damage);
+            let damage = item.map_or(crate::items::FIST_DAMAGE, |i| items.get(i).damage) * (1.0 + perks.damage);
             let mut dir = cam.forward().as_vec3();
             dir.y = 0.0;
             strikes.write(Strike { entity: e, damage, dir: dir.normalize_or_zero() });
@@ -357,7 +357,7 @@ fn use_hands(
         anim.start(hand);
         if let Some(hit) = target.hit
             && let Some(b) = world.block(hit.block)
-            && let Some(seconds) = items.break_time(item, blocks.registry.get(b))
+            && let Some(seconds) = items.break_time(item, blocks.registry.get(b)).map(|s| s / (1.0 + perks.mining))
         {
             if mining.block != Some(hit.block) {
                 *mining = Mining { block: Some(hit.block), hand, progress: 0.0 };

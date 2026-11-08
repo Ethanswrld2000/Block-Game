@@ -75,10 +75,8 @@ pub fn grab_cursor(
         cursor.grab_mode = CursorGrabMode::Locked;
         cursor.visible = false;
     }
-    if keys.just_pressed(KeyCode::Escape) {
-        cursor.grab_mode = CursorGrabMode::None;
-        cursor.visible = true;
-    }
+    // Esc opens the pause menu (see `settings`), which frees the mouse.
+    let _ = keys;
 }
 
 pub fn look(
