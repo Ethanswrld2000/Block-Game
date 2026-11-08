@@ -99,6 +99,7 @@ pub fn entry_layer(cause: DamageCause) -> Layer {
         DamageCause::Fall | DamageCause::Blunt => Layer::Damage,
         DamageCause::HeavyFall => Layer::Injuries,
         DamageCause::Piercing => Layer::Blood,
+        DamageCause::Chill => Layer::Fatigue,
     }
 }
 

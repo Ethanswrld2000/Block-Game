@@ -56,13 +56,18 @@ fn spawn_overlay(mut commands: Commands) {
     ));
 }
 
-/// F3 shows or hides the overlay; it steps aside while a screen like the inventory is open.
-fn toggle_overlay(keys: Res<ButtonInput<KeyCode>>, menus: Res<crate::camera::Menus>, mut shown: Local<Option<bool>>, mut q: Query<&mut Visibility, With<DebugText>>) {
+/// F3 shows or hides the overlay; it steps aside while a screen like the inventory, or a title card, is open.
+fn toggle_overlay(
+    keys: Res<ButtonInput<KeyCode>>,
+    menus: Res<crate::camera::Menus>,
+    card: Option<Res<crate::places::Card>>,
+    mut shown: Local<Option<bool>>, mut q: Query<&mut Visibility, With<DebugText>>) {
     let on = shown.get_or_insert(true);
     if keys.just_pressed(KeyCode::F3) {
         *on = !*on;
     }
-    let want = if *on && !menus.open { Visibility::Inherited } else { Visibility::Hidden };
+    let busy = menus.open || card.is_some_and(|c| c.up());
+    let want = if *on && !busy { Visibility::Inherited } else { Visibility::Hidden };
     for mut v in &mut q {
         if *v != want {
             *v = want;

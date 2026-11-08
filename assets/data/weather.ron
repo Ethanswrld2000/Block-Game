@@ -22,4 +22,10 @@
      visibility: 170.0, light: 0.2, precipitation: 1.0, wind: 12.0, lightning: true, chill: -7.0, air: 0.9),
     (name: "mist", title: "Mist", hours: (1.0, 4.0), clouds: 0.5, cloud_shade: 0.9,
      visibility: 70.0, light: 0.7, precipitation: 0.0, wind: 1.0, lightning: false, chill: -2.0, air: 0.85),
+    // Autumn and winter: a sudden bitter cold under a clear sky.
+    (name: "cold_snap", title: "Cold Snap", hours: (4.0, 10.0), clouds: 0.15, cloud_shade: 1.0,
+     visibility: 1400.0, light: 1.0, precipitation: 0.0, wind: 4.0, lightning: false, chill: -16.0),
+    // Spring and autumn: a howling gale that pushes you about and steals your breath.
+    (name: "gale", title: "Gale", hours: (1.0, 3.0), clouds: 0.85, cloud_shade: 0.6,
+     visibility: 400.0, light: 0.45, precipitation: 0.2, wind: 24.0, lightning: false, chill: -5.0, air: 0.8),
 ]

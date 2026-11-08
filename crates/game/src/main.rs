@@ -6,7 +6,9 @@ mod camera;
 mod chunk_mesh;
 mod clock;
 mod clouds;
+mod creatures;
 mod lod;
+mod places;
 mod player;
 mod precipitation;
 mod debug;
@@ -64,5 +66,6 @@ fn main() {
             survival::SurvivalPlugin,
             inventory::InventoryPlugin,
         ))
+        .add_plugins((creatures::CreaturesPlugin, places::PlacesPlugin))
         .run();
 }

@@ -1,0 +1,26 @@
+// What a chest holds the first time it is opened: table -> [(item, min, max, chance 0..1)].
+// "village" fills chests found in village huts, "barrow" those underground in barrows.
+// Chests you place yourself start empty.
+{
+    "village": [
+        ("smoked_fish", 1, 3, 0.7),
+        ("bread", 1, 2, 0.5),
+        ("cordage", 2, 5, 0.6),
+        ("linen_shirt", 1, 1, 0.25),
+        ("reed_hat", 1, 1, 0.25),
+        ("torch", 2, 6, 0.6),
+        ("marsh_berries", 2, 6, 0.5),
+        ("peat", 2, 8, 0.4),
+        ("stone_axe", 1, 1, 0.15),
+    ],
+    "barrow": [
+        ("old_coin", 3, 12, 1.0),
+        ("spirit_ember", 1, 3, 0.6),
+        ("flint_spear", 1, 1, 0.3),
+        ("bark_helm", 1, 1, 0.25),
+        ("hide_jerkin", 1, 1, 0.2),
+        ("fur_hood", 1, 1, 0.2),
+        ("raw_iron", 1, 4, 0.5),
+        ("cured_meat", 1, 2, 0.35),
+    ],
+}

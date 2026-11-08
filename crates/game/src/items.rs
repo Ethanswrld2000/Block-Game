@@ -34,6 +34,9 @@ struct ItemSpec {
     /// Icon colour for items without a block texture.
     #[serde(default)]
     color: Option<(f32, f32, f32)>,
+    /// Damage dealt when you hit a creature with it.
+    #[serde(default)]
+    damage: Option<f32>,
     #[serde(default)]
     model: Vec<ModelBox>,
 }
@@ -128,8 +131,13 @@ pub struct Item {
     /// How many fit in one stack.
     pub stack: u16,
     pub color: Color,
+    /// Damage when you hit a creature with it.
+    pub damage: f32,
     pub model: Vec<ModelBox>,
 }
+
+/// Damage of a bare-handed blow.
+pub const FIST_DAMAGE: f32 = 2.0;
 
 impl Item {
     pub fn wear_slot(&self) -> Option<WearSlot> {
@@ -189,7 +197,11 @@ impl Items {
                 .or_else(|| s.model.last().map(|m| m.color))
                 .map(|(r, g, b)| Color::srgb(r, g, b))
                 .unwrap_or(Color::srgb(0.5, 0.5, 0.5));
-            list.push(Item { name: s.name, title: s.title, kind, mass: s.mass, size: s.size, stack: stack.max(1), color, model: s.model });
+            let damage = s.damage.unwrap_or(match kind {
+                ItemKind::Tool { .. } => 4.0,
+                _ => FIST_DAMAGE,
+            });
+            list.push(Item { name: s.name, title: s.title, kind, mass: s.mass, size: s.size, stack: stack.max(1), color, damage, model: s.model });
         }
         Ok(Self { hand: spec.hand, list })
     }
