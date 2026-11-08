@@ -78,28 +78,44 @@ struct CardSub;
 #[derive(Component)]
 struct CardRule;
 
-fn spawn_card(mut commands: Commands) {
+fn spawn_card(mut commands: Commands, theme: Res<crate::theme::Theme>) {
     commands
         .spawn((
             CardRoot,
             Node {
                 position_type: PositionType::Absolute,
-                top: Val::Percent(9.0),
+                top: Val::Percent(8.0),
                 width: Val::Percent(100.0),
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Center,
-                row_gap: Val::Px(8.0),
+                justify_content: JustifyContent::Center,
                 ..default()
             },
             Visibility::Hidden,
             GlobalZIndex(5),
         ))
         .with_children(|c| {
-            c.spawn((CardTitle, Text::new(""), TextFont { font_size: bevy::text::FontSize::Px(46.0), ..default() }, TextColor(Color::NONE), TextShadow { offset: Vec2::splat(2.0), color: Color::NONE }));
-            c.spawn((CardRule, Node { width: Val::Px(220.0), height: Val::Px(2.0), ..default() }, BackgroundColor(Color::NONE)));
-            c.spawn((CardSub, Text::new(""), TextFont { font_size: bevy::text::FontSize::Px(20.0), ..default() }, TextColor(Color::NONE), TextShadow { offset: Vec2::splat(1.5), color: Color::NONE }));
+            // A ribbon behind the words so they read over any sky.
+            c.spawn((
+                CardBanner,
+                Node {
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    row_gap: Val::Px(6.0),
+                    padding: UiRect::axes(Val::Px(70.0), Val::Px(20.0)),
+                    ..default()
+                },
+                theme.skin("banner"),
+            ))
+            .with_children(|c| {
+                c.spawn((CardTitle, Text::new(""), theme.bold(42.0), TextColor(Color::NONE), TextShadow { offset: Vec2::splat(3.0), color: Color::NONE }));
+                c.spawn((CardRule, Node { width: Val::Px(240.0), height: Val::Px(8.0), ..default() }, theme.skin("divider")));
+                c.spawn((CardSub, Text::new(""), TextFont { font_size: bevy::text::FontSize::Px(20.0), ..default() }, TextColor(Color::NONE), TextShadow { offset: Vec2::splat(2.0), color: Color::NONE }));
+            });
         });
 }
+
+/// The ribbon behind a title card.
+#[derive(Component)]
+struct CardBanner;
 
 fn lower_the(title: &str) -> String {
     match title.strip_prefix("The ") {
@@ -212,7 +228,7 @@ fn fade(
     mut card: ResMut<Card>,
     mut root: Query<&mut Visibility, With<CardRoot>>,
     mut texts: Query<(&mut TextColor, &mut TextShadow, Has<CardTitle>)>,
-    mut rule: Query<&mut BackgroundColor, With<CardRule>>,
+    mut images: Query<&mut ImageNode, Or<(With<CardRule>, With<CardBanner>)>>,
 ) {
     let Some(age) = card.age.as_mut() else { return };
     *age += time.delta_secs();
@@ -239,7 +255,7 @@ fn fade(
         color.0 = if is_title { Color::srgba(0.98, 0.94, 0.82, alpha) } else { Color::srgba(0.85, 0.85, 0.8, alpha * 0.9) };
         shadow.color = Color::srgba(0.0, 0.0, 0.0, 0.8 * alpha);
     }
-    for mut bg in &mut rule {
-        bg.0 = Color::srgba(0.95, 0.9, 0.75, 0.6 * alpha);
+    for mut img in &mut images {
+        img.color = Color::srgba(1.0, 1.0, 1.0, alpha);
     }
 }

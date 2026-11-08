@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::camera::{FlyCamera, Menus};
 use crate::save::SaveDir;
+use crate::theme::{colors, sizes, Theme};
 use crate::world::ViewDistance;
 
 pub struct SettingsPlugin;
@@ -48,7 +49,7 @@ pub struct Settings {
     pub ambience: f32,
     /// The F3 overlay at start.
     pub debug_overlay: bool,
-    /// 0 off, 1 fast, 2 fancy.
+    /// 0 off, 1 on (three layers).
     pub clouds: u8,
 }
 
@@ -92,7 +93,7 @@ impl Knob {
             Knob::Fov => format!("{:.0}°", s.fov),
             Knob::Volume => format!("{:.0}%", s.volume * 100.0),
             Knob::Ambience => format!("{:.0}%", s.ambience * 100.0),
-            Knob::Clouds => ["off", "fast", "fancy"][s.clouds.min(2) as usize].into(),
+            Knob::Clouds => if s.clouds > 0 { "on" } else { "off" }.into(),
             Knob::DebugOverlay => (if s.debug_overlay { "on" } else { "off" }).into(),
         }
     }
@@ -104,7 +105,7 @@ impl Knob {
             Knob::Fov => s.fov = (s.fov + 5.0 * dir).clamp(50.0, 110.0),
             Knob::Volume => s.volume = (s.volume + 0.1 * dir).clamp(0.0, 1.0),
             Knob::Ambience => s.ambience = (s.ambience + 0.1 * dir).clamp(0.0, 1.0),
-            Knob::Clouds => s.clouds = (s.clouds as i32 + dir as i32).clamp(0, 2) as u8,
+            Knob::Clouds => s.clouds = (s.clouds as i32 + dir as i32).clamp(0, 1) as u8,
             Knob::DebugOverlay => s.debug_overlay = !s.debug_overlay,
         }
     }
@@ -159,27 +160,28 @@ fn store(dir: &SaveDir, s: &Settings) {
 }
 
 fn text(s: impl Into<String>, size: f32) -> impl Bundle {
-    (Text::new(s), TextFont { font_size: bevy::text::FontSize::Px(size), ..default() }, TextColor(Color::srgb(0.93, 0.92, 0.88)))
+    crate::theme::text(s, size, colors::TEXT)
 }
 
-fn button(kind: Button, label: &str, width: f32) -> impl Bundle {
+fn button(theme: &Theme, kind: Button, label: &str, width: f32) -> impl Bundle {
     (
         kind,
-        Node {
-            width: Val::Px(width),
-            height: Val::Px(40.0),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            border: UiRect::all(Val::Px(1.0)),
-            ..default()
-        },
-        BackgroundColor(Color::srgba(0.12, 0.13, 0.12, 0.95)),
-        BorderColor::all(Color::srgba(1.0, 1.0, 1.0, 0.25)),
-        children![text(label.to_string(), 18.0)],
+        Node { width: Val::Px(width), height: Val::Px(44.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() },
+        theme.skin("button"),
+        children![text(label.to_string(), sizes::LABEL)],
     )
 }
 
-fn spawn_menu(mut commands: Commands) {
+fn spawn_menu(mut commands: Commands, theme: Res<Theme>) {
+    let theme = &*theme;
+    let page = |display| Node {
+        display,
+        flex_direction: FlexDirection::Column,
+        align_items: AlignItems::Center,
+        row_gap: Val::Px(10.0),
+        padding: UiRect::axes(Val::Px(36.0), Val::Px(26.0)),
+        ..default()
+    };
     commands
         .spawn((
             MenuRoot,
@@ -191,33 +193,35 @@ fn spawn_menu(mut commands: Commands) {
                 align_items: AlignItems::Center,
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6)),
+            BackgroundColor(Color::srgba(0.0, 0.01, 0.0, 0.7)),
             GlobalZIndex(30),
             Visibility::Hidden,
         ))
         .with_children(|root| {
-            root.spawn((MainPage, Node { flex_direction: FlexDirection::Column, align_items: AlignItems::Center, row_gap: Val::Px(12.0), ..default() }))
-                .with_children(|p| {
-                    p.spawn(text("Paused", 40.0));
-                    p.spawn(button(Button::Resume, "Resume", 260.0));
-                    p.spawn(button(Button::Settings, "Settings", 260.0));
-                    p.spawn(button(Button::Quit, "Save and quit", 260.0));
-                });
-            root.spawn((
-                SettingsPage,
-                Node { display: Display::None, flex_direction: FlexDirection::Column, align_items: AlignItems::Center, row_gap: Val::Px(10.0), ..default() },
-            ))
-            .with_children(|p| {
-                p.spawn(text("Settings", 34.0));
+            root.spawn((MainPage, page(Display::Flex), theme.skin("panel"))).with_children(|p| {
+                p.spawn((theme.bold(sizes::TITLE), Text::new("Paused"), TextColor(colors::HEADING)));
+                p.spawn((Node { width: Val::Px(260.0), height: Val::Px(8.0), margin: UiRect::bottom(Val::Px(6.0)), ..default() }, theme.skin("divider")));
+                p.spawn(button(theme, Button::Resume, "Resume", 260.0));
+                p.spawn(button(theme, Button::Settings, "Settings", 260.0));
+                p.spawn(button(theme, Button::Quit, "Save and quit", 260.0));
+            });
+            root.spawn((SettingsPage, page(Display::None), theme.skin("panel"))).with_children(|p| {
+                p.spawn((theme.bold(sizes::TITLE), Text::new("Settings"), TextColor(colors::HEADING)));
+                p.spawn((Node { width: Val::Px(520.0), height: Val::Px(8.0), margin: UiRect::bottom(Val::Px(6.0)), ..default() }, theme.skin("divider")));
                 for (i, k) in Knob::ALL.iter().enumerate() {
-                    p.spawn(Node { width: Val::Px(520.0), align_items: AlignItems::Center, column_gap: Val::Px(10.0), ..default() }).with_children(|row| {
-                        row.spawn((Node { width: Val::Px(220.0), ..default() }, children![text(k.label(), 18.0)]));
-                        row.spawn(button(Button::Step(i, -1), "-", 44.0));
-                        row.spawn((Node { width: Val::Px(140.0), justify_content: JustifyContent::Center, ..default() }, children![(KnobValue(i), text("", 18.0))]));
-                        row.spawn(button(Button::Step(i, 1), "+", 44.0));
+                    p.spawn(Node { width: Val::Px(540.0), align_items: AlignItems::Center, column_gap: Val::Px(10.0), ..default() }).with_children(|row| {
+                        row.spawn((Node { width: Val::Px(230.0), ..default() }, children![text(k.label(), sizes::LABEL)]));
+                        row.spawn(button(theme, Button::Step(i, -1), "-", 44.0));
+                        row.spawn((
+                            Node { width: Val::Px(160.0), height: Val::Px(40.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() },
+                            theme.skin("inset"),
+                            children![(KnobValue(i), crate::theme::text("", sizes::LABEL, colors::HEADING))],
+                        ));
+                        row.spawn(button(theme, Button::Step(i, 1), "+", 44.0));
                     });
                 }
-                p.spawn(button(Button::Back, "Back", 260.0));
+                p.spawn((Node { height: Val::Px(6.0), ..default() },));
+                p.spawn(button(theme, Button::Back, "Back", 260.0));
             });
         });
 }
@@ -227,7 +231,18 @@ fn open_close(
     mut pause: ResMut<PauseMenu>,
     mut menus: ResMut<Menus>,
     mut cursor: Single<&mut CursorOptions, With<PrimaryWindow>>,
+    mut forced: Local<bool>,
 ) {
+    // `BLOCKGAME_PAUSE=1` (or `=settings`) opens the menu for screenshots.
+    if !*forced {
+        *forced = true;
+        if let Ok(v) = std::env::var("BLOCKGAME_PAUSE") {
+            pause.open = true;
+            pause.settings = v == "settings";
+            menus.open = true;
+            return;
+        }
+    }
     if !keys.just_pressed(KeyCode::Escape) {
         return;
     }
@@ -251,7 +266,8 @@ fn open_close(
 fn hover_and_click(
     mouse: Res<ButtonInput<MouseButton>>,
     window: Single<&Window, With<PrimaryWindow>>,
-    mut buttons: Query<(&Button, &ComputedNode, &UiGlobalTransform, &InheritedVisibility, &mut BackgroundColor)>,
+    mut buttons: Query<(&Button, &ComputedNode, &UiGlobalTransform, &InheritedVisibility, &mut ImageNode)>,
+    (theme, mouse_down): (Res<Theme>, Res<ButtonInput<MouseButton>>),
     mut pause: ResMut<PauseMenu>,
     mut menus: ResMut<Menus>,
     mut settings: ResMut<Settings>,
@@ -263,9 +279,19 @@ fn hover_and_click(
     }
     let p = window.physical_cursor_position();
     let mut clicked = None;
-    for (b, node, tf, vis, mut bg) in &mut buttons {
+    for (b, node, tf, vis, mut img) in &mut buttons {
         let over = vis.get() && p.is_some_and(|p| node.contains_point(*tf, p));
-        bg.0 = if over { Color::srgba(0.25, 0.3, 0.22, 0.98) } else { Color::srgba(0.12, 0.13, 0.12, 0.95) };
+        let want = if over && mouse_down.pressed(MouseButton::Left) {
+            "button_down"
+        } else if over {
+            "button_hover"
+        } else {
+            "button"
+        };
+        let skin = theme.image(want);
+        if img.rect != skin.rect {
+            *img = skin;
+        }
         if over && mouse.just_pressed(MouseButton::Left) {
             clicked = Some(*b);
         }

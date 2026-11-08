@@ -13,6 +13,8 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
 | `crates/game` | The Bevy client; one plugin per system | Gameplay state separate from rendering, so multiplayer can come later. |
 | `assets/textures/blocks.png` | 16x16 grid of 32x32 tiles | Placeholder art; Ethan repaints it. Keep tile positions stable. |
 | `assets/textures/blocks.ron` | Tile name -> index | Regenerate with `python3 tools/gen_placeholder_art.py` (overwrites the PNG). |
+| `assets/textures/ui.png` | UI sprite sheet, 2x pixels | Ethan repaints it; `ui.ron` lists each sprite's rect and slice. `tools/gen_ui_art.py` overwrites it. |
+| `assets/fonts/` | Pixelify Sans (OFL) | Compiled in; swap the `.ttf` files to change the font. |
 
 ## Commands
 
@@ -50,7 +52,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `assets/data/seasons.ron`, saved to `time.ron`), `game::weather` (kinds in `assets/data/weather.ron`,
   blended into the `Conditions` resource; local biome fog/haze/temperature in `LocalClimate`),
   `game::sky` (sun/moon light, ambient, fog, sky dome `assets/shaders/sky.wesl`, season tint of
-  foliage via the voxel material's `season` uniform and UV_1.y), `game::clouds` (blocky, y 236),
+  foliage via the voxel material's `season` uniform and UV_1.y), `game::clouds` (blocky, y 236; three layers since phase 10),
   `game::precipitation` (rain/snow pool), `game::lod` (distant terrain and islands as coloured
   columns out to 1500 blocks; `assets/shaders/lod.wesl` cuts it away inside the loaded area).
   Stars turn around the sun's axis; the moon has its own 8-day cycle and phases (`sky::moon_*`).
@@ -99,8 +101,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   saved to `progress.ron`), `player::Body.levitate/feather`, `game::sound` (placeholder oggs from
   `tools/gen_placeholder_sounds.py`, material sounds in `assets/data/sounds.ron`, loops follow
   weather/night/levitation), `game::settings` (Esc pause menu, `saves/settings.ron` shared by all
-  worlds: view distance, mouse, FOV, volume, ambience, clouds off/fast/fancy, debug overlay),
-  `game::clouds` raymarched in a slab y 236-290 (`assets/shaders/clouds.wesl`, two planes),
+  worlds: view distance, mouse, FOV, volume, ambience, clouds on/off, debug overlay),
   `game::bench` (`BLOCKGAME_BENCH=60` flies a fixed route with vsync off and logs frame times;
   `BLOCKGAME_NO_CLOUDS=1`, `BLOCKGAME_VSYNC=1`).
 - Creature skins: `creatures.ron` kinds name `skin: "x"` (or `skins: [...]`, one picked per
@@ -115,8 +116,18 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   sound or snow cover yet; no block light propagation (torches are real point lights); items on the
   ground and creatures are not saved; creatures walk straight at goals (no pathfinding, villagers
   don't climb into huts: they vanish at the door at night); creature parts don't animate yet.
-- Revisit (Ethan): the inventory screen works but its UX needs improving.
-- Next: all nine planned phases are built; ask Ethan what comes next.
+- Phase 10 (UI overhaul): done. `game::theme`: UI sprite sheet `assets/textures/ui.png` + `ui.ron`
+  (name -> rect and 9-slice borders, drawn at 2x; placeholder from `tools/gen_ui_art.py`, which
+  overwrites the PNG), `theme.skin("panel")` / `theme.icon("icon_food")` / `theme.image(..)`;
+  frames draw on the border box (`VisualBox::BorderBox`; Bevy's default is the content box).
+  Font: Pixelify Sans (`assets/fonts/ui.ttf`, `ui_bold.ttf`, OFL) loaded into Bevy's default font
+  handle so all text uses it; `theme.bold(size)` for headings; every UI `Text` gets `theme::SHADOW`
+  unless it has `NoShadow`. Colours in `theme::colors`, sizes in `theme::sizes`. Inventory: one
+  framed window, item tooltips by the cursor, crafting list sorted makeable-first and scrolled with
+  the wheel; hotbar shows block pictures. Clouds went back to blocky meshes, now three layers
+  (`clouds::LAYERS`: low rain deck y 200, middle y 236, high wisps y 300) whose cover follows
+  `Conditions.clouds`. `BLOCKGAME_PAUSE=1` (or `=settings`) opens the pause menu for screenshots.
+- Next: ask Ethan what comes next.
 
 ## Testing without a screen
 

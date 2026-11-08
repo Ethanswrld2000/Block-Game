@@ -9,6 +9,7 @@ use super::skills::{Node as SkillNode, Perks, Tree};
 use super::xp::Progression;
 use super::{Progress, Spells};
 use crate::camera::Menus;
+use crate::theme::{self, colors, sizes, Theme};
 
 pub struct ProgressUiPlugin;
 
@@ -21,7 +22,7 @@ impl Plugin for ProgressUiPlugin {
 }
 
 fn text(s: impl Into<String>, size: f32, color: Color) -> impl Bundle {
-    (Text::new(s), TextFont { font_size: bevy::text::FontSize::Px(size), ..default() }, TextColor(color), TextShadow { offset: Vec2::splat(1.5), color: Color::srgba(0.0, 0.0, 0.0, 0.85) })
+    theme::text(s, size, color)
 }
 
 #[derive(Component)]
@@ -35,16 +36,19 @@ struct FocusFill;
 #[derive(Component)]
 struct SpellText;
 
-const XP_W: f32 = 660.0;
+const XP_W: f32 = 360.0;
 const FOCUS_W: f32 = 170.0;
+/// The bars' frame is this thick on each side.
+const EDGE: f32 = 3.0;
 
-fn spawn_hud(mut commands: Commands) {
+fn spawn_hud(mut commands: Commands, theme: Res<Theme>) {
+    let theme = &*theme;
     // XP: a thin bar just above the hotbar, the level to its left.
     commands
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                bottom: Val::Px(60.0),
+                bottom: Val::Px(84.0),
                 width: Val::Percent(100.0),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
@@ -54,14 +58,11 @@ fn spawn_hud(mut commands: Commands) {
             Pickable::IGNORE,
         ))
         .with_children(|r| {
-            r.spawn((LevelText, text("1", 13.0, Color::srgb(0.95, 0.85, 0.45))));
-            r.spawn((
-                Node { width: Val::Px(XP_W), height: Val::Px(4.0), ..default() },
-                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.55)),
-            ))
-            .with_children(|b| {
+            r.spawn(theme.icon("icon_xp"));
+            r.spawn((Node { width: Val::Px(XP_W), height: Val::Px(12.0), padding: UiRect::all(Val::Px(EDGE)), ..default() }, theme.skin("bar"))).with_children(|b| {
                 b.spawn((XpFill, Node { width: Val::Px(0.0), height: Val::Percent(100.0), ..default() }, BackgroundColor(Color::srgb(0.95, 0.8, 0.3))));
             });
+            r.spawn((LevelText, text("1", sizes::SMALL + 1.0, colors::HEADING), Node { width: Val::Px(150.0), ..default() }));
         });
     // Focus: above the health bars, once you know a spell.
     commands
@@ -70,24 +71,25 @@ fn spawn_hud(mut commands: Commands) {
             Node {
                 position_type: PositionType::Absolute,
                 left: Val::Px(14.0),
-                bottom: Val::Px(172.0),
-                padding: UiRect::axes(Val::Px(8.0), Val::Px(5.0)),
+                bottom: Val::Px(152.0),
+                padding: UiRect::axes(Val::Px(12.0), Val::Px(8.0)),
                 flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(3.0),
+                row_gap: Val::Px(4.0),
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.35)),
+            theme.skin("panel_light"),
             Visibility::Hidden,
         ))
         .with_children(|p| {
             p.spawn(Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, ..default() }).with_children(|row| {
-                row.spawn(text("Focus", 13.0, Color::srgb(0.75, 0.85, 1.0)));
-                row.spawn((Node { width: Val::Px(FOCUS_W), height: Val::Px(8.0), ..default() }, BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.5))))
+                row.spawn(theme.icon("icon_focus"));
+                row.spawn((text("Focus", sizes::SMALL + 1.0, colors::TEXT), Node { width: Val::Px(70.0), ..default() }));
+                row.spawn((Node { width: Val::Px(FOCUS_W), height: Val::Px(14.0), padding: UiRect::all(Val::Px(EDGE)), ..default() }, theme.skin("bar")))
                     .with_children(|b| {
                         b.spawn((FocusFill, Node { width: Val::Px(FOCUS_W), height: Val::Percent(100.0), ..default() }, BackgroundColor(Color::srgb(0.45, 0.65, 1.0))));
                     });
             });
-            p.spawn((SpellText, text("", 12.0, Color::srgb(0.8, 0.88, 1.0))));
+            p.spawn((SpellText, text("", sizes::SMALL, Color::srgb(0.8, 0.88, 1.0))));
         });
 }
 
@@ -104,13 +106,13 @@ fn update_hud(
     mut panel: Query<&mut Visibility, With<FocusPanel>>,
 ) {
     for mut n in &mut xp {
-        n.width = Val::Px(XP_W * progress.level.fraction(&prog));
+        n.width = Val::Px((XP_W - 2.0 * EDGE) * progress.level.fraction(&prog));
     }
     for mut t in &mut level {
         let s = if progress.learned.points > 0 {
-            format!("Lv {}  ({} pt, K)", progress.level.level, progress.learned.points)
+            format!("Level {}  ({} to spend: K)", progress.level.level, progress.learned.points)
         } else {
-            format!("Lv {}", progress.level.level)
+            format!("Level {}", progress.level.level)
         };
         if t.0 != s {
             t.0 = s;
@@ -124,7 +126,7 @@ fn update_hud(
         }
     }
     for mut n in &mut focus {
-        n.width = Val::Px(FOCUS_W * (progress.focus / perks.max_focus()).clamp(0.0, 1.0));
+        n.width = Val::Px((FOCUS_W - 2.0 * EDGE) * (progress.focus / perks.max_focus()).clamp(0.0, 1.0));
     }
     let mut on = Vec::new();
     for (active, name, key) in [(spells.levitate, "Levitating", "G"), (spells.light, "Light", "X"), (spells.warmth, "Warmth", "V")] {
@@ -191,7 +193,8 @@ struct Info;
 #[derive(Component)]
 struct Header;
 
-fn spawn_screen(mut commands: Commands, tree: Res<Tree>) {
+fn spawn_screen(mut commands: Commands, tree: Res<Tree>, theme: Res<Theme>) {
+    let theme = &*theme;
     commands
         .spawn((
             Screen,
@@ -221,49 +224,40 @@ fn spawn_screen(mut commands: Commands, tree: Res<Tree>) {
             }
             for &(a, b, w) in &tree.links {
                 let (a, b) = (SkillNode::Major(a), SkillNode::Major(b));
-                s.spawn((EdgeLabel { a, b }, Node { position_type: PositionType::Absolute, ..default() }, text(w.to_string(), 13.0, Color::srgb(0.9, 0.8, 0.55))));
+                s.spawn((EdgeLabel { a, b }, Node { position_type: PositionType::Absolute, ..default() }, text(w.to_string(), sizes::BODY, colors::HEADING)));
             }
             for n in tree.nodes() {
                 s.spawn((
                     MapNode(n),
-                    Node {
-                        position_type: PositionType::Absolute,
-                        border: UiRect::all(Val::Px(2.0)),
-                        border_radius: BorderRadius::MAX,
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.2, 0.2, 0.22)),
-                    BorderColor::all(Color::srgb(0.4, 0.4, 0.45)),
+                    Node { position_type: PositionType::Absolute, justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() },
+                    theme.image(if matches!(n, SkillNode::Major(_)) { "node_major" } else { "node_minor" }),
                 ))
                 .with_children(|c| {
                     if let SkillNode::Minor(m, i) = n {
-                        c.spawn(text(tree.majors[m].ring[i].cost.to_string(), 11.0, Color::WHITE));
+                        c.spawn(text(tree.majors[m].ring[i].cost.to_string(), sizes::SMALL, colors::TEXT));
                     }
                 });
                 if let SkillNode::Major(m) = n {
-                    s.spawn((MapLabel(n), Node { position_type: PositionType::Absolute, ..default() }, text(tree.majors[m].title.clone(), 16.0, Color::srgb(0.95, 0.92, 0.85))));
+                    s.spawn((MapLabel(n), Node { position_type: PositionType::Absolute, ..default() }, theme.bold(sizes::LABEL), Text::new(tree.majors[m].title.clone()), TextColor(colors::TEXT)));
                 }
             }
-            s.spawn((
-                Header,
-                Node { position_type: PositionType::Absolute, top: Val::Px(14.0), left: Val::Px(18.0), ..default() },
-                text("", 18.0, Color::srgb(0.95, 0.88, 0.6)),
-            ));
+            s.spawn((Node { position_type: PositionType::Absolute, top: Val::Px(12.0), left: Val::Px(14.0), padding: UiRect::axes(Val::Px(14.0), Val::Px(8.0)), ..default() }, theme.skin("header")))
+                .with_children(|h| {
+                    h.spawn((Header, theme.bold(sizes::LABEL), Text::new(""), TextColor(colors::TEXT)));
+                });
             s.spawn((
                 Node {
                     position_type: PositionType::Absolute,
                     bottom: Val::Px(14.0),
                     left: Val::Px(18.0),
                     max_width: Val::Px(560.0),
-                    padding: UiRect::all(Val::Px(10.0)),
+                    padding: UiRect::axes(Val::Px(14.0), Val::Px(10.0)),
                     ..default()
                 },
-                BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6)),
+                theme.skin("tooltip"),
             ))
             .with_children(|p| {
-                p.spawn((Info, text("", 15.0, Color::srgb(0.9, 0.9, 0.9))));
+                p.spawn((Info, text("", sizes::BODY, colors::TEXT)));
             });
         });
 }
@@ -367,7 +361,7 @@ fn layout(
     tree: Res<Tree>,
     view: Res<TreeView>,
     progress: Res<Progress>,
-    mut nodes: Query<(&MapNode, &mut Node, &mut BackgroundColor, &mut BorderColor), (Without<MapEdge>, Without<MapLabel>, Without<EdgeLabel>)>,
+    mut nodes: Query<(&MapNode, &mut Node, &mut ImageNode), (Without<MapEdge>, Without<MapLabel>, Without<EdgeLabel>)>,
     mut labels: Query<(&MapLabel, &mut Node), (Without<MapNode>, Without<MapEdge>, Without<EdgeLabel>)>,
     mut edges: Query<(&MapEdge, &mut Node, &mut UiTransform, &mut BackgroundColor), (Without<MapNode>, Without<MapLabel>, Without<EdgeLabel>)>,
     mut edge_labels: Query<(&EdgeLabel, &mut Node), (Without<MapNode>, Without<MapLabel>, Without<MapEdge>)>,
@@ -379,7 +373,7 @@ fn layout(
     let size = window.size();
     let learned = &progress.learned;
     let at = |n: SkillNode| to_screen(&view, size, tree.pos(n));
-    for (m, mut node, mut bg, mut border) in &mut nodes {
+    for (m, mut node, mut img) in &mut nodes {
         let r = radius(m.0, view.zoom);
         let c = at(m.0);
         node.left = Val::Px(c.x - r);
@@ -389,20 +383,20 @@ fn layout(
         let taken = learned.taken.contains(&m.0);
         let closed = tree.closed(&learned.taken, m.0);
         let cost = tree.cost(&learned.taken, m.0);
-        let (fill, edge) = if taken {
-            (Color::srgb(0.85, 0.65, 0.2), Color::srgb(1.0, 0.9, 0.5))
+        // The stone's colour says what you can do with it.
+        let tint = if taken {
+            Color::srgb(1.0, 0.78, 0.3)
         } else if closed {
-            (Color::srgb(0.22, 0.08, 0.08), Color::srgb(0.4, 0.15, 0.15))
+            Color::srgb(0.45, 0.18, 0.16)
         } else if cost.is_some_and(|c| c <= learned.points) {
-            (Color::srgb(0.18, 0.32, 0.22), Color::srgb(0.45, 0.95, 0.55))
+            Color::srgb(0.5, 0.95, 0.55)
         } else if cost.is_some() {
-            (Color::srgb(0.16, 0.2, 0.3), Color::srgb(0.45, 0.55, 0.8))
+            Color::srgb(0.5, 0.62, 0.9)
         } else {
-            (Color::srgb(0.12, 0.12, 0.14), Color::srgb(0.3, 0.3, 0.33))
+            Color::srgb(0.32, 0.33, 0.36)
         };
         let hover = view.hover == Some(m.0);
-        bg.0 = fill;
-        *border = BorderColor::all(if hover { Color::WHITE } else { edge });
+        img.color = if hover { tint.mix(&Color::WHITE, 0.5) } else { tint };
     }
     for (l, mut node) in &mut labels {
         let c = at(l.0);

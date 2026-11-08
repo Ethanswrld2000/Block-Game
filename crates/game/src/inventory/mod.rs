@@ -12,7 +12,7 @@ pub mod crafting;
 pub mod drops;
 pub mod grid;
 pub mod loot;
-mod ui;
+pub(crate) mod ui;
 mod world_items;
 
 pub use world_items::Spill;
