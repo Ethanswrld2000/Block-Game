@@ -106,22 +106,21 @@ Each step is small enough for one pull request and makes the loop above more rea
    around" check from the voxel world.)
 2. **Campfire block.** A placeable fire that warms a wide area much more than a torch, cooks food
    without a camp, and burns fuel (sticks, logs). Torches stay light, campfires become heat.
-3. **Water and thirst (optional, ask Ethan).** A fourth meter that makes the desert harder and
-   gives the swamp's water a use. Only if it adds choices rather than chores.
-4. **Better clothes ladder.** Light clothes for heat (low insulation, shade), layered furs for cold,
+3. **Better clothes ladder.** Light clothes for heat (low insulation, shade), layered furs for cold,
    and a breathing item for deep caves (a reed breathing tube under water, an ember lamp that warns
    of bad air). Each region's answer becomes something you craft.
-5. **Expedition goals.** A short list of things to find in each region (an ore, a creature, a
+4. **Expedition goals.** A short list of things to find in each region (an ore, a creature, a
    place), shown in the K map, each giving XP and pointing at the next region. Data in a new
    `assets/data/journey.ron`.
-6. **Sky island payoff.** Something only up there worth the trip: a rare ore, a shrine that teaches
+5. **Sky island payoff.** Something only up there worth the trip: a rare ore, a shrine that teaches
    a spell, a view of the whole map.
-7. **Tuning pass.** Play a full in-game week from a new world and adjust `exposure.ron`,
+6. **Tuning pass.** Play a full in-game week from a new world and adjust `exposure.ron`,
    `weather.ron` and `food_tiers.ron` so day 1 is safe, day 3 has a hard night, and the first
    snowy trip needs preparation.
 
-## Questions for Ethan
+## Decided
 
-- Should heat and cold also affect how fast you get hungry (cold burns more food)?
-- Should the air meter matter in the swamp itself (bog gas pockets), or stay a depth/height thing?
-- Thirst: yes or no?
+- **No thirst** for now: too much to manage alongside food, air and temperature.
+- **No bog gas** in the swamp: air stays a matter of depth, height and weather (mist, gales).
+- **Cold and heat don't change hunger.** Exposure only wears down Fatigue and, at the far end,
+  Damage.
