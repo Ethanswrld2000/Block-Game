@@ -100,7 +100,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   kills, crafting, `places` finds and the first sky island; K opens the map screen in `progress::ui`;
   saved to `progress.ron`), `player::Body.levitate/feather`, `game::sound` (placeholder oggs from
   `tools/gen_placeholder_sounds.py`, material sounds in `assets/data/sounds.ron`, loops follow
-  weather/night/levitation), `game::settings` (Esc pause menu, `saves/settings.ron` shared by all
+  weather/levitation; no night loop, Ethan asked for it removed), `game::settings` (Esc pause menu, `saves/settings.ron` shared by all
   worlds: view distance, mouse, FOV, volume, ambience, clouds on/off, debug overlay),
   `game::bench` (`BLOCKGAME_BENCH=60` flies a fixed route with vsync off and logs frame times;
   `BLOCKGAME_NO_CLOUDS=1`, `BLOCKGAME_VSYNC=1`).

@@ -116,35 +116,12 @@ def main():
         seg = tt[: len(tt) - start]
         notes[start:] += np.sin(2 * np.pi * f * seg) * env(len(seg), 0.005, 0.5)
     save("level_up", notes)
-    # Loops: wind, rain, levitation hum, night swamp.
+    # Loops: wind, rain, levitation hum.
     save("wind_loop", lowpass(noise(8.3), 0.01) * (0.6 + 0.4 * np.sin(2 * np.pi * 0.15 * t(8.3))), loop=True)
     save("rain_loop", highpass(noise(6.3), 0.3) * 0.5 + lowpass(noise(6.3), 0.08) * 0.5, loop=True)
     tt = t(4.3)
     hum = np.sin(2 * np.pi * 110 * tt) * 0.4 + np.sin(2 * np.pi * 165 * tt) * 0.25 + lowpass(noise(4.3), 0.02) * 0.6
     save("levitate_loop", hum * (0.8 + 0.2 * np.sin(2 * np.pi * 0.5 * tt)), loop=True)
-    # Night swamp: a soft bed of air with a few distant frogs and crickets.
-    # Long, so the repeat isn't obvious, and gentle, so it sits in the back.
-    tt = t(30.0)
-    night = lowpass(noise(30.0), 0.006) * 0.35
-    for _ in range(14):
-        start = rng.integers(0, len(tt) - RATE)
-        if rng.random() < 0.5:
-            # A frog: two or three low croaks.
-            f = rng.uniform(140, 190)
-            for k in range(rng.integers(2, 4)):
-                n = int(RATE * 0.12)
-                seg = np.arange(n) / RATE
-                croak = np.sin(2 * np.pi * f * seg) * (0.6 + 0.4 * np.sin(2 * np.pi * 22 * seg)) * env(n, 0.02, 0.05)
-                at = start + k * int(RATE * 0.2)
-                night[at : at + n] += lowpass(croak, 0.2) * 0.12
-        else:
-            # A cricket: a soft, fast trill.
-            f = rng.uniform(1700, 2100)
-            n = int(RATE * 0.5)
-            seg = np.arange(n) / RATE
-            trill = np.sin(2 * np.pi * f * seg) * (np.sin(2 * np.pi * 28 * seg) > 0.3) * env(n, 0.05, 0.2)
-            night[start : start + n] += lowpass(trill, 0.3) * 0.04
-    save("night_loop", night, loop=True)
     # Thunder: a crack and a long rumble.
     n = noise(4.0)
     save("thunder", lowpass(n, 0.004) * env(len(n), 0.02, 1.3) * 3 + highpass(n, 0.2) * env(len(n), 0.001, 0.08))
