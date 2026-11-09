@@ -13,6 +13,7 @@
 
 pub mod brain;
 pub mod data;
+pub mod skin;
 mod villagers;
 
 use std::collections::HashMap;
@@ -52,6 +53,7 @@ impl Plugin for CreaturesPlugin {
                     .after(InteractSet),
             )
             .add_systems(Update, look_at_creature.run_if(|| std::env::var_os("BLOCKGAME_LOOK").is_some()))
+            .add_systems(Update, lineup.run_if(|| std::env::var_os("BLOCKGAME_LINEUP").is_some()))
             .add_plugins(villagers::VillagersPlugin);
     }
 }
@@ -124,19 +126,26 @@ impl Creature {
     }
 }
 
-/// One box of a creature's model, with its usual material.
+/// One box of a creature's model, with its usual and its hurt material.
 #[derive(Component)]
 struct Part {
     normal: Handle<StandardMaterial>,
+    hurt: Handle<StandardMaterial>,
 }
 
-type ModelPart = (Handle<Mesh>, Handle<StandardMaterial>, Vec3);
+/// One box ready to spawn: mesh, materials, offset from the creature's feet.
+#[derive(Clone)]
+struct ModelPart {
+    mesh: Handle<Mesh>,
+    normal: Handle<StandardMaterial>,
+    hurt: Handle<StandardMaterial>,
+    offset: Vec3,
+}
 
-/// Meshes and materials for each kind's model.
+/// Meshes and materials for each kind's model: one look per skin (or one in flat colours).
 #[derive(Resource)]
 pub struct CreatureAssets {
-    parts: Vec<Vec<ModelPart>>,
-    hurt: Handle<StandardMaterial>,
+    looks: Vec<Vec<Vec<ModelPart>>>,
 }
 
 /// When each barrow last woke its wights, in days.
@@ -145,34 +154,107 @@ struct Barrows {
     woke: HashMap<u64, f64>,
 }
 
-fn setup(mut commands: Commands, items: Res<Items>, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<StandardMaterial>>) {
+fn setup(
+    mut commands: Commands,
+    items: Res<Items>,
+    server: Res<AssetServer>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
     let kinds = Kinds::from_ron(include_str!("../../../../assets/data/creatures.ron"), &items).unwrap_or_else(|e| panic!("{e}"));
-    let parts = kinds
+    let flat_hurt = materials.add(StandardMaterial { base_color: Color::srgb(0.85, 0.15, 0.1), emissive: LinearRgba::rgb(0.4, 0.0, 0.0), ..default() });
+    let assets_dir = bevy::asset::io::file::FileAssetReader::get_base_path().join("assets");
+    let looks = kinds
         .list
         .iter()
         .map(|k| {
-            k.model
+            let ghost = |base: Color, texture: Option<Handle<Image>>, g: (f32, f32, f32)| StandardMaterial {
+                base_color: base.with_alpha(0.55),
+                base_color_texture: texture,
+                emissive: LinearRgba::from(Color::srgb(g.0, g.1, g.2)) * 2.0,
+                alpha_mode: AlphaMode::Blend,
+                unlit: true,
+                ..default()
+            };
+            let offset = |b: &skin::CreatureBox| Vec3::new(b.offset.0, b.offset.1, b.offset.2);
+            // Skins whose PNG exists; a missing one is skipped (with a warning) so the
+            // creature still shows up, in flat colours if it has no skins left.
+            let skins: Vec<&String> = k
+                .skins
                 .iter()
-                .map(|b| {
-                    let color = Color::srgb(b.color.0, b.color.1, b.color.2);
-                    let mat = match k.glow {
-                        Some(g) => StandardMaterial {
-                            base_color: color.with_alpha(0.55),
-                            emissive: LinearRgba::from(Color::srgb(g.0, g.1, g.2)) * 2.0,
-                            alpha_mode: AlphaMode::Blend,
-                            unlit: true,
-                            ..default()
-                        },
-                        None => StandardMaterial { base_color: color, perceptual_roughness: 0.95, ..default() },
-                    };
-                    (meshes.add(Cuboid::new(b.size.0, b.size.1, b.size.2)), materials.add(mat), Vec3::new(b.offset.0, b.offset.1, b.offset.2))
+                .filter(|s| {
+                    let found = assets_dir.join(skin_path(s)).exists();
+                    if !found {
+                        warn!("creature '{}': skin {} not found, run `cargo run --bin creature_skins`", k.name, skin_path(s));
+                    }
+                    found
+                })
+                .collect();
+            if skins.is_empty() {
+                let parts = k
+                    .model
+                    .iter()
+                    .map(|b| {
+                        let color = Color::srgb(b.color.0, b.color.1, b.color.2);
+                        let mat = match k.glow {
+                            Some(g) => ghost(color, None, g),
+                            None => StandardMaterial { base_color: color, perceptual_roughness: 0.95, ..default() },
+                        };
+                        ModelPart { mesh: meshes.add(Cuboid::new(b.size.0, b.size.1, b.size.2)), normal: materials.add(mat), hurt: flat_hurt.clone(), offset: offset(b) }
+                    })
+                    .collect();
+                return vec![parts];
+            }
+            let box_meshes: Vec<Handle<Mesh>> = (0..k.model.len()).map(|i| meshes.add(skinned_box(&k.model[i], &k.layout, i))).collect();
+            skins
+                .iter()
+                .map(|name| {
+                    let texture: Handle<Image> = server.load(skin_path(name));
+                    let normal = materials.add(match k.glow {
+                        Some(g) => ghost(Color::WHITE, Some(texture.clone()), g),
+                        None => StandardMaterial { base_color_texture: Some(texture.clone()), perceptual_roughness: 0.95, alpha_mode: AlphaMode::Mask(0.5), ..default() },
+                    });
+                    // Hit: the same skin, washed red.
+                    let hurt = materials.add(StandardMaterial {
+                        base_color: Color::srgb(1.0, 0.35, 0.3),
+                        base_color_texture: Some(texture),
+                        emissive: LinearRgba::rgb(0.4, 0.0, 0.0),
+                        alpha_mode: AlphaMode::Mask(0.5),
+                        ..default()
+                    });
+                    k.model.iter().zip(&box_meshes).map(|(b, mesh)| ModelPart { mesh: mesh.clone(), normal: normal.clone(), hurt: hurt.clone(), offset: offset(b) }).collect()
                 })
                 .collect()
         })
         .collect();
-    let hurt = materials.add(StandardMaterial { base_color: Color::srgb(0.85, 0.15, 0.1), emissive: LinearRgba::rgb(0.4, 0.0, 0.0), ..default() });
-    commands.insert_resource(CreatureAssets { parts, hurt });
+    commands.insert_resource(CreatureAssets { looks });
     commands.insert_resource(kinds);
+}
+
+/// A skin's path under `assets/`.
+fn skin_path(name: &str) -> String {
+    format!("textures/creatures/{name}.png")
+}
+
+/// A box mesh whose faces sample their patches of the skin.
+fn skinned_box(b: &skin::CreatureBox, layout: &skin::Layout, part: usize) -> Mesh {
+    use bevy::asset::RenderAssetUsages;
+    use bevy::mesh::{Indices, PrimitiveTopology};
+    let e = [b.size.0 * 0.5, b.size.1 * 0.5, b.size.2 * 0.5];
+    let (mut pos, mut nor, mut uv, mut idx) = (Vec::with_capacity(24), Vec::with_capacity(24), Vec::with_capacity(24), Vec::with_capacity(36));
+    for face in skin::Face::ALL {
+        let base = pos.len() as u32;
+        pos.extend(skin::face_corners(face, e));
+        nor.extend([face.normal(); 4]);
+        uv.extend(layout.uvs(part, face));
+        // Corners run TL, TR, BR, BL seen from outside: counter-clockwise is 0-3-2, 0-2-1.
+        idx.extend([base, base + 3, base + 2, base, base + 2, base + 1]);
+    }
+    Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nor)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+        .with_inserted_indices(Indices::U32(idx))
 }
 
 /// Spawn a creature standing at `pos` (feet), facing `yaw`.
@@ -189,8 +271,17 @@ pub fn spawn_creature(commands: &mut Commands, kinds: &Kinds, assets: &CreatureA
         Visibility::default(),
     ));
     e.with_children(|p| {
-        for (mesh, mat, offset) in &assets.parts[kind] {
-            p.spawn((Mesh3d(mesh.clone()), MeshMaterial3d(mat.clone()), Transform::from_translation(*offset), Part { normal: mat.clone() }, NotShadowCaster));
+        // Pick a skin from where it stands, so a group gets a mix.
+        let looks = &assets.looks[kind];
+        let h = (pos.x.to_bits() ^ pos.z.to_bits().rotate_left(16) ^ yaw.to_bits().rotate_left(8)).wrapping_mul(0x9E37_79B9);
+        for part in &looks[(h >> 16) as usize % looks.len()] {
+            p.spawn((
+                Mesh3d(part.mesh.clone()),
+                MeshMaterial3d(part.normal.clone()),
+                Transform::from_translation(part.offset),
+                Part { normal: part.normal.clone(), hurt: part.hurt.clone() },
+                NotShadowCaster,
+            ));
         }
         if let Some(g) = k.glow {
             p.spawn((
@@ -655,11 +746,10 @@ fn walk(time: Res<Time>, kinds: Option<Res<Kinds>>, world: Res<World>, blocks: R
 }
 
 /// Hit creatures flash red.
-fn tint(assets: Option<Res<CreatureAssets>>, creatures: Query<&Creature>, mut parts: Query<(&ChildOf, &Part, &mut MeshMaterial3d<StandardMaterial>)>) {
-    let Some(assets) = assets else { return };
+fn tint(creatures: Query<&Creature>, mut parts: Query<(&ChildOf, &Part, &mut MeshMaterial3d<StandardMaterial>)>) {
     for (parent, part, mut mat) in &mut parts {
         let Ok(c) = creatures.get(parent.parent()) else { continue };
-        let want = if c.hurt > 0.0 { &assets.hurt } else { &part.normal };
+        let want = if c.hurt > 0.0 { &part.hurt } else { &part.normal };
         if mat.0 != *want {
             mat.0 = want.clone();
         }
@@ -686,6 +776,45 @@ fn look_at_creature(
         cam.1.pitch = d.y.asin();
         cam.0.rotation = Quat::from_euler(EulerRot::YXZ, cam.1.yaw, cam.1.pitch, 0.0);
     }
+}
+
+/// `BLOCKGAME_LINEUP=1`: a row of still models, one per creature skin, in front of the
+/// camera, for checking skins (and screenshots). They are statues: no AI, no hits.
+fn lineup(
+    mut commands: Commands,
+    kinds: Option<Res<Kinds>>,
+    assets: Option<Res<CreatureAssets>>,
+    world: Res<World>,
+    blocks: Res<Blocks>,
+    cam: Single<&Transform, With<FlyCamera>>,
+    mut done: Local<bool>,
+) {
+    let (Some(kinds), Some(assets)) = (kinds, assets) else { return };
+    if *done {
+        return;
+    }
+    let fwd = flat(cam.forward().as_vec3()).normalize_or(Vec3::NEG_Z);
+    let side = Vec3::new(-fwd.z, 0.0, fwd.x);
+    let models: Vec<&Vec<ModelPart>> = assets.looks.iter().flatten().collect();
+    let spacing = 1.8;
+    let mut spots = Vec::new();
+    for i in 0..models.len() {
+        let p = cam.translation + fwd * (3.0 + models.len() as f32 * 0.9) + side * (i as f32 - (models.len() - 1) as f32 * 0.5) * spacing;
+        let (x, z) = (p.x.floor() as i32, p.z.floor() as i32);
+        // Wait until the ground there has loaded.
+        let Some(y) = ground_near(&world, &blocks, x, z, cam.translation.y as i32 + 8, cam.translation.y as i32 - 40, false) else { return };
+        spots.push(Vec3::new(x as f32 + 0.5, y as f32, z as f32 + 0.5));
+    }
+    let face = Quat::from_rotation_y((fwd.x).atan2(fwd.z));
+    for (parts, pos) in models.into_iter().zip(spots) {
+        commands.spawn((Transform::from_translation(pos).with_rotation(face), Visibility::default())).with_children(|p| {
+            for part in parts {
+                p.spawn((Mesh3d(part.mesh.clone()), MeshMaterial3d(part.normal.clone()), Transform::from_translation(part.offset), NotShadowCaster));
+            }
+        });
+    }
+    info!("lineup of {} creature skins ({} kinds)", assets.looks.iter().map(Vec::len).sum::<usize>(), kinds.list.len());
+    *done = true;
 }
 
 fn despawn_far(mut commands: Commands, player: Res<Player>, q: Query<(Entity, &Transform), Wild>) {

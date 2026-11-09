@@ -3,7 +3,8 @@
 
 use serde::Deserialize;
 
-use crate::items::{ItemId, Items, ModelBox};
+use super::skin::{CreatureBox, Layout};
+use crate::items::{ItemId, Items};
 use crate::player::DamageCause;
 
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -76,7 +77,11 @@ struct KindSpec {
     speed: f32,
     run: f32,
     size: (f32, f32),
-    model: Vec<ModelBox>,
+    model: Vec<CreatureBox>,
+    #[serde(default)]
+    skin: Option<String>,
+    #[serde(default)]
+    skins: Vec<String>,
     #[serde(default)]
     attack: Option<Attack>,
     #[serde(default)]
@@ -97,7 +102,12 @@ pub struct Kind {
     /// Half the body's width, and its height.
     pub half: f32,
     pub height: f32,
-    pub model: Vec<ModelBox>,
+    pub model: Vec<CreatureBox>,
+    /// Skin PNGs (names under `assets/textures/creatures/`), one picked per creature.
+    /// Empty: drawn in the boxes' flat colours.
+    pub skins: Vec<String>,
+    /// Where each box sits in the skins.
+    pub layout: Layout,
     pub attack: Option<Attack>,
     pub spawn: Option<Spawn>,
     pub drops: Vec<(ItemId, u16, f32)>,
@@ -125,6 +135,9 @@ impl Kinds {
             if s.model.is_empty() {
                 return Err(format!("creatures.ron: '{}' has no model", s.name));
             }
+            let mut skins: Vec<String> = s.skin.into_iter().collect();
+            skins.extend(s.skins);
+            let layout = Layout::new(&s.model);
             list.push(Kind {
                 name: s.name,
                 title: s.title,
@@ -135,6 +148,8 @@ impl Kinds {
                 half: s.size.0 * 0.5,
                 height: s.size.1,
                 model: s.model,
+                skins,
+                layout,
                 attack: s.attack,
                 spawn: s.spawn,
                 drops,
@@ -218,6 +233,18 @@ mod tests {
         // Wights only come from barrows, never the open surface.
         let wight = k.id("barrow_wight").unwrap();
         assert!(!night.iter().any(|(i, _)| *i == wight));
+    }
+
+    #[test]
+    fn every_listed_skin_exists_and_fits_its_layout() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/textures/creatures");
+        for k in &load().list {
+            for s in &k.skins {
+                let (w, h) = image::image_dimensions(dir.join(format!("{s}.png"))).unwrap_or_else(|e| panic!("{s}.png: {e}"));
+                // Painted at a higher resolution is fine, as long as it's the same shape.
+                assert!(w % k.layout.width == 0 && w * k.layout.height == h * k.layout.width, "{s}.png is {w}x{h}, layout is {}x{}", k.layout.width, k.layout.height);
+            }
+        }
     }
 
     #[test]

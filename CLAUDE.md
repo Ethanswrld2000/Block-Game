@@ -105,10 +105,18 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   worlds: view distance, mouse, FOV, volume, ambience, clouds on/off, debug overlay),
   `game::bench` (`BLOCKGAME_BENCH=60` flies a fixed route with vsync off and logs frame times;
   `BLOCKGAME_NO_CLOUDS=1`, `BLOCKGAME_VSYNC=1`).
+- Creature skins: `creatures.ron` kinds name `skin: "x"` (or `skins: [...]`, one picked per
+  creature) = `assets/textures/creatures/x.png`. `game::creatures::skin` (pure) unfolds each model
+  box into a net (top/bottom row, then right/front/left/back) at 32 px per block, packed in list order
+  (append new boxes so painted ones don't move; `uv: (x, y)` pins one). Boxes have `name`s for
+  animation later. `cargo run --bin creature_skins` writes starter PNGs for missing skins and
+  guides in `assets/textures/creatures/guides/`. No skin or missing PNG = flat `color`s. Hurt tints
+  the skin red; spirits blend the PNG's alpha. `--features dev` hot-reloads PNGs (`bevy/file_watcher`).
+  A PNG may be painted at 2x/4x as long as its shape matches (tested).
 - Known gaps: vertices are 40 bytes, not the packed 8-byte format (performance pass); no thunder
   sound or snow cover yet; no block light propagation (torches are real point lights); items on the
   ground and creatures are not saved; creatures walk straight at goals (no pathfinding, villagers
-  don't climb into huts: they vanish at the door at night); creature models are untextured boxes.
+  don't climb into huts: they vanish at the door at night); creature parts don't animate yet.
 - Phase 10 (UI overhaul): done. `game::theme`: UI sprite sheet `assets/textures/ui.png` + `ui.ron`
   (name -> rect and 9-slice borders, drawn at 2x; placeholder from `tools/gen_ui_art.py`, which
   overwrites the PNG), `theme.skin("panel")` / `theme.icon("icon_food")` / `theme.image(..)`;
@@ -136,7 +144,8 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
 `BLOCKGAME_TIME=day:hour` and `BLOCKGAME_WEATHER=rain` set the scene; the clock stands still during a screenshot run.
 With `BLOCKGAME_CAMERA` the shot is taken flying (`BLOCKGAME_WALK=1` stands there instead); without it, from the player standing at spawn.
 `BLOCKGAME_SLOT=n` starts with hotbar slot n in hand; `BLOCKGAME_SKILLS=n` gives n points and learns Wanderer and Mystic;
-`BLOCKGAME_CAST=levitate,light` starts spells; `BLOCKGAME_SKILLTREE=1` opens the tree; `BLOCKGAME_LOOK=fen_stag` turns the camera to the nearest creature of a kind.
+`BLOCKGAME_CAST=levitate,light` starts spells; `BLOCKGAME_SKILLTREE=1` opens the tree; `BLOCKGAME_LOOK=fen_stag` turns the camera to the nearest creature of a kind;
+`BLOCKGAME_LINEUP=1` stands a still model of every creature skin in a row in front of the camera.
 The home village's name and position are logged at startup.
 In the cloud container: `BEVY_ASSET_ROOT=$PWD BLOCKGAME_SCREENSHOT=/tmp/s.png WGPU_BACKEND=vulkan xvfb-run -s "-screen 0 1280x720x24" ./target/debug/block-game`
 (needs `mesa-vulkan-drivers xvfb libxkbcommon-x11-0`).
