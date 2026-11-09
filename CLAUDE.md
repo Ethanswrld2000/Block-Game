@@ -14,7 +14,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
 | `assets/textures/blocks.png` | 16x16 grid of 32x32 tiles | Placeholder art; Ethan repaints it. Keep tile positions stable. |
 | `assets/textures/blocks.ron` | Tile name -> index | Regenerate with `python3 tools/gen_placeholder_art.py` (overwrites the PNG). |
 | `assets/textures/ui.png` | UI sprite sheet, 2x pixels | Ethan repaints it; `ui.ron` lists each sprite's rect and slice. `tools/gen_ui_art.py` overwrites it. |
-| `assets/fonts/` | Pixelify Sans (OFL) | Compiled in; swap the `.ttf` files to change the font. |
+| `assets/fonts/` | Jersey 15 (OFL) | Compiled in; swap the `.ttf` files to change the font. |
 
 ## Commands
 
@@ -112,7 +112,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   (name -> rect and 9-slice borders, drawn at 2x; placeholder from `tools/gen_ui_art.py`, which
   overwrites the PNG), `theme.skin("panel")` / `theme.icon("icon_food")` / `theme.image(..)`;
   frames draw on the border box (`VisualBox::BorderBox`; Bevy's default is the content box).
-  Font: Pixelify Sans (`assets/fonts/ui.ttf`, `ui_bold.ttf`, OFL) loaded into Bevy's default font
+  Font: Jersey 15 (`assets/fonts/ui.ttf`, `ui_bold.ttf`, OFL; Pixelify Sans was too hard to read; sizes in `theme::sizes` sit on its 1/27-em pixel grid) loaded into Bevy's default font
   handle so all text uses it; `theme.bold(size)` for headings; every UI `Text` gets `theme::SHADOW`
   unless it has `NoShadow`. Colours in `theme::colors`, sizes in `theme::sizes`. Inventory: one
   framed window, item tooltips by the cursor, crafting list sorted makeable-first and scrolled with
