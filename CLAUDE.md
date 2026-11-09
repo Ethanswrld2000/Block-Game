@@ -135,7 +135,13 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   grids, hotbar, worn slots and crafting rows. Held items and dropped non-blocks use the extruded
   sprite; blocks stay textured cubes. items.ron has no `model`/`color` any more; a test checks every
   item has a sprite of its size.
-- Next: ask Ethan what comes next.
+- Exposure: `survival::exposure` (stages in `assets/data/exposure.ron`: cold, heat, air; each drains
+  Fatigue down to the mortal line, the last stage deals Damage). Air meter = oxygen where you stand
+  (`Vitals.air`; `Vitals.oxygen` is what the body gets after skills or a held breath, `breath` under
+  water); temperature meter = felt °C (`Vitals.feels`, follows surroundings over ~30 s). Both always
+  shown and shake by stage. `BLOCKGAME_FEELS=-25` / `BLOCKGAME_OXYGEN=50` force them for screenshots.
+  The gameplay loop and what to build next: `docs/GAMEPLAY_LOOP.md`.
+- Next: follow `docs/GAMEPLAY_LOOP.md` "What's next" (shelter first), or ask Ethan.
 
 ## Testing without a screen
 
