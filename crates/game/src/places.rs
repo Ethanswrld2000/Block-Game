@@ -106,9 +106,9 @@ fn spawn_card(mut commands: Commands, theme: Res<crate::theme::Theme>) {
                 theme.skin("banner"),
             ))
             .with_children(|c| {
-                c.spawn((CardTitle, Text::new(""), theme.bold(42.0), TextColor(Color::NONE), TextShadow { offset: Vec2::splat(3.0), color: Color::NONE }));
+                c.spawn((CardTitle, Text::new(""), theme.bold(crate::theme::sizes::HUGE), TextColor(Color::NONE), TextShadow { offset: Vec2::splat(3.0), color: Color::NONE }));
                 c.spawn((CardRule, Node { width: Val::Px(240.0), height: Val::Px(8.0), ..default() }, theme.skin("divider")));
-                c.spawn((CardSub, Text::new(""), TextFont { font_size: bevy::text::FontSize::Px(20.0), ..default() }, TextColor(Color::NONE), TextShadow { offset: Vec2::splat(2.0), color: Color::NONE }));
+                c.spawn((CardSub, Text::new(""), TextFont { font_size: bevy::text::FontSize::Px(crate::theme::sizes::LABEL), ..default() }, TextColor(Color::NONE), TextShadow { offset: Vec2::splat(2.0), color: Color::NONE }));
             });
         });
 }
@@ -227,13 +227,16 @@ fn fade(
     time: Res<Time>,
     mut card: ResMut<Card>,
     mut root: Query<&mut Visibility, With<CardRoot>>,
-    mut texts: Query<(&mut TextColor, &mut TextShadow, Has<CardTitle>)>,
+    // Only the card's own words: without the filter this faded every
+    // piece of text with a shadow, i.e. all the UI.
+    mut texts: Query<(&mut TextColor, &mut TextShadow, Has<CardTitle>), Or<(With<CardTitle>, With<CardSub>)>>,
     mut images: Query<&mut ImageNode, Or<(With<CardRule>, With<CardBanner>)>>,
 ) {
     let Some(age) = card.age.as_mut() else { return };
     *age += time.delta_secs();
     // Screenshot runs keep the card up so it can be seen.
-    if std::env::var_os("BLOCKGAME_SCREENSHOT").is_some() {
+    // (`BLOCKGAME_CARD_FADES=1` lets it fade, to check the rest of the UI after it.)
+    if std::env::var_os("BLOCKGAME_SCREENSHOT").is_some() && std::env::var_os("BLOCKGAME_CARD_FADES").is_none() {
         *age = age.min(FADE_IN + HOLD * 0.5);
     }
     let a = *age;

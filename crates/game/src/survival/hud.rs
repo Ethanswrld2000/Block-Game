@@ -170,7 +170,7 @@ fn spawn(mut commands: Commands, theme: Res<Theme>) {
                         Layer::Blood => "icon_blood",
                         Layer::Injuries => "icon_injuries",
                     }));
-                    row.spawn((text(l.name(), sizes::SMALL + 1.0, colors::TEXT), Node { width: Val::Px(70.0), ..default() }));
+                    row.spawn((text(l.name(), sizes::SMALL, colors::TEXT), Node { width: Val::Px(70.0), ..default() }));
                     row.spawn(bar_back(theme, BAR_W)).with_children(|b| {
                         b.spawn(bar_inner()).with_children(|b| {
                             b.spawn((BarFill(l), fill(layer_color(l))));
@@ -210,7 +210,7 @@ fn spawn(mut commands: Commands, theme: Res<Theme>) {
                             b.spawn((MeterFill(m), fill(color)));
                         });
                     });
-                    row.spawn((text(name, sizes::SMALL + 1.0, colors::TEXT), Node { width: Val::Px(VALUE_W), ..default() }));
+                    row.spawn((text(name, sizes::SMALL, colors::TEXT), Node { width: Val::Px(VALUE_W), ..default() }));
                 });
             }
             // Warmth: cold, comfortable and hot zones with a marker.
@@ -225,7 +225,7 @@ fn spawn(mut commands: Commands, theme: Res<Theme>) {
                     b.spawn(marker(Gauge::Warmth));
                     });
                 });
-                row.spawn((GaugeText(Gauge::Warmth), text("", sizes::SMALL + 1.0, colors::TEXT), Node { width: Val::Px(VALUE_W), ..default() }));
+                row.spawn((GaugeText(Gauge::Warmth), text("", sizes::SMALL, colors::TEXT), Node { width: Val::Px(VALUE_W), ..default() }));
             });
             // Load: light, the sweet spot, heavy.
             col.spawn(Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, ..default() }).with_children(|row| {
@@ -240,7 +240,7 @@ fn spawn(mut commands: Commands, theme: Res<Theme>) {
                     b.spawn(marker(Gauge::Load));
                     });
                 });
-                row.spawn((GaugeText(Gauge::Load), text("", sizes::SMALL + 1.0, colors::TEXT), Node { width: Val::Px(VALUE_W), ..default() }));
+                row.spawn((GaugeText(Gauge::Load), text("", sizes::SMALL, colors::TEXT), Node { width: Val::Px(VALUE_W), ..default() }));
             });
         });
 
@@ -277,7 +277,7 @@ fn spawn(mut commands: Commands, theme: Res<Theme>) {
             GlobalZIndex(6),
         ))
         .with_children(|c| {
-            c.spawn((theme.bold(48.0), Text::new("You perished"), TextColor(Color::srgb(1.0, 0.85, 0.8))));
+            c.spawn((theme.bold(sizes::HUGE), Text::new("You perished"), TextColor(Color::srgb(1.0, 0.85, 0.8))));
             c.spawn((DeathHint, text("", sizes::LABEL, colors::TEXT)));
         });
 }

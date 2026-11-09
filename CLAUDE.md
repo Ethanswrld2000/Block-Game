@@ -14,7 +14,8 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
 | `assets/textures/blocks.png` | 16x16 grid of 32x32 tiles | Placeholder art; Ethan repaints it. Keep tile positions stable. |
 | `assets/textures/blocks.ron` | Tile name -> index | Regenerate with `python3 tools/gen_placeholder_art.py` (overwrites the PNG). |
 | `assets/textures/ui.png` | UI sprite sheet, 2x pixels | Ethan repaints it; `ui.ron` lists each sprite's rect and slice. `tools/gen_ui_art.py` overwrites it. |
-| `assets/fonts/` | Pixelify Sans (OFL) | Compiled in; swap the `.ttf` files to change the font. |
+| `assets/textures/icons/` | Item sprites: `items`, `weapons` (tools), `blocks` (.png + .ron) | 20 px per inventory cell; Ethan repaints them. `tools/gen_item_art.py` only adds missing sprites (`--reset <sheet>` redraws). |
+| `assets/fonts/` | Jersey 15 (OFL) | Compiled in; swap the `.ttf` files to change the font. |
 
 ## Commands
 
@@ -100,7 +101,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   kills, crafting, `places` finds and the first sky island; K opens the map screen in `progress::ui`;
   saved to `progress.ron`), `player::Body.levitate/feather`, `game::sound` (placeholder oggs from
   `tools/gen_placeholder_sounds.py`, material sounds in `assets/data/sounds.ron`, loops follow
-  weather/night/levitation), `game::settings` (Esc pause menu, `saves/settings.ron` shared by all
+  weather/levitation; no night loop, Ethan asked for it removed), `game::settings` (Esc pause menu, `saves/settings.ron` shared by all
   worlds: view distance, mouse, FOV, volume, ambience, clouds on/off, debug overlay),
   `game::bench` (`BLOCKGAME_BENCH=60` flies a fixed route with vsync off and logs frame times;
   `BLOCKGAME_NO_CLOUDS=1`, `BLOCKGAME_VSYNC=1`).
@@ -120,13 +121,20 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   (name -> rect and 9-slice borders, drawn at 2x; placeholder from `tools/gen_ui_art.py`, which
   overwrites the PNG), `theme.skin("panel")` / `theme.icon("icon_food")` / `theme.image(..)`;
   frames draw on the border box (`VisualBox::BorderBox`; Bevy's default is the content box).
-  Font: Pixelify Sans (`assets/fonts/ui.ttf`, `ui_bold.ttf`, OFL) loaded into Bevy's default font
+  Font: Jersey 15 (`assets/fonts/ui.ttf`, `ui_bold.ttf`, OFL; Pixelify Sans was too hard to read; sizes in `theme::sizes` sit on its 1/27-em pixel grid) loaded into Bevy's default font
   handle so all text uses it; `theme.bold(size)` for headings; every UI `Text` gets `theme::SHADOW`
   unless it has `NoShadow`. Colours in `theme::colors`, sizes in `theme::sizes`. Inventory: one
   framed window, item tooltips by the cursor, crafting list sorted makeable-first and scrolled with
   the wheel; hotbar shows block pictures. Clouds went back to blocky meshes, now three layers
   (`clouds::LAYERS`: low rain deck y 200, middle y 236, high wisps y 300) whose cover follows
   `Conditions.clouds`. `BLOCKGAME_PAUSE=1` (or `=settings`) opens the pause menu for screenshots.
+- Item sprites: done. `game::item_art` (`ItemArt`: every item's sprite from the three sheets in
+  `assets/textures/icons/`, picked by kind: Tool -> weapons, Block -> blocks, else items; 20 px per
+  cell; `image(id)` for UI, `model(id)` extrudes opaque pixels into a mesh once the PNGs load).
+  `inventory::ui::icon` draws sprites at 2x (turned with `UiTransform` when the item is rotated) in
+  grids, hotbar, worn slots and crafting rows. Held items and dropped non-blocks use the extruded
+  sprite; blocks stay textured cubes. items.ron has no `model`/`color` any more; a test checks every
+  item has a sprite of its size.
 - Next: ask Ethan what comes next.
 
 ## Testing without a screen

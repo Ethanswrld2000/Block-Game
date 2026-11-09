@@ -11,9 +11,10 @@ use voxel::{BlockDef, Face};
 use crate::blocks::{Blocks, VoxelMaterial};
 use crate::camera::FlyCamera;
 use crate::interact::{Hand, HandAnim, Mining, Wielded};
+use crate::item_art::ItemArt;
 use crate::items::{ItemId, ItemKind, Items};
 use crate::player::{MoveMode, Player};
-use crate::torches::{Flicker, TorchAssets, TORCH_COLOR, TORCH_LUMENS, TORCH_RANGE};
+use crate::torches::{Flicker, TORCH_COLOR, TORCH_LUMENS, TORCH_RANGE};
 
 pub struct HandsPlugin;
 
@@ -32,6 +33,9 @@ struct Held {
     hand: Hand,
     showing: Option<Option<ItemId>>,
 }
+
+/// Metres per sprite pixel for a held item (before the hand's own scale).
+const HAND_PX: f32 = 0.0095;
 
 const SKIN: Color = Color::srgb(0.86, 0.66, 0.5);
 const SLEEVE: Color = Color::srgb(0.32, 0.36, 0.26);
@@ -68,8 +72,8 @@ fn spawn_hands(
                 // Items are held tilted up and forward.
                 h.spawn((
                     Held { hand, showing: None },
-                    // Models in items.ron are life-size; at arm's length in
-                    // front of the eye they read better a bit smaller.
+                    // Items are life-size; at arm's length in front of the
+                    // eye they read better a bit smaller.
                     Transform::from_xyz(0.0, 0.03, -0.02).with_rotation(Quat::from_rotation_x(0.9)).with_scale(Vec3::splat(0.42)),
                     Visibility::default(),
                 ));
@@ -79,7 +83,7 @@ fn spawn_hands(
 }
 
 /// A small cube of a block, textured like the real thing.
-fn block_mesh(def: &BlockDef, size: f32) -> Mesh {
+pub(crate) fn block_mesh(def: &BlockDef, size: f32) -> Mesh {
     let (mut pos, mut nor, mut uv, mut layer, mut idx) = (vec![], vec![], vec![], vec![], vec![]);
     let h = size * 0.5;
     for face in Face::ALL {
@@ -119,12 +123,15 @@ fn update_held(
     wielded: Res<Wielded>,
     items: Res<Items>,
     blocks: Res<Blocks>,
-    torch: Option<Res<TorchAssets>>,
+    art: Option<Res<ItemArt>>,
     mut held: Query<(Entity, &mut Held)>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let (Some(voxel_mat), Some(torch)) = (blocks.material.clone(), torch) else { return };
+    let (Some(voxel_mat), Some(art)) = (blocks.material.clone(), art) else { return };
+    if !art.ready {
+        return;
+    }
     for (e, mut h) in &mut held {
         // One hand for now: the right hand holds what's wielded.
         let id = if h.hand == Hand::Right { wielded.0 } else { None };
@@ -145,32 +152,31 @@ fn update_held(
                     NotShadowCaster,
                 ));
             }
-            _ if item.model.is_empty() => {
-                // No model: a small bundle in the item's colour.
-                let mat = materials.add(StandardMaterial { base_color: item.color, perceptual_roughness: 0.95, ..default() });
-                c.spawn((Mesh3d(meshes.add(Cuboid::new(0.16, 0.12, 0.2))), MeshMaterial3d(mat), Transform::from_xyz(0.0, 0.0, -0.12), NotShadowCaster));
-            }
             _ => {
-                for b in &item.model {
-                    let mat = materials.add(StandardMaterial {
-                        base_color: Color::srgb(b.color.0, b.color.1, b.color.2),
-                        perceptual_roughness: 0.9,
-                        ..default()
-                    });
-                    c.spawn((
-                        Mesh3d(meshes.add(Cuboid::new(b.size.0, b.size.1, b.size.2))),
-                        MeshMaterial3d(mat),
-                        Transform::from_xyz(b.offset.0, b.offset.1, b.offset.2),
-                        NotShadowCaster,
-                    ));
+                // The item's sprite, made solid: held near the bottom (the
+                // end of a handle), pointing forward.
+                let id_size = art.size(id).unwrap_or(UVec2::splat(20)).as_vec2();
+                let grip = if id_size.y >= id_size.x * 1.5 { id_size.y * 0.2 } else { id_size.y * 0.5 };
+                // Small things (a handful of berries) are drawn a bit bigger
+                // so they show above the hotbar.
+                let px = HAND_PX * (36.0 / id_size.max_element()).max(1.0);
+                let to_center = (id_size.y / 2.0 - grip) * px;
+                let place = Transform::from_xyz(0.0, 0.0, -to_center).with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)).with_scale(Vec3::splat(px));
+                match art.model(id) {
+                    Some((mesh, mat)) => {
+                        c.spawn((Mesh3d(mesh), MeshMaterial3d(mat), place, NotShadowCaster));
+                    }
+                    None => {
+                        c.spawn((Mesh3d(meshes.add(Cuboid::new(0.16, 0.12, 0.2))), MeshMaterial3d(materials.add(Color::srgb(0.5, 0.45, 0.38))), Transform::from_xyz(0.0, 0.0, -0.12), NotShadowCaster));
+                    }
                 }
                 if matches!(item.kind, ItemKind::Torch) {
-                    // A burning tip and a light that goes where you go.
-                    c.spawn((Mesh3d(torch.flame.clone()), MeshMaterial3d(torch.fire.clone()), Transform::from_xyz(0.0, 0.0, -0.33).with_scale(Vec3::splat(0.55)), NotShadowCaster));
+                    // A light that goes where you go, just past the flame.
+                    let tip = -(id_size.y - grip) * px;
                     c.spawn((
                         PointLight { intensity: TORCH_LUMENS * 0.8, range: TORCH_RANGE, color: TORCH_COLOR, shadow_maps_enabled: false, ..default() },
                         Flicker { base: TORCH_LUMENS * 0.8, seed: if h.hand == Hand::Left { 1.0 } else { 2.0 } },
-                        Transform::from_xyz(0.0, 0.0, -0.4),
+                        Transform::from_xyz(0.0, 0.25, tip - 0.7),
                     ));
                 }
             }

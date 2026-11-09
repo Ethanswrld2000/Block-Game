@@ -62,7 +62,7 @@ fn spawn_hud(mut commands: Commands, theme: Res<Theme>) {
             r.spawn((Node { width: Val::Px(XP_W), height: Val::Px(12.0), padding: UiRect::all(Val::Px(EDGE)), ..default() }, theme.skin("bar"))).with_children(|b| {
                 b.spawn((XpFill, Node { width: Val::Px(0.0), height: Val::Percent(100.0), ..default() }, BackgroundColor(Color::srgb(0.95, 0.8, 0.3))));
             });
-            r.spawn((LevelText, text("1", sizes::SMALL + 1.0, colors::HEADING), Node { width: Val::Px(150.0), ..default() }));
+            r.spawn((LevelText, text("1", sizes::SMALL, colors::HEADING), Node { width: Val::Px(150.0), ..default() }));
         });
     // Focus: above the health bars, once you know a spell.
     commands
@@ -83,7 +83,7 @@ fn spawn_hud(mut commands: Commands, theme: Res<Theme>) {
         .with_children(|p| {
             p.spawn(Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, ..default() }).with_children(|row| {
                 row.spawn(theme.icon("icon_focus"));
-                row.spawn((text("Focus", sizes::SMALL + 1.0, colors::TEXT), Node { width: Val::Px(70.0), ..default() }));
+                row.spawn((text("Focus", sizes::SMALL, colors::TEXT), Node { width: Val::Px(70.0), ..default() }));
                 row.spawn((Node { width: Val::Px(FOCUS_W), height: Val::Px(14.0), padding: UiRect::all(Val::Px(EDGE)), ..default() }, theme.skin("bar")))
                     .with_children(|b| {
                         b.spawn((FocusFill, Node { width: Val::Px(FOCUS_W), height: Val::Percent(100.0), ..default() }, BackgroundColor(Color::srgb(0.45, 0.65, 1.0))));
@@ -110,7 +110,7 @@ fn update_hud(
     }
     for mut t in &mut level {
         let s = if progress.learned.points > 0 {
-            format!("Level {}  ({} to spend: K)", progress.level.level, progress.learned.points)
+            format!("Level {}, {} pts (K)", progress.level.level, progress.learned.points)
         } else {
             format!("Level {}", progress.level.level)
         };

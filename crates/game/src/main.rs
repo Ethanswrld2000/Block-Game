@@ -18,6 +18,7 @@ mod hands;
 mod hud;
 mod interact;
 mod inventory;
+mod item_art;
 mod items;
 mod save;
 mod settings;
@@ -65,6 +66,7 @@ fn main() {
         ))
         .add_plugins((
             items::ItemsPlugin,
+            item_art::ItemArtPlugin,
             player::PlayerPlugin,
             hands::HandsPlugin,
             torches::TorchPlugin,

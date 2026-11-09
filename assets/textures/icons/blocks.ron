@@ -1,0 +1,22 @@
+// Item name -> (x, y, width, height) of its sprite in blocks.png.
+// 20 pixels per inventory cell. Made by tools/gen_item_art.py; safe to edit by hand
+// (move a sprite in the PNG and change its numbers here).
+(
+    cell: 20,
+    sprites: {
+        "dirt": (0, 0, 20, 20),
+        "planks": (22, 0, 20, 20),
+        "cobblestone": (44, 0, 20, 20),
+        "log": (66, 0, 20, 20),
+        "moss": (88, 0, 20, 20),
+        "mud": (110, 0, 20, 20),
+        "peat": (132, 0, 20, 20),
+        "sand": (154, 0, 20, 20),
+        "gravel": (176, 0, 20, 20),
+        "clay": (198, 0, 20, 20),
+        "swamp_log": (220, 0, 20, 20),
+        "skystone": (0, 22, 20, 20),
+        "cloud_moss": (22, 22, 20, 20),
+        "chest": (44, 22, 40, 40),
+    },
+)

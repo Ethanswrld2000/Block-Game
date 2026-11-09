@@ -15,7 +15,7 @@ use super::crafting::{Recipes, Station};
 use super::grid::{dims, Grid, Stack};
 use super::world_items::Spill;
 use super::{Chests, Inventory};
-use crate::blocks::Blocks;
+use crate::item_art::ItemArt;
 use crate::camera::{FlyCamera, Menus};
 use crate::interact::{Hotbar, OpenChest};
 use crate::items::{ItemKind, Items, WearSlot};
@@ -32,7 +32,6 @@ pub struct InventoryUiPlugin;
 impl Plugin for InventoryUiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<InvUi>()
-            .add_systems(Startup, icon_atlas)
             .add_systems(PostStartup, open_for_screenshot)
             .add_systems(Update, (open_close, hover, scroll, click, keys, rebuild, follow_cursor).chain().after(crate::interact::InteractSet));
     }
@@ -80,10 +79,6 @@ struct InvUi {
     over_list: bool,
 }
 
-/// Block textures as a grid, for item pictures.
-#[derive(Resource)]
-pub(crate) struct IconAtlas(pub Handle<TextureAtlasLayout>);
-
 #[derive(Component)]
 struct InvRoot;
 
@@ -104,11 +99,6 @@ struct Tooltip;
 
 #[derive(Component)]
 struct HintText;
-
-fn icon_atlas(mut commands: Commands, mut layouts: ResMut<Assets<TextureAtlasLayout>>, blocks: Res<Blocks>) {
-    let t = blocks.tiles.tile_size;
-    commands.insert_resource(IconAtlas(layouts.add(TextureAtlasLayout::from_grid(UVec2::splat(t), 16, 16, None, None))));
-}
 
 fn open_for_screenshot(mut ui: ResMut<InvUi>, mut menus: ResMut<Menus>) {
     if std::env::var_os("BLOCKGAME_INVENTORY").is_some() {
@@ -492,9 +482,9 @@ fn text(s: impl Into<String>, size: f32, color: Color) -> impl Bundle {
     theme::text(s, size, color)
 }
 
-fn darker(c: Color, k: f32) -> Color {
-    let l = c.to_linear();
-    Color::linear_rgba(l.red * k, l.green * k, l.blue * k, 1.0)
+/// The tint of an item's tile: plain, so the picture stands out.
+fn item_bg(hovered: bool) -> Color {
+    if hovered { Color::srgb(0.62, 0.58, 0.5) } else { Color::srgb(0.42, 0.4, 0.36) }
 }
 
 /// Height of a crafting row, and the gap between rows.
@@ -505,22 +495,39 @@ const RECIPE_VIEW: f32 = 430.0;
 
 /// An item's picture: its block texture, or its name on a tile of its colour,
 /// with the count in the corner.
-pub(crate) fn icon(c: &mut ChildSpawnerCommands, items: &Items, blocks: &Blocks, atlas: &IconAtlas, stack: Stack, w: f32, h: f32) {
-    let item = items.get(stack.item);
-    if let ItemKind::Block(b) = item.kind {
-        let index = blocks.registry.get(b).textures[4] as usize;
-        let side = (w.min(h) - 16.0).max(8.0);
-        c.spawn((
-            ImageNode::from_atlas_image(blocks.sheet.clone(), TextureAtlas { layout: atlas.0.clone(), index }),
-            Node { width: Val::Px(side), height: Val::Px(side), margin: UiRect::all(Val::Auto), ..default() },
-        ));
-    } else {
-        let size = if w < 50.0 { 11.0 } else { sizes::SMALL };
-        c.spawn((
-            text(item.title.clone(), size, colors::TEXT),
-            TextLayout::justify(Justify::Center),
-            Node { margin: UiRect::all(Val::Auto), max_width: Val::Px(w - 8.0), ..default() },
-        ));
+pub(crate) fn icon(c: &mut ChildSpawnerCommands, items: &Items, art: &ItemArt, stack: Stack, w: f32, h: f32, rotated: bool) {
+    match (art.image(stack.item), art.size(stack.item)) {
+        (Some(img), Some(size)) => {
+            // At 2x, or smaller if that doesn't fit (a tall item on the
+            // hotbar); turned with the item.
+            let s = size.as_vec2();
+            let (bw, bh) = if rotated { (h, w) } else { (w, h) };
+            let k = 2.0f32.min((bw - 4.0) / s.x).min((bh - 4.0) / s.y);
+            let (sw, sh) = (s.x * k, s.y * k);
+            let mut e = c.spawn((
+                img,
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(((w - sw) / 2.0).round()),
+                    top: Val::Px(((h - sh) / 2.0).round()),
+                    width: Val::Px(sw),
+                    height: Val::Px(sh),
+                    ..default()
+                },
+            ));
+            if rotated {
+                e.insert(UiTransform { rotation: Rot2::degrees(90.0), ..default() });
+            }
+        }
+        _ => {
+            // No sprite yet: the name.
+            let size = if w.min(h) < 100.0 { sizes::TINY } else { sizes::SMALL };
+            c.spawn((
+                text(items.get(stack.item).title.clone(), size, colors::TEXT),
+                TextLayout::justify(Justify::Center),
+                Node { margin: UiRect::all(Val::Auto), max_width: Val::Px(w - 8.0), ..default() },
+            ));
+        }
     }
     if stack.count > 1 {
         c.spawn((
@@ -531,7 +538,7 @@ pub(crate) fn icon(c: &mut ChildSpawnerCommands, items: &Items, blocks: &Blocks,
 }
 
 #[allow(clippy::too_many_arguments)]
-fn grid_node(p: &mut ChildSpawnerCommands, theme: &Theme, title: String, grid: &Grid, g: GridRef, items: &Items, blocks: &Blocks, atlas: &IconAtlas, hover: Option<Hover>, held: Option<Held>) {
+fn grid_node(p: &mut ChildSpawnerCommands, theme: &Theme, title: String, grid: &Grid, g: GridRef, items: &Items, art: &ItemArt, hover: Option<Hover>, held: Option<Held>) {
     p.spawn((theme.bold(sizes::LABEL), Text::new(title), TextColor(colors::HEADING), Node { margin: UiRect::bottom(Val::Px(2.0)), ..default() }));
     p.spawn((Node { padding: UiRect::all(Val::Px(4.0)), margin: UiRect::bottom(Val::Px(10.0)), ..default() }, theme.skin("inset"))).with_children(|frame| {
         frame
@@ -573,7 +580,6 @@ fn grid_node(p: &mut ChildSpawnerCommands, theme: &Theme, title: String, grid: &
                     let (w, h) = dims(items, p.stack.item, p.rotated);
                     let (pw, ph) = (w as f32 * CELL, h as f32 * CELL);
                     let hovered = matches!(hover, Some(Hover::Cell(hg, x, y)) if hg == g && grid.at(items, x, y).is_some_and(|i| grid.items[i] == *p));
-                    let color = items.get(p.stack.item).color;
                     gn.spawn((
                         Node {
                             position_type: PositionType::Absolute,
@@ -584,10 +590,10 @@ fn grid_node(p: &mut ChildSpawnerCommands, theme: &Theme, title: String, grid: &
                             overflow: Overflow::clip(),
                             ..default()
                         },
-                        theme.skin_tinted("item", darker(color, if hovered { 0.95 } else { 0.7 })),
+                        theme.skin_tinted("item", item_bg(hovered)),
                         Outline { width: Val::Px(if hovered { 2.0 } else { 0.0 }), offset: Val::Px(0.0), color: colors::GOLD },
                     ))
-                    .with_children(|c| icon(c, items, blocks, atlas, p.stack, pw, ph));
+                    .with_children(|c| icon(c, items, art, p.stack, pw - 2.0, ph - 2.0, p.rotated));
                 }
             });
     });
@@ -648,8 +654,8 @@ fn rebuild(
     mut commands: Commands,
     mut ui: ResMut<InvUi>,
     theme: Res<Theme>,
-    (inv, chests, items, blocks): (Res<Inventory>, Res<Chests>, Res<Items>, Res<Blocks>),
-    atlas: Option<Res<IconAtlas>>,
+    (inv, chests, items): (Res<Inventory>, Res<Chests>, Res<Items>),
+    art: Option<Res<ItemArt>>,
     recipes: Option<Res<Recipes>>,
     camp: Res<Camp>,
     player: Res<Player>,
@@ -663,7 +669,7 @@ fn rebuild(
     for e in &roots {
         commands.entity(e).despawn();
     }
-    let (Some(atlas), true) = (atlas, ui.open) else { return };
+    let (Some(art), true) = (art, ui.open) else { return };
     let (hover, held) = (ui.hover, ui.held);
     let at_camp = camp.near(player.pos);
     let theme = &*theme;
@@ -706,7 +712,7 @@ fn rebuild(
                                     ..default()
                                 };
                                 let mut e = match worn {
-                                    Some(i) => col.spawn((Zone::Slot(slot), node, theme.skin_tinted("item", darker(items.get(*i).color, 0.7)))),
+                                    Some(_) => col.spawn((Zone::Slot(slot), node, theme.skin_tinted("item", item_bg(false)))),
                                     None => col.spawn((Zone::Slot(slot), node, theme.skin(if hovered { "slot_hover" } else { "slot" }))),
                                 };
                                 if hovered {
@@ -715,8 +721,11 @@ fn rebuild(
                                 e.with_children(|c| {
                                     c.spawn(text(slot.title(), sizes::SMALL, colors::MUTED));
                                     match worn {
-                                        Some(i) => c.spawn(text(items.get(*i).title.clone(), sizes::BODY, colors::TEXT)),
-                                        None => c.spawn(text("empty", sizes::BODY, colors::FAINT)),
+                                        Some(i) => c.spawn(Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, ..default() }).with_children(|r| {
+                                            r.spawn(text(items.get(*i).title.clone(), sizes::BODY, colors::TEXT));
+                                            r.spawn(Node { width: Val::Px(34.0), height: Val::Px(34.0), ..default() }).with_children(|q| icon(q, &items, &art, Stack::new(*i, 1), 34.0, 34.0, false));
+                                        }).id(),
+                                        None => c.spawn(text("empty", sizes::BODY, colors::FAINT)).id(),
                                     };
                                 });
                             }
@@ -741,9 +750,9 @@ fn rebuild(
                         });
                         // Grids.
                         row.spawn(Node { flex_direction: FlexDirection::Column, ..default() }).with_children(|col| {
-                            grid_node(col, theme, "Pockets".into(), &inv.pockets, GridRef::Pockets, &items, &blocks, &atlas, hover, held);
+                            grid_node(col, theme, "Pockets".into(), &inv.pockets, GridRef::Pockets, &items, &art, hover, held);
                             match (&inv.bag, inv.worn.get(&WearSlot::Back)) {
-                                (Some(b), Some(i)) => grid_node(col, theme, items.get(*i).title.clone(), b, GridRef::Bag, &items, &blocks, &atlas, hover, held),
+                                (Some(b), Some(i)) => grid_node(col, theme, items.get(*i).title.clone(), b, GridRef::Bag, &items, &art, hover, held),
                                 _ => {
                                     heading(col, theme, "Bag");
                                     col.spawn(text("No bag. Wear one on your back\nto carry more.", sizes::BODY, colors::FAINT));
@@ -752,7 +761,7 @@ fn rebuild(
                             if let Some(c) = ui.chest
                                 && let Some(g) = chests.map.get(&c)
                             {
-                                grid_node(col, theme, "Chest".into(), g, GridRef::Chest(c), &items, &blocks, &atlas, hover, held);
+                                grid_node(col, theme, "Chest".into(), g, GridRef::Chest(c), &items, &art, hover, held);
                             }
                         });
                         // Crafting: what you can make now first.
@@ -802,16 +811,20 @@ fn rebuild(
                                         Node {
                                             min_height: Val::Px(RECIPE_ROW),
                                             flex_shrink: 0.0,
-                                            padding: UiRect::axes(Val::Px(10.0), Val::Px(4.0)),
-                                            flex_direction: FlexDirection::Column,
-                                            justify_content: JustifyContent::Center,
+                                            padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)),
+                                            column_gap: Val::Px(10.0),
+                                            align_items: AlignItems::Center,
                                             ..default()
                                         },
                                         theme.skin(skin),
                                     ))
-                                    .with_children(|c| {
-                                        c.spawn(text(title, sizes::BODY, if can { colors::TEXT } else { colors::MUTED }));
-                                        c.spawn(text(needs, sizes::SMALL, if can { colors::GOOD } else { colors::FAINT }));
+                                    .with_children(|row| {
+                                        row.spawn(Node { width: Val::Px(40.0), height: Val::Px(40.0), flex_shrink: 0.0, ..default() })
+                                            .with_children(|q| icon(q, &items, &art, Stack::new(rec.makes.item, 1), 40.0, 40.0, false));
+                                        row.spawn(Node { flex_direction: FlexDirection::Column, justify_content: JustifyContent::Center, ..default() }).with_children(|c| {
+                                            c.spawn(text(title, sizes::BODY, if can { colors::TEXT } else { colors::MUTED }));
+                                            c.spawn(text(needs, sizes::SMALL, if can { colors::GOOD } else { colors::FAINT }));
+                                        });
                                     });
                                 }
                             });
@@ -858,7 +871,7 @@ fn rebuild(
                 ))
                 .with_children(|t| {
                     t.spawn((theme.bold(sizes::LABEL), Text::new(title), TextColor(colors::HEADING)));
-                    t.spawn(text(body, sizes::SMALL + 1.0, colors::TEXT));
+                    t.spawn(text(body, sizes::SMALL, colors::TEXT));
                 });
             }
             // The held item, following the cursor.
@@ -868,11 +881,11 @@ fn rebuild(
                 root.spawn((
                     HeldIcon,
                     Node { position_type: PositionType::Absolute, width: Val::Px(pw - 2.0), height: Val::Px(ph - 2.0), overflow: Overflow::clip(), ..default() },
-                    theme.skin_tinted("item", darker(items.get(h.stack.item).color, 0.95)),
+                    theme.skin_tinted("item", item_bg(true)),
                     Outline { width: Val::Px(2.0), offset: Val::Px(0.0), color: colors::GOLD },
                     GlobalZIndex(30),
                 ))
-                .with_children(|c| icon(c, &items, &blocks, &atlas, h.stack, pw, ph));
+                .with_children(|c| icon(c, &items, &art, h.stack, pw - 2.0, ph - 2.0, h.rotated));
             }
         });
 }

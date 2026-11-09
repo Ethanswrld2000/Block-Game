@@ -142,7 +142,13 @@ fn update_clouds(
             clouds.task = None;
             clouds.built_center = Some(center);
             clouds.built_cover = cover;
-            commands.entity(entity).insert(Mesh3d(meshes.add(mesh)));
+            // A clear layer builds an empty mesh; draw nothing rather than an
+            // empty mesh (the renderer warns about those).
+            if mesh.count_vertices() == 0 {
+                commands.entity(entity).remove::<Mesh3d>();
+            } else {
+                commands.entity(entity).insert(Mesh3d(meshes.add(mesh)));
+            }
         }
         let cover = (layer.cover(weather.clouds) * 50.0).round() / 50.0;
         let want = if on && clouds.built_center.is_some() && clouds.built_cover > 0.0 { Visibility::Inherited } else { Visibility::Hidden };

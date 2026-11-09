@@ -108,6 +108,29 @@ ground makes.
 `assets/textures/blocks.png` is placeholder art: a 512x512 sheet of 32x32 tiles.
 Paint over any tile and rerun the game.
 
+### Item sprites
+
+Every item has a picture on one of three sheets in `assets/textures/icons/`:
+
+- `items.png`: food, materials, clothes, bags and torches
+- `weapons.png`: tools and weapons
+- `blocks.png`: blocks, drawn as little cubes
+
+Next to each PNG, a `.ron` file says where each item's sprite is: `"stone_pickaxe": (0, 0, 40, 60)`
+(x, y, width, height in pixels).
+
+- A sprite is 20 pixels per inventory cell the item takes, so the 2x3 pickaxe is 40x60. Draw tools
+  upright, with the end you hold at the bottom.
+- The inventory, hotbar and crafting list draw the sprite at 2x.
+- The same sprite is the 3D model in your hand and on the ground: every opaque pixel becomes a little
+  slab. Transparent pixels are empty space.
+- `python3 tools/gen_item_art.py` draws a placeholder for any item that doesn't have one yet (run it
+  after adding an item to `items.ron`). It keeps everything already in the sheets, so it never paints
+  over your work. `--reset items` (or `weapons`, `blocks`) starts that sheet over; `--reset blocks`
+  redraws the cubes after you repaint the block textures.
+
+Restart the game to see changes.
+
 ### The UI sheet
 
 Every frame, button, slot, bar, icon and skill-tree stone on screen comes from
@@ -128,7 +151,7 @@ Restart the game to see changes to `ui.png`.
 
 ### The font
 
-`assets/fonts/ui.ttf` and `ui_bold.ttf` are Pixelify Sans (SIL Open Font License, see `OFL.txt`).
+`assets/fonts/ui.ttf` and `ui_bold.ttf` are Jersey 15 (SIL Open Font License, see `OFL.txt`); both are the same file for now, so a bolder face can go in `ui_bold.ttf`.
 To use another font, replace those two files with any `.ttf` or `.otf` and rebuild: the font is
 compiled into the game. Every piece of text gets a dark shadow so it reads over a bright sky or snow.
 
