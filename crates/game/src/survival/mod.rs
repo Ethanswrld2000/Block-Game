@@ -1,14 +1,16 @@
-//! Survival: layered health, food, air, body warmth, carried weight,
-//! bedroll camping, sleep, death and respawn.
+//! Survival: layered health, food, the air around you, felt temperature,
+//! carried weight, bedroll camping, sleep, death and respawn.
 //!
 //! The rules live in plain Rust (`health`, `vitals`, `food`) so a server can
 //! run them later; the systems here gather the surroundings each frame and
 //! feed them in.
 //!
-//! Debug keys: F7 is a stab (piercing), F8 a club blow (blunt). `BLOCKGAME_VITALS=damage,fatigue,blood,injuries[,food,air,warmth]`
-//! sets the bars at start, for screenshots.
+//! Debug keys: F7 is a stab (piercing), F8 a club blow (blunt). `BLOCKGAME_VITALS=damage,fatigue,blood,injuries[,food]`
+//! sets the bars at start, and `BLOCKGAME_FEELS=-25` / `BLOCKGAME_OXYGEN=50` hold the
+//! felt temperature (°C) and the air (% of normal) there, for screenshots.
 
 pub mod camp;
+pub mod exposure;
 pub mod food;
 pub mod health;
 mod hud;
@@ -27,6 +29,7 @@ use crate::save::SaveDir;
 use crate::torches::Torches;
 use crate::weather::{Conditions, LocalClimate};
 use camp::Camp;
+use exposure::{Exposure, Scale};
 use food::FoodTiers;
 use health::Layer;
 use vitals::{Env, Vitals};
@@ -40,7 +43,9 @@ pub struct SurvivalPlugin;
 impl Plugin for SurvivalPlugin {
     fn build(&self, app: &mut App) {
         let tiers = FoodTiers::from_ron(include_str!("../../../../assets/data/food_tiers.ron")).unwrap_or_else(|e| panic!("{e}"));
+        let exposure = Exposure::from_ron(include_str!("../../../../assets/data/exposure.ron")).unwrap_or_else(|e| panic!("{e}"));
         app.insert_resource(tiers)
+            .insert_resource(exposure)
             .init_resource::<Survival>()
             .init_resource::<Camp>()
             .add_message::<Toast>()
@@ -198,8 +203,11 @@ fn tick_body(
     inv: Res<Inventory>,
     items: Res<Items>,
     (perks, spells): (Res<crate::progress::skills::Perks>, Res<crate::progress::Spells>),
+    (rules, mut forced): (Res<Exposure>, Local<Option<Forced>>),
     mut s: ResMut<Survival>,
+    mut toast: MessageWriter<Toast>,
 ) {
+    let forced = *forced.get_or_insert_with(Forced::from_env);
     let held = wielded.0;
     let holding_torch = held.is_some_and(|i| matches!(items.get(i).kind, ItemKind::Torch));
     let eye = player.pos + Vec3::Y * player.eye;
@@ -207,21 +215,78 @@ fn tick_body(
     let sun = crate::sky::sun_direction(clock.time, daylight).y;
     let carried = inv.mass(&items) + if camp.bedroll.is_none() { BEDROLL_MASS } else { 0.0 };
     let raw = feels_like(&climate, &conditions, sun, player.in_water, eye, &torches, holding_torch);
-    let air = if player.head_in_water { 0.0 } else { perks.breathe(vitals::air_at(eye.y) * conditions.air) };
+    let underwater = player.head_in_water;
+    let mut air = if underwater { 0.0 } else { vitals::air_at(eye.y) * conditions.air };
     let mut feels = perks.feel(vitals::clothed(raw, inv.insulation(&items)), vitals::COMFORT_LOW + 6.0);
     if spells.warmth {
         feels = perks_warm(feels);
     }
+    if let Some(f) = forced.feels {
+        feels = f;
+    }
+    if let Some(o) = forced.oxygen {
+        air = o / 100.0;
+    }
     let env = Env {
         air,
+        breathe: perks.breathe(air),
+        underwater,
         feels,
         sprinting: player.sprinting && *mode == MoveMode::Walk,
         carried: perks.carried(carried, vitals::CAPACITY),
     };
     s.env = env;
+    // Forced values show at once, even while flying.
+    if forced.feels.is_some() {
+        s.vitals.feels = env.feels;
+    }
+    if forced.oxygen.is_some() {
+        s.vitals.air = env.air * 100.0;
+        s.vitals.oxygen = env.breathe * 100.0;
+    }
     // Flying is for looking around: the body waits.
     if *mode == MoveMode::Walk && player.ready {
-        s.vitals.tick(&env, time.delta_secs().min(0.25));
+        let before = warnings(&s.vitals, &rules);
+        s.vitals.tick(&env, &rules, time.delta_secs().min(0.25));
+        // Say so when cold, heat or thin air gets worse.
+        for (now, was) in warnings(&s.vitals, &rules).into_iter().zip(before) {
+            if let Some((level, name)) = now
+                && was.is_none_or(|w| w.0 < level)
+            {
+                toast.write(Toast(warning_text(&name)));
+            }
+        }
+    }
+}
+
+/// Screenshot and test overrides for the surroundings.
+#[derive(Clone, Copy, Default)]
+struct Forced {
+    feels: Option<f32>,
+    oxygen: Option<f32>,
+}
+
+impl Forced {
+    fn from_env() -> Self {
+        let get = |k| std::env::var(k).ok().and_then(|v| v.trim().parse().ok());
+        Self { feels: get("BLOCKGAME_FEELS"), oxygen: get("BLOCKGAME_OXYGEN") }
+    }
+}
+
+/// The temperature and air stages in effect: (level, name).
+fn warnings(v: &Vitals, rules: &Exposure) -> [Option<(usize, String)>; 2] {
+    [
+        rules.temperature(v.feels).map(|(scale, a)| (a.level + if scale == Scale::Heat { 100 } else { 0 }, a.stage.name.clone())),
+        rules.stage(Scale::Air, v.oxygen).map(|a| (a.level, a.stage.name.clone())),
+    ]
+}
+
+fn warning_text(stage: &str) -> String {
+    match stage {
+        "Chilly" => "You're getting cold: it's wearing you out".into(),
+        "Hot" => "You're getting hot: it's wearing you out".into(),
+        "Thin air" => "The air is thin here: it's wearing you out".into(),
+        other => format!("{other}! Find shelter"),
     }
 }
 
@@ -261,12 +326,12 @@ fn perks_warm(feels: f32) -> f32 {
     if feels >= vitals::COMFORT_HIGH - 4.0 { feels } else { (feels + crate::progress::WARMTH_SPELL).min(vitals::COMFORT_HIGH - 4.0) }
 }
 
-fn set_body(s: Res<Survival>, sleep: Res<camp::Sleep>, mut body: ResMut<Body>) {
+fn set_body(s: Res<Survival>, rules: Res<Exposure>, sleep: Res<camp::Sleep>, mut body: ResMut<Body>) {
     let v = &s.vitals;
     *body = Body {
-        speed: v.speed(s.env.carried),
+        speed: v.speed(s.env.carried, &rules),
         fall: vitals::weight_fall(s.env.carried),
-        dizzy: v.dizzy(),
+        dizzy: v.dizzy(&rules),
         frozen: v.health.is_dead() || sleep.active(),
         ..default()
     };
@@ -289,6 +354,7 @@ fn screenshot_run() -> bool {
 
 fn load_player(
     dir: Res<SaveDir>,
+    rules: Res<Exposure>,
     mut s: ResMut<Survival>,
     mut camp: ResMut<Camp>,
     mut player: ResMut<Player>,
@@ -301,6 +367,7 @@ fn load_player(
             Ok(save) => {
                 player.pos = Vec3::new(save.pos.0, save.pos.1, save.pos.2);
                 s.vitals = save.vitals;
+                s.vitals.breath = s.vitals.breath.min(rules.breath);
                 camp.bedroll = save.camp;
                 for (mut tf, mut fc) in &mut cam {
                     tf.translation = player.pos + Vec3::Y * crate::player::EYE;
@@ -319,12 +386,6 @@ fn load_player(
         }
         if let Some(x) = n.get(4) {
             v.satiety = *x;
-        }
-        if let Some(x) = n.get(5) {
-            v.air = *x;
-        }
-        if let Some(x) = n.get(6) {
-            v.warmth = *x;
         }
     }
 }

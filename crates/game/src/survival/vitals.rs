@@ -1,18 +1,17 @@
-//! Everything about the body that changes over time: health, food, air,
-//! body warmth and carried weight. Plain Rust with no Bevy; the systems in
+//! Everything about the body that changes over time: health, food, the air
+//! around you, felt temperature and carried weight. Plain Rust with no Bevy; the systems in
 //! `survival` gather the surroundings into an `Env` and call `tick`.
 
 use serde::{Deserialize, Serialize};
 
 use super::food::FoodTier;
-use super::health::{Health, Layer, MAX};
+use super::exposure::{Exposure, Scale};
+use super::health::{Health, Layer, MAX, MORTAL_AT};
 
-/// Comfortable range of the felt temperature, °C.
+/// Comfortable range of the felt temperature, °C. The exposure stages in
+/// `exposure.ron` start here; these are for clothes and skills.
 pub const COMFORT_LOW: f32 = 8.0;
 pub const COMFORT_HIGH: f32 = 26.0;
-/// Body warmth (0..100) outside this band hurts.
-pub const COLD_BELOW: f32 = 30.0;
-pub const HOT_ABOVE: f32 = 70.0;
 /// What you can carry before you count as overloaded, kg.
 pub const CAPACITY: f32 = 40.0;
 /// Share of capacity that is the sweet spot: no bonus, no penalty.
@@ -22,16 +21,17 @@ pub const HEAVY_ABOVE: f32 = 0.6;
 const HUNGER: f32 = 100.0 / (1.5 * 1200.0);
 /// Below this satiety the body stops mending itself.
 pub const PECKISH: f32 = 15.0;
-/// Air meter levels where effects start.
-pub const AIR_SLOW: f32 = 70.0;
-pub const AIR_DIZZY: f32 = 45.0;
-pub const AIR_CHOKE: f32 = 20.0;
+/// Fatigue drain from exposure stops at the mortal line; only damage goes deeper.
+const FATIGUE_FLOOR: f32 = MAX * MORTAL_AT;
 
 /// The surroundings and what the body is doing this frame.
 #[derive(Debug, Clone, Copy)]
 pub struct Env {
-    /// How breathable the air is, 0 (underwater) .. 1.
+    /// Oxygen in the air where you are, 0..1 of normal (0 underwater).
     pub air: f32,
+    /// The same air as your body copes with it (skills help with thin air).
+    pub breathe: f32,
+    pub underwater: bool,
     /// Felt temperature, °C.
     pub feels: f32,
     pub sprinting: bool,
@@ -41,7 +41,7 @@ pub struct Env {
 
 impl Default for Env {
     fn default() -> Self {
-        Self { air: 1.0, feels: 16.0, sprinting: false, carried: 0.0 }
+        Self { air: 1.0, breathe: 1.0, underwater: false, feels: 16.0, sprinting: false, carried: 0.0 }
     }
 }
 
@@ -50,10 +50,18 @@ pub struct Vitals {
     pub health: Health,
     /// 0..100, how fed you are.
     pub satiety: f32,
-    /// 0..100, the air meter.
+    /// Oxygen in the air where you are, % of normal (the air meter).
     pub air: f32,
-    /// 0..100 with 50 comfortable.
-    pub warmth: f32,
+    /// Oxygen your body is getting, %: the air, eased by skills, or a held
+    /// breath under water. Exposure stages go by this.
+    #[serde(default = "full")]
+    pub oxygen: f32,
+    /// Seconds of breath left under water.
+    #[serde(default = "full_breath")]
+    pub breath: f32,
+    /// Felt temperature, °C: follows the surroundings over half a minute.
+    #[serde(default = "mild")]
+    pub feels: f32,
     /// A food buff: extra run speed (0.1 = +10%) and seconds left.
     pub buff_speed: f32,
     pub buff_left: f32,
@@ -61,8 +69,21 @@ pub struct Vitals {
 
 impl Default for Vitals {
     fn default() -> Self {
-        Self { health: Health::default(), satiety: 80.0, air: 100.0, warmth: 50.0, buff_speed: 0.0, buff_left: 0.0 }
+        Self { health: Health::default(), satiety: 80.0, air: 100.0, oxygen: 100.0, breath: BREATH, feels: 16.0, buff_speed: 0.0, buff_left: 0.0 }
     }
+}
+
+/// Default breath before `exposure.ron` is read (and for old saves).
+const BREATH: f32 = 20.0;
+
+fn full() -> f32 {
+    100.0
+}
+fn full_breath() -> f32 {
+    BREATH
+}
+fn mild() -> f32 {
+    16.0
 }
 
 /// Load as a share of capacity.
@@ -95,7 +116,7 @@ pub fn weight_fall(carried: f32) -> f32 {
 /// How breathable the air is at a height: thin high up, stale deep down.
 pub fn air_at(y: f32) -> f32 {
     if y < -64.0 {
-        (1.0 - (-64.0 - y) / 400.0).max(0.35)
+        (1.0 - (-64.0 - y) / 400.0).max(0.15)
     } else if y > 350.0 {
         (1.0 - (y - 350.0) / 500.0).max(0.45)
     } else {
@@ -113,74 +134,73 @@ pub fn clothed(feels: f32, insulation: f32) -> f32 {
     }
 }
 
-/// Where body warmth settles for a felt temperature.
-pub fn warmth_target(feels: f32) -> f32 {
-    let w = if feels < COMFORT_LOW {
-        50.0 - (COMFORT_LOW - feels) * 2.5
-    } else if feels > COMFORT_HIGH {
-        50.0 + (feels - COMFORT_HIGH) * 2.5
-    } else {
-        50.0
-    };
-    w.clamp(0.0, 100.0)
-}
-
 impl Vitals {
-    /// Movement multiplier from food buffs, weight and lack of air.
-    pub fn speed(&self, carried: f32) -> f32 {
+    /// Movement multiplier from food buffs, weight, heat, cold and thin air.
+    pub fn speed(&self, carried: f32, rules: &Exposure) -> f32 {
         let buff = if self.buff_left > 0.0 { 1.0 + self.buff_speed } else { 1.0 };
-        let air = if self.air < AIR_SLOW { 1.0 - 0.25 * ((AIR_SLOW - self.air) / AIR_SLOW).min(1.0) } else { 1.0 };
-        weight_speed(carried) * buff * air
+        let slow: f32 = [rules.temperature(self.feels).map(|t| t.1), rules.stage(Scale::Air, self.oxygen)].iter().flatten().map(|a| a.stage.slow).sum();
+        weight_speed(carried) * buff * (1.0 - slow).max(0.3)
     }
 
-    /// How dizzy lack of air makes you, 0..1 (camera sway and dark edges).
-    pub fn dizzy(&self) -> f32 {
-        ((AIR_DIZZY - self.air) / AIR_DIZZY).clamp(0.0, 1.0)
+    /// How dizzy thin air or heat make you, 0..1 (camera sway and dark edges).
+    pub fn dizzy(&self, rules: &Exposure) -> f32 {
+        let d: f32 = [rules.temperature(self.feels).map(|t| t.1), rules.stage(Scale::Air, self.oxygen)].iter().flatten().map(|a| a.stage.dizzy).sum();
+        d.min(1.0)
     }
 
-    pub fn too_cold(&self) -> bool {
-        self.warmth < COLD_BELOW
-    }
-
-    pub fn too_hot(&self) -> bool {
-        self.warmth > HOT_ABOVE
+    /// Whether cold, heat or thin air is wearing you down.
+    pub fn exposed(&self, rules: &Exposure) -> bool {
+        rules.temperature(self.feels).is_some() || rules.stage(Scale::Air, self.oxygen).is_some()
     }
 
     /// Advance the body by `dt` seconds.
-    pub fn tick(&mut self, env: &Env, dt: f32) {
+    pub fn tick(&mut self, env: &Env, rules: &Exposure, dt: f32) {
         if self.health.is_dead() {
             return;
         }
-        let h = &mut self.health;
 
         // Food.
         let hunger = if env.sprinting { HUNGER * 2.0 } else { HUNGER };
         self.satiety = (self.satiety - hunger * dt).max(0.0);
         if self.satiety <= 0.0 {
-            h.hit(Layer::Fatigue, 0.4 * dt);
+            self.health.hit(Layer::Fatigue, 0.4 * dt);
         }
         self.buff_left = (self.buff_left - dt).max(0.0);
 
-        // Air: the meter settles toward what the air gives; underwater it runs out.
-        let target = env.air.clamp(0.0, 1.0) * 100.0;
-        let rate = if target < self.air { if env.air <= 0.0 { 6.0 } else { 1.5 } } else { 20.0 };
-        self.air += (target - self.air).clamp(-rate * dt, rate * dt);
-        if self.air < AIR_CHOKE {
-            h.hit(Layer::Fatigue, (AIR_CHOKE - self.air) / AIR_CHOKE * 5.0 * dt);
+        // Air: the meter reads the air around you. Under water you hold your
+        // breath until it runs out, then the water's lack of air reaches you.
+        if env.underwater {
+            self.breath = (self.breath - dt).max(0.0);
+        } else {
+            self.breath = (self.breath + dt * 5.0).min(rules.breath);
         }
+        let ease = |v: &mut f32, to: f32, rate: f32| *v += (to - *v).clamp(-rate * dt, rate * dt);
+        ease(&mut self.air, env.air.clamp(0.0, 1.0) * 100.0, 40.0);
+        let gets = if env.underwater && self.breath > 0.0 { 1.0 } else { env.breathe };
+        ease(&mut self.oxygen, gets.clamp(0.0, 1.0) * 100.0, 40.0);
 
-        // Warmth drifts toward what the weather and fire make it.
-        let target = warmth_target(env.feels);
-        self.warmth += (target - self.warmth) * (1.0 - (-dt / 90.0).exp());
-        if self.warmth < COLD_BELOW {
-            h.hit(Layer::Fatigue, (COLD_BELOW - self.warmth) / COLD_BELOW * 0.6 * dt);
-        } else if self.warmth > HOT_ABOVE {
-            let heavy = if is_heavy(env.carried) { 2.0 } else { 1.0 };
-            h.hit(Layer::Fatigue, (self.warmth - HOT_ABOVE) / 30.0 * 1.0 * heavy * dt);
+        // The felt temperature follows the surroundings over half a minute.
+        self.feels += (env.feels - self.feels) * (1.0 - (-dt / 30.0).exp());
+
+        // Exposure: stamina first, down to the mortal line; the worst stages hurt.
+        let heavy = if is_heavy(env.carried) { 2.0 } else { 1.0 };
+        let stages = [
+            rules.temperature(self.feels).map(|(scale, a)| (a, if scale == Scale::Heat { heavy } else { 1.0 })),
+            rules.stage(Scale::Air, self.oxygen).map(|a| (a, 1.0)),
+        ];
+        for (a, extra) in stages.into_iter().flatten() {
+            let f = self.health.get(Layer::Fatigue);
+            if self.health.mortal().is_none() && f > FATIGUE_FLOOR {
+                self.health.hit(Layer::Fatigue, (a.stage.fatigue * a.ramp() * extra * dt).min(f - FATIGUE_FLOOR));
+            }
+            if a.stage.damage > 0.0 {
+                self.health.hit(Layer::Damage, a.stage.damage * a.ramp() * dt);
+            }
         }
 
         // Running wears you out, but never into the mortal half on its own.
-        let suffering = self.satiety <= 0.0 || self.warmth < COLD_BELOW || self.warmth > HOT_ABOVE || self.air < AIR_DIZZY;
+        let suffering = self.satiety <= 0.0 || self.exposed(rules);
+        let h = &mut self.health;
         if env.sprinting {
             let f = h.get(Layer::Fatigue);
             if f > 55.0 {
@@ -234,7 +254,6 @@ impl Vitals {
         h.heal(Layer::Damage, MAX);
         h.bleeding = 0.0;
         self.satiety = (self.satiety - 15.0).max(0.0);
-        self.air = 100.0;
     }
 }
 
@@ -248,20 +267,62 @@ mod tests {
     }
 
     fn run(v: &mut Vitals, env: Env, seconds: f32) {
+        let rules = crate::survival::exposure::tests::rules();
         for _ in 0..(seconds * 10.0) as usize {
-            v.tick(&env, 0.1);
+            v.tick(&env, &rules, 0.1);
         }
     }
 
+    fn cold(feels: f32) -> Env {
+        Env { feels, ..Default::default() }
+    }
+
     #[test]
-    fn freezing_drains_fatigue() {
+    fn mild_cold_drains_stamina_but_stops_at_the_mortal_line() {
         let mut v = Vitals::default();
-        run(&mut v, Env { feels: -15.0, ..Default::default() }, 150.0);
-        assert!(v.too_cold(), "warmth {}", v.warmth);
-        let h = v.health;
-        assert!(h.get(Layer::Fatigue) < 90.0, "{:?}", h.bars);
-        assert_eq!(h.get(Layer::Blood), MAX);
-        assert_eq!(h.get(Layer::Injuries), MAX);
+        run(&mut v, cold(0.0), 60.0);
+        let f = v.health.get(Layer::Fatigue);
+        assert!(f < MAX, "{:?}", v.health.bars);
+        run(&mut v, cold(0.0), 600.0);
+        assert_eq!(v.health.get(Layer::Fatigue), FATIGUE_FLOOR);
+        assert_eq!(v.health.mortal(), None);
+        // Damage heals only once you're out of the cold, so it stays as it was.
+        assert_eq!(v.health.get(Layer::Damage), MAX);
+    }
+
+    #[test]
+    fn colder_drains_faster_and_deadly_cold_hurts() {
+        let mut a = Vitals::default();
+        let mut b = Vitals::default();
+        run(&mut a, cold(0.0), 120.0);
+        run(&mut b, cold(-10.0), 120.0);
+        assert!(b.health.get(Layer::Fatigue) < a.health.get(Layer::Fatigue));
+        assert_eq!(b.health.get(Layer::Damage), MAX);
+        let mut c = Vitals::default();
+        run(&mut c, cold(-30.0), 120.0);
+        assert!(c.health.get(Layer::Damage) < MAX, "{:?}", c.health.bars);
+        // Left long enough, it kills.
+        run(&mut c, cold(-30.0), 3000.0);
+        assert!(c.health.is_dead(), "{:?}", c.health.bars);
+    }
+
+    #[test]
+    fn heat_works_the_same_way() {
+        let mut v = Vitals::default();
+        run(&mut v, cold(30.0), 600.0);
+        assert_eq!(v.health.get(Layer::Fatigue), FATIGUE_FLOOR);
+        assert_eq!(v.health.get(Layer::Damage), MAX);
+        run(&mut v, cold(48.0), 120.0);
+        assert!(v.health.get(Layer::Damage) < MAX);
+    }
+
+    #[test]
+    fn felt_temperature_follows_the_surroundings_slowly() {
+        let mut v = Vitals::default();
+        run(&mut v, cold(-20.0), 5.0);
+        assert!(v.feels > 5.0, "{}", v.feels);
+        run(&mut v, cold(-20.0), 200.0);
+        assert!((v.feels + 20.0).abs() < 0.1);
     }
 
     #[test]
@@ -269,7 +330,7 @@ mod tests {
         let mut v = Vitals::default();
         run(&mut v, Env::default(), 120.0);
         assert_eq!(v.health.bars, [MAX; 4]);
-        assert!((v.warmth - 50.0).abs() < 0.01);
+        assert_eq!(v.air, 100.0);
     }
 
     #[test]
@@ -281,15 +342,32 @@ mod tests {
     }
 
     #[test]
-    fn drowning_runs_out_of_air_then_hurts() {
+    fn thin_air_reads_on_the_meter_and_tires_you() {
         let mut v = Vitals::default();
-        run(&mut v, Env { air: 0.0, ..Default::default() }, 10.0);
-        assert!(v.air < 50.0 && v.health.get(Layer::Fatigue) == MAX);
-        run(&mut v, Env { air: 0.0, ..Default::default() }, 20.0);
+        let thin = Env { air: 0.7, breathe: 0.7, ..Default::default() };
+        run(&mut v, thin, 30.0);
+        assert!((v.air - 70.0).abs() < 0.01);
         assert!(v.health.get(Layer::Fatigue) < MAX);
-        // Surfacing refills it quickly.
-        run(&mut v, Env::default(), 6.0);
-        assert!(v.air > 99.0);
+        assert_eq!(v.health.get(Layer::Damage), MAX);
+        // A skill that eases thin air: same meter, no strain.
+        let mut v = Vitals::default();
+        run(&mut v, Env { air: 0.7, breathe: 0.9, ..Default::default() }, 30.0);
+        assert!((v.air - 70.0).abs() < 0.01);
+        assert_eq!(v.health.bars, [MAX; 4]);
+    }
+
+    #[test]
+    fn under_water_you_hold_your_breath_then_suffocate() {
+        let mut v = Vitals::default();
+        let water = Env { air: 0.0, breathe: 0.0, underwater: true, ..Default::default() };
+        run(&mut v, water, 10.0);
+        assert_eq!(v.air, 0.0);
+        assert_eq!(v.health.bars, [MAX; 4]);
+        run(&mut v, water, 20.0);
+        assert!(v.health.get(Layer::Damage) < MAX, "{:?}", v.health.bars);
+        // Surfacing brings the breath back quickly.
+        run(&mut v, Env::default(), 5.0);
+        assert!(v.breath >= BREATH - 0.01 && v.oxygen > 99.0);
     }
 
     #[test]
@@ -318,7 +396,7 @@ mod tests {
         v.health.hit(Layer::Damage, 50.0);
         v.eat(t.get(1).unwrap(), 5.0);
         assert_eq!(v.health.get(Layer::Damage), 50.0);
-        assert!(v.buff_left > 0.0 && v.speed(15.0) > 1.05);
+        assert!(v.buff_left > 0.0 && v.speed(15.0, &crate::survival::exposure::tests::rules()) > 1.05);
         // Tier 2 heals Damage but cannot touch a mortal layer.
         let mut v = Vitals::default();
         v.health.hit(Layer::Blood, 60.0);
@@ -361,9 +439,10 @@ mod tests {
         assert_eq!(clothed(-10.0, 12.0), 2.0);
         assert_eq!(clothed(20.0, 12.0), COMFORT_HIGH);
         assert_eq!(clothed(34.0, 12.0), 40.0);
-        // A fur coat turns a freezing night into a merely cold one.
-        assert!(warmth_target(clothed(-10.0, 16.0)) > COLD_BELOW);
-        assert!(warmth_target(-10.0) < COLD_BELOW);
+        // A fur coat turns a freezing night into a merely chilly one.
+        let rules = crate::survival::exposure::tests::rules();
+        assert_eq!(rules.temperature(-10.0).unwrap().1.stage.name, "Freezing");
+        assert_eq!(rules.temperature(clothed(-10.0, 16.0)).unwrap().1.stage.name, "Chilly");
     }
 
     #[test]

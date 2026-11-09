@@ -1,0 +1,34 @@
+// Exposure: what the felt temperature and the oxygen in the air do to you.
+// Each scale is a list of stages, mildest first. A stage starts when the value
+// passes `at` (cold and air: below it; heat: above it), and the worst stage
+// reached is the one in effect.
+//   name:    shown on the HUD meter and in the warning
+//   shake:   how hard the meter shakes, 0..1
+//   fatigue: Fatigue (stamina) drained per second, never below the mortal line
+//   damage:  real damage per second, landing on Damage and spilling down (can kill)
+//   slow:    share of movement speed lost
+//   dizzy:   camera sway and dark edges, 0..1
+// Drain and damage grow the further past `at` you are: +10% per unit, up to 3x.
+//
+// Temperatures are the felt temperature in °C after clothes, weather, wet,
+// fire and skills. Oxygen is the share of normal air, 100 = sea level.
+(
+    cold: [
+        (name: "Chilly",      at: 8.0,   shake: 0.2, fatigue: 0.12),
+        (name: "Freezing",    at: -4.0,  shake: 0.55, fatigue: 0.45, slow: 0.08),
+        (name: "Deadly cold", at: -18.0, shake: 1.0, fatigue: 0.45, damage: 0.5, slow: 0.15),
+    ],
+    heat: [
+        (name: "Hot",         at: 26.0, shake: 0.2, fatigue: 0.12),
+        (name: "Sweltering",  at: 34.0, shake: 0.55, fatigue: 0.45, slow: 0.08, dizzy: 0.15),
+        (name: "Scorching",   at: 42.0, shake: 1.0, fatigue: 0.45, damage: 0.5, slow: 0.15, dizzy: 0.3),
+    ],
+    air: [
+        (name: "Thin air",    at: 85.0, shake: 0.2, fatigue: 0.1, slow: 0.05),
+        (name: "Very thin",   at: 60.0, shake: 0.55, fatigue: 0.4, slow: 0.15, dizzy: 0.35),
+        (name: "Suffocating", at: 35.0, shake: 1.0, fatigue: 0.4, damage: 0.9, slow: 0.3, dizzy: 0.8),
+    ],
+    // Seconds you can hold your breath under water before the water's lack of
+    // air reaches you; it refills five times as fast on the surface.
+    breath: 20.0,
+)

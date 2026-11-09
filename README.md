@@ -59,9 +59,16 @@ Food comes in four tiers: berries and reed hearts give a short burst of speed, s
 bread mend Damage, stew and cured meat reach Blood, and a feast or ember herb restores
 everything, even a mortal bar. Sleeping at camp rests Fatigue, mends Blood and Injuries a
 little, and restores Damage when nothing is mortal. Carrying little makes you faster, a heavy
-load slows you and makes falls hurt more. Air runs short underwater, deep underground, high on the
-sky islands and in swamp mist; warmth follows the climate, the weather, the time of day and
-torches nearby.
+load slows you and makes falls hurt more.
+
+Two meters bottom right are always on. **Air** reads the oxygen in the air where you stand: thin
+high on the sky islands, stale deep underground, worse in swamp mist and gales. Under water it
+reads nothing and you hold your breath (20 seconds). **Temperature** is what you feel: the climate,
+the season, day and night, the weather (rain, storms and cold snaps make it colder), being wet,
+torches and fire nearby, clothes and skills. Either meter starts to shake when you leave the
+comfortable range: at first it only wears down Fatigue, and never past the mortal line. Further out
+it shakes harder and drains faster, and at the far end (deadly cold, scorching heat, suffocating
+air) it deals real damage and can kill you. The stages live in `assets/data/exposure.ron`.
 
 ## The living world
 
