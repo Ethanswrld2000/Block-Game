@@ -27,5 +27,10 @@
         "wind_loop": 0.5,
         "rain_loop": 0.5,
         "levitate_loop": 0.35,
+        // Critters (also scaled by the ambience setting and their distance).
+        "bird": 0.45,
+        "frog": 0.5,
+        "cricket": 0.3,
+        "kite": 0.4,
     },
 )

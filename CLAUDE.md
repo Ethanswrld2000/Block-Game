@@ -143,6 +143,14 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `Survival.temperature` lists every part of the felt temperature (biome, season, height, sun,
   weather, wet, torches, clothes, skills, spell); the HUD shows it top right (F6 toggles).
   The gameplay loop and what to build next: `docs/GAMEPLAY_LOOP.md`.
+- Critters: `game::creatures::critters`. `temper: Critter` kinds in creatures.ron with a `critter: (...)` block
+  (motion Bird/Hopper/Drifter, count, ring, calls, hearing, height, hop, rest, shy, near_water, min_temp,
+  fair_weather, to_light): marsh finches and grey kites circle in flocks, land, hop and call; reed frogs hop
+  and croak near water; dusk crickets, fireflies (`glow: true` boxes blink) and lamp moths (circle lights)
+  at night; bog darters over water by day. Boxes named `wing_*` flap. Not hittable, no drops. Calls are
+  panned (`PlaySound::ambient_at`, camera has a `SpatialListener`) and follow the ambience volume.
+  Critter sounds: `python3 tools/gen_placeholder_sounds.py --only bird_ frog_ ...`. Spirits are off
+  for now (spawn weight 0 in creatures.ron).
 - Weather timing: each weather picks the next one when it starts (`WeatherState.next/until`);
   clouds change only in the last 30 s before a change (`weather::CLOUD_LEAD_SECONDS`), the rest
   blends in after. `game::weather_hud` shows weather, next and countdown in `hud::TopRight` (a
