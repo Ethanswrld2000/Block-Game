@@ -17,11 +17,34 @@ pub struct HudPlugin;
 
 impl Plugin for HudPlugin {
     fn build(&self, app: &mut App) {
+        // The top-right column: panels there (the weather, ...) stack in it
+        // instead of each placing itself, so they never overlap.
+        let top_right = app
+            .world_mut()
+            .spawn((
+                Name::new("top right"),
+                Node {
+                    position_type: PositionType::Absolute,
+                    right: Val::Px(14.0),
+                    top: Val::Px(14.0),
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::End,
+                    row_gap: Val::Px(8.0),
+                    ..default()
+                },
+            ))
+            .id();
+        app.insert_resource(TopRight(top_right));
         app.add_systems(PostStartup, spawn_hud).add_systems(Update, (update_hotbar, hurt_flash));
     }
 }
 
 /// Hotbar slot size in points.
+/// The column at the top right of the screen: spawn a panel with
+/// `ChildOf(top_right.0)` (and no position of its own) to stack it there.
+#[derive(Resource, Clone, Copy)]
+pub struct TopRight(pub Entity);
+
 pub const SLOT: f32 = 58.0;
 
 #[derive(Component)]

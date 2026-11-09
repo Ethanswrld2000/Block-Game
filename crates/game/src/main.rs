@@ -28,6 +28,7 @@ mod theme;
 mod survival;
 mod torches;
 mod weather;
+mod weather_hud;
 mod world;
 
 use bevy::prelude::*;
@@ -61,6 +62,7 @@ fn main() {
             weather::WeatherPlugin,
             sky::SkyPlugin,
             clouds::CloudPlugin,
+            weather_hud::WeatherHudPlugin,
             precipitation::PrecipitationPlugin,
             lod::LodPlugin,
         ))
