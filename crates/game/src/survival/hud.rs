@@ -17,7 +17,8 @@ pub struct SurvivalHudPlugin;
 
 impl Plugin for SurvivalHudPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn).add_systems(Update, (update_bars, update_meters, shake, temperature_list, toasts, overlays).after(super::SurvivalSet));
+        // PostStartup, after the weather panel, so this one stacks below it.
+        app.add_systems(PostStartup, spawn).add_systems(Update, (update_bars, update_meters, shake, temperature_list, toasts, overlays).after(super::SurvivalSet));
     }
 }
 
@@ -69,7 +70,7 @@ enum Gauge {
     Load,
 }
 
-/// The temperature breakdown, top right (F6 shows and hides it).
+/// The temperature breakdown, top right under the weather (F6 shows and hides it).
 #[derive(Component)]
 struct TempPanel;
 
@@ -198,7 +199,7 @@ fn full_screen(color: Color) -> impl Bundle {
     )
 }
 
-fn spawn(mut commands: Commands, theme: Res<Theme>, rules: Res<Exposure>) {
+fn spawn(mut commands: Commands, theme: Res<Theme>, rules: Res<Exposure>, top_right: Res<crate::hud::TopRight>) {
     let theme = &*theme;
     let rules = &*rules;
     commands.spawn((Dizzy, full_screen(Color::srgba(0.02, 0.03, 0.08, 0.0))));
@@ -310,10 +311,9 @@ fn spawn(mut commands: Commands, theme: Res<Theme>, rules: Res<Exposure>) {
     commands
         .spawn((
             TempPanel,
+            // Under the weather panel in the top-right column.
+            ChildOf(top_right.0),
             Node {
-                position_type: PositionType::Absolute,
-                right: Val::Px(14.0),
-                top: Val::Px(14.0),
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(2.0),
                 padding: UiRect::axes(Val::Px(12.0), Val::Px(10.0)),
