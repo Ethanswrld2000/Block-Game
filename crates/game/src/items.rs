@@ -91,14 +91,6 @@ impl WearSlot {
     }
 }
 
-/// One box of a creature's model (see creatures.ron).
-#[derive(Deserialize, Debug, Clone, Copy)]
-pub struct ModelBox {
-    pub size: (f32, f32, f32),
-    pub offset: (f32, f32, f32),
-    pub color: (f32, f32, f32),
-}
-
 #[derive(Debug, Clone)]
 pub enum ItemKind {
     Tool { speeds: HashMap<String, f32> },

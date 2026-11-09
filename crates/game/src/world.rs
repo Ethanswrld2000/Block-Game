@@ -67,6 +67,8 @@ struct LoadedChunk {
     /// Bumped on every change, so a stale mesh result is ignored.
     version: u32,
     meshed_version: Option<u32>,
+    /// A mesh has been put on screen (the distant terrain hides itself here).
+    drawn: bool,
     /// Edited by the player since it was last saved.
     modified: bool,
 }
@@ -289,7 +291,28 @@ fn change_view_distance(keys: Res<ButtonInput<KeyCode>>, mut view: ResMut<ViewDi
     }
 }
 
-fn camera_chunk(cam: &Transform) -> ChunkPos {
+/// Vertical offsets the drawn-chunk mask holds: -MASK_UP..=MASK_UP (31 bits).
+pub const MASK_UP: i32 = 15;
+
+impl World {
+    /// Which chunks around `center` are drawn, for the distant-terrain shader:
+    /// a `(2 * half + 1)^2` grid of columns (x fastest), each a bit mask of
+    /// vertical offsets (bit `dy + MASK_UP`). Shares the chunk grid exactly, so
+    /// the distant terrain is cut away only where real chunks cover it.
+    pub fn drawn_mask(&self, center: ChunkPos, half: i32) -> Vec<u32> {
+        let n = 2 * half + 1;
+        let mut mask = vec![0u32; (n * n) as usize];
+        for (p, c) in &self.chunks {
+            let (dx, dy, dz) = (p.x - center.x, p.y - center.y, p.z - center.z);
+            if c.drawn && dx.abs() <= half && dz.abs() <= half && dy.abs() <= MASK_UP {
+                mask[((dz + half) * n + dx + half) as usize] |= 1 << (dy + MASK_UP);
+            }
+        }
+        mask
+    }
+}
+
+pub fn camera_chunk(cam: &Transform) -> ChunkPos {
     BlockPos::from_world(cam.translation.to_array()).chunk()
 }
 
@@ -368,7 +391,7 @@ fn collect_generated(mut world: ResMut<World>) {
         }
         world.chunks.insert(
             p,
-            LoadedChunk { data: Arc::new(chunk), entities: Vec::new(), version: 0, meshed_version: None, modified: false },
+            LoadedChunk { data: Arc::new(chunk), entities: Vec::new(), version: 0, meshed_version: None, drawn: false, modified: false },
         );
         // A neighbour meshed while this chunk was outside the vertical band
         // treated it as air; remesh it now that the real blocks are here.
@@ -454,6 +477,7 @@ fn collect_meshes(
             continue; // changed while meshing; a newer mesh is coming
         }
         chunk.meshed_version = Some(version);
+        chunk.drawn = true;
         for e in chunk.entities.drain(..) {
             commands.entity(e).despawn();
         }
@@ -479,7 +503,7 @@ fn collect_meshes(
     stats.unsaved = world.chunks.values().filter(|c| c.modified).count();
 }
 
-fn unload_far(
+pub fn unload_far(
     mut commands: Commands,
     mut world: ResMut<World>,
     view: Res<ViewDistance>,

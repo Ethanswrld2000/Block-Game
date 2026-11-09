@@ -4,8 +4,10 @@
 //! Each tile covers `TILE` blocks square. Its land is sampled every
 //! `LAND_STEP` blocks straight from the world generator (no chunks needed) and
 //! drawn as blocky columns in the surface block's average colour; sky islands
-//! get a finer grid. Tiles are built on worker threads, nearest first. Inside
-//! the loaded area the shader cuts the tiles away so the real chunks show.
+//! get a finer grid. Tiles are built on worker threads, nearest first. Where a
+//! real chunk is drawn the shader cuts the tiles away so the chunk shows: it
+//! reads a mask of drawn chunks on the same 32-block grid, so the cut follows
+//! chunk borders exactly and never opens a hole where a chunk is still loading.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -15,7 +17,7 @@ use bevy::light::NotShadowCaster;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::pbr::{ExtendedMaterial, MaterialExtension};
 use bevy::prelude::*;
-use bevy::render::render_resource::AsBindGroup;
+use bevy::render::render_resource::{AsBindGroup, Extent3d, TextureDimension, TextureFormat};
 use bevy::shader::ShaderRef;
 use bevy::tasks::futures::check_ready;
 use bevy::tasks::{AsyncComputeTaskPool, Task};
@@ -25,7 +27,7 @@ use worldgen::{WorldGen, SEA_LEVEL};
 use crate::blocks::Blocks;
 use crate::camera::FlyCamera;
 use crate::sky::MAX_VISIBILITY;
-use crate::world::{Generator, ViewDistance};
+use crate::world::{camera_chunk, Generator, World};
 
 /// Tile size in blocks.
 pub const TILE: i32 = 256;
@@ -39,10 +41,18 @@ pub type LodMaterial = ExtendedMaterial<StandardMaterial, LodExtension>;
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 pub struct LodExtension {
-    /// x: loaded radius, y: loaded half-height (blocks); the shader hides the tile there.
+    /// xyz: the chunk the mask is centred on; w: the mask's half-width in chunks.
     #[uniform(100)]
-    pub near: Vec4,
+    pub center: Vec4,
+    /// Drawn chunks around `center` (see `World::drawn_mask`); the shader hides the tiles there.
+    #[texture(101, sample_type = "u_int")]
+    pub mask: Handle<Image>,
 }
+
+/// Half-width of the drawn-chunk mask in chunks: the largest view distance
+/// (32) plus the 2-chunk margin chunks keep before they unload.
+const MASK_HALF: i32 = 34;
+const MASK_N: u32 = (2 * MASK_HALF + 1) as u32;
 
 impl MaterialExtension for LodExtension {
     fn fragment_shader() -> ShaderRef {
@@ -56,7 +66,7 @@ impl Plugin for LodPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<LodMaterial>::default())
             .init_resource::<LodTiles>()
-            .add_systems(Update, (update_near, schedule_tiles, collect_tiles).chain());
+            .add_systems(Update, (update_mask.after(crate::world::unload_far), schedule_tiles, collect_tiles).chain());
     }
 }
 
@@ -65,32 +75,51 @@ pub struct LodTiles {
     tiles: HashMap<IVec2, Entity>,
     tasks: HashMap<IVec2, Task<Option<Mesh>>>,
     material: Option<Handle<LodMaterial>>,
+    mask: Option<Handle<Image>>,
     pub count: usize,
 }
 
-fn update_near(
-    view: Res<ViewDistance>,
+/// Keep the shader's mask of drawn chunks up to date (only re-sent when it changes).
+fn update_mask(
+    world: Res<World>,
     mut lod: ResMut<LodTiles>,
     mut materials: ResMut<Assets<LodMaterial>>,
-    mut last: Local<Option<(i32, i32)>>,
+    mut images: ResMut<Assets<Image>>,
+    cam: Query<&Transform, With<FlyCamera>>,
+    mut last: Local<(Option<IVec3>, Vec<u32>)>,
 ) {
-    let near = Vec4::new(view.chunks as f32 * 32.0 - 8.0, (view.vertical as f32 - 0.5) * 32.0, 0.0, 0.0);
-    match &lod.material {
-        None => {
-            lod.material = Some(materials.add(LodMaterial {
-                base: StandardMaterial { perceptual_roughness: 1.0, reflectance: 0.05, ..default() },
-                extension: LodExtension { near },
-            }));
-            *last = Some((view.chunks, view.vertical));
-        }
-        Some(h) if *last != Some((view.chunks, view.vertical)) => {
-            if let Some(mut m) = materials.get_mut(h) {
-                m.extension.near = near;
-                *last = Some((view.chunks, view.vertical));
-            }
-        }
-        _ => {}
+    let Ok(cam) = cam.single() else { return };
+    let c = camera_chunk(cam);
+    let center = IVec3::new(c.x, c.y, c.z);
+    let mask = world.drawn_mask(c, MASK_HALF);
+    let bytes = |m: &[u32]| m.iter().flat_map(|w| w.to_le_bytes()).collect::<Vec<u8>>();
+    let Some(h) = lod.material.clone() else {
+        let image = Image::new(
+            Extent3d { width: MASK_N, height: MASK_N, depth_or_array_layers: 1 },
+            TextureDimension::D2,
+            bytes(&mask),
+            TextureFormat::R32Uint,
+            RenderAssetUsages::RENDER_WORLD | RenderAssetUsages::MAIN_WORLD,
+        );
+        lod.mask = Some(images.add(image));
+        lod.material = Some(materials.add(LodMaterial {
+            base: StandardMaterial { perceptual_roughness: 1.0, reflectance: 0.05, ..default() },
+            extension: LodExtension { center: center.as_vec3().extend(MASK_HALF as f32), mask: lod.mask.clone().unwrap() },
+        }));
+        *last = (Some(center), mask);
+        return;
+    };
+    if last.0 == Some(center) && last.1 == mask {
+        return;
     }
+    // Change the image and the centre in the same frame so they always agree.
+    if let Some(mut image) = lod.mask.as_ref().and_then(|m| images.get_mut(m)) {
+        image.data = Some(bytes(&mask));
+    }
+    if let Some(mut m) = materials.get_mut(&h) {
+        m.extension.center = center.as_vec3().extend(MASK_HALF as f32);
+    }
+    *last = (Some(center), mask);
 }
 
 fn tile_of(p: Vec3) -> IVec2 {

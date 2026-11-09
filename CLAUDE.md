@@ -55,7 +55,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `game::sky` (sun/moon light, ambient, fog, sky dome `assets/shaders/sky.wesl`, season tint of
   foliage via the voxel material's `season` uniform and UV_1.y), `game::clouds` (blocky, y 236; three layers since phase 10),
   `game::precipitation` (rain/snow pool), `game::lod` (distant terrain and islands as coloured
-  columns out to 1500 blocks; `assets/shaders/lod.wesl` cuts it away inside the loaded area).
+  columns out to 1500 blocks; `assets/shaders/lod.wesl` cuts it away only where a real chunk is drawn, from a per-chunk mask `World::drawn_mask`).
   Stars turn around the sun's axis; the moon has its own 8-day cycle and phases (`sky::moon_*`).
 - Phase 5 (player): done. `game::player` (`Player` resource: AABB walking, gravity, jump, sprint,
   crouch edge-guard, swimming, head-bob, landing dip, fall `Damage` messages; F toggles `MoveMode`
@@ -140,6 +140,8 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   (`Vitals.air`; `Vitals.oxygen` is what the body gets after skills or a held breath, `breath` under
   water); temperature meter = felt °C (`Vitals.feels`, follows surroundings over ~30 s). Both always
   shown and shake by stage. `BLOCKGAME_FEELS=-25` / `BLOCKGAME_OXYGEN=50` force them for screenshots.
+  `Survival.temperature` lists every part of the felt temperature (biome, season, height, sun,
+  weather, wet, torches, clothes, skills, spell); the HUD shows it top right (F6 toggles).
   The gameplay loop and what to build next: `docs/GAMEPLAY_LOOP.md`.
 - Critters: `game::creatures::critters`. `temper: Critter` kinds in creatures.ron with a `critter: (...)` block
   (motion Bird/Hopper/Drifter, count, ring, calls, hearing, height, hop, rest, shy, near_water, min_temp,
@@ -149,6 +151,12 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   panned (`PlaySound::ambient_at`, camera has a `SpatialListener`) and follow the ambience volume.
   Critter sounds: `python3 tools/gen_placeholder_sounds.py --only bird_ frog_ ...`. Spirits are off
   for now (spawn weight 0 in creatures.ron).
+- Weather timing: each weather picks the next one when it starts (`WeatherState.next/until`);
+  clouds change only in the last 30 s before a change (`weather::CLOUD_LEAD_SECONDS`), the rest
+  blends in after. `game::weather_hud` shows weather, next and countdown in `hud::TopRight` (a
+  column at the top right; spawn panels there with `ChildOf`). Low and middle cloud layers are
+  opaque (blended ones flickered by view angle) and thin out at their edge. Table: `docs/WEATHER.md`
+  and `docs/weather.csv` (update when weather.ron or seasons.ron change).
 - Next: follow `docs/GAMEPLAY_LOOP.md` "What's next" (shelter first), or ask Ethan.
 
 ## Testing without a screen

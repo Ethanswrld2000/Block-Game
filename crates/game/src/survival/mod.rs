@@ -27,7 +27,7 @@ use crate::items::{ItemKind, Items};
 use crate::player::{Body, Damage, DamageCause, MoveMode, Player, PlayerSet};
 use crate::save::SaveDir;
 use crate::torches::Torches;
-use crate::weather::{Conditions, LocalClimate};
+use crate::weather::{Conditions, LocalClimate, WeatherKinds, WeatherState};
 use camp::Camp;
 use exposure::{Exposure, Scale};
 use food::FoodTiers;
@@ -75,6 +75,8 @@ pub struct Survival {
     pub vitals: Vitals,
     /// What the body felt this frame (for the HUD).
     pub env: Env,
+    /// Everything adding up to `env.feels`: (what, °C). For the HUD breakdown.
+    pub temperature: Vec<(String, f32)>,
     /// Eating progress, 0..1.
     pub eating: f32,
     /// When you died; `None` while alive.
@@ -170,31 +172,52 @@ fn eat(
 }
 
 /// Felt temperature, °C: the climate here, day and night, weather, being
-/// wet, and fire nearby.
+/// wet, and fire nearby. Each part goes into `parts` with its share, for the
+/// breakdown on the HUD.
 #[allow(clippy::too_many_arguments)]
-fn feels_like(climate: &LocalClimate, conditions: &Conditions, sun_height: f32, wet: bool, eye: Vec3, torches: &Torches, holding_torch: bool) -> f32 {
-    let mut t = climate.temperature * 30.0 + sun_height * 5.0 + conditions.chill;
+fn feels_like(
+    climate: &LocalClimate,
+    conditions: &Conditions,
+    weather: &str,
+    sun_height: f32,
+    wet: bool,
+    eye: Vec3,
+    torches: &Torches,
+    holding_torch: bool,
+    parts: &mut Vec<(String, f32)>,
+) -> f32 {
+    let biome = if climate.biome_title.is_empty() { "Climate".to_string() } else { climate.biome_title.clone() };
+    parts.push((biome, climate.biome * 30.0));
+    parts.push(("Season".into(), climate.season * 30.0));
+    parts.push(("Height above ground".into(), climate.altitude * 30.0));
+    parts.push((if sun_height >= 0.0 { "Sun" } else { "Night" }.into(), sun_height * 5.0));
+    parts.push((format!("Weather: {weather}"), conditions.chill));
     if wet {
-        t -= 6.0;
+        parts.push(("Wet".into(), -6.0));
     }
     let mut fire = 0.0;
     for p in torches.positions() {
         let d = eye.distance(Vec3::new(p.x as f32 + 0.5, p.y as f32 + 0.7, p.z as f32 + 0.5));
         fire += (10.0 * (1.0 - d / 6.0)).max(0.0);
     }
+    // Fire tops out at +16 all told.
+    let placed = fire.min(FIRE_MAX);
+    parts.push((if fire > FIRE_MAX { "Torches nearby (max)" } else { "Torches nearby" }.into(), placed));
     if holding_torch {
-        fire += 3.0;
+        parts.push(("Torch in hand".into(), (FIRE_MAX - placed).min(3.0)));
     }
-    t + fire.min(16.0)
+    parts.iter().map(|p| p.1).sum()
 }
+
+/// Most warmth that torches can give, °C.
+const FIRE_MAX: f32 = 16.0;
 
 #[allow(clippy::too_many_arguments)]
 fn tick_body(
     time: Res<Time>,
     mode: Res<MoveMode>,
     player: Res<Player>,
-    climate: Res<LocalClimate>,
-    conditions: Res<Conditions>,
+    (climate, conditions, weather, kinds): (Res<LocalClimate>, Res<Conditions>, Res<WeatherState>, Res<WeatherKinds>),
     clock: Res<WorldClock>,
     seasons: Res<Seasons>,
     torches: Res<Torches>,
@@ -214,16 +237,26 @@ fn tick_body(
     let daylight = seasons.blended(seasons.at(&clock), |x| x.daylight);
     let sun = crate::sky::sun_direction(clock.time, daylight).y;
     let carried = inv.mass(&items) + if camp.bedroll.is_none() { BEDROLL_MASS } else { 0.0 };
-    let raw = feels_like(&climate, &conditions, sun, player.in_water, eye, &torches, holding_torch);
+    let mut parts = std::mem::take(&mut s.temperature);
+    parts.clear();
+    let weather = kinds.list.get(weather.current).map_or("", |k| k.title.as_str());
+    let raw = feels_like(&climate, &conditions, weather, sun, player.in_water, eye, &torches, holding_torch, &mut parts);
     let underwater = player.head_in_water;
     let mut air = if underwater { 0.0 } else { vitals::air_at(eye.y) * conditions.air };
-    let mut feels = perks.feel(vitals::clothed(raw, inv.insulation(&items)), vitals::COMFORT_LOW + 6.0);
+    let dressed = vitals::clothed(raw, inv.insulation(&items));
+    parts.push(("Clothes".into(), dressed - raw));
+    let mut feels = perks.feel(dressed, vitals::COMFORT_LOW + 6.0);
+    parts.push(("Skills".into(), feels - dressed));
     if spells.warmth {
+        let before = feels;
         feels = perks_warm(feels);
+        parts.push(("Warmth spell".into(), feels - before));
     }
     if let Some(f) = forced.feels {
+        parts.push(("BLOCKGAME_FEELS override".into(), f - feels));
         feels = f;
     }
+    s.temperature = parts;
     if let Some(o) = forced.oxygen {
         air = o / 100.0;
     }

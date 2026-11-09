@@ -11,11 +11,19 @@
 //! snow cover the sky. Each layer is cells on a grid laid over 2D noise. Its
 //! mesh is built on a worker thread around the camera and rebuilt when the
 //! camera or the coverage moves on; in between, the wind slides it along.
+//! Cover changes only when the weather does (see `weather`), so between
+//! changes the sky holds steady.
+//!
+//! The low and middle layers are opaque: blended meshes aren't sorted within
+//! themselves or reliably against each other, which made faces and layers
+//! flicker over one another as the camera turned. Instead of fading out at
+//! the edge they thin out, and the fog hides the rest. The thin high wisps
+//! stay see-through; they're drawn after the opaque layers, so those hide them.
 
 use std::sync::Arc;
 
 use bevy::asset::RenderAssetUsages;
-use bevy::light::NotShadowCaster;
+use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use bevy::tasks::futures::check_ready;
@@ -59,12 +67,13 @@ pub struct Layer {
     pub speed: f32,
     /// How bright it is compared with the weather's cloud shade.
     pub shade: f32,
+    /// See-through layers blend (and fade out at the edge); the rest are opaque.
     pub alpha: f32,
 }
 
 pub const LAYERS: [Layer; 3] = [
-    Layer { name: "low", y: 200.0, cell: 10.0, radius: 90, thin: 5.0, thick: 9.0, frequency: 0.06, seed: 0x10D0, from: 0.55, to: 0.95, speed: 0.8, shade: 0.82, alpha: 0.98 },
-    Layer { name: "middle", y: CLOUD_Y, cell: 12.0, radius: 80, thin: 4.0, thick: 8.0, frequency: 0.07, seed: 0x00C1_00D5, from: 0.08, to: 0.85, speed: 1.0, shade: 1.0, alpha: 0.97 },
+    Layer { name: "low", y: 200.0, cell: 10.0, radius: 90, thin: 5.0, thick: 9.0, frequency: 0.06, seed: 0x10D0, from: 0.55, to: 0.95, speed: 0.8, shade: 0.82, alpha: 1.0 },
+    Layer { name: "middle", y: CLOUD_Y, cell: 12.0, radius: 80, thin: 4.0, thick: 8.0, frequency: 0.07, seed: 0x00C1_00D5, from: 0.08, to: 0.85, speed: 1.0, shade: 1.0, alpha: 1.0 },
     Layer { name: "high", y: 300.0, cell: 20.0, radius: 60, thin: 1.0, thick: 2.0, frequency: 0.05, seed: 0x41A7, from: 0.0, to: 1.0, speed: 1.6, shade: 1.05, alpha: 0.8 },
 ];
 
@@ -72,6 +81,10 @@ impl Layer {
     /// This layer's cover, 0..1, for the weather's cloud cover.
     pub fn cover(&self, weather: f32) -> f32 {
         ((weather - self.from) / (self.to - self.from)).clamp(0.0, 1.0)
+    }
+
+    pub fn opaque(&self) -> bool {
+        self.alpha >= 1.0
     }
 }
 
@@ -99,7 +112,7 @@ fn spawn_clouds(mut commands: Commands, mut materials: ResMut<Assets<StandardMat
         noise.set_fractal_octaves(Some(3));
         let material = materials.add(StandardMaterial {
             base_color: Color::srgba(1.0, 1.0, 1.0, layer.alpha),
-            alpha_mode: AlphaMode::Blend,
+            alpha_mode: if layer.opaque() { AlphaMode::Opaque } else { AlphaMode::Blend },
             perceptual_roughness: 1.0,
             reflectance: 0.0,
             ..default()
@@ -111,6 +124,7 @@ fn spawn_clouds(mut commands: Commands, mut materials: ResMut<Assets<StandardMat
             Transform::from_xyz(0.0, layer.y, 0.0),
             Visibility::Hidden,
             NotShadowCaster,
+            NotShadowReceiver,
         ));
     }
 }
@@ -170,7 +184,6 @@ fn update_clouds(
         // Shade: white in fair weather, grey before rain.
         if let Some(mut m) = materials.get_mut(&clouds.material) {
             let s = (weather.cloud_shade * layer.shade).min(1.0);
-            // Nearly opaque, so stars and the moon don't shine through.
             let want = Color::srgba(s, s, s * 1.02, layer.alpha);
             if m.base_color != want {
                 m.base_color = want;
@@ -223,8 +236,11 @@ fn build(noise: &FastNoiseLite, layer: &Layer, center: IVec2, cover: f32) -> Mes
     let idx = |dx: i32, dz: i32| ((dz + radius + 1) as usize) * n + (dx + radius + 1) as usize;
     for dz in -radius - 1..=radius + 1 {
         for dx in -radius - 1..=radius + 1 {
-            if dx * dx + dz * dz <= (radius + 1) * (radius + 1) {
-                h[idx(dx, dz)] = thickness(noise, layer, center.x + dx, center.y + dz, cover);
+            let r2 = dx * dx + dz * dz;
+            if r2 <= (radius + 1) * (radius + 1) {
+                // Opaque layers thin out over the outer part instead of fading.
+                let edge = if layer.opaque() { (((r2 as f32).sqrt() / radius as f32 - 0.55) / 0.45).clamp(0.0, 1.0) } else { 0.0 };
+                h[idx(dx, dz)] = thickness(noise, layer, center.x + dx, center.y + dz, cover * (1.0 - edge));
             }
         }
     }

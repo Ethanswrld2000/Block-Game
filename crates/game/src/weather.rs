@@ -2,6 +2,13 @@
 //! chances, blended smoothly into the `Conditions` everything else reads
 //! (clouds, fog, light, rain and snow, wind, lightning).
 //!
+//! Each weather lasts a random number of hours (`hours` in weather.ron), and
+//! the next one is picked as soon as the current one starts, so the HUD can
+//! show what's coming and when. The clouds move first: they thicken or clear
+//! over the last `CLOUD_LEAD_SECONDS` before the change, then rain, fog, light
+//! and wind blend in over `BLEND_SECONDS` after it. Nothing else changes the
+//! clouds, so the sky holds steady while a weather lasts.
+//!
 //! F4 cycles the weather by hand. `BLOCKGAME_WEATHER=rain` starts with a given
 //! weather, for screenshots.
 
@@ -10,11 +17,14 @@ use serde::Deserialize;
 use voxel::BlockPos;
 
 use crate::camera::FlyCamera;
-use crate::clock::{Seasons, WorldClock};
+use crate::clock::{DAY_SECONDS, Seasons, WorldClock};
 use crate::world::Generator;
 
 /// Real seconds a weather change takes to blend in.
 const BLEND_SECONDS: f32 = 30.0;
+/// Real seconds (at normal clock speed) before a change that the clouds start
+/// turning into the next weather's.
+pub const CLOUD_LEAD_SECONDS: f32 = 30.0;
 
 pub struct WeatherPlugin;
 
@@ -30,12 +40,16 @@ impl Plugin for WeatherPlugin {
         let first = start.unwrap_or(0);
         let conditions = Conditions::from_kind(&kinds.list[first]);
         app.insert_resource(kinds)
-            .insert_resource(WeatherState { current: first, previous: first, blend: 1.0, until: None, forced: start.is_some() })
+            .insert_resource(WeatherState::new(first, start.is_some()))
             .insert_resource(conditions)
             .init_resource::<LocalClimate>()
-            .add_systems(Update, (sample_climate, change_weather, blend_conditions, lightning).chain());
+            .add_systems(Update, (sample_climate, change_weather, blend_conditions, lightning).chain().in_set(WeatherSet));
     }
 }
+
+/// The systems that update the weather; readers can run after it.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct WeatherSet;
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct WeatherKind {
@@ -86,10 +100,49 @@ pub struct WeatherState {
     pub previous: usize,
     /// 0 = all previous, 1 = all current.
     pub blend: f32,
-    /// Total days (see `WorldClock::total_days`) when the weather next changes.
-    until: Option<f64>,
+    /// The weather after this one, picked when this one starts.
+    pub next: Option<usize>,
+    /// Total days (see `WorldClock::total_days`) when this weather started and
+    /// when it changes to `next`.
+    pub since: f64,
+    pub until: Option<f64>,
+    /// Clouds blend on their own: from `cloud_previous` to `current` (only
+    /// after F4, which changes at once), then towards `next` before a change.
+    cloud_previous: usize,
+    cloud_blend: f32,
     /// Set by `BLOCKGAME_WEATHER`: hold this weather.
-    forced: bool,
+    pub forced: bool,
+}
+
+impl WeatherState {
+    fn new(first: usize, forced: bool) -> Self {
+        Self { current: first, previous: first, blend: 1.0, next: None, since: 0.0, until: None, cloud_previous: first, cloud_blend: 1.0, forced }
+    }
+
+    /// Real seconds (at normal clock speed) until the weather changes.
+    pub fn seconds_left(&self, now: f64) -> Option<f32> {
+        self.until.map(|u| ((u - now) * DAY_SECONDS as f64).max(0.0) as f32)
+    }
+
+    /// Real seconds (at normal clock speed) this weather lasts in all.
+    pub fn seconds_total(&self) -> Option<f32> {
+        self.until.map(|u| ((u - self.since) * DAY_SECONDS as f64) as f32)
+    }
+
+    /// How far the clouds have turned towards the next weather's, 0..1.
+    pub fn cloud_lead(&self, now: f64) -> f32 {
+        cloud_lead(self.seconds_left(now))
+    }
+}
+
+/// 0 until `CLOUD_LEAD_SECONDS` before the change, then easing up to 1 at it.
+pub fn cloud_lead(seconds_left: Option<f32>) -> f32 {
+    let Some(left) = seconds_left else { return 0.0 };
+    smooth(1.0 - (left / CLOUD_LEAD_SECONDS).clamp(0.0, 1.0))
+}
+
+fn smooth(t: f32) -> f32 {
+    t * t * (3.0 - 2.0 * t)
 }
 
 /// The weather as everything else sees it, blended between kinds.
@@ -131,19 +184,26 @@ impl Conditions {
 
 /// The climate around the camera: biome fog colour and haze, temperature with
 /// the season applied. Eased so walking between biomes fades smoothly.
-#[derive(Resource, Debug, Clone, Copy)]
+#[derive(Resource, Debug, Clone)]
 pub struct LocalClimate {
     pub fog: Vec3,
     pub haze: f32,
     pub temperature: f32,
-    target: (Vec3, f32, f32),
+    /// What `temperature` is made of (eased the same way): the biome (or the
+    /// column's own climate, if colder), the season, and height above the ground.
+    pub biome: f32,
+    pub season: f32,
+    pub altitude: f32,
+    /// The biome here, for the temperature breakdown.
+    pub biome_title: String,
+    target: (Vec3, f32, [f32; 3]),
     timer: f32,
 }
 
 impl Default for LocalClimate {
     fn default() -> Self {
         let fog = Vec3::new(0.46, 0.53, 0.47);
-        Self { fog, haze: 0.4, temperature: 0.4, target: (fog, 0.4, 0.4), timer: 0.0 }
+        Self { fog, haze: 0.4, temperature: 0.4, biome: 0.4, season: 0.0, altitude: 0.0, biome_title: String::new(), target: (fog, 0.4, [0.4, 0.0, 0.0]), timer: 0.0 }
     }
 }
 
@@ -167,14 +227,19 @@ fn sample_climate(
         let season = seasons.blended(seasons.at(&clock), |s| s.temperature);
         // Colder with height above the ground too (sky islands, mountain air).
         let altitude = ((p.y - col.height.max(0)) as f32 / 400.0).max(0.0);
-        let temperature = biome.temperature.min(col.climate.temperature) + season - altitude;
-        climate.target = (Vec3::from(biome.fog), biome.haze, temperature);
+        climate.target = (Vec3::from(biome.fog), biome.haze, [biome.temperature.min(col.climate.temperature), season, -altitude]);
+        if climate.biome_title != biome.title {
+            climate.biome_title = biome.title.clone();
+        }
     }
     let k = 1.0 - (-dt / 3.0).exp();
-    let (fog, haze, temp) = climate.target;
+    let (fog, haze, [b, season, altitude]) = climate.target;
     climate.fog = climate.fog.lerp(fog, k);
     climate.haze += (haze - climate.haze) * k;
-    climate.temperature += (temp - climate.temperature) * k;
+    climate.biome += (b - climate.biome) * k;
+    climate.season += (season - climate.season) * k;
+    climate.altitude += (altitude - climate.altitude) * k;
+    climate.temperature = climate.biome + climate.season + climate.altitude;
 }
 
 /// Small deterministic random numbers, so a world's weather repeats.
@@ -189,26 +254,30 @@ fn hash(a: u64, b: u64) -> f32 {
 /// The direction the wind blows (clouds, rain and gusts that push you).
 pub const WIND_DIR: Vec2 = Vec2::new(0.944, 0.33);
 
-/// Pick the next weather by the season's chances, and when it ends (total
-/// days). Depends only on the seed and the hour, so a world's weather repeats.
-pub fn roll_weather(kinds: &WeatherKinds, season: &crate::clock::Season, seed: u64, now: f64) -> (Option<usize>, f64) {
-    let weights: Vec<f32> = kinds.list.iter().map(|k| season.weather.get(&k.name).copied().unwrap_or(0.0)).collect();
+/// Pick the weather that follows `current` at `when` (total days) by the
+/// season's chances. A different weather if the season allows one. Depends
+/// only on the seed and the hour, so a world's weather repeats.
+pub fn pick_weather(kinds: &WeatherKinds, season: &crate::clock::Season, seed: u64, when: f64, current: usize) -> usize {
+    let weights: Vec<f32> =
+        kinds.list.iter().enumerate().map(|(i, k)| if i == current { 0.0 } else { season.weather.get(&k.name).copied().unwrap_or(0.0) }).collect();
     let total: f32 = weights.iter().sum();
-    let slot = (now * 24.0) as u64;
-    let mut pick = None;
-    if total > 0.0 {
-        let mut roll = hash(seed, slot) * total;
-        for (i, w) in weights.iter().enumerate() {
-            if roll < *w {
-                pick = Some(i);
-                break;
-            }
-            roll -= w;
-        }
+    if total <= 0.0 {
+        return current;
     }
-    let k = &kinds.list[pick.unwrap_or(0)];
-    let hours = k.hours.0 + (k.hours.1 - k.hours.0) * hash(seed ^ 0xAB, slot);
-    (pick, now + hours as f64 / 24.0)
+    let mut roll = hash(seed, (when * 24.0) as u64) * total;
+    for (i, w) in weights.iter().enumerate() {
+        if roll < *w {
+            return i;
+        }
+        roll -= w;
+    }
+    weights.iter().rposition(|w| *w > 0.0).unwrap_or(current)
+}
+
+/// How long a weather starting at `when` lasts, in days.
+pub fn weather_days(kind: &WeatherKind, seed: u64, when: f64) -> f64 {
+    let hours = kind.hours.0 + (kind.hours.1 - kind.hours.0) * hash(seed ^ 0xAB, (when * 24.0) as u64);
+    hours as f64 / 24.0
 }
 
 fn change_weather(
@@ -222,46 +291,69 @@ fn change_weather(
 ) {
     let now = clock.total_days();
     let seed = generator.map(|g| g.0.seed()).unwrap_or(1);
-    let mut next = None;
+    let dt = time.delta_secs();
+    state.blend = (state.blend + dt / BLEND_SECONDS).min(1.0);
+    state.cloud_blend = (state.cloud_blend + dt / BLEND_SECONDS).min(1.0);
+
+    // Start `n` now, and pick what follows it and when.
+    let begin = |state: &mut WeatherState, n: usize, clouds_at_once: bool| {
+        if n != state.current {
+            info!("weather: {} -> {}", kinds.list[state.current].name, kinds.list[n].name);
+            state.previous = state.current;
+            state.blend = 0.0;
+            if clouds_at_once {
+                state.cloud_previous = state.current;
+                state.cloud_blend = 0.0;
+            } else {
+                state.cloud_previous = n;
+                state.cloud_blend = 1.0;
+            }
+            state.current = n;
+        }
+        let until = now + weather_days(&kinds.list[n], seed, now);
+        let later = WorldClock { day: until as u32, time: until.fract() as f32, speed: 1.0 };
+        let season = &seasons.list[seasons.at(&later).current];
+        state.since = now;
+        state.until = Some(until);
+        state.next = Some(pick_weather(&kinds, season, seed, until, n));
+    };
+
     if keys.just_pressed(KeyCode::F4) {
-        next = Some((state.current + 1) % kinds.list.len());
         state.forced = false;
-    } else if !state.forced && state.until.is_none_or(|u| now >= u) {
-        let season = &seasons.list[seasons.at(&clock).current];
-        let (pick, until) = roll_weather(&kinds, season, seed, now);
-        // The very first roll keeps the starting weather and only sets how long it lasts.
-        if state.until.is_some() {
-            next = pick;
-            state.until = Some(until);
-        } else {
-            let k = &kinds.list[state.current];
-            let slot = (now * 24.0) as u64;
-            state.until = Some(now + (k.hours.0 + (k.hours.1 - k.hours.0) * hash(seed ^ 0xAB, slot)) as f64 / 24.0);
+        let n = (state.current + 1) % kinds.list.len();
+        begin(&mut state, n, true);
+    } else if state.forced {
+        state.until = None;
+        state.next = None;
+    } else {
+        match (state.until, state.next) {
+            // The very first weather keeps the starting kind.
+            (None, _) | (_, None) => {
+                let n = state.current;
+                begin(&mut state, n, false);
+            }
+            (Some(u), Some(n)) if now >= u => begin(&mut state, n, false),
+            // The clock was set back (a loaded save): start over from here.
+            _ if now < state.since => {
+                let n = state.current;
+                begin(&mut state, n, false);
+            }
+            _ => {}
         }
     }
-    if let Some(n) = next
-        && n != state.current
-    {
-        info!("weather: {} -> {}", kinds.list[state.current].name, kinds.list[n].name);
-        state.previous = state.current;
-        state.current = n;
-        state.blend = 0.0;
-    }
-    state.blend = (state.blend + time.delta_secs() / BLEND_SECONDS).min(1.0);
 }
 
 fn blend_conditions(
+    clock: Res<WorldClock>,
     state: Res<WeatherState>,
     kinds: Res<WeatherKinds>,
     climate: Res<LocalClimate>,
     mut c: ResMut<Conditions>,
 ) {
     let (a, b) = (&kinds.list[state.previous], &kinds.list[state.current]);
-    let t = state.blend * state.blend * (3.0 - 2.0 * state.blend);
+    let t = smooth(state.blend);
     let mix = |x: f32, y: f32| x + (y - x) * t;
-    c.clouds = mix(a.clouds, b.clouds);
-    c.cloud_shade = mix(a.cloud_shade, b.cloud_shade);
-    // Blend visibility in log space so mist rolls in gradually.
+    // Visibility blends in log space so mist rolls in gradually.
     c.visibility = (mix(a.visibility.ln(), b.visibility.ln())).exp();
     c.light = mix(a.light, b.light);
     c.precipitation = mix(a.precipitation, b.precipitation);
@@ -270,6 +362,21 @@ fn blend_conditions(
     c.air = mix(a.air, b.air);
     c.lightning = b.lightning && state.blend > 0.5;
     c.snowing = climate.temperature < 0.0;
+
+    // Clouds: steady while a weather lasts, turning to the next one's just before it comes.
+    let from = &kinds.list[state.cloud_previous];
+    let ct = smooth(state.cloud_blend);
+    let here = (from.clouds + (b.clouds - from.clouds) * ct, from.cloud_shade + (b.cloud_shade - from.cloud_shade) * ct);
+    let (clouds, shade) = match state.next {
+        Some(n) => {
+            let l = state.cloud_lead(clock.total_days());
+            let to = &kinds.list[n];
+            (here.0 + (to.clouds - here.0) * l, here.1 + (to.cloud_shade - here.1) * l)
+        }
+        None => here,
+    };
+    c.clouds = clouds;
+    c.cloud_shade = shade;
 }
 
 fn lightning(time: Res<Time>, mut c: ResMut<Conditions>, mut next: Local<f32>, mut t: Local<f32>) {
@@ -315,12 +422,15 @@ mod tests {
         let seasons = Seasons::from_ron(include_str!("../../../assets/data/seasons.ron")).unwrap();
         let mut seen: Vec<std::collections::BTreeSet<String>> = vec![Default::default(); seasons.list.len()];
         let mut now = 0.0f64;
+        let mut current = 0;
         while now < 40.0 {
             let clock = WorldClock { day: now as u32, time: now.fract() as f32, speed: 1.0 };
             let s = seasons.at(&clock).current;
-            let (pick, until) = roll_weather(&kinds, &seasons.list[s], 7, now);
-            seen[s].insert(kinds.list[pick.unwrap()].name.clone());
-            now = until;
+            let next = pick_weather(&kinds, &seasons.list[s], 7, now, current);
+            assert_ne!(next, current, "the weather changes when it changes");
+            current = next;
+            seen[s].insert(kinds.list[current].name.clone());
+            now += weather_days(&kinds.list[current], 7, now);
         }
         for (i, s) in seen.iter().enumerate() {
             assert!(s.len() >= 3, "{}: {:?}", seasons.list[i].name, s);
@@ -330,6 +440,25 @@ mod tests {
         assert!(!season("winter").contains("storm"));
         assert!(!season("summer").contains("cold_snap") && !season("spring").contains("cold_snap"));
         assert!(!season("summer").contains("gale") && !season("winter").contains("gale"));
+    }
+
+    #[test]
+    fn clouds_turn_only_in_the_last_half_minute() {
+        assert_eq!(cloud_lead(None), 0.0);
+        assert_eq!(cloud_lead(Some(600.0)), 0.0);
+        assert_eq!(cloud_lead(Some(CLOUD_LEAD_SECONDS)), 0.0);
+        let mid = cloud_lead(Some(CLOUD_LEAD_SECONDS / 2.0));
+        assert!((mid - 0.5).abs() < 1e-5);
+        assert_eq!(cloud_lead(Some(0.0)), 1.0);
+    }
+
+    #[test]
+    fn weathers_last_long_enough_for_the_clouds_to_turn() {
+        let kinds = WeatherKinds::from_ron(include_str!("../../../assets/data/weather.ron")).unwrap();
+        for k in &kinds.list {
+            let shortest = k.hours.0 / 24.0 * DAY_SECONDS;
+            assert!(shortest >= CLOUD_LEAD_SECONDS * 3.0, "{} can last only {shortest} s", k.name);
+        }
     }
 
     #[test]
