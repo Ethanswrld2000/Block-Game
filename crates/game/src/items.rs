@@ -31,14 +31,9 @@ struct ItemSpec {
     size: (u8, u8),
     #[serde(default)]
     stack: Option<u16>,
-    /// Icon colour for items without a block texture.
-    #[serde(default)]
-    color: Option<(f32, f32, f32)>,
     /// Damage dealt when you hit a creature with it.
     #[serde(default)]
     damage: Option<f32>,
-    #[serde(default)]
-    model: Vec<ModelBox>,
 }
 
 fn default_mass() -> f32 {
@@ -96,7 +91,7 @@ impl WearSlot {
     }
 }
 
-/// One box of a held item's model, in hand space (metres, -Z points away).
+/// One box of a creature's model (see creatures.ron).
 #[derive(Deserialize, Debug, Clone, Copy)]
 pub struct ModelBox {
     pub size: (f32, f32, f32),
@@ -130,10 +125,8 @@ pub struct Item {
     pub size: (u8, u8),
     /// How many fit in one stack.
     pub stack: u16,
-    pub color: Color,
     /// Damage when you hit a creature with it.
     pub damage: f32,
-    pub model: Vec<ModelBox>,
 }
 
 /// Damage of a bare-handed blow.
@@ -192,16 +185,11 @@ impl Items {
                 ItemKind::Material => 32,
                 _ => 1,
             });
-            let color = s
-                .color
-                .or_else(|| s.model.last().map(|m| m.color))
-                .map(|(r, g, b)| Color::srgb(r, g, b))
-                .unwrap_or(Color::srgb(0.5, 0.5, 0.5));
             let damage = s.damage.unwrap_or(match kind {
                 ItemKind::Tool { .. } => 4.0,
                 _ => FIST_DAMAGE,
             });
-            list.push(Item { name: s.name, title: s.title, kind, mass: s.mass, size: s.size, stack: stack.max(1), color, damage, model: s.model });
+            list.push(Item { name: s.name, title: s.title, kind, mass: s.mass, size: s.size, stack: stack.max(1), damage });
         }
         Ok(Self { hand: spec.hand, list })
     }
