@@ -43,6 +43,9 @@ pub struct CreatureBox {
     /// Pin this box's net at a pixel in the skin instead of packing it.
     #[serde(default)]
     pub uv: Option<(u32, u32)>,
+    /// Glows by itself (a firefly's tail): drawn unlit and bright.
+    #[serde(default)]
+    pub glow: bool,
 }
 
 /// The six faces, in the order of [`Net::faces`].
@@ -200,7 +203,7 @@ mod tests {
     use super::*;
 
     fn b(size: (f32, f32, f32)) -> CreatureBox {
-        CreatureBox { size, offset: (0.0, 0.0, 0.0), color: (1.0, 1.0, 1.0), name: String::new(), uv: None }
+        CreatureBox { size, offset: (0.0, 0.0, 0.0), color: (1.0, 1.0, 1.0), name: String::new(), uv: None, glow: false }
     }
 
     fn sub(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {

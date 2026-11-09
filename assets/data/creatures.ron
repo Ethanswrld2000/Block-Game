@@ -12,6 +12,15 @@
 //   skin:    a PNG in assets/textures/creatures/ painted onto the model (skins: [...] picks one
 //            at random per creature). `cargo run --bin creature_skins` writes a starter PNG and a
 //            guide for any listed skin that doesn't exist yet. Without a skin the boxes use `color`.
+//   critter: small ambient life (needs temper: Critter), moved by game::creatures::critters:
+//            motion: Bird (circles in flocks, lands, hops, calls), Hopper (sits and hops),
+//            Drifter (hovers and drifts); count: most around you; ring: (min, max) spawn
+//            distance; calls: sound names, call_every: (min, max) s, hearing: blocks;
+//            height: flying/hovering height over the ground; hop: (along, up) speed;
+//            rest: (min, max) s perched/sitting/hovering; shy: startles this close;
+//            near_water, min_temp (local climate, -1..1), fair_weather, to_light (moths)
+//            Boxes named wing_* flap (they swing at the edge nearest the body);
+//            boxes with glow: true shine and blink (fireflies).
 //   model:   boxes: name (for animation later), size, offset, color (flat colour / starter fill),
 //            uv: (x, y) to pin the box's patch in the skin (otherwise packed in list order:
 //            add new boxes at the end so painted ones don't move)
@@ -77,7 +86,8 @@
             (name: "wisp",            size: (0.4, 0.5, 0.3), offset: (0.0, 0.25, 0.05), color: (0.55, 0.8, 1.0)),
         ],
         attack: Some((damage: 4.0, cause: Chill, reach: 1.8, every: 2.5)),
-        spawn: Some((biomes: [], when: Night, at: Surface, group: (1, 1), weight: 2.5)),
+        // Weight 0: spirits are off for now (Ethan, Nov 2026). Put it back to 2.5 to bring them back.
+        spawn: Some((biomes: [], when: Night, at: Surface, group: (1, 1), weight: 0.0)),
         drops: [("spirit_ember", 1, 0.7)],
         glow: Some((0.55, 0.85, 1.0)),
     ),
@@ -110,5 +120,119 @@
             (name: "leg_left",        size: (0.18, 0.7, 0.2), offset: (-0.13, 0.35, 0.0), color: (0.4, 0.33, 0.24)),
         ],
         drops: [],
+    ),
+    // ---- Critters: ambience. Small, harmless, can't be hit. ----
+    (
+        name: "marsh_finch", title: "Marsh Finch", temper: Critter, health: 1.0, speed: 6.0, run: 9.0,
+        size: (0.3, 0.3),
+        skin: "marsh_finch",
+        model: [
+            (name: "body",            size: (0.18, 0.16, 0.3), offset: (0.0, 0.12, 0.0), color: (0.45, 0.36, 0.24)),
+            (name: "head",            size: (0.14, 0.14, 0.14), offset: (0.0, 0.25, -0.16), color: (0.36, 0.3, 0.2)),
+            (name: "beak",            size: (0.04, 0.04, 0.07), offset: (0.0, 0.23, -0.26), color: (0.85, 0.65, 0.25)),
+            (name: "tail",            size: (0.1, 0.03, 0.14), offset: (0.0, 0.16, 0.21), color: (0.3, 0.24, 0.16)),
+            (name: "wing_right",      size: (0.24, 0.03, 0.16), offset: (0.21, 0.17, 0.0), color: (0.38, 0.3, 0.2)),
+            (name: "wing_left",       size: (0.24, 0.03, 0.16), offset: (-0.21, 0.17, 0.0), color: (0.38, 0.3, 0.2)),
+            (name: "breast",          size: (0.12, 0.08, 0.04), offset: (0.0, 0.12, -0.16), color: (0.85, 0.55, 0.3)),
+        ],
+        spawn: Some((biomes: ["great_swamp", "mossy_woods", "meadow", "pine_hills", "shore"], when: Day, at: Surface, group: (3, 6), weight: 1.0)),
+        drops: [],
+        critter: Some((motion: Bird, count: 12, ring: (20.0, 70.0), calls: ["bird_chirp_0", "bird_chirp_1", "bird_chirp_2"],
+            call_every: (1.5, 5.0), hearing: 40.0, height: (9.0, 20.0), rest: (6.0, 20.0), shy: 7.0, fair_weather: true)),
+    ),
+    (
+        name: "grey_kite", title: "Grey Kite", temper: Critter, health: 1.0, speed: 7.0, run: 11.0,
+        size: (0.6, 0.5),
+        skin: "grey_kite",
+        model: [
+            (name: "body",            size: (0.28, 0.24, 0.6), offset: (0.0, 0.25, 0.0), color: (0.55, 0.55, 0.52)),
+            (name: "head",            size: (0.2, 0.2, 0.22), offset: (0.0, 0.42, -0.32), color: (0.75, 0.74, 0.7)),
+            (name: "beak",            size: (0.06, 0.07, 0.1), offset: (0.0, 0.38, -0.47), color: (0.25, 0.22, 0.18)),
+            (name: "tail",            size: (0.26, 0.04, 0.3), offset: (0.0, 0.28, 0.42), color: (0.4, 0.4, 0.38)),
+            (name: "wing_right",      size: (0.7, 0.04, 0.32), offset: (0.49, 0.32, 0.0), color: (0.45, 0.45, 0.43)),
+            (name: "wing_left",       size: (0.7, 0.04, 0.32), offset: (-0.49, 0.32, 0.0), color: (0.45, 0.45, 0.43)),
+        ],
+        spawn: Some((biomes: [], when: Day, at: Surface, group: (1, 2), weight: 1.0)),
+        drops: [],
+        critter: Some((motion: Bird, count: 3, ring: (40.0, 95.0), calls: ["kite_call"],
+            call_every: (8.0, 22.0), hearing: 90.0, height: (28.0, 45.0), rest: (5.0, 12.0), shy: 12.0, fair_weather: true)),
+    ),
+    (
+        name: "reed_frog", title: "Reed Frog", temper: Critter, health: 1.0, speed: 1.0, run: 2.0,
+        size: (0.3, 0.28),
+        skin: "reed_frog",
+        model: [
+            (name: "body",            size: (0.28, 0.16, 0.3), offset: (0.0, 0.1, 0.02), color: (0.33, 0.5, 0.22)),
+            (name: "head",            size: (0.26, 0.12, 0.14), offset: (0.0, 0.15, -0.18), color: (0.38, 0.55, 0.25)),
+            (name: "eye_right",       size: (0.07, 0.07, 0.07), offset: (0.09, 0.23, -0.2), color: (0.85, 0.75, 0.3)),
+            (name: "eye_left",        size: (0.07, 0.07, 0.07), offset: (-0.09, 0.23, -0.2), color: (0.85, 0.75, 0.3)),
+            (name: "leg_back_right",  size: (0.08, 0.08, 0.22), offset: (0.17, 0.04, 0.08), color: (0.28, 0.42, 0.18)),
+            (name: "leg_back_left",   size: (0.08, 0.08, 0.22), offset: (-0.17, 0.04, 0.08), color: (0.28, 0.42, 0.18)),
+            (name: "leg_front_right", size: (0.05, 0.08, 0.05), offset: (0.11, 0.04, -0.14), color: (0.28, 0.42, 0.18)),
+            (name: "leg_front_left",  size: (0.05, 0.08, 0.05), offset: (-0.11, 0.04, -0.14), color: (0.28, 0.42, 0.18)),
+        ],
+        spawn: Some((biomes: ["great_swamp", "mossy_woods", "meadow", "shore"], when: Any, at: Surface, group: (1, 3), weight: 1.0)),
+        drops: [],
+        critter: Some((motion: Hopper, count: 8, ring: (6.0, 30.0), calls: ["frog_croak_0", "frog_croak_1"],
+            call_every: (3.0, 12.0), hearing: 36.0, hop: (2.8, 6.0), rest: (2.0, 9.0), shy: 3.0, near_water: true, min_temp: 0.05)),
+    ),
+    (
+        name: "dusk_cricket", title: "Dusk Cricket", temper: Critter, health: 1.0, speed: 1.0, run: 2.0,
+        size: (0.14, 0.12),
+        skin: "dusk_cricket",
+        model: [
+            (name: "body",            size: (0.08, 0.07, 0.18), offset: (0.0, 0.06, 0.0), color: (0.22, 0.17, 0.1)),
+            (name: "head",            size: (0.07, 0.07, 0.07), offset: (0.0, 0.07, -0.12), color: (0.18, 0.14, 0.08)),
+            (name: "leg_back_right",  size: (0.03, 0.08, 0.14), offset: (0.06, 0.06, 0.05), color: (0.3, 0.22, 0.12)),
+            (name: "leg_back_left",   size: (0.03, 0.08, 0.14), offset: (-0.06, 0.06, 0.05), color: (0.3, 0.22, 0.12)),
+            (name: "antennae",        size: (0.08, 0.02, 0.12), offset: (0.0, 0.1, -0.2), color: (0.3, 0.22, 0.12)),
+        ],
+        spawn: Some((biomes: ["great_swamp", "mossy_woods", "meadow", "pine_hills", "shore", "dunes"], when: Night, at: Surface, group: (1, 2), weight: 1.0)),
+        drops: [],
+        critter: Some((motion: Hopper, count: 10, ring: (5.0, 26.0), calls: ["cricket_chirp_0", "cricket_chirp_1"],
+            call_every: (1.0, 3.5), hearing: 28.0, hop: (1.4, 4.5), rest: (4.0, 15.0), shy: 2.0, min_temp: 0.1, fair_weather: true)),
+    ),
+    (
+        name: "firefly", title: "Firefly", temper: Critter, health: 1.0, speed: 0.7, run: 2.2,
+        size: (0.1, 0.1),
+        skin: "firefly",
+        model: [
+            (name: "body",            size: (0.05, 0.05, 0.1), offset: (0.0, 0.0, -0.02), color: (0.15, 0.13, 0.1)),
+            (name: "lantern",         size: (0.08, 0.08, 0.08), offset: (0.0, -0.01, 0.06), color: (0.85, 1.0, 0.35), glow: true),
+            (name: "wing_right",      size: (0.08, 0.01, 0.06), offset: (0.065, 0.03, -0.01), color: (0.5, 0.5, 0.45)),
+            (name: "wing_left",       size: (0.08, 0.01, 0.06), offset: (-0.065, 0.03, -0.01), color: (0.5, 0.5, 0.45)),
+        ],
+        spawn: Some((biomes: ["great_swamp", "mossy_woods", "meadow"], when: Night, at: Surface, group: (3, 6), weight: 1.0)),
+        drops: [],
+        critter: Some((motion: Drifter, count: 24, ring: (4.0, 30.0), height: (0.5, 2.5), min_temp: 0.15, fair_weather: true)),
+    ),
+    (
+        name: "lamp_moth", title: "Lamp Moth", temper: Critter, health: 1.0, speed: 1.6, run: 3.2,
+        size: (0.2, 0.1),
+        skin: "lamp_moth",
+        model: [
+            (name: "body",            size: (0.05, 0.05, 0.14), offset: (0.0, 0.0, 0.0), color: (0.6, 0.55, 0.45)),
+            (name: "wing_right",      size: (0.14, 0.01, 0.12), offset: (0.095, 0.02, 0.0), color: (0.85, 0.8, 0.68)),
+            (name: "wing_left",       size: (0.14, 0.01, 0.12), offset: (-0.095, 0.02, 0.0), color: (0.85, 0.8, 0.68)),
+        ],
+        spawn: Some((biomes: [], when: Night, at: Surface, group: (1, 2), weight: 1.0)),
+        drops: [],
+        critter: Some((motion: Drifter, count: 6, ring: (4.0, 24.0), height: (1.0, 4.0), to_light: true, min_temp: 0.1, fair_weather: true)),
+    ),
+    (
+        name: "bog_darter", title: "Bog Darter", temper: Critter, health: 1.0, speed: 4.5, run: 8.0,
+        size: (0.3, 0.1),
+        skin: "bog_darter",
+        model: [
+            (name: "body",            size: (0.04, 0.04, 0.32), offset: (0.0, 0.0, 0.04), color: (0.2, 0.45, 0.6)),
+            (name: "head",            size: (0.07, 0.06, 0.06), offset: (0.0, 0.0, -0.14), color: (0.15, 0.3, 0.35)),
+            (name: "wing_right",      size: (0.22, 0.01, 0.06), offset: (0.13, 0.03, -0.06), color: (0.75, 0.85, 0.9)),
+            (name: "wing_left",       size: (0.22, 0.01, 0.06), offset: (-0.13, 0.03, -0.06), color: (0.75, 0.85, 0.9)),
+            (name: "wing_right_back", size: (0.2, 0.01, 0.05), offset: (0.12, 0.03, 0.02), color: (0.75, 0.85, 0.9)),
+            (name: "wing_left_back",  size: (0.2, 0.01, 0.05), offset: (-0.12, 0.03, 0.02), color: (0.75, 0.85, 0.9)),
+        ],
+        spawn: Some((biomes: ["great_swamp", "shore"], when: Day, at: Surface, group: (1, 3), weight: 1.0)),
+        drops: [],
+        critter: Some((motion: Drifter, count: 6, ring: (5.0, 28.0), height: (0.6, 2.0), rest: (0.4, 2.5), shy: 2.5, near_water: true, min_temp: 0.2, fair_weather: true)),
     ),
 ]

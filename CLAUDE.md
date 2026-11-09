@@ -141,6 +141,14 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   water); temperature meter = felt °C (`Vitals.feels`, follows surroundings over ~30 s). Both always
   shown and shake by stage. `BLOCKGAME_FEELS=-25` / `BLOCKGAME_OXYGEN=50` force them for screenshots.
   The gameplay loop and what to build next: `docs/GAMEPLAY_LOOP.md`.
+- Critters: `game::creatures::critters`. `temper: Critter` kinds in creatures.ron with a `critter: (...)` block
+  (motion Bird/Hopper/Drifter, count, ring, calls, hearing, height, hop, rest, shy, near_water, min_temp,
+  fair_weather, to_light): marsh finches and grey kites circle in flocks, land, hop and call; reed frogs hop
+  and croak near water; dusk crickets, fireflies (`glow: true` boxes blink) and lamp moths (circle lights)
+  at night; bog darters over water by day. Boxes named `wing_*` flap. Not hittable, no drops. Calls are
+  panned (`PlaySound::ambient_at`, camera has a `SpatialListener`) and follow the ambience volume.
+  Critter sounds: `python3 tools/gen_placeholder_sounds.py --only bird_ frog_ ...`. Spirits are off
+  for now (spawn weight 0 in creatures.ron).
 - Next: follow `docs/GAMEPLAY_LOOP.md` "What's next" (shelter first), or ask Ethan.
 
 ## Testing without a screen
