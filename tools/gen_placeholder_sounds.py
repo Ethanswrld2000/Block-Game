@@ -3,9 +3,11 @@
 
 Writes assets/sounds/*.ogg (needs numpy and ffmpeg). Overwrites existing files, so
 replace sounds you've recorded or bought by name instead of rerunning this.
+`--only bird_ frog_` writes just the sounds whose names start with those prefixes.
 """
 import os
 import subprocess
+import sys
 import tempfile
 import wave
 
@@ -14,6 +16,7 @@ import numpy as np
 RATE = 44100
 OUT = os.path.join(os.path.dirname(__file__), "..", "assets", "sounds")
 rng = np.random.default_rng(7)
+ONLY = sys.argv[sys.argv.index("--only") + 1:] if "--only" in sys.argv else []
 
 
 def t(seconds):
@@ -50,6 +53,8 @@ def norm(x, peak=0.8):
 
 
 def save(name, x, loop=False):
+    if ONLY and not any(name.startswith(p) for p in ONLY):
+        return
     x = norm(x, 0.7 if loop else 0.85)
     if loop:
         # Crossfade the ends so the loop has no click.
@@ -125,6 +130,51 @@ def main():
     # Thunder: a crack and a long rumble.
     n = noise(4.0)
     save("thunder", lowpass(n, 0.004) * env(len(n), 0.02, 1.3) * 3 + highpass(n, 0.2) * env(len(n), 0.001, 0.08))
+
+    critters()
+
+
+def sweep(seconds, f0, f1, decay=0.05, attack=0.004):
+    """A quick pitch slide with a soft start: one chirp note."""
+    tt = t(seconds)
+    f = f0 + (f1 - f0) * tt / seconds
+    return np.sin(2 * np.pi * np.cumsum(f) / RATE) * env(len(tt), attack, decay)
+
+
+def sequence(parts, gap):
+    out = []
+    for p in parts:
+        out += [p, np.zeros(int(RATE * gap))]
+    return np.concatenate(out)
+
+
+def critters():
+    # Birds: little runs of high slides, three different songs.
+    save("bird_chirp_0", sequence([sweep(0.07, 3800, 5200), sweep(0.07, 3900, 5400), sweep(0.12, 5000, 3600, 0.08)], 0.04))
+    save("bird_chirp_1", sequence([sweep(0.05, 4400, 3600, 0.03)] * 5, 0.03))
+    save("bird_chirp_2", sequence([sweep(0.15, 3000, 4600, 0.1), sweep(0.2, 4600, 3800, 0.12)], 0.06))
+    # Wings beating on take-off.
+    n = noise(0.45)
+    beats = (np.sin(2 * np.pi * 14 * t(0.45)) > 0.2) * np.exp(-t(0.45) / 0.25)
+    save("bird_flap", lowpass(n, 0.12) * beats)
+    # The kite: a long falling whistle.
+    tt = t(1.1)
+    save("kite_call", sweep(1.1, 2600, 1700, 0.6, 0.05) * (1 + 0.3 * np.sin(2 * np.pi * 7 * tt)))
+    # Frogs: a low buzzy croak (a tone pulsed ~30 times a second), one and two-part.
+    def croak(seconds, f):
+        tt = t(seconds)
+        tone = sum(np.sin(2 * np.pi * f * h * tt) / h for h in (1, 2, 3, 5))
+        pulses = np.clip(np.sin(2 * np.pi * 32 * tt), 0, 1) ** 2
+        return tone * pulses * np.sin(np.pi * tt / seconds) ** 0.5
+    save("frog_croak_0", croak(0.45, 180))
+    save("frog_croak_1", sequence([croak(0.18, 210), croak(0.3, 170)], 0.08))
+    # Crickets: a high tone in quick bursts.
+    def trill(bursts, f):
+        tt = t(0.06)
+        burst = np.sin(2 * np.pi * f * tt) * np.clip(np.sin(2 * np.pi * 50 * tt), 0, 1)
+        return sequence([burst] * bursts, 0.045)
+    save("cricket_chirp_0", trill(3, 4400))
+    save("cricket_chirp_1", trill(4, 4700))
 
 
 if __name__ == "__main__":

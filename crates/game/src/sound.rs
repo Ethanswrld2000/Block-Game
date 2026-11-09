@@ -1,11 +1,11 @@
 //! Sound: footsteps by the ground's material, mining and breaking, fights,
-//! spells and levelling up, and looping wind, rain and levitation
-//! sounds. Which material sounds like what is in `assets/data/sounds.ron`;
+//! spells and levelling up, critters calling (panned to where they are), and
+//! looping wind, rain and levitation sounds. Which material sounds like what is in `assets/data/sounds.ron`;
 //! the files are in `assets/sounds/`.
 
 use std::collections::HashMap;
 
-use bevy::audio::{AudioSinkPlayback, Volume};
+use bevy::audio::{AudioSinkPlayback, SpatialScale, Volume};
 use bevy::prelude::*;
 use serde::Deserialize;
 use voxel::BlockPos;
@@ -68,11 +68,25 @@ pub struct PlaySound {
     pub name: String,
     /// Multiplies the sound's own volume.
     pub gain: f32,
+    /// Where it comes from, for panning between the ears (the caller fades it with distance).
+    pub at: Option<Vec3>,
+    /// Part of the ambience: follows the ambience volume setting too.
+    pub ambient: bool,
 }
 
 impl PlaySound {
     pub fn new(name: impl Into<String>) -> Self {
-        Self { name: name.into(), gain: 1.0 }
+        Self { name: name.into(), gain: 1.0, at: None, ambient: false }
+    }
+
+    pub fn gain(mut self, gain: f32) -> Self {
+        self.gain = gain;
+        self
+    }
+
+    /// An ambient sound from a place in the world.
+    pub fn ambient_at(name: impl Into<String>, at: Vec3, gain: f32) -> Self {
+        Self { name: name.into(), gain, at: Some(at), ambient: true }
     }
 }
 
@@ -85,6 +99,7 @@ fn load_bank(mut commands: Commands, assets: Res<AssetServer>) {
     let mut names: Vec<String> = [
         "break", "place", "swing", "hit", "hurt", "creature_hurt", "spirit", "spell_on", "spell_off", "level_up", "thunder",
         "wind_loop", "rain_loop", "levitate_loop", "dig_soft", "dig_hard", "dig_wood", "dig_plant",
+        "bird_flap",
     ]
     .iter()
     .map(|s| s.to_string())
@@ -94,6 +109,7 @@ fn load_bank(mut commands: Commands, assets: Res<AssetServer>) {
             names.push(format!("step_{kind}_{i}"));
         }
     }
+    // Critter calls named in creatures.ron load the first time they're played.
     let handles = names.into_iter().map(|n| (n.clone(), assets.load(format!("sounds/{n}.ogg")))).collect();
     commands.insert_resource(Bank { handles });
 }
@@ -132,22 +148,39 @@ fn jitter(seed: &mut u64) -> f32 {
     0.9 + (*seed >> 40) as f32 / (1u64 << 24) as f32 * 0.2
 }
 
-fn play(mut commands: Commands, mut msgs: MessageReader<PlaySound>, bank: Option<Res<Bank>>, spec: Res<SoundSpec>, settings: Res<Settings>, mut seed: Local<u64>) {
-    let Some(bank) = bank else { return };
+/// Spatial sounds are only panned: positions are shrunk so far that the built-in
+/// fall-off (1 / distance²) never bites, and callers fade them with distance themselves.
+const PAN_ONLY: SpatialScale = SpatialScale::new(0.001);
+
+#[allow(clippy::too_many_arguments)]
+fn play(
+    mut commands: Commands,
+    mut msgs: MessageReader<PlaySound>,
+    bank: Option<ResMut<Bank>>,
+    server: Res<AssetServer>,
+    spec: Res<SoundSpec>,
+    settings: Res<Settings>,
+    mut seed: Local<u64>,
+) {
+    let Some(mut bank) = bank else { return };
     if *seed == 0 {
         *seed = 0x5EED_50DD;
     }
     for m in msgs.read() {
-        let Some(h) = bank.handles.get(&m.name) else {
-            warn_once!("no sound '{}'", m.name);
-            continue;
-        };
-        let v = spec.volume(&m.name) * m.gain * settings.volume;
+        let mut v = spec.volume(&m.name) * m.gain * settings.volume;
+        if m.ambient {
+            v *= settings.ambience;
+        }
         if v <= 0.001 {
             continue;
         }
+        let h = bank.handles.entry(m.name.clone()).or_insert_with(|| server.load(format!("sounds/{}.ogg", m.name))).clone();
         let speed = jitter(&mut seed);
-        commands.spawn((AudioPlayer(h.clone()), PlaybackSettings::DESPAWN.with_volume(Volume::Linear(v)).with_speed(speed)));
+        let playback = PlaybackSettings::DESPAWN.with_volume(Volume::Linear(v)).with_speed(speed);
+        match m.at {
+            Some(at) => commands.spawn((AudioPlayer(h), playback.with_spatial(true).with_spatial_scale(PAN_ONLY), Transform::from_translation(at))),
+            None => commands.spawn((AudioPlayer(h), playback)),
+        };
     }
 }
 
@@ -177,7 +210,7 @@ fn footsteps(
     let Some(material) = material_at(&world, &blocks, under) else { return };
     *which = (*which + 1 + (step as usize % 2)) % 3;
     let gain = if player.crouching { 0.4 } else if player.sprinting { 1.3 } else { 1.0 };
-    out.write(PlaySound { name: format!("{}_{}", spec.of(&material).step, *which), gain });
+    out.write(PlaySound::new(format!("{}_{}", spec.of(&material).step, *which)).gain(gain));
 }
 
 /// A knock with each blow while mining; a crunch when the block goes.
@@ -219,7 +252,7 @@ fn fights(mut strikes: MessageReader<Strike>, mut hurts: MessageReader<Damage>, 
     }
     for d in hurts.read() {
         if d.amount > 0.5 {
-            out.write(PlaySound { name: "hurt".into(), gain: (d.amount / 15.0).clamp(0.4, 1.2) });
+            out.write(PlaySound::new("hurt").gain((d.amount / 15.0).clamp(0.4, 1.2)));
         }
     }
 }
@@ -273,7 +306,7 @@ fn spirits(
         .map(|(tf, _)| tf.translation.distance(player.pos))
         .fold(f32::MAX, f32::min);
     if nearest < 24.0 {
-        out.write(PlaySound { name: "spirit".into(), gain: 1.0 - nearest / 30.0 });
+        out.write(PlaySound::new("spirit").gain(1.0 - nearest / 30.0));
     }
 }
 

@@ -10,8 +10,12 @@
 //! Spirits drift through walls at night and touch you with cold (Fatigue).
 //! They will not come within a few blocks of a torch, placed or held, and
 //! fade away at dawn.
+//!
+//! Critters (birds, frogs, insects) are creatures too, with `temper: Critter`;
+//! they have their own spawner and movement in `critters`.
 
 pub mod brain;
+pub mod critters;
 pub mod data;
 pub mod skin;
 mod villagers;
@@ -54,7 +58,7 @@ impl Plugin for CreaturesPlugin {
             )
             .add_systems(Update, look_at_creature.run_if(|| std::env::var_os("BLOCKGAME_LOOK").is_some()))
             .add_systems(Update, lineup.run_if(|| std::env::var_os("BLOCKGAME_LINEUP").is_some()))
-            .add_plugins(villagers::VillagersPlugin);
+            .add_plugins((villagers::VillagersPlugin, critters::CrittersPlugin));
     }
 }
 
@@ -128,9 +132,11 @@ impl Creature {
 
 /// One box of a creature's model, with its usual and its hurt material.
 #[derive(Component)]
-struct Part {
+pub(crate) struct Part {
     normal: Handle<StandardMaterial>,
     hurt: Handle<StandardMaterial>,
+    /// Which box of the kind's model this is.
+    pub index: usize,
 }
 
 /// One box ready to spawn: mesh, materials, offset from the creature's feet.
@@ -198,6 +204,7 @@ fn setup(
                         let color = Color::srgb(b.color.0, b.color.1, b.color.2);
                         let mat = match k.glow {
                             Some(g) => ghost(color, None, g),
+                            None if b.glow => StandardMaterial { base_color: color, emissive: LinearRgba::from(color) * 6.0, unlit: true, ..default() },
                             None => StandardMaterial { base_color: color, perceptual_roughness: 0.95, ..default() },
                         };
                         ModelPart { mesh: meshes.add(Cuboid::new(b.size.0, b.size.1, b.size.2)), normal: materials.add(mat), hurt: flat_hurt.clone(), offset: offset(b) }
@@ -214,6 +221,17 @@ fn setup(
                         Some(g) => ghost(Color::WHITE, Some(texture.clone()), g),
                         None => StandardMaterial { base_color_texture: Some(texture.clone()), perceptual_roughness: 0.95, alpha_mode: AlphaMode::Mask(0.5), ..default() },
                     });
+                    // Boxes that glow by themselves: the skin, unlit and bright.
+                    let glow = k.model.iter().any(|b| b.glow).then(|| {
+                        materials.add(StandardMaterial {
+                            base_color_texture: Some(texture.clone()),
+                            emissive_texture: Some(texture.clone()),
+                            emissive: LinearRgba::WHITE * 6.0,
+                            unlit: true,
+                            alpha_mode: AlphaMode::Mask(0.5),
+                            ..default()
+                        })
+                    });
                     // Hit: the same skin, washed red.
                     let hurt = materials.add(StandardMaterial {
                         base_color: Color::srgb(1.0, 0.35, 0.3),
@@ -222,7 +240,17 @@ fn setup(
                         alpha_mode: AlphaMode::Mask(0.5),
                         ..default()
                     });
-                    k.model.iter().zip(&box_meshes).map(|(b, mesh)| ModelPart { mesh: mesh.clone(), normal: normal.clone(), hurt: hurt.clone(), offset: offset(b) }).collect()
+                    k.model
+                        .iter()
+                        .zip(&box_meshes)
+                        .map(|(b, mesh)| {
+                            let normal = match &glow {
+                                Some(g) if b.glow => g.clone(),
+                                _ => normal.clone(),
+                            };
+                            ModelPart { mesh: mesh.clone(), normal, hurt: hurt.clone(), offset: offset(b) }
+                        })
+                        .collect()
                 })
                 .collect()
         })
@@ -274,12 +302,12 @@ pub fn spawn_creature(commands: &mut Commands, kinds: &Kinds, assets: &CreatureA
         // Pick a skin from where it stands, so a group gets a mix.
         let looks = &assets.looks[kind];
         let h = (pos.x.to_bits() ^ pos.z.to_bits().rotate_left(16) ^ yaw.to_bits().rotate_left(8)).wrapping_mul(0x9E37_79B9);
-        for part in &looks[(h >> 16) as usize % looks.len()] {
+        for (index, part) in looks[(h >> 16) as usize % looks.len()].iter().enumerate() {
             p.spawn((
                 Mesh3d(part.mesh.clone()),
                 MeshMaterial3d(part.normal.clone()),
                 Transform::from_translation(part.offset),
-                Part { normal: part.normal.clone(), hurt: part.hurt.clone() },
+                Part { normal: part.normal.clone(), hurt: part.hurt.clone(), index },
                 NotShadowCaster,
             ));
         }
@@ -301,10 +329,10 @@ fn aim(cam: Single<&Transform, With<FlyCamera>>, kinds: Option<Res<Kinds>>, mode
     let reach = if *mode == MoveMode::Fly { crate::interact::FLY_REACH } else { crate::interact::REACH };
     let mut best: Option<(Entity, f32)> = None;
     for (e, tf, c) in &q {
-        if c.fade < 0.5 {
+        let k = kinds.get(c.kind);
+        if c.fade < 0.5 || k.temper == Temper::Critter {
             continue;
         }
-        let k = kinds.get(c.kind);
         let half = Vec3::new(k.half, 0.0, k.half);
         let min = tf.translation - half;
         let max = tf.translation + half + Vec3::Y * k.height;
@@ -343,7 +371,7 @@ fn take_strikes(
         c.on_ground = false;
         match k.temper {
             Temper::Neutral | Temper::Hostile | Temper::Spirit => c.angry = 20.0,
-            Temper::Skittish | Temper::Villager => c.scared = 8.0,
+            Temper::Skittish | Temper::Villager | Temper::Critter => c.scared = 8.0,
         }
         if c.health <= 0.0 {
             let at = tf.translation + Vec3::Y * (k.height * 0.5);
@@ -375,8 +403,9 @@ pub fn ground_near(world: &World, blocks: &Blocks, x: i32, z: i32, from: i32, to
     }).map(|y| y + 1)
 }
 
-/// Light sources a spirit keeps away from: placed torches, a torch in your hand, the Light spell.
-fn lights(torches: &Torches, player: &Player, wielded: &Wielded, items: &Items, spell: bool) -> Vec<Vec3> {
+/// Light sources a spirit keeps away from (and moths flutter round): placed torches,
+/// a torch in your hand, the Light spell.
+pub(crate) fn lights(torches: &Torches, player: &Player, wielded: &Wielded, items: &Items, spell: bool) -> Vec<Vec3> {
     let mut l: Vec<Vec3> = torches.positions().map(|p| Vec3::new(p.x as f32 + 0.5, p.y as f32 + 0.5, p.z as f32 + 0.5)).collect();
     if spell || wielded.0.is_some_and(|i| matches!(items.get(i).kind, ItemKind::Torch)) {
         l.push(player.pos + Vec3::Y);
@@ -417,7 +446,7 @@ fn spawn_around(
             Temper::Skittish | Temper::Neutral => counts[0] += 1,
             Temper::Hostile => counts[1] += 1,
             Temper::Spirit => counts[2] += 1,
-            Temper::Villager => {}
+            Temper::Villager | Temper::Critter => {}
         }
     }
     let lights = lights(&torches, &player, &wielded, &items, spells.light);
@@ -439,7 +468,7 @@ fn spawn_around(
             Temper::Skittish | Temper::Neutral => counts[0] >= MAX_ANIMALS,
             Temper::Hostile => counts[1] >= MAX_HUNTERS,
             Temper::Spirit => counts[2] >= MAX_SPIRITS,
-            Temper::Villager => true,
+            Temper::Villager | Temper::Critter => true,
         };
         let list: Vec<(usize, f32)> = kinds.candidates(biome, night).into_iter().filter(|(i, _)| !full(kinds.get(*i).temper)).collect();
         let Some(kind) = data::pick(&list, rng.unit()) else { continue };
@@ -461,7 +490,7 @@ fn spawn_around(
             Temper::Skittish | Temper::Neutral => counts[0] += n as usize,
             Temper::Hostile => counts[1] += n as usize,
             Temper::Spirit => counts[2] += n as usize,
-            Temper::Villager => {}
+            Temper::Villager | Temper::Critter => {}
         }
     }
 }
@@ -508,7 +537,7 @@ fn spawn_wights(
     }
 }
 
-fn flat(v: Vec3) -> Vec3 {
+pub(crate) fn flat(v: Vec3) -> Vec3 {
     Vec3::new(v.x, 0.0, v.z)
 }
 
@@ -536,7 +565,7 @@ fn think(
         c.scared = (c.scared - dt).max(0.0);
         c.cooldown = (c.cooldown - dt).max(0.0);
         c.think -= dt;
-        if k.temper == Temper::Spirit {
+        if matches!(k.temper, Temper::Spirit | Temper::Critter) {
             continue;
         }
         let pos = tf.translation;
@@ -672,20 +701,23 @@ fn spirits(
 }
 
 /// Is a creature's box at `pos` inside anything solid? Unloaded counts as solid.
-fn blocked(world: &World, blocks: &Blocks, pos: Vec3, half: f32, height: f32) -> bool {
+pub(crate) fn blocked(world: &World, blocks: &Blocks, pos: Vec3, half: f32, height: f32) -> bool {
     let min = pos - Vec3::new(half, 0.0, half);
     let max = pos + Vec3::new(half, height, half);
     crate::player::blocks_in(min, max).any(|b| world.block(b).is_none_or(|id| blocks.registry.get(id).solid))
 }
 
-/// Walking physics for everything but spirits: gravity, hops up steps, floating in water.
+/// Walking physics for everything but spirits and flying critters: gravity, hops up steps,
+/// floating in water.
 fn walk(time: Res<Time>, kinds: Option<Res<Kinds>>, world: Res<World>, blocks: Res<Blocks>, mut q: Query<(&mut Transform, &mut Creature, &Visibility)>) {
     let Some(kinds) = kinds else { return };
     let dt = time.delta_secs().min(0.05);
     let water = blocks.registry.id("water");
     for (mut tf, mut c, vis) in &mut q {
         let k = kinds.get(c.kind);
-        if k.temper == Temper::Spirit || *vis == Visibility::Hidden {
+        // Of the critters, only hoppers walk (and swim); fliers move themselves.
+        let flies = k.critter.as_ref().is_some_and(|c| c.motion != data::Motion::Hopper);
+        if k.temper == Temper::Spirit || flies || *vis == Visibility::Hidden {
             continue;
         }
         // Not loaded under it yet: wait.

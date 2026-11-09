@@ -54,6 +54,8 @@ fn spawn_camera(mut commands: Commands) {
             .with_rotation(Quat::from_euler(EulerRot::YXZ, cam.yaw, cam.pitch, 0.0)),
         Projection::Perspective(PerspectiveProjection { near: 0.05, far: crate::sky::SKY_RADIUS * 1.2, ..default() }),
         DistanceFog { color: Color::srgb(0.46, 0.53, 0.47), ..default() },
+        // Ears for panned sounds (critter calls).
+        bevy::audio::SpatialListener::new(0.3),
         cam,
     ));
 }
