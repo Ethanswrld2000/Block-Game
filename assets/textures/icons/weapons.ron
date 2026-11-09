@@ -1,0 +1,12 @@
+// Item name -> (x, y, width, height) of its sprite in weapons.png.
+// 20 pixels per inventory cell. Made by tools/gen_item_art.py; safe to edit by hand
+// (move a sprite in the PNG and change its numbers here).
+(
+    cell: 20,
+    sprites: {
+        "stone_pickaxe": (0, 0, 40, 60),
+        "stone_axe": (42, 0, 20, 60),
+        "stone_shovel": (64, 0, 20, 60),
+        "flint_spear": (86, 0, 20, 80),
+    },
+)

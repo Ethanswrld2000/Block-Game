@@ -4,10 +4,10 @@
 
 use bevy::prelude::*;
 
-use crate::blocks::Blocks;
 use crate::interact::{Hands, Hotbar, Wielded, SLOTS};
 use crate::inventory::grid::Stack;
-use crate::inventory::ui::{icon, IconAtlas};
+use crate::inventory::ui::icon;
+use crate::item_art::ItemArt;
 use crate::inventory::Inventory;
 use crate::items::Items;
 use crate::player::Damage;
@@ -62,8 +62,8 @@ fn spawn_hud(mut commands: Commands, hotbar: Option<Res<Hotbar>>, theme: Res<The
             root.spawn((Node { column_gap: Val::Px(2.0), padding: UiRect::all(Val::Px(6.0)), ..default() }, theme.skin("panel_light"))).with_children(|row| {
                 for i in 0..SLOTS {
                     row.spawn((Slot(i), Node { width: Val::Px(SLOT), height: Val::Px(SLOT), ..default() }, theme.skin("slot"))).with_children(|s| {
-                        // The slot number sits in the top-left corner, the picture below it.
-                        s.spawn((SlotContent(i), Node { width: Val::Percent(100.0), height: Val::Percent(100.0), padding: UiRect::top(Val::Px(12.0)), ..default() }));
+                        // The picture, with the slot number over its top-left corner.
+                        s.spawn((SlotContent(i), Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() }));
                         s.spawn((
                             theme::text(format!("{}", i + 1), sizes::SMALL, colors::MUTED),
                             Node { position_type: PositionType::Absolute, left: Val::Px(5.0), top: Val::Px(2.0), ..default() },
@@ -80,14 +80,13 @@ fn update_hotbar(
     mut commands: Commands,
     theme: Res<Theme>,
     (hands, hotbar, items, inv, wielded): (Res<Hands>, Res<Hotbar>, Res<Items>, Res<Inventory>, Res<Wielded>),
-    blocks: Res<Blocks>,
-    atlas: Option<Res<IconAtlas>>,
+    art: Option<Res<ItemArt>>,
     mut slots: Query<(&Slot, &mut ImageNode)>,
     contents: Query<(Entity, &SlotContent)>,
     mut line: Query<&mut Text, With<HandsLine>>,
     mut ready: Local<bool>,
 ) {
-    let Some(atlas) = atlas else { return };
+    let Some(art) = art else { return };
     if *ready && !(hands.is_changed() || hotbar.is_changed() || inv.is_changed() || wielded.is_changed()) {
         return;
     }
@@ -99,7 +98,7 @@ fn update_hotbar(
         commands.entity(e).with_children(|p| {
             // Dim the picture when you have none left.
             p.spawn(Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() }).with_children(|q| {
-                icon(q, &items, &blocks, &atlas, Stack::new(id, n.clamp(1, u16::MAX as u32) as u16), SLOT, SLOT);
+                icon(q, &items, &art, Stack::new(id, n.clamp(1, u16::MAX as u32) as u16), SLOT, SLOT, false);
             });
             if n == 0 {
                 p.spawn((Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() }, BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6))));

@@ -14,6 +14,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
 | `assets/textures/blocks.png` | 16x16 grid of 32x32 tiles | Placeholder art; Ethan repaints it. Keep tile positions stable. |
 | `assets/textures/blocks.ron` | Tile name -> index | Regenerate with `python3 tools/gen_placeholder_art.py` (overwrites the PNG). |
 | `assets/textures/ui.png` | UI sprite sheet, 2x pixels | Ethan repaints it; `ui.ron` lists each sprite's rect and slice. `tools/gen_ui_art.py` overwrites it. |
+| `assets/textures/icons/` | Item sprites: `items`, `weapons` (tools), `blocks` (.png + .ron) | 20 px per inventory cell; Ethan repaints them. `tools/gen_item_art.py` only adds missing sprites (`--reset <sheet>` redraws). |
 | `assets/fonts/` | Jersey 15 (OFL) | Compiled in; swap the `.ttf` files to change the font. |
 
 ## Commands
@@ -119,6 +120,13 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   the wheel; hotbar shows block pictures. Clouds went back to blocky meshes, now three layers
   (`clouds::LAYERS`: low rain deck y 200, middle y 236, high wisps y 300) whose cover follows
   `Conditions.clouds`. `BLOCKGAME_PAUSE=1` (or `=settings`) opens the pause menu for screenshots.
+- Item sprites: done. `game::item_art` (`ItemArt`: every item's sprite from the three sheets in
+  `assets/textures/icons/`, picked by kind: Tool -> weapons, Block -> blocks, else items; 20 px per
+  cell; `image(id)` for UI, `model(id)` extrudes opaque pixels into a mesh once the PNGs load).
+  `inventory::ui::icon` draws sprites at 2x (turned with `UiTransform` when the item is rotated) in
+  grids, hotbar, worn slots and crafting rows. Held items and dropped non-blocks use the extruded
+  sprite; blocks stay textured cubes. items.ron has no `model`/`color` any more; a test checks every
+  item has a sprite of its size.
 - Next: ask Ethan what comes next.
 
 ## Testing without a screen

@@ -10,6 +10,7 @@ use voxel::BlockPos;
 use super::grid::Stack;
 use super::Inventory;
 use crate::blocks::Blocks;
+use crate::item_art::ItemArt;
 use crate::items::{ItemKind, Items};
 use crate::player::{MoveMode, Player};
 use crate::world::World;
@@ -47,7 +48,9 @@ fn spawn_spills(
     blocks: Res<Blocks>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    art: Option<Res<ItemArt>>,
     mut cube: Local<Option<Handle<Mesh>>>,
+    mut grey: Local<Option<Handle<StandardMaterial>>>,
     mut block_cubes: Local<std::collections::HashMap<voxel::BlockId, Handle<Mesh>>>,
 ) {
     for s in spills.read() {
@@ -59,11 +62,19 @@ fn spawn_spills(
                 let mesh = block_cubes.entry(*b).or_insert_with(|| meshes.add(crate::hands::block_mesh(blocks.registry.get(*b), DROP_SIZE))).clone();
                 e.insert((Mesh3d(mesh), MeshMaterial3d(voxel_mat.clone())));
             }
-            _ => {
-                let mesh = cube.get_or_insert_with(|| meshes.add(Cuboid::new(DROP_SIZE, DROP_SIZE, DROP_SIZE))).clone();
-                let mat = materials.add(StandardMaterial { base_color: item.color, perceptual_roughness: 0.9, ..default() });
-                e.insert((Mesh3d(mesh), MeshMaterial3d(mat)));
-            }
+            // Anything else is its sprite, made solid, standing up.
+            _ => match (art.as_ref().and_then(|a| a.model(s.stack.item)), art.as_ref().and_then(|a| a.size(s.stack.item))) {
+                (Some((mesh, mat)), Some(size)) => {
+                    let k = (DROP_SIZE * 1.6 / size.max_element() as f32).min(0.016);
+                    e.with_child((Mesh3d(mesh), MeshMaterial3d(mat), Transform::from_scale(Vec3::splat(k)), NotShadowCaster));
+                    e.insert(Visibility::default());
+                }
+                _ => {
+                    let mesh = cube.get_or_insert_with(|| meshes.add(Cuboid::new(DROP_SIZE, DROP_SIZE, DROP_SIZE))).clone();
+                    let mat = grey.get_or_insert_with(|| materials.add(Color::srgb(0.5, 0.45, 0.38))).clone();
+                    e.insert((Mesh3d(mesh), MeshMaterial3d(mat)));
+                }
+            },
         }
     }
 }
