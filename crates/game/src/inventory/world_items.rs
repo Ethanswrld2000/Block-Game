@@ -39,6 +39,7 @@ struct WorldItem {
     age: f32,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_spills(
     mut commands: Commands,
     mut spills: MessageReader<Spill>,
@@ -47,28 +48,28 @@ fn spawn_spills(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut cube: Local<Option<Handle<Mesh>>>,
+    mut block_cubes: Local<std::collections::HashMap<voxel::BlockId, Handle<Mesh>>>,
 ) {
     for s in spills.read() {
-        let mesh = cube.get_or_insert_with(|| meshes.add(Cuboid::new(0.28, 0.28, 0.28))).clone();
         let item = items.get(s.stack.item);
-        // Block items take the colour of their block's texture.
-        let color = match (&item.kind, &blocks.tile_colors) {
-            (ItemKind::Block(b), Some(tc)) => {
-                let c = tc[blocks.registry.get(*b).textures[2] as usize];
-                Color::linear_rgb(c.x, c.y, c.z)
+        let mut e = commands.spawn((WorldItem { stack: s.stack, vel: 0.0, age: 0.0 }, Transform::from_translation(s.at), NotShadowCaster));
+        match (&item.kind, &blocks.material) {
+            // A block looks like a small copy of itself, every face textured.
+            (ItemKind::Block(b), Some(voxel_mat)) => {
+                let mesh = block_cubes.entry(*b).or_insert_with(|| meshes.add(crate::hands::block_mesh(blocks.registry.get(*b), DROP_SIZE))).clone();
+                e.insert((Mesh3d(mesh), MeshMaterial3d(voxel_mat.clone())));
             }
-            _ => item.color,
-        };
-        let mat = materials.add(StandardMaterial { base_color: color, perceptual_roughness: 0.9, ..default() });
-        commands.spawn((
-            WorldItem { stack: s.stack, vel: 0.0, age: 0.0 },
-            Mesh3d(mesh),
-            MeshMaterial3d(mat),
-            Transform::from_translation(s.at),
-            NotShadowCaster,
-        ));
+            _ => {
+                let mesh = cube.get_or_insert_with(|| meshes.add(Cuboid::new(DROP_SIZE, DROP_SIZE, DROP_SIZE))).clone();
+                let mat = materials.add(StandardMaterial { base_color: item.color, perceptual_roughness: 0.9, ..default() });
+                e.insert((Mesh3d(mesh), MeshMaterial3d(mat)));
+            }
+        }
     }
 }
+
+/// Edge of a dropped item's cube, in blocks.
+const DROP_SIZE: f32 = 0.28;
 
 fn fall_and_spin(
     mut commands: Commands,
