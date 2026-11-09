@@ -141,6 +141,12 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   water); temperature meter = felt °C (`Vitals.feels`, follows surroundings over ~30 s). Both always
   shown and shake by stage. `BLOCKGAME_FEELS=-25` / `BLOCKGAME_OXYGEN=50` force them for screenshots.
   The gameplay loop and what to build next: `docs/GAMEPLAY_LOOP.md`.
+- Weather timing: each weather picks the next one when it starts (`WeatherState.next/until`);
+  clouds change only in the last 30 s before a change (`weather::CLOUD_LEAD_SECONDS`), the rest
+  blends in after. `game::weather_hud` shows weather, next and countdown in `hud::TopRight` (a
+  column at the top right; spawn panels there with `ChildOf`). Low and middle cloud layers are
+  opaque (blended ones flickered by view angle) and thin out at their edge. Table: `docs/WEATHER.md`
+  and `docs/weather.csv` (update when weather.ron or seasons.ron change).
 - Next: follow `docs/GAMEPLAY_LOOP.md` "What's next" (shelter first), or ask Ethan.
 
 ## Testing without a screen
