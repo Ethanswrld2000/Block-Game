@@ -140,6 +140,8 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   (`Vitals.air`; `Vitals.oxygen` is what the body gets after skills or a held breath, `breath` under
   water); temperature meter = felt °C (`Vitals.feels`, follows surroundings over ~30 s). Both always
   shown and shake by stage. `BLOCKGAME_FEELS=-25` / `BLOCKGAME_OXYGEN=50` force them for screenshots.
+  `Survival.temperature` lists every part of the felt temperature (biome, season, height, sun,
+  weather, wet, torches, clothes, skills, spell); the HUD shows it top right (F6 toggles).
   The gameplay loop and what to build next: `docs/GAMEPLAY_LOOP.md`.
 - Next: follow `docs/GAMEPLAY_LOOP.md` "What's next" (shelter first), or ask Ethan.
 

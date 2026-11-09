@@ -17,7 +17,7 @@ pub struct SurvivalHudPlugin;
 
 impl Plugin for SurvivalHudPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn).add_systems(Update, (update_bars, update_meters, shake, toasts, overlays).after(super::SurvivalSet));
+        app.add_systems(Startup, spawn).add_systems(Update, (update_bars, update_meters, shake, temperature_list, toasts, overlays).after(super::SurvivalSet));
     }
 }
 
@@ -68,6 +68,26 @@ enum Gauge {
     Air,
     Load,
 }
+
+/// The temperature breakdown, top right (F6 shows and hides it).
+#[derive(Component)]
+struct TempPanel;
+
+#[derive(Component)]
+struct TempHeader;
+
+/// One line of the breakdown: its slot, and whether it's the label or the value.
+#[derive(Component)]
+struct TempLine(usize);
+
+#[derive(Component)]
+struct TempLabel(usize);
+
+#[derive(Component)]
+struct TempValue(usize);
+
+/// Lines kept ready for the breakdown.
+const TEMP_LINES: usize = 14;
 
 #[derive(Component)]
 struct ToastText;
@@ -286,6 +306,33 @@ fn spawn(mut commands: Commands, theme: Res<Theme>, rules: Res<Exposure>) {
             });
         });
 
+    // What's making you warm or cold, each with its share.
+    commands
+        .spawn((
+            TempPanel,
+            Node {
+                position_type: PositionType::Absolute,
+                right: Val::Px(14.0),
+                top: Val::Px(14.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(2.0),
+                padding: UiRect::axes(Val::Px(12.0), Val::Px(10.0)),
+                min_width: Val::Px(250.0),
+                ..default()
+            },
+            hud_panel(theme),
+        ))
+        .with_children(|col| {
+            col.spawn((TempHeader, text("", sizes::SMALL, colors::TEXT)));
+            for i in 0..TEMP_LINES {
+                col.spawn((TempLine(i), Node { justify_content: JustifyContent::SpaceBetween, column_gap: Val::Px(16.0), display: Display::None, ..default() })).with_children(|row| {
+                    row.spawn((TempLabel(i), text("", sizes::SMALL, colors::MUTED)));
+                    row.spawn((TempValue(i), text("", sizes::SMALL, colors::TEXT)));
+                });
+            }
+            col.spawn(text("F6 hides this", sizes::SMALL, colors::MUTED));
+        });
+
     commands
         .spawn(Node {
             position_type: PositionType::Absolute,
@@ -447,6 +494,71 @@ fn shake(time: Res<Time>, s: Res<Survival>, rules: Res<Exposure>, mut rows: Quer
         if node.left != l || node.top != tp {
             node.left = l;
             node.top = tp;
+        }
+    }
+}
+
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
+fn temperature_list(
+    keys: Res<ButtonInput<KeyCode>>,
+    s: Res<Survival>,
+    mut shown: Local<Option<bool>>,
+    mut panel: Query<&mut Node, (With<TempPanel>, Without<TempLine>)>,
+    mut lines: Query<(&TempLine, &mut Node), Without<TempPanel>>,
+    mut header: Query<&mut Text, (With<TempHeader>, Without<TempLabel>, Without<TempValue>)>,
+    mut labels: Query<(&TempLabel, &mut Text), (Without<TempHeader>, Without<TempValue>)>,
+    mut values: Query<(&TempValue, &mut Text, &mut TextColor), (Without<TempHeader>, Without<TempLabel>)>,
+) {
+    let on = shown.get_or_insert(true);
+    if keys.just_pressed(KeyCode::F6) {
+        *on = !*on;
+    }
+    let d = if *on { Display::Flex } else { Display::None };
+    if let Ok(mut n) = panel.single_mut()
+        && n.display != d
+    {
+        n.display = d;
+    }
+    if !*on {
+        return;
+    }
+    // Hide what adds nothing, except the biome (always the first line).
+    let parts: Vec<&(String, f32)> = s.temperature.iter().enumerate().filter(|(i, p)| *i == 0 || p.1.abs() >= 0.05).map(|(_, p)| p).collect();
+    if let Ok(mut t) = header.single_mut() {
+        let h = format!("Surroundings {:.1}°C, you feel {:.1}°C", s.env.feels, s.vitals.feels);
+        if t.0 != h {
+            t.0 = h;
+        }
+    }
+    for (l, mut node) in &mut lines {
+        let d = if l.0 < parts.len() { Display::Flex } else { Display::None };
+        if node.display != d {
+            node.display = d;
+        }
+    }
+    for (l, mut t) in &mut labels {
+        if let Some(p) = parts.get(l.0)
+            && t.0 != p.0
+        {
+            t.0 = p.0.clone();
+        }
+    }
+    for (v, mut t, mut c) in &mut values {
+        if let Some(p) = parts.get(v.0) {
+            let x = format!("{:+.1}°C", p.1);
+            if t.0 != x {
+                t.0 = x;
+            }
+            let col = if p.1 > 0.05 {
+                Color::srgb(1.0, 0.72, 0.45)
+            } else if p.1 < -0.05 {
+                Color::srgb(0.6, 0.78, 1.0)
+            } else {
+                colors::TEXT
+            };
+            if c.0 != col {
+                c.0 = col;
+            }
         }
     }
 }

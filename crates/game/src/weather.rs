@@ -131,19 +131,26 @@ impl Conditions {
 
 /// The climate around the camera: biome fog colour and haze, temperature with
 /// the season applied. Eased so walking between biomes fades smoothly.
-#[derive(Resource, Debug, Clone, Copy)]
+#[derive(Resource, Debug, Clone)]
 pub struct LocalClimate {
     pub fog: Vec3,
     pub haze: f32,
     pub temperature: f32,
-    target: (Vec3, f32, f32),
+    /// What `temperature` is made of (eased the same way): the biome (or the
+    /// column's own climate, if colder), the season, and height above the ground.
+    pub biome: f32,
+    pub season: f32,
+    pub altitude: f32,
+    /// The biome here, for the temperature breakdown.
+    pub biome_title: String,
+    target: (Vec3, f32, [f32; 3]),
     timer: f32,
 }
 
 impl Default for LocalClimate {
     fn default() -> Self {
         let fog = Vec3::new(0.46, 0.53, 0.47);
-        Self { fog, haze: 0.4, temperature: 0.4, target: (fog, 0.4, 0.4), timer: 0.0 }
+        Self { fog, haze: 0.4, temperature: 0.4, biome: 0.4, season: 0.0, altitude: 0.0, biome_title: String::new(), target: (fog, 0.4, [0.4, 0.0, 0.0]), timer: 0.0 }
     }
 }
 
@@ -167,14 +174,19 @@ fn sample_climate(
         let season = seasons.blended(seasons.at(&clock), |s| s.temperature);
         // Colder with height above the ground too (sky islands, mountain air).
         let altitude = ((p.y - col.height.max(0)) as f32 / 400.0).max(0.0);
-        let temperature = biome.temperature.min(col.climate.temperature) + season - altitude;
-        climate.target = (Vec3::from(biome.fog), biome.haze, temperature);
+        climate.target = (Vec3::from(biome.fog), biome.haze, [biome.temperature.min(col.climate.temperature), season, -altitude]);
+        if climate.biome_title != biome.title {
+            climate.biome_title = biome.title.clone();
+        }
     }
     let k = 1.0 - (-dt / 3.0).exp();
-    let (fog, haze, temp) = climate.target;
+    let (fog, haze, [b, season, altitude]) = climate.target;
     climate.fog = climate.fog.lerp(fog, k);
     climate.haze += (haze - climate.haze) * k;
-    climate.temperature += (temp - climate.temperature) * k;
+    climate.biome += (b - climate.biome) * k;
+    climate.season += (season - climate.season) * k;
+    climate.altitude += (altitude - climate.altitude) * k;
+    climate.temperature = climate.biome + climate.season + climate.altitude;
 }
 
 /// Small deterministic random numbers, so a world's weather repeats.
