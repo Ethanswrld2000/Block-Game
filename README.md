@@ -32,7 +32,8 @@ Tools in Software Update, or put
   (while levitating, Space rises and Ctrl/C sinks)
 - Test keys: F7 is a stab, F8 a club blow, F9 gives you one of everything
 - `-` / `=` change the view distance; hold T to fast-forward time; F4 changes the weather
-- F3 toggles the debug overlay
+- F3 toggles the debug overlay; F6 shows or hides the temperature breakdown (top right: everything
+  warming or cooling you, each with its °C)
 
 Tools mine their own materials faster: the pickaxe for stone and ore, the axe for wood and
 leaves, the shovel for soil.
