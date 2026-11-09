@@ -55,7 +55,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `game::sky` (sun/moon light, ambient, fog, sky dome `assets/shaders/sky.wesl`, season tint of
   foliage via the voxel material's `season` uniform and UV_1.y), `game::clouds` (blocky, y 236; three layers since phase 10),
   `game::precipitation` (rain/snow pool), `game::lod` (distant terrain and islands as coloured
-  columns out to 1500 blocks; `assets/shaders/lod.wesl` cuts it away inside the loaded area).
+  columns out to 1500 blocks; `assets/shaders/lod.wesl` cuts it away only where a real chunk is drawn, from a per-chunk mask `World::drawn_mask`).
   Stars turn around the sun's axis; the moon has its own 8-day cycle and phases (`sky::moon_*`).
 - Phase 5 (player): done. `game::player` (`Player` resource: AABB walking, gravity, jump, sprint,
   crouch edge-guard, swimming, head-bob, landing dip, fall `Damage` messages; F toggles `MoveMode`

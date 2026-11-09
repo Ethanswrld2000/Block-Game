@@ -214,7 +214,7 @@ fn update_sky(
     let moon_amount = smoothstep(0.02, 0.18, moon.y);
     let warm = smoothstep(0.0, 0.35, sun.y);
     if let Ok((mut light, mut tf)) = sun_q.single_mut() {
-        let sun_lux = 11_000.0 * sun_amount * weather.light;
+        let sun_lux = 9_500.0 * sun_amount * weather.light;
         let moon_lux = 300.0 * moon_amount * lit * weather.light.sqrt();
         let (dir, lux, color) = if sun_lux >= moon_lux {
             let c = srgb(1.0, 0.62, 0.38).lerp(srgb(1.0, 0.97, 0.92), warm);
@@ -235,7 +235,8 @@ fn update_sky(
     ambient.color = Color::linear_rgb(sky_tint.x.min(1.0), sky_tint.y.min(1.0), sky_tint.z.min(1.0));
     // Brighter nights under a full moon that is up.
     let moonlight = 1.0 + 0.8 * lit * moon_amount;
-    ambient.brightness = (70.0 * moonlight + 560.0 * day) * (0.55 + 0.45 * weather.light) + flash * 2500.0;
+    // Daytime sky light is strong enough that shade stays readable (softer shadows).
+    ambient.brightness = (70.0 * moonlight + 1_050.0 * day) * (0.55 + 0.45 * weather.light) + flash * 2500.0;
 
     // Fog.
     let visibility = (weather.visibility * climate.haze).clamp(30.0, MAX_VISIBILITY);

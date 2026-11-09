@@ -9,6 +9,8 @@ use crate::{TreeKind, WorldGen, SEA_LEVEL};
 
 /// How far a canopy can reach sideways from its trunk.
 const REACH: i32 = 3;
+/// Tallest a tree reaches above its ground block (pine: trunk up to 16, tip 2 more).
+const TALLEST: i32 = 20;
 /// Highest chance any biome uses, for a cheap first filter.
 const MAX_CHANCE: f32 = 0.05;
 
@@ -61,7 +63,7 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) {
             }
             let ground = col.height;
             let min_ground = if biome.trees == TreeKind::Swamp { SEA_LEVEL } else { SEA_LEVEL + 1 };
-            if ground < min_ground || ground + 16 < o.y || ground > o.y + CHUNK_SIZE_I32 {
+            if ground < min_ground || ground + TALLEST < o.y || ground > o.y + CHUNK_SIZE_I32 {
                 continue;
             }
             draw(wg, &mut canvas, biome.trees, tx, ground, tz, h);
@@ -76,7 +78,7 @@ pub(crate) fn draw(wg: &WorldGen, c: &mut Canvas, kind: TreeKind, x: i32, ground
     match kind {
         TreeKind::None => {}
         TreeKind::Swamp => {
-            let top = ground + 6 + var % 4;
+            let top = ground + 9 + var % 5;
             for y in ground + 1..=top {
                 c.put(x, y, z, ids.swamp_log);
             }
@@ -94,31 +96,35 @@ pub(crate) fn draw(wg: &WorldGen, c: &mut Canvas, kind: TreeKind, x: i32, ground
             for (dx, dz) in [(3i32, 0i32), (-3, 0), (0, 3), (0, -3), (2, 2), (-2, -2)] {
                 if (var >> (dx.abs() + dz.abs())) & 1 == 1 {
                     c.fill(x + dx, top - 2, z + dz, ids.swamp_leaves);
+                    // Some strands hang a block further.
+                    if (var >> (dx.abs() + dz.abs() + 6)) & 1 == 1 {
+                        c.fill(x + dx, top - 3, z + dz, ids.swamp_leaves);
+                    }
                 }
             }
         }
         TreeKind::Oak => {
-            let top = ground + 4 + var % 3;
+            let top = ground + 7 + var % 4;
             for y in ground + 1..=top {
                 c.put(x, y, z, ids.log);
             }
-            for dy in -2..=1 {
-                let r = if dy >= 1 || dy == -2 { 1 } else { 2 };
+            for dy in -3..=1 {
+                let r = if dy >= 1 || dy == -3 { 1 } else { 2 };
                 disc(c, x, top + dy, z, r, ids.leaves);
             }
             c.fill(x, top + 2, z, ids.leaves);
         }
         TreeKind::Pine => {
-            let top = ground + 7 + var % 5;
+            let top = ground + 11 + var % 6;
             for y in ground + 1..=top {
                 c.put(x, y, z, ids.log);
             }
             // Layers narrowing towards the tip.
             let mut r = 0;
-            for y in (ground + 3..=top + 1).rev() {
+            for y in (ground + 4..=top + 1).rev() {
                 disc(c, x, y, z, r, ids.leaves);
                 r = if r >= 2 { 1 } else { r + 1 };
-                if y < ground + 5 {
+                if y < ground + 6 {
                     r = r.min(2);
                 }
             }
