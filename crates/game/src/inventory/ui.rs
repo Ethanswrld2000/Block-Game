@@ -515,7 +515,7 @@ pub(crate) fn icon(c: &mut ChildSpawnerCommands, items: &Items, blocks: &Blocks,
             Node { width: Val::Px(side), height: Val::Px(side), margin: UiRect::all(Val::Auto), ..default() },
         ));
     } else {
-        let size = if w < 50.0 { 11.0 } else { sizes::SMALL };
+        let size = if w.min(h) < 100.0 { sizes::TINY } else { sizes::SMALL };
         c.spawn((
             text(item.title.clone(), size, colors::TEXT),
             TextLayout::justify(Justify::Center),
@@ -858,7 +858,7 @@ fn rebuild(
                 ))
                 .with_children(|t| {
                     t.spawn((theme.bold(sizes::LABEL), Text::new(title), TextColor(colors::HEADING)));
-                    t.spawn(text(body, sizes::SMALL + 1.0, colors::TEXT));
+                    t.spawn(text(body, sizes::SMALL, colors::TEXT));
                 });
             }
             // The held item, following the cursor.

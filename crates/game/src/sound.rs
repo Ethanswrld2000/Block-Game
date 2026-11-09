@@ -1,5 +1,5 @@
 //! Sound: footsteps by the ground's material, mining and breaking, fights,
-//! spells and levelling up, and looping wind, rain, night and levitation
+//! spells and levelling up, and looping wind, rain and levitation
 //! sounds. Which material sounds like what is in `assets/data/sounds.ron`;
 //! the files are in `assets/sounds/`.
 
@@ -11,7 +11,6 @@ use serde::Deserialize;
 use voxel::BlockPos;
 
 use crate::blocks::Blocks;
-use crate::clock::WorldClock;
 use crate::creatures::Creature;
 use crate::interact::{Mined, Mining, Placed, Strike};
 use crate::player::{Damage, MoveMode, Player};
@@ -85,7 +84,7 @@ struct Bank {
 fn load_bank(mut commands: Commands, assets: Res<AssetServer>) {
     let mut names: Vec<String> = [
         "break", "place", "swing", "hit", "hurt", "creature_hurt", "spirit", "spell_on", "spell_off", "level_up", "thunder",
-        "wind_loop", "rain_loop", "levitate_loop", "night_loop", "dig_soft", "dig_hard", "dig_wood", "dig_plant",
+        "wind_loop", "rain_loop", "levitate_loop", "dig_soft", "dig_hard", "dig_wood", "dig_plant",
     ]
     .iter()
     .map(|s| s.to_string())
@@ -104,7 +103,6 @@ fn load_bank(mut commands: Commands, assets: Res<AssetServer>) {
 enum Loop {
     Wind,
     Rain,
-    Night,
     Levitate,
 }
 
@@ -113,14 +111,13 @@ impl Loop {
         match self {
             Loop::Wind => "wind_loop",
             Loop::Rain => "rain_loop",
-            Loop::Night => "night_loop",
             Loop::Levitate => "levitate_loop",
         }
     }
 }
 
 fn start_loops(mut commands: Commands, bank: Res<Bank>) {
-    for l in [Loop::Wind, Loop::Rain, Loop::Night, Loop::Levitate] {
+    for l in [Loop::Wind, Loop::Rain, Loop::Levitate] {
         if let Some(h) = bank.handles.get(l.file()) {
             commands.spawn((l, AudioPlayer(h.clone()), PlaybackSettings::LOOP.with_volume(Volume::Linear(0.0))));
         }
@@ -280,12 +277,11 @@ fn spirits(
     }
 }
 
-/// Loops follow the weather, the time of day, height and spells.
+/// Loops follow the weather, height and spells.
 #[allow(clippy::too_many_arguments)]
 fn loops(
     time: Res<Time>,
     conditions: Res<Conditions>,
-    clock: Res<WorldClock>,
     player: Res<Player>,
     spells: Res<Spells>,
     settings: Res<Settings>,
@@ -295,12 +291,10 @@ fn loops(
     let dt = time.delta_secs();
     let high = ((player.pos.y - 80.0) / 200.0).clamp(0.0, 1.0);
     let rain = if conditions.snowing { 0.0 } else { conditions.precipitation.clamp(0.0, 1.0) };
-    let night = if crate::survival::camp::is_night(clock.hour()) { 1.0 - rain * 0.7 } else { 0.0 };
     for (l, mut sink) in &mut q {
         let level = match l {
             Loop::Wind => ((conditions.wind / 20.0).clamp(0.0, 1.0) * 0.8 + high * 0.6).min(1.0),
             Loop::Rain => rain,
-            Loop::Night => night,
             Loop::Levitate => {
                 if spells.levitate {
                     1.0

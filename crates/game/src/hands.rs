@@ -79,7 +79,7 @@ fn spawn_hands(
 }
 
 /// A small cube of a block, textured like the real thing.
-fn block_mesh(def: &BlockDef, size: f32) -> Mesh {
+pub(crate) fn block_mesh(def: &BlockDef, size: f32) -> Mesh {
     let (mut pos, mut nor, mut uv, mut layer, mut idx) = (vec![], vec![], vec![], vec![], vec![]);
     let h = size * 0.5;
     for face in Face::ALL {

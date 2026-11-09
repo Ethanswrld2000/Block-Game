@@ -128,7 +128,7 @@ Restart the game to see changes to `ui.png`.
 
 ### The font
 
-`assets/fonts/ui.ttf` and `ui_bold.ttf` are Pixelify Sans (SIL Open Font License, see `OFL.txt`).
+`assets/fonts/ui.ttf` and `ui_bold.ttf` are Jersey 15 (SIL Open Font License, see `OFL.txt`); both are the same file for now, so a bolder face can go in `ui_bold.ttf`.
 To use another font, replace those two files with any `.ttf` or `.otf` and rebuild: the font is
 compiled into the game. Every piece of text gets a dark shadow so it reads over a bright sky or snow.
 

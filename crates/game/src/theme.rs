@@ -1,6 +1,6 @@
 //! How the UI looks: the sprite sheet (`assets/textures/ui.png`, laid out in
 //! `assets/textures/ui.ron`, placeholder made by `tools/gen_ui_art.py`), the
-//! font (`assets/fonts/ui.ttf` and `ui_bold.ttf`, Pixelify Sans, OFL), the
+//! font (`assets/fonts/ui.ttf` and `ui_bold.ttf`, Jersey 15, OFL), the
 //! text colours, and a shadow under every piece of text so it reads over a
 //! bright sky or snow.
 //!
@@ -141,13 +141,19 @@ pub mod colors {
     pub const BAD: Color = Color::srgb(1.0, 0.48, 0.40);
 }
 
-/// Text sizes, in points.
+/// Text sizes, in points. Jersey 15 is drawn on a grid of 1/27 em, so sizes
+/// that are multiples of 6.75 put its pixels on whole screen pixels on a
+/// Retina display (13.5 -> 1 px per font pixel, 20.25 -> 1.5 points = 3 px,
+/// 27 -> 4 px). Other sizes blur the strokes.
 pub mod sizes {
-    pub const SMALL: f32 = 13.0;
-    pub const BODY: f32 = 16.0;
-    pub const LABEL: f32 = 18.0;
-    pub const HEADING: f32 = 22.0;
-    pub const TITLE: f32 = 30.0;
+    /// Item names on small tiles.
+    pub const TINY: f32 = 13.5;
+    pub const SMALL: f32 = 20.25;
+    pub const BODY: f32 = 20.25;
+    pub const LABEL: f32 = 27.0;
+    pub const HEADING: f32 = 27.0;
+    pub const TITLE: f32 = 40.5;
+    pub const HUGE: f32 = 54.0;
 }
 
 /// The shadow put under text so it reads on any background.

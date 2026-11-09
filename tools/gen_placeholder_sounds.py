@@ -116,25 +116,12 @@ def main():
         seg = tt[: len(tt) - start]
         notes[start:] += np.sin(2 * np.pi * f * seg) * env(len(seg), 0.005, 0.5)
     save("level_up", notes)
-    # Loops: wind, rain, levitation hum, night swamp.
+    # Loops: wind, rain, levitation hum.
     save("wind_loop", lowpass(noise(8.3), 0.01) * (0.6 + 0.4 * np.sin(2 * np.pi * 0.15 * t(8.3))), loop=True)
     save("rain_loop", highpass(noise(6.3), 0.3) * 0.5 + lowpass(noise(6.3), 0.08) * 0.5, loop=True)
     tt = t(4.3)
     hum = np.sin(2 * np.pi * 110 * tt) * 0.4 + np.sin(2 * np.pi * 165 * tt) * 0.25 + lowpass(noise(4.3), 0.02) * 0.6
     save("levitate_loop", hum * (0.8 + 0.2 * np.sin(2 * np.pi * 0.5 * tt)), loop=True)
-    tt = t(10.3)
-    night = lowpass(noise(10.3), 0.01) * 0.3
-    for _ in range(40):
-        # Frogs and crickets: short chirps at random.
-        start = rng.integers(0, len(tt) - RATE // 4)
-        f = rng.choice([2800, 3400, 220, 260])
-        n = RATE // 10 if f > 1000 else RATE // 5
-        seg = np.arange(n) / RATE
-        chirp = np.sin(2 * np.pi * f * seg) * env(n, 0.005, 0.03 if f > 1000 else 0.08)
-        if f < 1000:
-            chirp *= np.sin(2 * np.pi * 30 * seg) > 0
-        night[start : start + n] += chirp * 0.25
-    save("night_loop", night, loop=True)
     # Thunder: a crack and a long rumble.
     n = noise(4.0)
     save("thunder", lowpass(n, 0.004) * env(len(n), 0.02, 1.3) * 3 + highpass(n, 0.2) * env(len(n), 0.001, 0.08))

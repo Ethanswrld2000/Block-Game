@@ -30,7 +30,7 @@ fn spawn_overlay(mut commands: Commands, theme: Res<crate::theme::Theme>) {
     commands.spawn((
         DebugText,
         Text::new(""),
-        TextFont { font_size: bevy::text::FontSize::Px(15.0), ..default() },
+        TextFont { font_size: bevy::text::FontSize::Px(crate::theme::sizes::BODY), ..default() },
         TextColor(Color::WHITE),
         Node {
             position_type: PositionType::Absolute,

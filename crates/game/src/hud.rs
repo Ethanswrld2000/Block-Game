@@ -62,7 +62,8 @@ fn spawn_hud(mut commands: Commands, hotbar: Option<Res<Hotbar>>, theme: Res<The
             root.spawn((Node { column_gap: Val::Px(2.0), padding: UiRect::all(Val::Px(6.0)), ..default() }, theme.skin("panel_light"))).with_children(|row| {
                 for i in 0..SLOTS {
                     row.spawn((Slot(i), Node { width: Val::Px(SLOT), height: Val::Px(SLOT), ..default() }, theme.skin("slot"))).with_children(|s| {
-                        s.spawn((SlotContent(i), Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() }));
+                        // The slot number sits in the top-left corner, the picture below it.
+                        s.spawn((SlotContent(i), Node { width: Val::Percent(100.0), height: Val::Percent(100.0), padding: UiRect::top(Val::Px(12.0)), ..default() }));
                         s.spawn((
                             theme::text(format!("{}", i + 1), sizes::SMALL, colors::MUTED),
                             Node { position_type: PositionType::Absolute, left: Val::Px(5.0), top: Val::Px(2.0), ..default() },
