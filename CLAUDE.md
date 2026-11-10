@@ -159,7 +159,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   column at the top right; spawn panels there with `ChildOf`). Low and middle cloud layers are
   opaque (blended ones flickered by view angle) and thin out at their edge. Table: `docs/WEATHER.md`
   and `docs/weather.csv` (update when weather.ron or seasons.ron change).
-- Phase 11 (wind and foliage): `game::wind` (`Wind` resource: strength eases to the weather's `wind`
+- Phase 11, wind and foliage: `game::wind` (`Wind` resource: strength eases to the weather's `wind`
   over ~20 s; direction wanders slowly by itself (`wind::wander`, under ~0.6°/s) and veers a little per
   weather, eased over ~2 min; gusts; the weather HUD title names where it comes from). Clouds drift along
   it at `Wind::cloud_drift` (square root of the wind, so gales are ~5 blocks/s, not 24+); rain, snow and
