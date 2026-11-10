@@ -1,0 +1,44 @@
+#![enable(implicit_some)]
+// The look of the world on top of plain lighting: colour grading, ground mist
+// and night, by season, weather and biome (game::atmosphere).
+//
+// A grade's fields multiply together (contrast, saturation) or add up
+// (exposure, warmth, mist); anything left out is neutral.
+//   exposure:   brighter (+) or darker (-), in stops
+//   contrast:   1 = unchanged, more = deeper shadows and brighter highlights
+//   saturation: 1 = unchanged, 0 = grey
+//   warmth:     + leans orange, - leans blue
+//   mist:       ground mist in low ground and over water, 0 = none, 1 = thick
+//   sunset:     seasons only: colour of sunrise and sunset glow (r, g, b)
+(
+    // Always applied.
+    base: (contrast: 1.15, saturation: 1.1),
+    // Blended in as the sun goes down: colour drains a little (the blue of
+    // night comes from the sky light itself, so torches stay warm).
+    night: (contrast: 0.96, saturation: 0.8, warmth: -0.04),
+    // Extra mist for a couple of hours around sunrise.
+    dawn_mist: 0.5,
+    seasons: {
+        "spring": (saturation: 1.04, sunset: (1.0, 0.52, 0.3)),
+        "summer": (contrast: 1.04, saturation: 1.1, warmth: 0.04, sunset: (1.0, 0.48, 0.2)),
+        "autumn": (contrast: 1.02, saturation: 1.06, warmth: 0.08, sunset: (1.0, 0.4, 0.18)),
+        "winter": (contrast: 0.97, saturation: 0.82, warmth: -0.07, exposure: 0.1, sunset: (1.0, 0.58, 0.45)),
+    },
+    weather: {
+        "clear": (),
+        "overcast": (contrast: 0.94, saturation: 0.86),
+        "rain": (contrast: 0.94, saturation: 0.72, warmth: -0.02, exposure: -0.1, mist: 0.3),
+        "storm": (contrast: 1.04, saturation: 0.6, warmth: -0.02, exposure: -0.35, mist: 0.35),
+        "mist": (contrast: 0.88, saturation: 0.8, mist: 1.0),
+        "cold_snap": (saturation: 0.86, warmth: -0.1),
+        "gale": (contrast: 0.96, saturation: 0.8, warmth: -0.03),
+    },
+    // By biome name (biomes.ron).
+    biomes: {
+        "great_swamp": (mist: 0.45, saturation: 0.95),
+        "mossy_woods": (mist: 0.2),
+        "dunes": (saturation: 1.05, warmth: 0.05),
+        "shore": (mist: 0.15),
+        "frost_peaks": (saturation: 0.9, warmth: -0.05),
+    },
+)

@@ -65,7 +65,8 @@ pub fn unpack_tint_sway(packed: f32) -> (f32, f32) {
 }
 
 /// Mesh a padded chunk. Position, normal, UV (0..size, repeated per block in
-/// the shader), UV_1.x = texture layer, UV_1.y = season tint strength.
+/// the shader), UV_1.x = texture layer plus corner shading (see [`pack_layer`]),
+/// UV_1.y = season tint and sway (see [`pack_tint_sway`]).
 pub fn build(chunk: &PaddedChunk, registry: &BlockRegistry, opaque: &[bool]) -> ChunkMeshes {
     let quads = voxel::mesher::mesh(chunk, opaque);
     let (mut solid, mut clear) = (Buffers::default(), Buffers::default());
@@ -118,7 +119,7 @@ fn push_plants(chunk: &PaddedChunk, registry: &BlockRegistry, b: &mut Buffers) {
                         b.pos.push(corners[i]);
                         b.nor.push([0.0, 1.0, 0.0]);
                         b.uv.push(uvs[i]);
-                        b.layer.push([tex, pack_tint_sway(tint, sway[i])]);
+                        b.layer.push([pack_layer(tex, 0), pack_tint_sway(tint, sway[i])]);
                     }
                     b.idx.extend_from_slice(&[start, start + 1, start + 2, start, start + 2, start + 3]);
                     b.idx.extend_from_slice(&[start, start + 2, start + 1, start, start + 3, start + 2]);
@@ -126,6 +127,14 @@ fn push_plants(chunk: &PaddedChunk, registry: &BlockRegistry, b: &mut Buffers) {
             }
         }
     }
+}
+
+/// UV_1.x carries the texture layer in its whole part and the corner shading
+/// (0 open .. 1 deep crease) in its fraction, so shading costs no extra vertex
+/// data. The layer is the same on all four corners, so `floor` in the shader
+/// gets it back exactly; the 0.05 keeps interpolation from dipping below it.
+pub fn pack_layer(layer: f32, ao: u8) -> f32 {
+    layer + 0.05 + 0.9 * (ao as f32 / 3.0)
 }
 
 fn push_quad(q: &Quad, registry: &BlockRegistry, b: &mut Buffers) {
@@ -155,10 +164,12 @@ fn push_quad(q: &Quad, registry: &BlockRegistry, b: &mut Buffers) {
         (true, true) if q.face == voxel::Face::PosY => 0.5,
         _ => 0.0,
     };
+    // Corner shading in `corners` order; none on water and ice.
+    let ao = if def.translucent { [0; 4] } else { [q.ao[0], q.ao[1], q.ao[3], q.ao[2]] };
     // Leaves (see-through foliage) rustle a little.
     let sway = if def.foliage && !def.opaque { LEAF_SWAY } else { 0.0 };
     let start = b.pos.len() as u32;
-    for mut c in corners {
+    for (i, mut c) in corners.into_iter().enumerate() {
         if lower_top {
             c[1] -= 0.12;
         }
@@ -171,15 +182,20 @@ fn push_quad(q: &Quad, registry: &BlockRegistry, b: &mut Buffers) {
             1 => [c[0], c[2]],
             _ => [c[0], -c[1]],
         });
-        b.layer.push([tex, pack_tint_sway(foliage, sway)]);
+        b.layer.push([pack_layer(tex, ao[i]), pack_tint_sway(foliage, sway)]);
     }
     // u x v points along +axis for x and z faces, and along -axis for y faces.
     let flip = (axis == 1) == q.face.is_positive();
-    if flip {
-        b.idx.extend_from_slice(&[start, start + 2, start + 1, start, start + 3, start + 2]);
-    } else {
-        b.idx.extend_from_slice(&[start, start + 1, start + 2, start, start + 2, start + 3]);
-    }
+    // Split along the diagonal that keeps a dark corner in its own triangle,
+    // so shading doesn't smear across the face.
+    let other = ao[0] as u32 + ao[2] as u32 > ao[1] as u32 + ao[3] as u32;
+    let s = start;
+    b.idx.extend_from_slice(&match (flip, other) {
+        (false, false) => [s, s + 1, s + 2, s, s + 2, s + 3],
+        (true, false) => [s, s + 2, s + 1, s, s + 3, s + 2],
+        (false, true) => [s, s + 1, s + 3, s + 1, s + 2, s + 3],
+        (true, true) => [s, s + 3, s + 1, s + 1, s + 3, s + 2],
+    });
 }
 
 #[cfg(test)]

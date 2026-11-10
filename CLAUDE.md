@@ -153,6 +153,16 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   for now (spawn weight 0 in creatures.ron).
 - Phase 11 (atmosphere, wind and critters everywhere): in progress. Critters spawn in every biome for now
   (`biomes: []`) and only leave below freezing (`min_temp: 0.0`); frogs and darters still need water nearby.
+  Atmosphere: `game::atmosphere` + `assets/data/atmosphere.ron` (grades by season, weather, biome and
+  night: exposure, contrast, saturation, warmth, ground mist, season sunset colour). Terrain (voxel, water,
+  LOD) fogs itself towards the sky's horizon colour in the view direction (`apply_atmosphere`, copied in
+  `voxel.wesl` and `lod.wesl`; must match `sky.wesl` at the horizon; uniform `AtmosParams`, filled by
+  `sky::update_sky`) plus height mist from `MIST_BASE`; Bevy's `DistanceFog` still covers other meshes.
+  Camera is `Hdr` with soft `Bloom` (`BLOCKGAME_NO_BLOOM=1`) and TonyMcMapface (`BLOCKGAME_TONEMAP=agx|aces|..`
+  to compare). Contrast is a power curve around mid grey (Bevy's linear `contrast` clips darks to black).
+  Corner shading (AO) is baked by `voxel::mesher` (`Quad.ao`; quads merge only where shading stays right)
+  and packed into UV_1.x's fraction (`chunk_mesh::pack_layer`). Sky: three-stop gradient, sun haze,
+  sunset spread and anti-sun band, faint star band at night. Nights: dim blue ambient, lifted by the moon.
 - Weather timing: each weather picks the next one when it starts (`WeatherState.next/until`);
   clouds change only in the last 30 s before a change (`weather::CLOUD_LEAD_SECONDS`), the rest
   blends in after. `game::weather_hud` shows weather, next and countdown in `hud::TopRight` (a

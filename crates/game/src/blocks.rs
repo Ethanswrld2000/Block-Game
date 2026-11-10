@@ -27,6 +27,9 @@ pub struct VoxelExtension {
     /// (see `wind::Wind::sway`).
     #[uniform(103)]
     pub wind: Vec4,
+    /// Sky-matched fog and ground mist (see `atmosphere`).
+    #[uniform(104)]
+    pub atmos: crate::atmosphere::AtmosParams,
 }
 
 impl MaterialExtension for VoxelExtension {
@@ -129,9 +132,11 @@ fn build_material(
         base: StandardMaterial {
             perceptual_roughness: 0.95,
             reflectance: 0.08,
+            // The shader fogs towards the sky itself (see `atmosphere`).
+            fog_enabled: false,
             ..default()
         },
-        extension: VoxelExtension { textures: textures.clone(), season: Vec4::ZERO, wind: Vec4::ZERO },
+        extension: VoxelExtension { textures: textures.clone(), season: Vec4::ZERO, wind: Vec4::ZERO, atmos: default() },
     }));
     blocks.translucent_material = Some(materials.add(VoxelMaterial {
         base: StandardMaterial {
@@ -140,8 +145,9 @@ fn build_material(
             alpha_mode: AlphaMode::Blend,
             double_sided: true,
             cull_mode: None,
+            fog_enabled: false,
             ..default()
         },
-        extension: VoxelExtension { textures, season: Vec4::ZERO, wind: Vec4::ZERO },
+        extension: VoxelExtension { textures, season: Vec4::ZERO, wind: Vec4::ZERO, atmos: default() },
     }));
 }

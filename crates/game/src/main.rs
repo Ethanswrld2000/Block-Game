@@ -1,5 +1,6 @@
 //! Game client entry point. Each system lives in its own plugin.
 
+mod atmosphere;
 mod autoshot;
 mod bench;
 mod blocks;
@@ -63,6 +64,7 @@ fn main() {
             weather::WeatherPlugin,
             wind::WindPlugin,
             sky::SkyPlugin,
+            atmosphere::AtmospherePlugin,
             clouds::CloudPlugin,
             weather_hud::WeatherHudPlugin,
             precipitation::PrecipitationPlugin,

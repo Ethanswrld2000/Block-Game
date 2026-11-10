@@ -1,6 +1,9 @@
-// Sky dome: a gradient from horizon to zenith, sunset glow, sun and moon
-// discs, and stars at night. Drawn on a huge sphere around the camera with
-// fog off; the horizon colour matches the fog so distant land fades into it.
+// Sky dome: a three-stop gradient (horizon, mid sky, zenith), haze and glow
+// around the sun, sunrise and sunset colour across the sky, sun and moon
+// discs, and stars with a faint band across them at night. Drawn on a huge
+// sphere around the camera with fog off. At the horizon it is exactly the
+// colour the terrain fogs into (`horizon_color` in voxel.wesl and lod.wesl),
+// so distant land melts into the sky behind it.
 
 import bevy_pbr::render::{
     mesh_view_bindings::view,
@@ -23,6 +26,9 @@ struct SkyParams {
     star_x: vec4<f32>,
     star_y: vec4<f32>,
     star_z: vec4<f32>,
+    mid: vec4<f32>,
+    // x: daytime haze towards the sun, y: star band brightness
+    haze: vec4<f32>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100) var<uniform> sky: SkyParams;
@@ -39,27 +45,46 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let dir = normalize(in.world_position.xyz - view.world_position.xyz);
     let up = dir.y;
 
-    // Gradient: horizon colour low down, zenith colour overhead.
-    let t = pow(clamp(up, 0.0, 1.0), 0.45);
-    var col = mix(sky.horizon.rgb, sky.zenith.rgb, t);
+    // Gradient: horizon haze low down, the mid sky, the zenith overhead.
+    let t = clamp(up, 0.0, 1.0);
+    var col = mix(sky.horizon.rgb, sky.mid.rgb, smoothstep(0.0, 0.2, t));
+    col = mix(col, sky.zenith.rgb, smoothstep(0.1, 0.85, t));
     // Below the horizon: a slightly darker version of the horizon.
     col = mix(col, sky.horizon.rgb * 0.85, clamp(-up * 4.0, 0.0, 1.0));
 
-    // Sunset glow around the sun, strongest near the horizon.
     let sun = sky.sun_dir.xyz;
     let toward = max(dot(dir, sun), 0.0);
-    let flat_toward = max(dot(normalize(vec3<f32>(dir.x, 0.0, dir.z) + 1e-5), normalize(vec3<f32>(sun.x, 0.0, sun.z) + 1e-5)), 0.0);
+    let flat_dir = normalize(vec3<f32>(dir.x, 0.0, dir.z) + vec3<f32>(1e-5, 0.0, 0.0));
+    let flat_sun = normalize(vec3<f32>(sun.x, 0.0, sun.z) + vec3<f32>(1e-5, 0.0, 0.0));
+    let flat_toward = max(dot(flat_dir, flat_sun), 0.0);
     let low = 1.0 - clamp(abs(up) * 2.5, 0.0, 1.0);
+    // Daytime haze: the sky whitens towards the sun.
+    col *= 1.0 + sky.haze.x * pow(toward, 5.0);
+    // Sunrise and sunset: glow around the sun, strongest near the horizon...
     let glow = sky.sun_dir.w * (pow(flat_toward, 3.0) * low * 0.8 + pow(toward, 12.0) * 0.5);
     col = mix(col, sky.sun_color.rgb, clamp(glow, 0.0, 0.9));
+    // ...warm light spreading up the sun's half of the sky, and a pink band
+    // low over the opposite horizon. Both are zero at the horizon itself, so
+    // the fog still matches.
+    let above = smoothstep(0.0, 0.12, up);
+    let spread = sky.sun_dir.w * pow(flat_toward, 1.5) * above * (1.0 - smoothstep(0.2, 0.9, up)) * 0.3;
+    col = mix(col, sky.sun_color.rgb * 0.8, clamp(spread, 0.0, 1.0));
+    let away = max(-dot(flat_dir, flat_sun), 0.0);
+    let belt = sky.sun_dir.w * away * away * above * (1.0 - smoothstep(0.08, 0.3, up)) * 0.35;
+    col = mix(col, vec3<f32>(0.62, 0.36, 0.46) * max(dot(sky.horizon.rgb, vec3<f32>(0.33)), 0.05) * 2.2, clamp(belt, 0.0, 1.0));
 
     let clear = 1.0 - sky.extra.w;
 
     // Stars, turning across the sky around the same axis as the sun.
     let rd = vec3<f32>(dot(sky.star_x.xyz, dir), dot(sky.star_y.xyz, dir), dot(sky.star_z.xyz, dir));
+    // A faint band of distant stars across the sky, in blocky patches.
+    let band_n = normalize(vec3<f32>(0.35, 0.82, 0.45));
+    let band = exp(-pow(dot(rd, band_n) / 0.16, 2.0));
+    let mottle = 0.55 + 0.45 * hash3(floor(rd * 28.0));
+    col += vec3<f32>(0.42, 0.46, 0.65) * 0.03 * band * mottle * sky.haze.y * clear * clamp(up * 6.0, 0.0, 1.0);
     let cell = floor(rd * 220.0);
     let h = hash3(cell);
-    if (h > 0.9975 && up > -0.05) {
+    if (h > 0.9975 - 0.003 * band && up > -0.05) {
         let twinkle = 0.6 + 0.4 * hash3(cell + 7.0);
         col += vec3<f32>(0.9, 0.92, 1.0) * sky.extra.x * twinkle * clear * clamp(up * 6.0, 0.0, 1.0);
     }

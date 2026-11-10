@@ -54,10 +54,29 @@ fn spawn_camera(mut commands: Commands) {
             .with_rotation(Quat::from_euler(EulerRot::YXZ, cam.yaw, cam.pitch, 0.0)),
         Projection::Perspective(PerspectiveProjection { near: 0.05, far: crate::sky::SKY_RADIUS * 1.2, ..default() }),
         DistanceFog { color: Color::srgb(0.46, 0.53, 0.47), ..default() },
+        // HDR so bright things (sun, torches, fireflies) can bloom; grading
+        // and bloom are set by `atmosphere`.
+        bevy::camera::Hdr,
+        tonemapping(),
+        bevy::render::view::ColorGrading::default(),
+        crate::atmosphere::bloom(),
         // Ears for panned sounds (critter calls).
         bevy::audio::SpatialListener::new(0.3),
         cam,
     ));
+}
+
+/// The tone curve. `BLOCKGAME_TONEMAP=tony|agx|aces|filmic|reinhard` to compare.
+fn tonemapping() -> bevy::render::view::Tonemapping {
+    use bevy::render::view::Tonemapping as T;
+    match std::env::var("BLOCKGAME_TONEMAP").as_deref() {
+        Ok("tony") => T::TonyMcMapface,
+        Ok("agx") => T::AgX,
+        Ok("aces") => T::AcesFitted,
+        Ok("filmic") => T::BlenderFilmic,
+        Ok("reinhard") => T::ReinhardLuminance,
+        _ => T::TonyMcMapface,
+    }
 }
 
 pub fn grab_cursor(
