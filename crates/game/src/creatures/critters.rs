@@ -661,6 +661,16 @@ mod tests {
     }
 
     #[test]
+    fn critters_live_in_every_biome_for_now() {
+        let k = super::super::data::tests::load();
+        for c in k.list.iter().filter(|c| c.critter.is_some()) {
+            for biome in ["great_swamp", "meadow", "pine_hills", "dunes", "highlands", "frost_peaks", "skyreach"] {
+                assert!(c.spawn.as_ref().unwrap().lives_in(biome), "{} doesn't live in {biome}", c.name);
+            }
+        }
+    }
+
+    #[test]
     fn orbit_goes_round_home() {
         let home = Vec3::new(10.0, 5.0, -4.0);
         for i in 0..8 {
