@@ -74,7 +74,7 @@ Two meters, always shown, with stages in `assets/data/exposure.ron`:
   you hold your breath for 20 seconds before the lack of air reaches you.
 - **Temperature** is what you feel, in °C: biome and season, day and night, weather (overcast -1,
   rain -4, gale -5, storm -7, cold snap -16), being wet (-6), torches and fire nearby (up to +16),
-  clothes, the Warmth spell and skills. It follows your surroundings over about half a minute, so a
+  clothes, the Warmth spell and skills. It follows your surroundings within about 12 seconds (`follow` in exposure.ron), so a
   quick dip is fine and a long one is not.
 
 Each side has three stages. As a stage gets worse, the meter shakes harder:

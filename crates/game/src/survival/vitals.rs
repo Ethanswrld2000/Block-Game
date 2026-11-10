@@ -59,7 +59,7 @@ pub struct Vitals {
     /// Seconds of breath left under water.
     #[serde(default = "full_breath")]
     pub breath: f32,
-    /// Felt temperature, °C: follows the surroundings over half a minute.
+    /// Felt temperature, °C: follows the surroundings (`exposure.ron` `follow`).
     #[serde(default = "mild")]
     pub feels: f32,
     /// A food buff: extra run speed (0.1 = +10%) and seconds left.
@@ -179,8 +179,8 @@ impl Vitals {
         let gets = if env.underwater && self.breath > 0.0 { 1.0 } else { env.breathe };
         ease(&mut self.oxygen, gets.clamp(0.0, 1.0) * 100.0, 40.0);
 
-        // The felt temperature follows the surroundings over half a minute.
-        self.feels += (env.feels - self.feels) * (1.0 - (-dt / 30.0).exp());
+        // The felt temperature follows the surroundings (`follow` seconds).
+        self.feels += (env.feels - self.feels) * (1.0 - (-dt / rules.follow.max(0.1)).exp());
 
         // Exposure: stamina first, down to the mortal line; the worst stages hurt.
         let heavy = if is_heavy(env.carried) { 2.0 } else { 1.0 };
@@ -294,8 +294,8 @@ mod tests {
     fn colder_drains_faster_and_deadly_cold_hurts() {
         let mut a = Vitals::default();
         let mut b = Vitals::default();
-        run(&mut a, cold(0.0), 120.0);
-        run(&mut b, cold(-10.0), 120.0);
+        run(&mut a, cold(0.0), 30.0);
+        run(&mut b, cold(-10.0), 30.0);
         assert!(b.health.get(Layer::Fatigue) < a.health.get(Layer::Fatigue));
         assert_eq!(b.health.get(Layer::Damage), MAX);
         let mut c = Vitals::default();
@@ -319,7 +319,7 @@ mod tests {
     #[test]
     fn felt_temperature_follows_the_surroundings_slowly() {
         let mut v = Vitals::default();
-        run(&mut v, cold(-20.0), 5.0);
+        run(&mut v, cold(-20.0), 2.0);
         assert!(v.feels > 5.0, "{}", v.feels);
         run(&mut v, cold(-20.0), 200.0);
         assert!((v.feels + 20.0).abs() < 0.1);

@@ -138,7 +138,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
 - Exposure: `survival::exposure` (stages in `assets/data/exposure.ron`: cold, heat, air; each drains
   Fatigue down to the mortal line, the last stage deals Damage). Air meter = oxygen where you stand
   (`Vitals.air`; `Vitals.oxygen` is what the body gets after skills or a held breath, `breath` under
-  water); temperature meter = felt °C (`Vitals.feels`, follows surroundings over ~30 s). Both always
+  water); temperature meter = felt °C (`Vitals.feels`, follows surroundings, time constant `follow` in exposure.ron). Both always
   shown and shake by stage. `BLOCKGAME_FEELS=-25` / `BLOCKGAME_OXYGEN=50` force them for screenshots.
   `Survival.temperature` lists every part of the felt temperature (biome, season, height, sun,
   weather, wet, torches, clothes, skills, spell); the HUD shows it top right (F6 toggles).
