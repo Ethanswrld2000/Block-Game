@@ -14,21 +14,24 @@
 // fire and skills. Oxygen is the share of normal air, 100 = sea level.
 (
     cold: [
-        (name: "Chilly",      at: 8.0,   shake: 0.2, fatigue: 0.12),
-        (name: "Freezing",    at: -4.0,  shake: 0.55, fatigue: 0.45, slow: 0.08),
-        (name: "Deadly cold", at: -18.0, shake: 1.0, fatigue: 0.45, damage: 0.5, slow: 0.15),
+        (name: "Chilly",      at: 8.0,   shake: 0.2, fatigue: 0.3),
+        (name: "Freezing",    at: -4.0,  shake: 0.55, fatigue: 1.0, slow: 0.08),
+        (name: "Deadly cold", at: -18.0, shake: 1.0, fatigue: 1.0, damage: 0.7, slow: 0.15),
     ],
     heat: [
-        (name: "Hot",         at: 26.0, shake: 0.2, fatigue: 0.12),
-        (name: "Sweltering",  at: 34.0, shake: 0.55, fatigue: 0.45, slow: 0.08, dizzy: 0.15),
-        (name: "Scorching",   at: 42.0, shake: 1.0, fatigue: 0.45, damage: 0.5, slow: 0.15, dizzy: 0.3),
+        (name: "Hot",         at: 26.0, shake: 0.2, fatigue: 0.3),
+        (name: "Sweltering",  at: 34.0, shake: 0.55, fatigue: 1.0, slow: 0.08, dizzy: 0.15),
+        (name: "Scorching",   at: 42.0, shake: 1.0, fatigue: 1.0, damage: 0.7, slow: 0.15, dizzy: 0.3),
     ],
     air: [
-        (name: "Thin air",    at: 85.0, shake: 0.2, fatigue: 0.1, slow: 0.05),
-        (name: "Very thin",   at: 60.0, shake: 0.55, fatigue: 0.4, slow: 0.15, dizzy: 0.35),
-        (name: "Suffocating", at: 35.0, shake: 1.0, fatigue: 0.4, damage: 0.9, slow: 0.3, dizzy: 0.8),
+        (name: "Thin air",    at: 85.0, shake: 0.2, fatigue: 0.3, slow: 0.05),
+        (name: "Very thin",   at: 60.0, shake: 0.55, fatigue: 1.0, slow: 0.15, dizzy: 0.35),
+        (name: "Suffocating", at: 35.0, shake: 1.0, fatigue: 1.0, damage: 1.2, slow: 0.3, dizzy: 0.8),
     ],
     // Seconds you can hold your breath under water before the water's lack of
     // air reaches you; it refills five times as fast on the surface.
     breath: 20.0,
+    // Seconds for the felt temperature to get most of the way (63%) to what
+    // the surroundings give, so a quick dip is fine and a long one is not.
+    follow: 12.0,
 )
