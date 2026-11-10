@@ -250,7 +250,7 @@ fn walk(
     blocks: Res<Blocks>,
     cam: Query<&FlyCamera>,
     body: Res<Body>,
-    conditions: Res<crate::weather::Conditions>,
+    wind: Res<crate::wind::Wind>,
     mut player: ResMut<Player>,
     mut damage: MessageWriter<Damage>,
 ) {
@@ -313,11 +313,11 @@ fn walk(
     let accel = if p.on_ground { 45.0 } else if p.in_water { 12.0 } else { 9.0 };
     let horiz = Vec2::new(p.vel.x, p.vel.z);
     // Strong wind pushes you about when nothing overhead shelters you.
-    let gust = (conditions.wind - 8.0).max(0.0) * 0.15;
+    let gust = (wind.speed - 8.0).max(0.0) * 0.15;
     let sheltered = gust == 0.0
         || p.in_water
         || (2..26).any(|dy| matches!(cell(&world, &blocks, BlockPos::new(feet.x, feet.y + dy, feet.z), water), Cell::Solid | Cell::Unknown));
-    let push = if sheltered { Vec2::ZERO } else { crate::weather::WIND_DIR * gust };
+    let push = if sheltered { Vec2::ZERO } else { wind.dir() * gust };
     let target = Vec2::new(wish.x, wish.z) * speed + push;
     let new = horiz.move_towards(target, accel * dt);
     p.vel.x = new.x;

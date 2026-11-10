@@ -5,24 +5,30 @@
 //   trees: swamp, "oak", "pine" or "none";  tree_chance: per column, 0..1
 //   fog: RGB 0..1, the colour the sky and fog lean towards here
 //   haze: optional, default 1; how far you can see (0.5 = half as far)
+//   plants: optional ground plants (blocks with `shape: plant`), tried in order on
+//           each surface block: (block, chance per block 0..1, shore: true = only
+//           on ground at most one block above sea level). Patch noise clumps them.
 [
     (
         name: "great_swamp", title: "The Great Swamp",
         temperature: 0.4, humidity: 0.8, min_height: -3, max_height: 10,
         surface: "moss", subsurface: "peat", underwater: "mud",
         trees: swamp, tree_chance: 0.012, fog: (0.46, 0.53, 0.47), haze: 0.4,
+        plants: [(block: "reeds", chance: 0.5, shore: true), (block: "fern", chance: 0.12), (block: "bog_bloom", chance: 0.03), (block: "tall_grass", chance: 0.2)],
     ),
     (
         name: "mossy_woods", title: "The Mossy Woods",
         temperature: 0.1, humidity: 0.35, min_height: 1, max_height: 70,
         surface: "grass", subsurface: "dirt", underwater: "clay",
         trees: oak, tree_chance: 0.03, fog: (0.55, 0.65, 0.6), haze: 0.8,
+        plants: [(block: "fern", chance: 0.15), (block: "tall_grass", chance: 0.25)],
     ),
     (
         name: "meadow", title: "The Windward Meadows",
         temperature: 0.2, humidity: -0.3, min_height: 1, max_height: 70,
         surface: "grass", subsurface: "dirt", underwater: "gravel",
         trees: oak, tree_chance: 0.002, fog: (0.7, 0.78, 0.86),
+        plants: [(block: "bog_bloom", chance: 0.03), (block: "tall_grass", chance: 0.55)],
     ),
     (
         name: "dunes", title: "The Ochre Shore",
@@ -35,12 +41,14 @@
         temperature: -0.5, humidity: 0.2, min_height: 1, max_height: 90,
         surface: "grass", subsurface: "dirt", underwater: "gravel",
         trees: pine, tree_chance: 0.025, fog: (0.6, 0.68, 0.75),
+        plants: [(block: "fern", chance: 0.08), (block: "tall_grass", chance: 0.18)],
     ),
     (
         name: "shore", title: "The Grey Strand",
         temperature: 0.0, humidity: 0.0, min_height: -2, max_height: 2,
         surface: "sand", subsurface: "sand", underwater: "sand",
         trees: none, tree_chance: 0.0, fog: (0.7, 0.78, 0.86),
+        plants: [(block: "reeds", chance: 0.15, shore: true)],
     ),
     (
         name: "highlands", title: "The Broken Highlands",

@@ -30,6 +30,7 @@ mod survival;
 mod torches;
 mod weather;
 mod weather_hud;
+mod wind;
 mod world;
 
 use bevy::prelude::*;
@@ -61,6 +62,7 @@ fn main() {
         .add_plugins((
             clock::ClockPlugin,
             weather::WeatherPlugin,
+            wind::WindPlugin,
             sky::SkyPlugin,
             atmosphere::AtmospherePlugin,
             clouds::CloudPlugin,

@@ -16,7 +16,7 @@ import bevy_pbr::render::{
 @group(constants::MATERIAL_BIND_GROUP) @binding(101) var block_sampler: sampler;
 // rgb: the season's foliage colour; a: how far to lean towards it.
 @group(constants::MATERIAL_BIND_GROUP) @binding(102) var<uniform> season: vec4<f32>;
-@group(constants::MATERIAL_BIND_GROUP) @binding(103) var<uniform> atmos: Atmos;
+@group(constants::MATERIAL_BIND_GROUP) @binding(104) var<uniform> atmos: Atmos;
 
 // --- Sky-matched fog and ground mist. Kept the same in voxel.wesl and
 // lod.wesl; the horizon formula matches sky.wesl at the horizon. Fields: see

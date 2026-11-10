@@ -16,6 +16,7 @@
 
 mod biome;
 mod islands;
+mod plants;
 mod structures;
 mod trees;
 mod util;
@@ -97,6 +98,8 @@ pub struct WorldGen {
     tunnel_a: FastNoiseLite,
     tunnel_b: FastNoiseLite,
     island_shape: FastNoiseLite,
+    /// Clumps ground plants into patches.
+    plant_patch: FastNoiseLite,
     pub biomes: Biomes,
     ids: Ids,
     structures: structures::Cache,
@@ -144,6 +147,7 @@ impl WorldGen {
             tunnel_a: noise(seed, 11, 0.012, 1, FBm),
             tunnel_b: noise(seed, 12, 0.012, 1, FBm),
             island_shape: noise(seed, 13, 0.04, 2, FBm),
+            plant_patch: noise(seed, 14, 0.045, 2, FBm),
             biomes: Biomes::from_ron(biomes_ron, blocks)?,
             ids,
             structures: structures::Cache::default(),
@@ -289,6 +293,7 @@ impl WorldGen {
             self.fill_terrain(pos, &cols, &mut dense);
             trees::place(self, pos, &mut dense);
             structures::place(self, pos, &mut dense);
+            plants::place(self, pos, &cols, &mut dense);
         }
         if island_chunk {
             any |= islands::place(self, pos, &mut dense);

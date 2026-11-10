@@ -1,4 +1,5 @@
-//! Blocky clouds in three layers, drifting with the wind:
+//! Blocky clouds in three layers, drifting with the wind (`wind::Wind`: they
+//! follow its direction as it slowly turns, at `Wind::cloud_drift`):
 //!
 //! - **low** (y 200): a grey deck that only forms in rain, snow and storms;
 //! - **middle** (y 236): the puffy blocks, scattered on a clear day, joined up
@@ -32,6 +33,7 @@ use fastnoise_lite::{FastNoiseLite, FractalType, NoiseType};
 
 use crate::camera::FlyCamera;
 use crate::weather::Conditions;
+use crate::wind::Wind;
 
 /// Height of the middle layer's base.
 pub const CLOUD_Y: f32 = 236.0;
@@ -74,7 +76,7 @@ pub struct Layer {
 pub const LAYERS: [Layer; 3] = [
     Layer { name: "low", y: 200.0, cell: 10.0, radius: 90, thin: 5.0, thick: 9.0, frequency: 0.06, seed: 0x10D0, from: 0.55, to: 0.95, speed: 0.8, shade: 0.82, alpha: 1.0 },
     Layer { name: "middle", y: CLOUD_Y, cell: 12.0, radius: 80, thin: 4.0, thick: 8.0, frequency: 0.07, seed: 0x00C1_00D5, from: 0.08, to: 0.85, speed: 1.0, shade: 1.0, alpha: 1.0 },
-    Layer { name: "high", y: 300.0, cell: 20.0, radius: 60, thin: 1.0, thick: 2.0, frequency: 0.05, seed: 0x41A7, from: 0.0, to: 1.0, speed: 1.6, shade: 1.05, alpha: 0.8 },
+    Layer { name: "high", y: 300.0, cell: 20.0, radius: 60, thin: 1.0, thick: 2.0, frequency: 0.05, seed: 0x41A7, from: 0.05, to: 1.0, speed: 1.4, shade: 1.05, alpha: 0.8 },
 ];
 
 impl Layer {
@@ -134,6 +136,7 @@ fn update_clouds(
     mut commands: Commands,
     time: Res<Time>,
     weather: Res<Conditions>,
+    wind: Res<Wind>,
     settings: Res<crate::settings::Settings>,
     cam: Query<&Transform, (With<FlyCamera>, Without<Clouds>)>,
     mut q: Query<(Entity, &mut Clouds, &mut Transform, &mut Visibility)>,
@@ -143,10 +146,10 @@ fn update_clouds(
     let Ok(cam) = cam.single() else { return };
     // The Clouds setting; `BLOCKGAME_NO_CLOUDS=1` turns them off (to measure what they cost).
     let on = settings.clouds > 0 && std::env::var_os("BLOCKGAME_NO_CLOUDS").is_none();
-    let wind = Vec2::new(1.0, 0.35).normalize() * weather.wind;
+    let drift = wind.dir() * wind.cloud_drift();
     for (entity, mut clouds, mut tf, mut vis) in &mut q {
         let layer = clouds.layer;
-        clouds.offset += wind * layer.speed * time.delta_secs();
+        clouds.offset += drift * layer.speed * time.delta_secs();
         tf.translation = Vec3::new(clouds.offset.x, layer.y, clouds.offset.y);
 
         // Collect a finished build.
@@ -198,7 +201,7 @@ fn thickness(noise: &FastNoiseLite, layer: &Layer, x: i32, z: i32, cover: f32) -
         return 0.0;
     }
     let n = noise.get_noise_2d(x as f32, z as f32) * 0.5 + 0.5;
-    let threshold = 0.72 - cover * 0.5;
+    let threshold = 0.83 - cover * 0.61;
     if n < threshold {
         0.0
     } else if n < threshold + 0.1 {
@@ -299,17 +302,18 @@ mod tests {
     use super::*;
 
     /// Cloud cover in `weather.ron` for clear skies and for rain.
-    const CLEAR: f32 = 0.22;
+    const CLEAR: f32 = 0.1;
     const RAIN: f32 = 0.9;
 
     #[test]
-    fn clear_days_have_some_clouds_and_rain_covers_the_sky() {
+    fn clear_days_have_a_few_clouds_and_rain_covers_the_sky() {
         let [low, mid, high] = LAYERS;
-        // Clear: no low deck, a scattering of puffs and some wisps.
+        // Clear: no low deck, a few puffs and thin wisps.
         assert_eq!(low.cover(CLEAR), 0.0);
         let puffs = coverage(&mid, mid.cover(CLEAR));
-        assert!(puffs > 0.05 && puffs < 0.35, "clear-day puffs cover {puffs}");
-        assert!(coverage(&high, high.cover(CLEAR)) > 0.05);
+        assert!(puffs > 0.02 && puffs < 0.08, "clear-day puffs cover {puffs}");
+        let wisps = coverage(&high, high.cover(CLEAR));
+        assert!(wisps > 0.03 && wisps < 0.15, "clear-day wisps cover {wisps}");
         // Rain: the low deck forms and the middle layer closes up.
         assert!(coverage(&low, low.cover(RAIN)) > 0.4);
         let lid = coverage(&mid, mid.cover(RAIN));

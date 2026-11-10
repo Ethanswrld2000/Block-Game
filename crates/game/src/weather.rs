@@ -251,9 +251,6 @@ fn hash(a: u64, b: u64) -> f32 {
     (x >> 40) as f32 / (1u64 << 24) as f32
 }
 
-/// The direction the wind blows (clouds, rain and gusts that push you).
-pub const WIND_DIR: Vec2 = Vec2::new(0.944, 0.33);
-
 /// Pick the weather that follows `current` at `when` (total days) by the
 /// season's chances. A different weather if the season allows one. Depends
 /// only on the seed and the hour, so a world's weather repeats.

@@ -23,14 +23,27 @@ pub struct VoxelExtension {
     /// Season colour for grass and leaves: rgb, and a = how strongly to apply it.
     #[uniform(102)]
     pub season: Vec4,
-    /// Sky-matched fog and ground mist (see `atmosphere`).
+    /// Wind for swaying leaves and plants: xy = direction (x, z), z = how hard
+    /// (see `wind::Wind::sway`).
     #[uniform(103)]
+    pub wind: Vec4,
+    /// Sky-matched fog and ground mist (see `atmosphere`).
+    #[uniform(104)]
     pub atmos: crate::atmosphere::AtmosParams,
 }
 
 impl MaterialExtension for VoxelExtension {
+    fn vertex_shader() -> ShaderRef {
+        "shaders/voxel_vertex.wesl".into()
+    }
+
     fn fragment_shader() -> ShaderRef {
         "shaders/voxel.wesl".into()
+    }
+
+    /// Shadows sway with the leaves, so leaves don't shadow themselves.
+    fn prepass_vertex_shader() -> ShaderRef {
+        "shaders/voxel_prepass.wesl".into()
     }
 }
 
@@ -123,7 +136,7 @@ fn build_material(
             fog_enabled: false,
             ..default()
         },
-        extension: VoxelExtension { textures: textures.clone(), season: Vec4::ZERO, atmos: default() },
+        extension: VoxelExtension { textures: textures.clone(), season: Vec4::ZERO, wind: Vec4::ZERO, atmos: default() },
     }));
     blocks.translucent_material = Some(materials.add(VoxelMaterial {
         base: StandardMaterial {
@@ -135,6 +148,6 @@ fn build_material(
             fog_enabled: false,
             ..default()
         },
-        extension: VoxelExtension { textures, season: Vec4::ZERO, atmos: default() },
+        extension: VoxelExtension { textures, season: Vec4::ZERO, wind: Vec4::ZERO, atmos: default() },
     }));
 }

@@ -12,7 +12,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
 | `crates/worldgen` | Terrain, biomes, caves, sky islands | Pure functions of (seed, position); thread-safe; no Bevy. |
 | `crates/game` | The Bevy client; one plugin per system | Gameplay state separate from rendering, so multiplayer can come later. |
 | `assets/textures/blocks.png` | 16x16 grid of 32x32 tiles | Placeholder art; Ethan repaints it. Keep tile positions stable. |
-| `assets/textures/blocks.ron` | Tile name -> index | Regenerate with `python3 tools/gen_placeholder_art.py` (overwrites the PNG). |
+| `assets/textures/blocks.ron` | Tile name -> index | Regenerate with `python3 tools/gen_placeholder_art.py` (overwrites the PNG; `--only <tiles>` adds tiles without touching the rest). |
 | `assets/textures/ui.png` | UI sprite sheet, 2x pixels | Ethan repaints it; `ui.ron` lists each sprite's rect and slice. `tools/gen_ui_art.py` overwrites it. |
 | `assets/textures/icons/` | Item sprites: `items`, `weapons` (tools), `blocks` (.png + .ron) | 20 px per inventory cell; Ethan repaints them. `tools/gen_item_art.py` only adds missing sprites (`--reset <sheet>` redraws). |
 | `assets/fonts/` | Jersey 15 (OFL) | Compiled in; swap the `.ttf` files to change the font. |
@@ -53,7 +53,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `assets/data/seasons.ron`, saved to `time.ron`), `game::weather` (kinds in `assets/data/weather.ron`,
   blended into the `Conditions` resource; local biome fog/haze/temperature in `LocalClimate`),
   `game::sky` (sun/moon light, ambient, fog, sky dome `assets/shaders/sky.wesl`, season tint of
-  foliage via the voxel material's `season` uniform and UV_1.y), `game::clouds` (blocky, y 236; three layers since phase 10),
+  foliage via the voxel material's `season` uniform and UV_1.y), `game::clouds` (blocky, y 236; three layers since phase 10; drift with `game::wind` since phase 11),
   `game::precipitation` (rain/snow pool), `game::lod` (distant terrain and islands as coloured
   columns out to 1500 blocks; `assets/shaders/lod.wesl` cuts it away only where a real chunk is drawn, from a per-chunk mask `World::drawn_mask`).
   Stars turn around the sun's axis; the moon has its own 8-day cycle and phases (`sky::moon_*`).
@@ -169,6 +169,20 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   column at the top right; spawn panels there with `ChildOf`). Low and middle cloud layers are
   opaque (blended ones flickered by view angle) and thin out at their edge. Table: `docs/WEATHER.md`
   and `docs/weather.csv` (update when weather.ron or seasons.ron change).
+- Phase 11, wind and foliage: `game::wind` (`Wind` resource: strength eases to the weather's `wind`
+  over ~20 s; direction wanders slowly by itself (`wind::wander`, under ~0.6°/s) and veers a little per
+  weather, eased over ~2 min; gusts; the weather HUD title names where it comes from). Clouds drift along
+  it at `Wind::cloud_drift` (square root of the wind, so gales are ~5 blocks/s, not 24+); rain, snow and
+  wind push follow it too (`weather::WIND_DIR` is gone). Clear days: cloud cover 0.1 (cold snap 0.06) and
+  a stricter cloud threshold, so a few puffs and thin wisps. Ground plants: `shape: plant` blocks
+  (`tall_grass`, `reeds`, `fern`, `bog_bloom`) are two crossed quads meshed into a third per-chunk mesh
+  (`ChunkMeshes.plants`, no shadows), scattered by `worldgen::plants` from each biome's `plants` list in
+  biomes.ron (patch noise; `shore: true` = only by the water), removed with the block under them, and
+  replaced when you place a block into them. Sway: `assets/shaders/voxel_vertex.wesl` (and
+  `voxel_prepass.wesl` for shadows, same `sway_offset`) bends plant tops and rustles leaves by world position
+  and time, from the voxel material's `wind` uniform; how far a vertex sways is packed into UV_1.y with the
+  season tint (`chunk_mesh::pack_tint_sway`). New tiles: `python3 tools/gen_placeholder_art.py --only <names>`
+  paints just those into the existing blocks.png.
 - Next: follow `docs/GAMEPLAY_LOOP.md` "What's next" (shelter first), or ask Ethan.
 
 ## Testing without a screen
