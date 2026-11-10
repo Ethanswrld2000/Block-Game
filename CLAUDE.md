@@ -151,6 +151,8 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   panned (`PlaySound::ambient_at`, camera has a `SpatialListener`) and follow the ambience volume.
   Critter sounds: `python3 tools/gen_placeholder_sounds.py --only bird_ frog_ ...`. Spirits are off
   for now (spawn weight 0 in creatures.ron).
+- Phase 11 (atmosphere, wind and critters everywhere): in progress. Critters spawn in every biome for now
+  (`biomes: []`) and only leave below freezing (`min_temp: 0.0`); frogs and darters still need water nearby.
 - Weather timing: each weather picks the next one when it starts (`WeatherState.next/until`);
   clouds change only in the last 30 s before a change (`weather::CLOUD_LEAD_SECONDS`), the rest
   blends in after. `game::weather_hud` shows weather, next and countdown in `hud::TopRight` (a
