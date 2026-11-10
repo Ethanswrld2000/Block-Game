@@ -33,5 +33,8 @@
         "swamp_log_top": 26,
         "swamp_leaves": 27,
         "glowcap": 28,
+        "tall_grass": 29,
+        "fern": 30,
+        "bog_bloom": 31,
     },
 )

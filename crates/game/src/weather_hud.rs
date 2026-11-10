@@ -71,18 +71,20 @@ pub fn title(name: &str, title: &str, snowing: bool, precipitation: f32) -> Stri
 }
 
 #[allow(clippy::type_complexity)]
+#[allow(clippy::too_many_arguments)]
 fn update(
     clock: Res<WorldClock>,
     state: Res<WeatherState>,
     kinds: Res<WeatherKinds>,
     c: Res<Conditions>,
+    wind: Res<crate::wind::Wind>,
     mut title_q: Query<&mut Text, (With<Title>, Without<Next>)>,
     mut next_q: Query<(&mut Text, &mut TextColor), (With<Next>, Without<Title>)>,
     mut left_q: Query<&mut Node, With<Left>>,
 ) {
     let now = clock.total_days();
     let k = &kinds.list[state.current];
-    let name = title(&k.name, &k.title, c.snowing, k.precipitation);
+    let name = format!("{}  ({} wind)", title(&k.name, &k.title, c.snowing, k.precipitation), wind.compass());
     for mut t in &mut title_q {
         if t.0 != name {
             t.0 = name.clone();

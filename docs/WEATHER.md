@@ -8,13 +8,13 @@ RON files, update both.
 
 | weather | name in files | lasts (game hours) | lasts (real minutes) | cloud cover | cloud shade | low deck (y 200) | middle puffs (y 236) | high wisps (y 300) | visibility (blocks) | sunlight | rain/snow | wind (blocks/s) | lightning | felt chill (°C) | air | spring % | summer % | autumn % | winter % |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Clear | clear | 6-14 | 5.0-11.7 | 0.22 | 1.0 | 0% | 18% | 22% | 1400 | 1.0 | 0.0 | 3 | no | 0 | 1.0 | 27% | 54% | 18% | 19% |
-| Overcast | overcast | 4-10 | 3.3-8.3 | 0.75 | 0.8 | 50% | 87% | 75% | 900 | 0.55 | 0.0 | 5 | no | -1.0 | 1.0 | 20% | 15% | 24% | 25% |
-| Rain | rain | 3-8 | 2.5-6.7 | 0.9 | 0.6 | 88% | 100% | 90% | 260 | 0.35 | 0.7 | 6 | no | -4.0 | 1.0 | 27% | 8% | 18% | 25% |
+| Clear | clear | 6-14 | 5.0-11.7 | 0.1 | 1.0 | 0% | 3% | 5% | 1400 | 1.0 | 0.0 | 3 | no | 0 | 1.0 | 27% | 54% | 18% | 19% |
+| Overcast | overcast | 4-10 | 3.3-8.3 | 0.75 | 0.8 | 50% | 87% | 74% | 900 | 0.55 | 0.0 | 5 | no | -1.0 | 1.0 | 20% | 15% | 24% | 25% |
+| Rain | rain | 3-8 | 2.5-6.7 | 0.9 | 0.6 | 88% | 100% | 89% | 260 | 0.35 | 0.7 | 6 | no | -4.0 | 1.0 | 27% | 8% | 18% | 25% |
 | Thunderstorm | storm | 2-5 | 1.7-4.2 | 1 | 0.4 | 100% | 100% | 100% | 170 | 0.2 | 1.0 | 12 | yes | -7.0 | 0.9 | 7% | 15% | 6% | - |
-| Mist | mist | 2-6 | 1.7-5.0 | 0.5 | 0.9 | 0% | 55% | 50% | 70 | 0.7 | 0.0 | 1 | no | -2.0 | 0.85 | 13% | 8% | 18% | 12% |
-| Cold Snap | cold_snap | 8-18 | 6.7-15.0 | 0.15 | 1.0 | 0% | 9% | 15% | 1400 | 1.0 | 0.0 | 4 | no | -16.0 | 1.0 | - | - | 6% | 19% |
-| Gale | gale | 2-5 | 1.7-4.2 | 0.85 | 0.6 | 75% | 100% | 85% | 400 | 0.45 | 0.2 | 24 | no | -5.0 | 0.8 | 7% | - | 12% | - |
+| Mist | mist | 2-6 | 1.7-5.0 | 0.5 | 0.9 | 0% | 55% | 47% | 70 | 0.7 | 0.0 | 1 | no | -2.0 | 0.85 | 13% | 8% | 18% | 12% |
+| Cold Snap | cold_snap | 8-18 | 6.7-15.0 | 0.06 | 1.0 | 0% | 0% | 1% | 1400 | 1.0 | 0.0 | 4 | no | -16.0 | 1.0 | - | - | 6% | 19% |
+| Gale | gale | 2-5 | 1.7-4.2 | 0.85 | 0.6 | 75% | 100% | 84% | 400 | 0.45 | 0.2 | 24 | no | -5.0 | 0.8 | 7% | - | 12% | - |
 
 How to read it:
 
@@ -22,9 +22,14 @@ How to read it:
   seconds (a day is 20 minutes). Holding T fast-forwards it with the clock.
 - **Cloud cover** is the weather's dial, 0 to 1. Each layer turns that into
   its own cover between its `from` and `to` (low 0.55-0.95, middle
-  0.08-0.85, high 0-1); the layer columns show where each one sits, 0% = gone,
+  0.08-0.85, high 0.05-1); the layer columns show where each one sits, 0% = gone,
   100% = as thick as it gets. **Cloud shade** is how white the clouds are
   (1 = white, lower = grey).
+- **Wind** is its strength. Rain and snow drift with it and grass and leaves
+  sway with it; the clouds drift with its square root (about 1.7 blocks/s on a
+  clear day, 5 in a gale). Its direction turns slowly on its own and veers a
+  little with each new weather (`crates/game/src/wind.rs`), and the clouds
+  follow it round.
 - **Visibility** is how far you see before fog, before biome haze. **Sunlight**
   multiplies the sun. **Rain/snow** falls as snow below freezing. **Air** below
   1 makes it harder to breathe.

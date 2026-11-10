@@ -9,13 +9,16 @@
 //   visibility:    how far you can see in blocks, before biome haze
 //   light:         multiplies sunlight
 //   precipitation: rain or snow amount, 0..1 (snow where it's below freezing)
-//   wind:          cloud and rain drift, blocks per second
+//   wind:          wind strength, blocks per second: rain and snow drift with it,
+//                  grass and leaves sway with it, clouds drift with its square
+//                  root (a gale moves them faster, not wildly); its direction
+//                  turns slowly by itself (see crates/game/src/wind.rs)
 //   lightning:     true for thunderstorms
 //   chill:         added to the felt temperature, °C (wet and wind feel colder)
 //   air:           how breathable the air is, 1 = normal (swamp spores in mist,
 //                  gale winds in storms make it harder to breathe)
 [
-    (name: "clear", title: "Clear", hours: (6.0, 14.0), clouds: 0.22, cloud_shade: 1.0,
+    (name: "clear", title: "Clear", hours: (6.0, 14.0), clouds: 0.1, cloud_shade: 1.0,
      visibility: 1400.0, light: 1.0, precipitation: 0.0, wind: 3.0, lightning: false),
     (name: "overcast", title: "Overcast", hours: (4.0, 10.0), clouds: 0.75, cloud_shade: 0.8,
      visibility: 900.0, light: 0.55, precipitation: 0.0, wind: 5.0, lightning: false, chill: -1.0),
@@ -26,7 +29,7 @@
     (name: "mist", title: "Mist", hours: (2.0, 6.0), clouds: 0.5, cloud_shade: 0.9,
      visibility: 70.0, light: 0.7, precipitation: 0.0, wind: 1.0, lightning: false, chill: -2.0, air: 0.85),
     // Autumn and winter: a sudden bitter cold under a clear sky.
-    (name: "cold_snap", title: "Cold Snap", hours: (8.0, 18.0), clouds: 0.15, cloud_shade: 1.0,
+    (name: "cold_snap", title: "Cold Snap", hours: (8.0, 18.0), clouds: 0.06, cloud_shade: 1.0,
      visibility: 1400.0, light: 1.0, precipitation: 0.0, wind: 4.0, lightning: false, chill: -16.0),
     // Spring and autumn: a howling gale that pushes you about and steals your breath.
     (name: "gale", title: "Gale", hours: (2.0, 5.0), clouds: 0.85, cloud_shade: 0.6,

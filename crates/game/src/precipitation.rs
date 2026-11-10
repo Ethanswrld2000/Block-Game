@@ -87,9 +87,11 @@ fn blocked(world: &World, p: Vec3) -> bool {
 }
 
 #[allow(clippy::type_complexity)]
+#[allow(clippy::too_many_arguments)]
 fn fall(
     time: Res<Time>,
     weather: Res<Conditions>,
+    wind: Res<crate::wind::Wind>,
     world: Res<World>,
     assets: Res<DropAssets>,
     cam: Query<&Transform, (With<FlyCamera>, Without<Drop>)>,
@@ -103,7 +105,8 @@ fn fall(
     let c = cam.translation;
     let dt = time.delta_secs().min(0.25);
     let active = if weather.precipitation > 0.02 { (weather.precipitation * DROPS as f32) as usize } else { 0 };
-    let wind = Vec3::new(1.0, 0.0, 0.35).normalize() * weather.wind;
+    let w = wind.velocity();
+    let wind = Vec3::new(w.x, 0.0, w.y);
     let t = time.elapsed_secs();
 
     for (mut d, mut tf, mut vis, mut mesh, mut mat) in &mut drops {

@@ -339,8 +339,10 @@ fn use_hands(
         && mouse.pressed(MouseButton::Right)
         && (mouse.just_pressed(MouseButton::Right) || anim.place_cooldown <= 0.0)
     {
-        let into = hit.before;
-        let free = world.block(into).is_some_and(|b| !blocks.registry.get(b).solid && blocks.registry.get(b).shape == voxel::Shape::Cube);
+        // Aiming at a plant puts the block in its place.
+        let is_plant = |p: BlockPos| world.block(p).is_some_and(|b| blocks.registry.get(b).shape == voxel::Shape::Plant);
+        let into = if is_plant(hit.block) { hit.block } else { hit.before };
+        let free = world.block(into).is_some_and(|b| !blocks.registry.get(b).solid && blocks.registry.get(b).shape != voxel::Shape::Torch);
         // Never inside yourself (solid blocks only; a torch can go at your feet).
         let blocks_player = blocks.registry.get(place).solid && player.overlaps(into);
         if free && !blocks_player && item.is_some_and(|i| inv.take(i, 1)) && world.set_block(into, place) {
@@ -372,6 +374,14 @@ fn use_hands(
             }
             if mining.progress >= 1.0 && world.set_block(hit.block, BlockId::AIR) {
                 mined.write(Mined { pos: hit.block, block: b });
+                // A plant standing on the block goes with it.
+                let above = BlockPos::new(hit.block.x, hit.block.y + 1, hit.block.z);
+                if let Some(p) = world.block(above).filter(|p| blocks.registry.get(*p).shape == voxel::Shape::Plant)
+                    && world.set_block(above, BlockId::AIR)
+                {
+                    mined.write(Mined { pos: above, block: p });
+                    remesh_around(&mut world, &blocks, above);
+                }
                 remesh_around(&mut world, &blocks, hit.block);
                 mining.block = None;
                 mining.progress = 0.0;
