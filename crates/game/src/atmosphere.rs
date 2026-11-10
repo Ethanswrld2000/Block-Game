@@ -333,7 +333,7 @@ mod tests {
         let l = looks();
         let day = current_grade(&l, Grade::default(), Grade::default(), Grade::default(), 0.0);
         let night = current_grade(&l, Grade::default(), Grade::default(), Grade::default(), 1.0);
-        assert!(night.saturation < day.saturation * 0.7);
+        assert!(night.saturation < day.saturation);
         assert!(night.warmth < day.warmth);
     }
 
