@@ -9,6 +9,11 @@
 //!    `trailing_zeros` / `trailing_ones`, so a flat field of grass becomes a
 //!    handful of quads instead of thousands.
 //!
+//! 4. Each face also gets corner shading (ambient occlusion): how many of the
+//!    three opaque blocks around each corner, in front of the face, crowd it.
+//!    Faces only merge where the shading stays correct across the merged quad
+//!    (same values, and only along the direction they don't change in).
+//!
 //! The output is a list of [`Quad`]s; turning those into GPU vertices is the
 //! renderer's job.
 
@@ -69,6 +74,40 @@ pub struct Quad {
     /// Size along the face's u axis and v axis, in blocks (1..=32).
     pub size_u: u8,
     pub size_v: u8,
+    /// Corner shading, 0 (open) to 3 (in a crease), for the corners
+    /// (u0, v0), (u1, v0), (u0, v1), (u1, v1), where u1/v1 is the far edge.
+    pub ao: [u8; 4],
+}
+
+/// How faces with this corner shading may merge with their neighbours.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Merge {
+    /// The same everywhere: merge both ways.
+    Both,
+    /// Shading changes along u only: stack along v.
+    AlongV,
+    /// Shading changes along v only: stack along u.
+    AlongU,
+    /// A lone face.
+    None,
+}
+
+fn merge_kind(ao: [u8; 4]) -> Merge {
+    let along_v = ao[0] == ao[2] && ao[1] == ao[3];
+    let along_u = ao[0] == ao[1] && ao[2] == ao[3];
+    match (along_u, along_v) {
+        (true, true) => Merge::Both,
+        (false, true) => Merge::AlongV,
+        (true, false) => Merge::AlongU,
+        _ => Merge::None,
+    }
+}
+
+/// Corner shading for one corner from its two side neighbours and the
+/// diagonal one: two sides make a full crease whatever the diagonal is.
+#[inline]
+fn corner_ao(side_u: bool, side_v: bool, diagonal: bool) -> u8 {
+    if side_u && side_v { 3 } else { side_u as u8 + side_v as u8 + diagonal as u8 }
 }
 
 /// A chunk plus a 1-block border, as dense ids. Index with [`padded_index`];
@@ -103,8 +142,9 @@ impl PaddedChunk {
 /// Mesh one padded chunk. `opaque[id]` says whether a block hides faces behind it.
 pub fn mesh(chunk: &PaddedChunk, opaque: &[bool]) -> Vec<Quad> {
     let mut quads = Vec::new();
-    // Planes reused between slices: (block, rows[u] = bits along v).
-    let mut planes: Vec<(BlockId, [u32; CHUNK_SIZE])> = Vec::new();
+    // Planes reused between slices: (block, corner shading, rows[u] = bits along v).
+    let mut planes: Vec<(BlockId, [u8; 4], [u32; CHUNK_SIZE])> = Vec::new();
+    let occludes = |x: usize, y: usize, z: usize| opaque[chunk.get(x, y, z).0 as usize];
 
     for axis in 0..3 {
         // Column masks for this axis: index [u * PADDED + v] over padded coords.
@@ -179,8 +219,10 @@ pub fn mesh(chunk: &PaddedChunk, opaque: &[bool]) -> Vec<Quad> {
                 if rows.iter().all(|&r| r == 0) {
                     continue;
                 }
-                // Split this slice's visible faces by block type.
+                // Split this slice's visible faces by block type and corner shading.
                 planes.clear();
+                // The layer in front of these faces, in padded coordinates.
+                let front = if positive { d + 2 } else { d };
                 for (u, &row) in rows.iter().enumerate() {
                     let mut bits = row;
                     while bits != 0 {
@@ -191,23 +233,37 @@ pub fn mesh(chunk: &PaddedChunk, opaque: &[bool]) -> Vec<Quad> {
                         p[ua] = u + 1;
                         p[va] = v + 1;
                         let b = chunk.get(p[0], p[1], p[2]);
-                        let plane = match planes.iter_mut().find(|(pb, _)| *pb == b) {
+                        let at = |du: isize, dv: isize| {
+                            let mut q = [0usize; 3];
+                            q[axis] = front;
+                            q[ua] = (u as isize + 1 + du) as usize;
+                            q[va] = (v as isize + 1 + dv) as usize;
+                            occludes(q[0], q[1], q[2])
+                        };
+                        let (nu, pu, nv, pv) = (at(-1, 0), at(1, 0), at(0, -1), at(0, 1));
+                        let ao = [
+                            corner_ao(nu, nv, at(-1, -1)),
+                            corner_ao(pu, nv, at(1, -1)),
+                            corner_ao(nu, pv, at(-1, 1)),
+                            corner_ao(pu, pv, at(1, 1)),
+                        ];
+                        let plane = match planes.iter_mut().find(|(pb, pa, _)| *pb == b && *pa == ao) {
                             Some(pl) => pl,
                             None => {
-                                planes.push((b, [0; CHUNK_SIZE]));
+                                planes.push((b, ao, [0; CHUNK_SIZE]));
                                 planes.last_mut().unwrap()
                             }
                         };
-                        plane.1[u] |= 1 << v;
+                        plane.2[u] |= 1 << v;
                     }
                 }
-                for (block, plane) in planes.iter_mut() {
-                    greedy_plane(plane, |u, v, su, sv| {
+                for (block, ao, plane) in planes.iter_mut() {
+                    greedy_plane(plane, merge_kind(*ao), |u, v, su, sv| {
                         let mut origin = [0u8; 3];
                         origin[axis] = d as u8;
                         origin[ua] = u as u8;
                         origin[va] = v as u8;
-                        quads.push(Quad { face, block: *block, origin, size_u: su as u8, size_v: sv as u8 });
+                        quads.push(Quad { face, block: *block, origin, size_u: su as u8, size_v: sv as u8, ao: *ao });
                     });
                 }
             }
@@ -216,16 +272,23 @@ pub fn mesh(chunk: &PaddedChunk, opaque: &[bool]) -> Vec<Quad> {
     quads
 }
 
-/// Merge set bits of a 32x32 plane into rectangles. Calls `emit(u, v, size_u, size_v)`.
-fn greedy_plane(plane: &mut [u32; CHUNK_SIZE], mut emit: impl FnMut(usize, usize, usize, usize)) {
+/// Merge set bits of a 32x32 plane into rectangles, only in the directions
+/// `merge` allows. Calls `emit(u, v, size_u, size_v)`.
+fn greedy_plane(plane: &mut [u32; CHUNK_SIZE], merge: Merge, mut emit: impl FnMut(usize, usize, usize, usize)) {
+    let (grow_u, grow_v) = match merge {
+        Merge::Both => (true, true),
+        Merge::AlongU => (true, false),
+        Merge::AlongV => (false, true),
+        Merge::None => (false, false),
+    };
     for u in 0..CHUNK_SIZE {
         while plane[u] != 0 {
             let v = plane[u].trailing_zeros() as usize;
-            let run = (plane[u] >> v).trailing_ones() as usize;
+            let run = if grow_v { (plane[u] >> v).trailing_ones() as usize } else { 1 };
             let mask = if run == 32 { u32::MAX } else { ((1u32 << run) - 1) << v };
             plane[u] &= !mask;
             let mut size_u = 1;
-            while u + size_u < CHUNK_SIZE && plane[u + size_u] & mask == mask {
+            while grow_u && u + size_u < CHUNK_SIZE && plane[u + size_u] & mask == mask {
                 plane[u + size_u] &= !mask;
                 size_u += 1;
             }
@@ -304,6 +367,46 @@ mod tests {
         let q = mesh(&c, &OPAQUE);
         assert!(q.iter().any(|q| q.block == STONE && q.face == Face::PosX));
         assert!(!q.iter().any(|q| q.block == GLASS && q.face == Face::NegX));
+    }
+
+    #[test]
+    fn open_faces_have_no_shading() {
+        let mut c = PaddedChunk::default();
+        c.set(5, 5, 5, STONE);
+        assert!(mesh(&c, &OPAQUE).iter().all(|q| q.ao == [0; 4]));
+    }
+
+    #[test]
+    fn floor_by_a_wall_is_shaded_along_the_wall() {
+        // A 32x32 floor with a wall along x = 1 standing on it.
+        let mut c = PaddedChunk::default();
+        for x in 1..=32 {
+            for z in 1..=32 {
+                c.set(x, 1, z, STONE);
+            }
+        }
+        for z in 0..=33 {
+            c.set(1, 2, z, STONE);
+        }
+        let tops: Vec<_> = mesh(&c, &OPAQUE).into_iter().filter(|q| q.face == Face::PosY && q.origin[1] == 0).collect();
+        // The strip touching the wall (x = 1) is one quad, dark on its wall side only.
+        let strip: Vec<_> = tops.iter().filter(|q| q.origin[0] == 1).collect();
+        assert_eq!(strip.len(), 1, "{tops:?}");
+        assert_eq!((strip[0].size_u, strip[0].size_v), (1, 32));
+        assert_eq!(strip[0].ao, [2, 0, 2, 0]);
+        // The rest of the floor is open and merges as before.
+        let open: Vec<_> = tops.iter().filter(|q| q.origin[0] > 1).collect();
+        assert_eq!(open.len(), 1);
+        assert_eq!(open[0].ao, [0; 4]);
+        assert_eq!(area(&tops), 31 * 32);
+    }
+
+    #[test]
+    fn crease_corner_is_fully_dark() {
+        assert_eq!(corner_ao(true, true, false), 3);
+        assert_eq!(corner_ao(true, false, true), 2);
+        assert_eq!(corner_ao(false, false, true), 1);
+        assert_eq!(corner_ao(false, false, false), 0);
     }
 
     #[test]

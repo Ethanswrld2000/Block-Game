@@ -47,6 +47,9 @@ pub struct LodExtension {
     /// Drawn chunks around `center` (see `World::drawn_mask`); the shader hides the tiles there.
     #[texture(101, sample_type = "u_int")]
     pub mask: Handle<Image>,
+    /// Sky-matched fog and ground mist (see `atmosphere`).
+    #[uniform(102)]
+    pub atmos: crate::atmosphere::AtmosParams,
 }
 
 /// Half-width of the drawn-chunk mask in chunks: the largest view distance
@@ -79,6 +82,12 @@ pub struct LodTiles {
     pub count: usize,
 }
 
+impl LodTiles {
+    pub fn material(&self) -> Option<&Handle<LodMaterial>> {
+        self.material.as_ref()
+    }
+}
+
 /// Keep the shader's mask of drawn chunks up to date (only re-sent when it changes).
 fn update_mask(
     world: Res<World>,
@@ -103,8 +112,8 @@ fn update_mask(
         );
         lod.mask = Some(images.add(image));
         lod.material = Some(materials.add(LodMaterial {
-            base: StandardMaterial { perceptual_roughness: 1.0, reflectance: 0.05, ..default() },
-            extension: LodExtension { center: center.as_vec3().extend(MASK_HALF as f32), mask: lod.mask.clone().unwrap() },
+            base: StandardMaterial { perceptual_roughness: 1.0, reflectance: 0.05, fog_enabled: false, ..default() },
+            extension: LodExtension { center: center.as_vec3().extend(MASK_HALF as f32), mask: lod.mask.clone().unwrap(), atmos: default() },
         }));
         *last = (Some(center), mask);
         return;

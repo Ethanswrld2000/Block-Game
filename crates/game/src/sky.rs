@@ -16,6 +16,7 @@ use bevy::shader::ShaderRef;
 use crate::blocks::{Blocks, VoxelMaterial};
 use crate::camera::FlyCamera;
 use crate::clock::{Seasons, WorldClock};
+use crate::atmosphere::Atmos;
 use crate::weather::{Conditions, LocalClimate};
 
 /// Radius of the sky sphere. The camera's far plane is beyond it.
@@ -44,6 +45,11 @@ pub struct SkyParams {
     pub star_x: Vec4,
     pub star_y: Vec4,
     pub star_z: Vec4,
+    /// The middle band of the three-stop gradient (horizon, mid, zenith).
+    pub mid: Vec4,
+    /// x: daytime haze brightening towards the sun (same as the fog's),
+    /// y: brightness of the band of faint stars across the night sky.
+    pub haze: Vec4,
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -71,10 +77,10 @@ impl Plugin for SkyPlugin {
 }
 
 #[derive(Component)]
-struct Sun;
+pub struct Sun;
 
 #[derive(Component)]
-struct SkyDome;
+pub struct SkyDome;
 
 fn spawn_sky(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<SkyMaterial>>) {
     commands.spawn((
@@ -166,7 +172,7 @@ fn luma(c: Vec3) -> f32 {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn update_sky(
+pub fn update_sky(
     clock: Res<WorldClock>,
     seasons: Res<Seasons>,
     weather: Res<Conditions>,
@@ -177,6 +183,7 @@ fn update_sky(
     mut fog_q: Query<&mut DistanceFog>,
     dome: Query<&MeshMaterial3d<SkyMaterial>, With<SkyDome>>,
     mut materials: ResMut<Assets<SkyMaterial>>,
+    mut atmos: ResMut<Atmos>,
 ) {
     let season = seasons.at(&clock);
     let daylight_share = seasons.blended(season, |s| s.daylight);
@@ -190,20 +197,28 @@ fn update_sky(
     let cloudy = smoothstep(0.3, 0.95, weather.clouds);
     let dim = 0.45 + 0.55 * weather.light;
 
-    // Sky colours.
-    let mut zenith = srgb(0.012, 0.018, 0.05).lerp(srgb(0.3, 0.5, 0.86), day);
-    let mut horizon = srgb(0.035, 0.045, 0.085).lerp(srgb(0.68, 0.8, 0.93), day);
-    let sunset_color = srgb(1.0, 0.5, 0.22);
+    // Sky colours. Nights are deep blue-black; a moon that is up lifts them a little.
+    let moon_up = smoothstep(0.02, 0.18, moon.y) * lit;
+    let night_zenith = srgb(0.007, 0.011, 0.032).lerp(srgb(0.014, 0.022, 0.058), moon_up);
+    let night_horizon = srgb(0.024, 0.032, 0.066).lerp(srgb(0.04, 0.052, 0.095), moon_up);
+    let mut zenith = night_zenith.lerp(srgb(0.22, 0.42, 0.85), day);
+    let mut horizon = night_horizon.lerp(srgb(0.66, 0.79, 0.93), day);
+    let sunset_color = atmos.sunset;
     horizon = horizon.lerp(sunset_color * 0.8, sunset * 0.45);
-    zenith = zenith.lerp(srgb(0.32, 0.3, 0.55), sunset * 0.35);
-    // The local biome tints the haze (green-grey over the swamp, sandy over dunes).
+    zenith = zenith.lerp(srgb(0.3, 0.27, 0.52), sunset * 0.35);
+    // The local biome tints the haze (green-grey over the swamp, sandy over
+    // dunes), and the sky above a little.
     let biome = Vec3::from_array(climate.fog.to_array()).powf(2.2) * (0.06 + 0.94 * day);
     horizon = horizon.lerp(biome, 0.45);
+    zenith = zenith.lerp(biome * 0.6, 0.08 * day);
     // Clouds and rain wash the colour out.
     horizon = horizon.lerp(Vec3::splat(luma(horizon)), cloudy * 0.7);
     zenith = zenith.lerp(horizon * 0.95, cloudy * 0.85);
     zenith *= dim;
     horizon *= dim;
+    // Middle of the sky: between the two, a touch deeper in colour.
+    let mid_raw = horizon.lerp(zenith, 0.55);
+    let mid = Vec3::splat(luma(mid_raw)).lerp(mid_raw, 1.0 + 0.25 * (1.0 - cloudy)).max(Vec3::ZERO);
     let flash = weather.flash;
     horizon += Vec3::splat(flash * 0.35);
 
@@ -230,16 +245,23 @@ fn update_sky(
         *tf = Transform::default().looking_to(-d, Vec3::Y);
     }
 
-    // Ambient: sky light, enough to see by under the moon.
+    // Ambient: sky light. By day strong enough that shade stays readable; at
+    // night dim and blue, just enough to make out shapes under a new moon and
+    // clearly more under a full one, so torches really matter.
     let sky_tint = (zenith * 0.4 + horizon * 0.6).normalize_or_zero() * 1.7;
-    ambient.color = Color::linear_rgb(sky_tint.x.min(1.0), sky_tint.y.min(1.0), sky_tint.z.min(1.0));
-    // Brighter nights under a full moon that is up.
-    let moonlight = 1.0 + 0.8 * lit * moon_amount;
-    // Daytime sky light is strong enough that shade stays readable (softer shadows).
-    ambient.brightness = (70.0 * moonlight + 1_050.0 * day) * (0.55 + 0.45 * weather.light) + flash * 2500.0;
+    let night_tint = srgb(0.55, 0.66, 1.0);
+    let tint = night_tint.lerp(sky_tint, day).min(Vec3::ONE);
+    ambient.color = Color::linear_rgb(tint.x, tint.y, tint.z);
+    let night_light = 42.0 + 58.0 * lit * moon_amount;
+    ambient.brightness = (night_light + 1_100.0 * day) * (0.55 + 0.45 * weather.light) + flash * 2500.0;
 
-    // Fog.
+    // Fog. Terrain fogs itself towards the sky in the direction you look (see
+    // `atmosphere`, same numbers as the dome below); Bevy's fog covers the rest
+    // (creatures, clouds, items) with the plain horizon colour.
     let visibility = (weather.visibility * climate.haze).clamp(30.0, MAX_VISIBILITY);
+    let sc = sunset_color.lerp(srgb(1.0, 0.95, 0.85), warm);
+    let glow_amount = sunset * (1.0 - cloudy * 0.8);
+    let day_haze = 0.35 * day * (1.0 - cloudy);
     for mut fog in &mut fog_q {
         fog.color = Color::linear_rgb(horizon.x, horizon.y, horizon.z);
         let glow = sunset_color * (sunset * (1.0 - cloudy));
@@ -247,23 +269,32 @@ fn update_sky(
         fog.directional_light_exponent = 12.0;
         fog.falloff = FogFalloff::Linear { start: visibility * 0.2, end: visibility };
     }
+    atmos.params.horizon = horizon.extend(visibility * 0.2);
+    atmos.params.glow = sc.extend(visibility);
+    atmos.params.sun = sun.extend(glow_amount);
+    atmos.params.mist.w = day_haze;
+    atmos.night = 1.0 - day;
+    // Morning: from just before sunrise until the sun is well up.
+    let morning = if clock.time < 0.5 { 1.0 } else { 0.0 };
+    atmos.dawn = morning * smoothstep(-0.25, -0.02, sun.y) * (1.0 - smoothstep(0.12, 0.4, sun.y));
 
     if let Ok(handle) = dome.single()
         && let Some(mut mat) = materials.get_mut(&handle.0)
     {
-        let sc = srgb(1.0, 0.55, 0.28).lerp(srgb(1.0, 0.95, 0.85), warm);
         // Inverse rotation, as columns; the shader uses them as rows (transpose = inverse).
         let inv = Mat3::from_quat(sky_rotation(clock.time));
         mat.extension.params = SkyParams {
             zenith: zenith.extend(1.0),
             horizon: horizon.extend(1.0),
-            sun_dir: sun.extend(sunset * (1.0 - cloudy * 0.8)),
+            sun_dir: sun.extend(glow_amount),
             sun_color: sc.extend(1.0),
             moon_dir: moon.extend(0.35 + 0.65 * (1.0 - day)),
-            extra: Vec4::new((1.0 - smoothstep(-0.3, 0.02, sun.y)) * 1.4, lit, flash * 0.6, cloudy),
+            extra: Vec4::new((1.0 - smoothstep(-0.32, -0.08, sun.y)) * 1.4, lit, flash * 0.6, cloudy),
             star_x: inv.x_axis.extend(0.0),
             star_y: inv.y_axis.extend(0.0),
             star_z: inv.z_axis.extend(0.0),
+            mid: mid.extend(1.0),
+            haze: Vec4::new(day_haze, 1.0 - smoothstep(-0.3, 0.0, sun.y), 0.0, 0.0),
         };
     }
 }
