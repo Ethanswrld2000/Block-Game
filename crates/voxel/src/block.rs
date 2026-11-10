@@ -61,6 +61,9 @@ pub enum Shape {
     /// Not meshed with the chunk; the game draws it as its own small model
     /// (and gives it a light).
     Torch,
+    /// Two crossed see-through quads (grass, reeds, ferns), meshed with the
+    /// chunk into their own mesh; the top sways in the wind.
+    Plant,
 }
 
 fn yes() -> bool {

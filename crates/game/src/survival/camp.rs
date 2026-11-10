@@ -104,7 +104,7 @@ fn clear_patch(world: &World, blocks: &Blocks, c: BlockPos) -> bool {
     (0..2).all(|dx| {
         (0..2).all(|dz| {
             let p = BlockPos::new(c.x + dx, c.y, c.z + dz);
-            let open = |q: BlockPos| world.block(q).is_some_and(|b| Some(b) != water && !blocks.registry.get(b).solid && blocks.registry.get(b).shape == voxel::Shape::Cube);
+            let open = |q: BlockPos| world.block(q).is_some_and(|b| Some(b) != water && !blocks.registry.get(b).solid && blocks.registry.get(b).shape != voxel::Shape::Torch);
             open(p) && open(BlockPos::new(p.x, p.y + 1, p.z)) && solid(BlockPos::new(p.x, p.y - 1, p.z)) == Some(true)
         })
     })

@@ -14,4 +14,8 @@
     "snow": [],
     "ice": [],
     "water": [],
+    "tall_grass": [("plant_fiber", 1, 0.4)],
+    "reeds": [("plant_fiber", 1, 0.6), ("swamp_reed", 1, 0.25)],
+    "fern": [("plant_fiber", 1, 0.3)],
+    "bog_bloom": [("plant_fiber", 1, 0.2)],
 }

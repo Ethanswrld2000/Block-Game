@@ -28,6 +28,26 @@ struct BiomeSpec {
     fog: (f32, f32, f32),
     #[serde(default = "one")]
     haze: f32,
+    #[serde(default)]
+    plants: Vec<PlantSpec>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct PlantSpec {
+    block: String,
+    chance: f32,
+    #[serde(default)]
+    shore: bool,
+}
+
+/// A ground plant a biome scatters on its surface.
+#[derive(Debug, Clone, Copy)]
+pub struct Plant {
+    pub block: BlockId,
+    /// Chance per surface block, before the patch noise (0..1).
+    pub chance: f32,
+    /// Only by the water: ground at most one block above sea level.
+    pub shore: bool,
 }
 
 fn one() -> f32 {
@@ -52,6 +72,8 @@ pub struct Biome {
     pub fog: [f32; 3],
     /// Multiplies how far you can see: below 1 is hazier (the swamp).
     pub haze: f32,
+    /// Ground plants, tried in order.
+    pub plants: Vec<Plant>,
 }
 
 #[derive(Debug, Clone)]
@@ -69,6 +91,11 @@ impl Biomes {
         };
         let mut list = Vec::new();
         for s in specs {
+            let plants = s
+                .plants
+                .iter()
+                .map(|p| Ok(Plant { block: block(&s.name, &p.block)?, chance: p.chance, shore: p.shore }))
+                .collect::<Result<Vec<_>, String>>()?;
             list.push(Biome {
                 surface: block(&s.name, &s.surface)?,
                 subsurface: block(&s.name, &s.subsurface)?,
@@ -83,6 +110,7 @@ impl Biomes {
                 tree_chance: s.tree_chance,
                 fog: [s.fog.0, s.fog.1, s.fog.2],
                 haze: s.haze,
+                plants,
             });
         }
         let find = |n: &str| list.iter().position(|b| b.name == n).ok_or_else(|| format!("biomes.ron needs a '{n}' biome"));

@@ -274,7 +274,7 @@ pub fn setup_generator(
     if let Some(v) = wg.home_village() {
         info!("home village {} at {:?} with {} huts", v.name, v.center, v.huts.len());
     }
-    world.shaped = Arc::new(blocks.registry.iter().map(|(_, d)| d.shape != voxel::Shape::Cube).collect());
+    world.shaped = Arc::new(blocks.registry.iter().map(|(_, d)| d.shape == voxel::Shape::Torch).collect());
     player.pos = Vec3::new(x as f32 + 0.5, y as f32, z as f32 + 0.5);
     for mut tf in &mut cam {
         tf.translation = player.pos + Vec3::Y * crate::player::EYE;
@@ -490,6 +490,13 @@ fn collect_meshes(
                     commands.spawn((Mesh3d(meshes.add(mesh)), MeshMaterial3d::<VoxelMaterial>(mat.clone()), tf)).id(),
                 );
             }
+        }
+        // Plants cast no shadow: their crossed quads would shadow as solid squares.
+        if let Some(mesh) = m.plants {
+            uploads += 1;
+            chunk.entities.push(
+                commands.spawn((Mesh3d(meshes.add(mesh)), MeshMaterial3d::<VoxelMaterial>(opaque_mat.clone()), tf, bevy::light::NotShadowCaster)).id(),
+            );
         }
     }
     world.finished_meshes = later;
