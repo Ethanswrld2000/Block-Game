@@ -36,6 +36,13 @@ pub struct Exposure {
     pub air: Vec<Stage>,
     /// Seconds of held breath under water.
     pub breath: f32,
+    /// Time constant, seconds, of the felt temperature following the surroundings.
+    #[serde(default = "follow")]
+    pub follow: f32,
+}
+
+fn follow() -> f32 {
+    12.0
 }
 
 /// A stage in effect and how far past its threshold you are.
