@@ -11,10 +11,10 @@ RON files, update both.
 | Clear | clear | 6-14 | 5.0-11.7 | 0.1 | 1.0 | 0% | 3% | 5% | 1400 | 1.0 | 0.0 | 3 | no | 0 | 1.0 | 27% | 54% | 18% | 19% |
 | Overcast | overcast | 4-10 | 3.3-8.3 | 0.75 | 0.8 | 50% | 87% | 74% | 900 | 0.55 | 0.0 | 5 | no | -1.0 | 1.0 | 20% | 15% | 24% | 25% |
 | Rain | rain | 3-8 | 2.5-6.7 | 0.9 | 0.6 | 88% | 100% | 89% | 260 | 0.35 | 0.7 | 6 | no | -4.0 | 1.0 | 27% | 8% | 18% | 25% |
-| Thunderstorm | storm | 2-5 | 1.7-4.2 | 1 | 0.4 | 100% | 100% | 100% | 170 | 0.2 | 1.0 | 12 | yes | -7.0 | 0.9 | 7% | 15% | 6% | - |
-| Mist | mist | 2-6 | 1.7-5.0 | 0.5 | 0.9 | 0% | 55% | 47% | 70 | 0.7 | 0.0 | 1 | no | -2.0 | 0.85 | 13% | 8% | 18% | 12% |
+| Thunderstorm | storm | 3-6 | 2.5-5.0 | 1 | 0.4 | 100% | 100% | 100% | 170 | 0.2 | 1.0 | 12 | yes | -7.0 | 0.9 | 7% | 15% | 6% | - |
+| Mist | mist | 3-7 | 2.5-5.8 | 0.5 | 0.9 | 0% | 55% | 47% | 70 | 0.7 | 0.0 | 1 | no | -2.0 | 0.85 | 13% | 8% | 18% | 12% |
 | Cold Snap | cold_snap | 8-18 | 6.7-15.0 | 0.06 | 1.0 | 0% | 0% | 1% | 1400 | 1.0 | 0.0 | 4 | no | -16.0 | 1.0 | - | - | 6% | 19% |
-| Gale | gale | 2-5 | 1.7-4.2 | 0.85 | 0.6 | 75% | 100% | 84% | 400 | 0.45 | 0.2 | 24 | no | -5.0 | 0.8 | 7% | - | 12% | - |
+| Gale | gale | 3-6 | 2.5-5.0 | 0.85 | 0.6 | 75% | 100% | 84% | 400 | 0.45 | 0.2 | 24 | no | -5.0 | 0.8 | 7% | - | 12% | - |
 
 How to read it:
 
@@ -32,7 +32,12 @@ How to read it:
   follow it round.
 - **Visibility** is how far you see before fog, before biome haze. **Sunlight**
   multiplies the sun. **Rain/snow** falls as snow below freezing. **Air** below
-  1 makes it harder to breathe.
+  1 makes it harder to breathe. Under about 500 blocks of visibility the fog
+  starts to cover the sky too (`sky::fog_veil`); in mist the sun, moon and
+  stars are gone.
+- **Rain/snow**: snow falls when it's below freezing where you are, and keeps
+  falling until it's a little above (so walking near the snow line doesn't
+  flick it back and forth).
 - **Season %** is the chance of that weather when the season picks one. The
   weather never picks itself again, so the real share of the next pick is a
   little higher for the others.
@@ -43,12 +48,12 @@ How to read it:
    one right away (by the season at the moment it ends). The panel in the top
    right shows the weather, the next one and the time left, with a bar.
 2. The clouds don't change while a weather lasts.
-3. 30 seconds before the change (`weather::CLOUD_LEAD_SECONDS`) the clouds
+3. A minute before the change (`weather::CLOUD_LEAD_SECONDS`) the clouds
    start turning into the next weather's cover and shade; the panel line turns
-   gold ("Rain rolling in 0:24").
-4. At the change, rain, fog, light, wind, chill and air blend in over about
-   30 seconds (`BLEND_SECONDS`). Lightning starts halfway through.
+   gold ("Rain rolling in 0:48").
+4. At the change, rain, fog, light, wind, chill and air blend in over a
+   minute (`BLEND_SECONDS`). Lightning starts halfway through.
 
-F4 skips to the following weather at once (clouds and all blend over 30 s).
+F4 skips to the following weather at once (clouds and all blend over a minute).
 `BLOCKGAME_WEATHER=rain` holds one weather for screenshots; the panel then
 says "holding".

@@ -132,13 +132,15 @@ fn fall(
             off.z = -off.z * 0.95;
             tf.translation = c + off;
         }
-        let gone = off.y < -BELOW || off.y > ABOVE + 6.0 || off.x * off.x + off.z * off.z > AREA_RADIUS * AREA_RADIUS * 1.2;
+        // Rain turned to snow (or back): every drop starts again as the new kind
+        // at once, so the two never fall together.
+        let switching = d.snow != weather.snowing;
+        let gone = switching || off.y < -BELOW || off.y > ABOVE + 6.0 || off.x * off.x + off.z * off.z > AREA_RADIUS * AREA_RADIUS * 1.2;
         let hit = !gone && !d.covered && blocked(&world, tf.translation);
         if gone || hit {
             // Start again somewhere above the camera. A freshly started pool
             // (y far below) scatters through the whole height so it doesn't
             // arrive in one sheet.
-            let switching = d.snow != weather.snowing;
             let fresh = off.y < -1000.0 || switching;
             let a = rand(&mut rng) * std::f32::consts::TAU;
             let r = rand(&mut rng).sqrt() * AREA_RADIUS;

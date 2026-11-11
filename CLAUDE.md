@@ -164,8 +164,9 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   and packed into UV_1.x's fraction (`chunk_mesh::pack_layer`). Sky: three-stop gradient, sun haze,
   sunset spread and anti-sun band, faint star band at night. Nights: dim blue ambient, lifted by the moon.
 - Weather timing: each weather picks the next one when it starts (`WeatherState.next/until`);
-  clouds change only in the last 30 s before a change (`weather::CLOUD_LEAD_SECONDS`), the rest
-  blends in after. `game::weather_hud` shows weather, next and countdown in `hud::TopRight` (a
+  clouds change only in the last minute before a change (`weather::CLOUD_LEAD_SECONDS`), the rest
+  blends in over a minute after. Snow has hysteresis (`SNOW_STOPS_ABOVE`); fog veils the sky dome
+  (`sky::fog_veil`, `SkyParams.haze.z`). `game::weather_hud` shows weather, next and countdown in `hud::TopRight` (a
   column at the top right; spawn panels there with `ChildOf`). Low and middle cloud layers are
   opaque (blended ones flickered by view angle) and thin out at their edge. Table: `docs/WEATHER.md`
   and `docs/weather.csv` (update when weather.ron or seasons.ron change).
