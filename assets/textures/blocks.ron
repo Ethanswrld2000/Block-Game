@@ -37,5 +37,6 @@
         "fern": 30,
         "bog_bloom": 31,
         "rootstone": 32,
+        "vine": 33,
     },
 )
