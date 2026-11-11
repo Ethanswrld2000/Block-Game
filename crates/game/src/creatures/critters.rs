@@ -36,6 +36,9 @@ impl Plugin for CrittersPlugin {
     }
 }
 
+/// Leaving critters (other than birds) only fade once they're this far from you.
+const FADE_AWAY: f32 = 16.0;
+
 /// Rain or snow heavier than this sends fair-weather critters away.
 const WET: f32 = 0.3;
 
@@ -300,8 +303,10 @@ fn move_critters(
             }
             Motion::Drifter => drifter(&mut c, &mut cr, k, spec, pos, startled, &around, &world, &blocks, rng),
         };
-        // Birds leave by flying off; the small ones fade.
-        if c.leaving && spec.motion != Motion::Bird {
+        // Birds leave by flying off; the small ones fade, but only out of your way, so
+        // none vanish in front of you.
+        let near = flat(tf.translation - around.player).length() < FADE_AWAY;
+        if c.leaving && spec.motion != Motion::Bird && !near {
             c.fade -= around.dt / 1.5;
         } else {
             c.fade = (c.fade + around.dt).min(1.0);
@@ -667,6 +672,14 @@ mod tests {
             for biome in ["great_swamp", "meadow", "pine_hills", "dunes", "highlands", "frost_peaks", "skyreach"] {
                 assert!(c.spawn.as_ref().unwrap().lives_in(biome), "{} doesn't live in {biome}", c.name);
             }
+        }
+    }
+
+    #[test]
+    fn critters_let_you_come_close() {
+        let k = super::super::data::tests::load();
+        for c in k.list.iter().filter_map(|c| c.critter.as_ref().map(|s| (&c.name, s))) {
+            assert_eq!(c.1.shy, 0.0, "{} startles when you come near", c.0);
         }
     }
 
