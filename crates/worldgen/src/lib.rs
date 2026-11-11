@@ -86,6 +86,11 @@ struct Ids {
     peat: BlockId,
     torch: BlockId,
     chest: BlockId,
+    /// Vines clinging to the north, south, east and west side of their cell.
+    vine: [BlockId; 4],
+    /// Twigs poking out of the trunk beside them, by the side they're attached to.
+    twig: [BlockId; 4],
+    pebble: BlockId,
 }
 
 /// The world generator. Build once, share between threads with `Arc`.
@@ -121,6 +126,9 @@ impl WorldGen {
             stone: b("stone")?,
             deeprock: b("deeprock")?,
             rootstone: b("rootstone")?,
+            vine: [b("vine_north")?, b("vine_south")?, b("vine_east")?, b("vine_west")?],
+            twig: [b("twig_north")?, b("twig_south")?, b("twig_east")?, b("twig_west")?],
+            pebble: b("pebble")?,
             dirt: b("dirt")?,
             water: b("water")?,
             coal: b("coal_ore")?,
@@ -476,6 +484,26 @@ mod tests {
         assert_eq!(g.generate(ChunkPos::new(0, 40, 0)).is_uniform(), Some(BlockId::AIR));
         assert_eq!(g.generate(ChunkPos::new(0, -11, 0)).is_uniform(), Some(g.ids.rootstone));
         assert_eq!(g.generate(ChunkPos::new(0, 32, 0)).is_uniform(), Some(BlockId::AIR));
+    }
+
+    #[test]
+    fn swamp_has_twigs_vines_and_pebbles() {
+        let g = wg();
+        let [sx, sy, sz] = g.find_spawn();
+        let (mut twigs, mut vines, mut pebbles) = (0, 0, 0);
+        for cz in -2..=2 {
+            for cx in -2..=2 {
+                for cy in -1..=0 {
+                    let p = ChunkPos::new(sx.div_euclid(32) + cx, sy.div_euclid(32) + cy, sz.div_euclid(32) + cz);
+                    for b in g.generate(p).to_dense() {
+                        twigs += g.ids.twig.contains(&b) as u32;
+                        vines += g.ids.vine.contains(&b) as u32;
+                        pebbles += (b == g.ids.pebble) as u32;
+                    }
+                }
+            }
+        }
+        assert!(twigs > 5 && vines > 10 && pebbles > 3, "twigs {twigs}, vines {vines}, pebbles {pebbles}");
     }
 
     #[test]

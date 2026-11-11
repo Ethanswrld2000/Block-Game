@@ -246,6 +246,59 @@ fn find_target(
     });
 }
 
+/// Break the block at `p` (it drops as usual), then anything that was held up
+/// by it: plants and pebbles on top, twigs and vines on its sides, and vines
+/// hanging below those. Returns false if nothing was there to break.
+fn break_block(world: &mut World, blocks: &Blocks, mined: &mut MessageWriter<Mined>, p: BlockPos) -> bool {
+    let Some(b) = world.block(p).filter(|b| !b.is_air()) else { return false };
+    if !world.set_block(p, BlockId::AIR) {
+        return false;
+    }
+    mined.write(Mined { pos: p, block: b });
+    remesh_around(world, blocks, p);
+    let mut check: Vec<BlockPos> = neighbours(p).collect();
+    // A long vine can drop a strand at a time; keep it bounded.
+    let mut budget = 256;
+    while let Some(q) = check.pop() {
+        budget -= 1;
+        if budget == 0 {
+            break;
+        }
+        let Some(qb) = world.block(q).filter(|b| !b.is_air()) else { continue };
+        let def = blocks.registry.get(qb);
+        let supports = def.supports();
+        if supports.is_empty() || supports.iter().any(|o| holds(world, blocks, def, q, *o)) {
+            continue;
+        }
+        if world.set_block(q, BlockId::AIR) {
+            mined.write(Mined { pos: q, block: qb });
+            remesh_around(world, blocks, q);
+            check.extend(neighbours(q));
+        }
+    }
+    true
+}
+
+fn neighbours(p: BlockPos) -> impl Iterator<Item = BlockPos> {
+    [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]].into_iter().map(move |d| BlockPos::new(p.x + d[0], p.y + d[1], p.z + d[2]))
+}
+
+/// Does the block at offset `o` from `p` hold up `def`? The ground under a
+/// plant must be solid; a vine can also hang from the vine above; anything
+/// else clings to any block that isn't itself a small detail or a torch.
+fn holds(world: &World, blocks: &Blocks, def: &voxel::BlockDef, p: BlockPos, o: [i32; 3]) -> bool {
+    let Some(n) = world.block(BlockPos::new(p.x + o[0], p.y + o[1], p.z + o[2])) else { return true };
+    if n.is_air() {
+        return false;
+    }
+    let nd = blocks.registry.get(n);
+    match def.shape {
+        voxel::Shape::Vine if o == [0, 1, 0] => nd.shape == voxel::Shape::Vine,
+        voxel::Shape::Plant | voxel::Shape::Pebble => nd.solid,
+        _ => !nd.shape.is_detail() && nd.shape != voxel::Shape::Torch && !nd.translucent,
+    }
+}
+
 /// Remesh the chunk holding `p` and any neighbour sharing a face, right away.
 fn remesh_around(world: &mut World, blocks: &Blocks, p: BlockPos) {
     let c = p.chunk();
@@ -329,6 +382,16 @@ fn use_hands(
         return;
     }
 
+    // Right click on a twig or a pebble: snap it off or pick it up.
+    if mouse.just_pressed(MouseButton::Right)
+        && let Some(hit) = target.hit
+        && world.block(hit.block).is_some_and(|b| matches!(blocks.registry.get(b).shape, voxel::Shape::Twig | voxel::Shape::Pebble))
+    {
+        anim.start(hand);
+        break_block(&mut world, &blocks, &mut mined, hit.block);
+        return;
+    }
+
     // Right click: place the block or torch in your hand.
     let place = match kind {
         Some(ItemKind::Block(b)) => Some(*b),
@@ -340,7 +403,7 @@ fn use_hands(
         && (mouse.just_pressed(MouseButton::Right) || anim.place_cooldown <= 0.0)
     {
         // Aiming at a plant puts the block in its place.
-        let is_plant = |p: BlockPos| world.block(p).is_some_and(|b| blocks.registry.get(b).shape == voxel::Shape::Plant);
+        let is_plant = |p: BlockPos| world.block(p).is_some_and(|b| blocks.registry.get(b).shape.is_detail());
         let into = if is_plant(hit.block) { hit.block } else { hit.before };
         let free = world.block(into).is_some_and(|b| !blocks.registry.get(b).solid && blocks.registry.get(b).shape != voxel::Shape::Torch);
         // Never inside yourself (solid blocks only; a torch can go at your feet).
@@ -374,17 +437,7 @@ fn use_hands(
             } else {
                 mining.progress += dt / seconds;
             }
-            if mining.progress >= 1.0 && world.set_block(hit.block, BlockId::AIR) {
-                mined.write(Mined { pos: hit.block, block: b });
-                // A plant standing on the block goes with it.
-                let above = BlockPos::new(hit.block.x, hit.block.y + 1, hit.block.z);
-                if let Some(p) = world.block(above).filter(|p| blocks.registry.get(*p).shape == voxel::Shape::Plant)
-                    && world.set_block(above, BlockId::AIR)
-                {
-                    mined.write(Mined { pos: above, block: p });
-                    remesh_around(&mut world, &blocks, above);
-                }
-                remesh_around(&mut world, &blocks, hit.block);
+            if mining.progress >= 1.0 && break_block(&mut world, &blocks, &mut mined, hit.block) {
                 mining.block = None;
                 mining.progress = 0.0;
             }

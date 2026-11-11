@@ -340,6 +340,12 @@ def flint(c):
     c.line(7, 7, 13, 13, 1, mix(FLINT, (220, 230, 240), 0.35))
 
 
+def small_rock(c):
+    c.poly([(3, 13), (5, 7), (10, 4), (15, 6), (17, 12), (13, 16), (7, 16)], hexc("8a8a86"))
+    c.poly([(6, 8), (10, 5), (14, 7), (11, 9)], hexc("a8a8a2"))
+    c.dot(12, 13, hexc("6a6a66"))
+
+
 def hide(c):
     c.poly([(6, 4), (14, 8), (26, 8), (34, 4), (32, 14), (36, 26), (30, 36), (20, 33), (10, 36), (4, 26), (8, 14)], HIDE)
     c.ellipse(20, 20, 8, 9, mix(HIDE, (230, 200, 160), 0.2))
@@ -481,7 +487,7 @@ DRAW = {f.__name__: f for f in [
     stone_pickaxe, stone_axe, stone_shovel, flint_spear, torch, marsh_berries, swamp_reed, smoked_fish, bread, peat_stew,
     cured_meat, feast_platter, ember_herb, stick, plant_fiber, cordage, coal, raw_iron, flint, hide, fur, linen_shirt,
     linen_trousers, hide_boots, reed_hat, reed_cloak, fur_hood, fur_coat, hide_leggings, bark_helm, bark_vest, hide_jerkin,
-    reed_satchel, hide_pack, raw_meat, roast_meat, spirit_ember, old_coin,
+    reed_satchel, hide_pack, raw_meat, roast_meat, spirit_ember, old_coin, small_rock,
 ]}
 
 

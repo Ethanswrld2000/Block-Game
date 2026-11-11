@@ -218,7 +218,9 @@ impl Items {
         if block.hardness < 0.0 {
             return None;
         }
-        Some(block.hardness / self.speed(held, &block.material).max(0.01))
+        // A speed of 0 means this can't cut it at all (logs by hand).
+        let speed = self.speed(held, &block.material);
+        (speed > 0.0).then(|| block.hardness / speed)
     }
 }
 
@@ -257,7 +259,10 @@ pub mod tests {
         let hand = items.break_time(None, stone).unwrap();
         let picked = items.break_time(pick, stone).unwrap();
         assert!(picked < 1.0 && hand > 8.0, "pick {picked}, hand {hand}");
-        assert!(items.break_time(axe, log).unwrap() < items.break_time(pick, log).unwrap());
+        // Logs need an axe: not bare hands, not a pickaxe.
+        assert!(items.break_time(axe, log).is_some_and(|t| t < 1.0));
+        assert_eq!(items.break_time(pick, log), None);
+        assert_eq!(items.break_time(None, log), None);
         // A torch in the hand mines like a bare hand.
         assert_eq!(items.break_time(items.id("torch"), stone), Some(hand));
     }

@@ -18,4 +18,14 @@
     "reeds": [("plant_fiber", 1, 0.6), ("swamp_reed", 1, 0.25)],
     "fern": [("plant_fiber", 1, 0.3)],
     "bog_bloom": [("plant_fiber", 1, 0.2)],
+    // Tree details and pebbles (right click picks them up, or break them).
+    "twig_north": [("stick", 1, 1.0)],
+    "twig_south": [("stick", 1, 1.0)],
+    "twig_east": [("stick", 1, 1.0)],
+    "twig_west": [("stick", 1, 1.0)],
+    "vine_north": [("plant_fiber", 1, 0.4)],
+    "vine_south": [("plant_fiber", 1, 0.4)],
+    "vine_east": [("plant_fiber", 1, 0.4)],
+    "vine_west": [("plant_fiber", 1, 0.4)],
+    "pebble": [("small_rock", 1, 1.0)],
 }

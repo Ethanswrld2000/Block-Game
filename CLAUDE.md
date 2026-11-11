@@ -185,6 +185,13 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   and time, from the voxel material's `wind` uniform; how far a vertex sways is packed into UV_1.y with the
   season tint (`chunk_mesh::pack_tint_sway`). New tiles: `python3 tools/gen_placeholder_art.py --only <names>`
   paints just those into the existing blocks.png.
+- Tree details: `voxel::Shape::{Vine, Twig, Pebble}` (+ `Plant`) are small "detail" blocks (`Shape::is_detail`)
+  meshed into the plants mesh by `chunk_mesh::push_detail`; vines and twigs have `attach: north|south|east|west`
+  in blocks.ron (`vine_*`, `twig_*`), `BlockDef::supports()` says what holds each up, and `interact::break_block`
+  drops whatever loses its support (a vine strand falls with the leaf above it). `worldgen::trees` adds twigs,
+  canopy and trunk vines and leaf tufts; `worldgen::plants` scatters `pebble`s. Right click snaps a twig off
+  (stick) or picks a pebble up (`small_rock`). Logs are material `log`: bare hands and the pickaxe can't cut
+  them (a speed of 0 in items.ron = can't break), only the axe.
 - Arm: `hands` turns the arm about the shoulder (`hands::ARM`, `swing_pose`: wind-up, strike, return).
 - Next: the sleeping station / fusion / hands-on stations plan (Claude Doc "Sleeping Station and Fusion: Plan"):
   trees with vines and twigs, pebbles, the ancestral urn, tool bench, carpentry bench. New characters will start

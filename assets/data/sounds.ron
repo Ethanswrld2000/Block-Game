@@ -7,6 +7,7 @@
         "stone": (step: "step_hard", dig: "dig_hard"),
         "ore": (step: "step_hard", dig: "dig_hard"),
         "wood": (step: "step_wood", dig: "dig_wood"),
+        "log": (step: "step_wood", dig: "dig_wood"),
         "plant": (step: "step_plant", dig: "dig_plant"),
     },
     fallback: (step: "step_soft", dig: "dig_soft"),
