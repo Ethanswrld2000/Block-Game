@@ -23,6 +23,7 @@
         "moss": { "earth": 0.5 },
         "peat": { "earth": 1.0 },
         "small_rock": { "stone": 1.0 },
+        "rough_axe": { "earth": 1.0, "stone": 2.0 },
         "flint": { "stone": 2.0 },
         "cobblestone": { "stone": 1.0 },
         "coal": { "stone": 1.0, "earth": 1.0 },

@@ -25,6 +25,11 @@
             name: "stone_pickaxe", title: "Stone Pickaxe", mass: 2.5, size: (2, 3), damage: 5.0,
             kind: Tool(speeds: { "stone": 4.0, "ore": 3.5, "soil": 1.3 }),
         ),
+        // The first axe: a stick and two small rocks knocked together at the tool bench.
+        (
+            name: "rough_axe", title: "Rough Stone Axe", mass: 0.8, size: (1, 2), damage: 5.0,
+            kind: Tool(speeds: { "log": 1.6, "wood": 1.6, "plant": 2.0 }),
+        ),
         (
             name: "stone_axe", title: "Stone Axe", mass: 2.0, size: (1, 3), damage: 7.0,
             kind: Tool(speeds: { "log": 4.0, "wood": 4.0, "plant": 3.0 }),

@@ -8,5 +8,6 @@
         "stone_axe": (42, 0, 20, 60),
         "stone_shovel": (64, 0, 20, 60),
         "flint_spear": (86, 0, 20, 80),
+        "rough_axe": (108, 0, 20, 40),
     },
 )

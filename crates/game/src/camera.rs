@@ -29,6 +29,8 @@ impl Plugin for FlyCameraPlugin {
 #[derive(Resource, Default, Debug)]
 pub struct Menus {
     pub open: bool,
+    /// Standing still at a bench: no walking.
+    pub still: bool,
 }
 
 #[derive(Component)]

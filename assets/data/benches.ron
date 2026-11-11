@@ -1,0 +1,11 @@
+// Things made by hand at the benches beside the sleeping station.
+//   station: which bench (its name in fusion.ron)
+//   slots:   what each slot on the board must hold, (item, count)
+//            tool_bench: "handle" (the long groove, 1) and "material" (the hollow, up to 4)
+//   work:    how many times to work the bench's tool (the tool bench's strike stone)
+//   makes:   what lies on the board afterwards, (item, count)
+(
+    recipes: [
+        (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("small_rock", 2)}, work: 3, makes: ("rough_axe", 1)),
+    ],
+)

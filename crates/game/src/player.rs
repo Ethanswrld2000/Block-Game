@@ -250,12 +250,12 @@ fn walk(
     blocks: Res<Blocks>,
     cam: Query<&FlyCamera>,
     body: Res<Body>,
-    wind: Res<crate::wind::Wind>,
+    (wind, menus): (Res<crate::wind::Wind>, Res<crate::camera::Menus>),
     mut player: ResMut<Player>,
     mut damage: MessageWriter<Damage>,
 ) {
     let Ok(look) = cam.single() else { return };
-    if body.frozen {
+    if body.frozen || menus.still {
         player.vel = Vec3::ZERO;
         player.sprinting = false;
         return;

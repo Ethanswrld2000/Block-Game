@@ -25,7 +25,7 @@ impl Plugin for HandsPlugin {
 }
 
 #[derive(Component)]
-struct HandRoot(Hand);
+pub(crate) struct HandRoot(Hand);
 
 /// Holds the model of the item in a hand; rebuilt when the item changes.
 #[derive(Component)]

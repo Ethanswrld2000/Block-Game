@@ -463,8 +463,8 @@ fn animate_swings(time: Res<Time>, mut anim: ResMut<HandAnim>) {
     anim.right = (anim.right - step).max(0.0);
 }
 
-fn draw_target(target: Res<Target>, mining: Res<Mining>, mut gizmos: Gizmos) {
-    if let Some(hit) = target.hit {
+fn draw_target(target: Res<Target>, mining: Res<Mining>, menus: Res<crate::camera::Menus>, mut gizmos: Gizmos) {
+    if let Some(hit) = target.hit.filter(|_| !menus.open) {
         let p = hit.block;
         let center = Vec3::new(p.x as f32 + 0.5, p.y as f32 + 0.5, p.z as f32 + 0.5);
         gizmos.cube(Transform::from_translation(center).with_scale(Vec3::splat(1.003)), Color::srgba(0.05, 0.05, 0.05, 0.9));

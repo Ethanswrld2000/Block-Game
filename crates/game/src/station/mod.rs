@@ -11,6 +11,8 @@
 //! The stations are models, not blocks, so they move with your camp. Looking at
 //! one shows its name and what the urn needs next.
 
+pub mod bench;
+pub mod board;
 pub mod fusion;
 
 use bevy::light::NotShadowCaster;
@@ -36,11 +38,27 @@ impl Plugin for StationPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<UrnState>()
             .init_resource::<StationAim>()
+            .init_resource::<board::AtBench>()
             .add_systems(PreStartup, load_fusion)
-            .add_systems(Startup, (load_urn, spawn_label))
+            .add_systems(Startup, (load_urn, spawn_label, board::spawn_board_ui, board::load_benches))
             .add_systems(
                 Update,
-                (aim, use_station, place_stations, show_label).chain().before(crate::interact::InteractSet).after(crate::player::PlayerSet),
+                (
+                    aim,
+                    use_station,
+                    place_stations,
+                    show_label,
+                    board::board_for_screenshot,
+                    board::board_keys,
+                    board::board_camera,
+                    board::board_hides,
+                    board::board_click,
+                    board::board_models,
+                    board::board_ui,
+                )
+                    .chain()
+                    .before(crate::interact::InteractSet)
+                    .after(crate::player::PlayerSet),
             )
             .add_systems(Update, (save_urn, camp_for_screenshot))
             .add_systems(Last, save_urn_on_exit);
@@ -345,13 +363,13 @@ fn aim(cam: Single<&Transform, With<FlyCamera>>, stations: Query<&Station>, mut 
         .min_by(|a, b| a.1.total_cmp(&b.1));
 }
 
-/// Right click a station: the urn takes what you hold; benches come next.
-#[allow(clippy::too_many_arguments)]
+/// Right click a station: the urn takes what you hold; the tool bench opens its board.
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn use_station(
     mouse: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
     cursor: Single<&CursorOptions, With<PrimaryWindow>>,
-    menus: Res<Menus>,
+    (mut menus, mut at_bench, stations, mode, player): (ResMut<Menus>, ResMut<board::AtBench>, Query<&Station>, Res<crate::player::MoveMode>, Res<crate::player::Player>),
     aimed: Res<StationAim>,
     target: Res<crate::interact::Target>,
     cam: Single<&Transform, With<FlyCamera>>,
@@ -400,7 +418,17 @@ fn use_station(
                 toast.write(Toast(format!("The urn places a {title} beside it")));
             }
         }
-        StationKind::ToolBench | StationKind::CarpentryBench => {
+        StationKind::ToolBench => {
+            if *mode == crate::player::MoveMode::Fly {
+                toast.write(Toast("Land to work at the bench".into()));
+                return;
+            }
+            let Some(st) = stations.iter().find(|s| s.kind == kind) else { return };
+            at_bench.enter(*st, player.pos + Vec3::Y * player.eye);
+            menus.open = true;
+            menus.still = true;
+        }
+        StationKind::CarpentryBench => {
             toast.write(Toast(format!("The {} isn't ready to work yet", kind.title())));
         }
     }
@@ -459,6 +487,7 @@ fn show_label(
         Some((kind, _)) if !menus.open => {
             let line = match kind {
                 StationKind::Urn => format!("{}  ·  right click to put in what you hold", next_line(&urn.0, &fusion.0)),
+                StationKind::ToolBench => "Right click to work it with your hands".to_string(),
                 _ => "Coming soon: work it with your hands".to_string(),
             };
             (kind.title().to_string(), line)

@@ -161,9 +161,11 @@ fn open_close(
 ) {
     let busy = s.vitals.health.is_dead() || sleep.active();
     let mut want = ui.open;
-    if keys.just_pressed(KeyCode::Tab) || (ui.open && (keys.just_pressed(KeyCode::Escape) || keys.just_pressed(KeyCode::KeyI))) {
+    // Another screen (the pause menu, a bench) has the mouse: Tab and I wait.
+    let free = ui.open || !menus.open;
+    if (free && keys.just_pressed(KeyCode::Tab)) || (ui.open && (keys.just_pressed(KeyCode::Escape) || keys.just_pressed(KeyCode::KeyI))) {
         want = !ui.open;
-    } else if keys.just_pressed(KeyCode::KeyI) {
+    } else if free && keys.just_pressed(KeyCode::KeyI) {
         want = true;
     }
     for m in chest_msgs.read() {

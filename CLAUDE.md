@@ -197,11 +197,18 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `station::fusion` (`assets/data/fusion.ron`: fusion kinds, what each item gives, upgrades with `needs`/`after`/
   `station`; upgrades spend fusion). Right click the urn with an item (Shift: whole stack); 10 earth places the
   tool bench, 40 more the carpentry bench. Saved to `urn.ron`. `BLOCKGAME_CAMP=1` unrolls the bedroll in front of
-  you, `BLOCKGAME_URN=tool_bench,earth=5` sets upgrades and fusion (screenshots). Benches can't be worked yet.
+  you, `BLOCKGAME_URN=tool_bench,earth=5` sets upgrades and fusion (screenshots).
+- Hands-on benches: `station::board` (no menu: right click the tool bench and the camera glides down over its top,
+  the HUD and arms step aside (`board_hides`), a strip of your things sits at the bottom; click one to pick it up,
+  it hangs under the cursor; click a slot to set it down; knock the strike stone to work it; A/D next bench, Esc
+  leaves and the board empties back into your pockets). Pure rules in `station::bench` (`Board`, slots per bench in
+  `slots_of`, recipes in `assets/data/benches.ron`: slots, `work` knocks, `makes`). First recipe: stick + 2 small
+  rocks, 3 knocks = `rough_axe`. `Menus.still` stops walking at a bench. `BLOCKGAME_BOARD=stick,small_rock*2[,made]`
+  opens the tool bench with those laid out (`-` skips a slot; needs CAMP and URN). The carpentry bench has no board yet.
+  New characters start with only their clothes (`start_kit.ron`); the bedroll is always there (B).
 - Arm: `hands` turns the arm about the shoulder (`hands::ARM`, `swing_pose`: wind-up, strike, return).
-- Next: the sleeping station / fusion / hands-on stations plan (Claude Doc "Sleeping Station and Fusion: Plan"):
-  trees with vines and twigs, pebbles, the ancestral urn, tool bench, carpentry bench. New characters will start
-  with only the bedroll and clothes; the first axe is a stick plus two small rocks at the tool bench.
+- Next: the rest of the Claude Doc "Sleeping Station and Fusion: Plan": the axe chop swing with trees shaking,
+  carpentry bench recipes (then retire the Tab crafting list), the lens station that shows an item's fusion.
 
 ## Testing without a screen
 

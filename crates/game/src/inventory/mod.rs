@@ -426,9 +426,9 @@ mod tests {
         // No bags for now: one big grid.
         assert!(inv.bag.is_none());
         assert_eq!((inv.pockets.w, inv.pockets.h), POCKETS);
-        assert_eq!(inv.count(items.id("torch").unwrap()), 8);
+        // Only the clothes you stand in: everything else is gathered and made.
+        assert!(inv.pockets.is_empty());
         assert!(inv.insulation(&items) > 4.0);
-        assert!(inv.mass(&items) > 5.0 && inv.mass(&items) < 20.0, "{}", inv.mass(&items));
     }
 
     #[test]

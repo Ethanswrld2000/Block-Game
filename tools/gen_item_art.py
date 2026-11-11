@@ -207,6 +207,16 @@ def handle(c, x, y0, y1, w=3):
     return p
 
 
+def rough_axe(c):
+    # A forked stick with a knapped rock jammed in the split.
+    c.line(10, 39, 10, 10, 3, WOOD)
+    c.line(9, 12, 6, 4, 2, WOOD_D)
+    c.line(11, 12, 14, 4, 2, WOOD_D)
+    c.poly([(3, 6), (9, 2), (17, 4), (19, 10), (15, 15), (8, 14)], STONE)
+    c.line(16, 5, 18, 11, 1, STONE_L)
+    c.dot(7, 9, mul(STONE, 0.8))
+
+
 def stone_pickaxe(c):
     handle(c, 18, 10, 59, 4)
     c.poly([(2, 14), (8, 7), (20, 4), (32, 7), (38, 14), (33, 12), (20, 10), (7, 12)], STONE)
@@ -487,7 +497,7 @@ DRAW = {f.__name__: f for f in [
     stone_pickaxe, stone_axe, stone_shovel, flint_spear, torch, marsh_berries, swamp_reed, smoked_fish, bread, peat_stew,
     cured_meat, feast_platter, ember_herb, stick, plant_fiber, cordage, coal, raw_iron, flint, hide, fur, linen_shirt,
     linen_trousers, hide_boots, reed_hat, reed_cloak, fur_hood, fur_coat, hide_leggings, bark_helm, bark_vest, hide_jerkin,
-    reed_satchel, hide_pack, raw_meat, roast_meat, spirit_ember, old_coin, small_rock,
+    reed_satchel, hide_pack, raw_meat, roast_meat, spirit_ember, old_coin, small_rock, rough_axe,
 ]}
 
 
