@@ -31,7 +31,7 @@ use drops::Drops;
 use grid::{Grid, GridSave, Stack};
 
 /// Pockets and belt, always with you.
-pub const POCKETS: (u8, u8) = (5, 3);
+pub const POCKETS: (u8, u8) = (20, 10);
 /// A chest's grid.
 pub const CHEST: (u8, u8) = (8, 5);
 /// Armor can keep at most this share of a blow off a bar.

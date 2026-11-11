@@ -146,5 +146,7 @@ pub fn fly(
             speed *= cam.fast_multiplier;
         }
         tf.translation += dir.normalize_or_zero() * speed * time.delta_secs();
+        // The world ends at its ceiling; flying stops just under it.
+        tf.translation.y = tf.translation.y.min(worldgen::WORLD_CEILING as f32);
     }
 }

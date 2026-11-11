@@ -2,7 +2,7 @@
 //   wear:  items put on (one per slot; a Bag goes on your back)
 //   carry: (item, count) put into pockets and bag
 (
-    wear: ["linen_shirt", "linen_trousers", "hide_boots", "reed_satchel"],
+    wear: ["linen_shirt", "linen_trousers", "hide_boots"],
     carry: [
         ("stone_pickaxe", 1),
         ("stone_axe", 1),

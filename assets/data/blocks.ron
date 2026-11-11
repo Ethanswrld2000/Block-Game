@@ -44,4 +44,6 @@
     (name: "reeds", top: "reed", solid: false, opaque: false, hardness: 0.05, material: "plant", shape: plant),
     (name: "fern", top: "fern", solid: false, opaque: false, foliage: true, hardness: 0.05, material: "plant", shape: plant),
     (name: "bog_bloom", top: "bog_bloom", solid: false, opaque: false, hardness: 0.05, material: "plant", shape: plant),
+    // The floor of the world (y -300): can't be mined.
+    (name: "rootstone", top: "rootstone", hardness: -1.0, material: "stone"),
 ]

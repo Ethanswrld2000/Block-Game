@@ -1,5 +1,5 @@
-//! The inventory screen (Tab): what you wear, your pockets and bag, an open
-//! chest, and crafting.
+//! The inventory screen (Tab): one big grid of what you carry, and beside it
+//! a panel with tabs for crafting, clothes and an open chest.
 //!
 //! Click an item to pick it up, click again to put it down; R turns it while
 //! you hold it. Right click moves an item straight across (to the chest and
@@ -25,7 +25,10 @@ use crate::survival::health::Layer;
 use crate::survival::Survival;
 use crate::theme::{self, colors, sizes, Theme};
 
-const CELL: f32 = 46.0;
+/// One grid cell: item sprites are 20 px per cell, drawn at 2x.
+const CELL: f32 = 40.0;
+/// Width of the side panel (crafting, clothes, chest).
+const SIDE_W: f32 = 360.0;
 
 pub struct InventoryUiPlugin;
 
@@ -40,7 +43,6 @@ impl Plugin for InventoryUiPlugin {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GridRef {
     Pockets,
-    Bag,
     Chest(BlockPos),
 }
 
@@ -63,6 +65,26 @@ enum Hover {
     Cell(GridRef, u8, u8),
     Slot(WearSlot),
     Recipe(usize),
+    Tab(Side),
+}
+
+/// What the side panel shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum Side {
+    #[default]
+    Crafting,
+    Clothes,
+    Chest,
+}
+
+impl Side {
+    fn title(self) -> &'static str {
+        match self {
+            Side::Crafting => "Crafting",
+            Side::Clothes => "Clothes",
+            Side::Chest => "Chest",
+        }
+    }
 }
 
 #[derive(Resource, Default)]
@@ -77,6 +99,8 @@ struct InvUi {
     scroll: f32,
     /// The cursor is over the crafting list.
     over_list: bool,
+    /// The side panel's tab.
+    side: Side,
 }
 
 #[derive(Component)]
@@ -89,6 +113,7 @@ enum Zone {
     Slot(WearSlot),
     Recipe(usize),
     RecipeList,
+    Tab(Side),
 }
 
 #[derive(Component)]
@@ -111,7 +136,6 @@ fn open_for_screenshot(mut ui: ResMut<InvUi>, mut menus: ResMut<Menus>) {
 fn grid_mut<'a>(inv: &'a mut Inventory, chests: &'a mut Chests, g: GridRef) -> Option<&'a mut Grid> {
     match g {
         GridRef::Pockets => Some(&mut inv.pockets),
-        GridRef::Bag => inv.bag.as_mut(),
         GridRef::Chest(p) => Some(chests.grid(p)),
     }
 }
@@ -145,6 +169,7 @@ fn open_close(
     for m in chest_msgs.read() {
         want = true;
         ui.chest = Some(m.0);
+        ui.side = Side::Chest;
         if !chests.map.contains_key(&m.0)
             && let (Some(loot), Some(generator)) = (&loot, &generator)
         {
@@ -165,6 +190,9 @@ fn open_close(
     {
         ui.chest = None;
         ui.dirty = true;
+    }
+    if ui.chest.is_none() && ui.side == Side::Chest {
+        ui.side = Side::Crafting;
     }
     if busy {
         want = false;
@@ -227,6 +255,7 @@ fn hover(
             }
             Zone::Slot(s) => Hover::Slot(s),
             Zone::Recipe(i) => Hover::Recipe(i),
+            Zone::Tab(t) => Hover::Tab(t),
         });
     }
     if ui.over_list != over_list {
@@ -301,6 +330,7 @@ fn click(
     ui.message.clear();
     let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
     match hover {
+        Hover::Tab(t) => ui.side = t,
         Hover::Cell(g, x, y) if left => {
             let held = ui.held;
             let Some(grid) = grid_mut(&mut inv, &mut chests, g) else { return };
@@ -637,10 +667,6 @@ fn describe(items: &Items, id: crate::items::ItemId) -> (String, String) {
 }
 
 /// A heading for a column.
-fn heading(p: &mut ChildSpawnerCommands, theme: &Theme, s: &str) {
-    p.spawn((theme.bold(sizes::LABEL), Text::new(s), TextColor(colors::HEADING), Node { margin: UiRect::bottom(Val::Px(2.0)), ..default() }));
-}
-
 /// A line with an icon in front.
 fn icon_line(p: &mut ChildSpawnerCommands, theme: &Theme, icon_name: &str, s: String, color: Color) {
     p.spawn(Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, ..default() }).with_children(|r| {
@@ -697,137 +723,155 @@ fn rebuild(
                     });
                     win.spawn((Node { height: Val::Px(8.0), ..default() }, theme.skin("divider")));
                     win.spawn(Node { column_gap: Val::Px(22.0), align_items: AlignItems::Start, ..default() }).with_children(|row| {
-                        // Worn.
-                        row.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(4.0), width: Val::Px(250.0), ..default() }).with_children(|col| {
-                            heading(col, theme, "Worn");
-                            for slot in WearSlot::ALL {
-                                let worn = inv.worn.get(&slot);
-                                let hovered = hover == Some(Hover::Slot(slot));
-                                let node = Node {
-                                    width: Val::Percent(100.0),
-                                    height: Val::Px(40.0),
-                                    padding: UiRect::horizontal(Val::Px(10.0)),
-                                    align_items: AlignItems::Center,
-                                    justify_content: JustifyContent::SpaceBetween,
-                                    ..default()
-                                };
-                                let mut e = match worn {
-                                    Some(_) => col.spawn((Zone::Slot(slot), node, theme.skin_tinted("item", item_bg(false)))),
-                                    None => col.spawn((Zone::Slot(slot), node, theme.skin(if hovered { "slot_hover" } else { "slot" }))),
-                                };
-                                if hovered {
-                                    e.insert(Outline { width: Val::Px(2.0), offset: Val::Px(0.0), color: colors::GOLD });
-                                }
-                                e.with_children(|c| {
-                                    c.spawn(text(slot.title(), sizes::SMALL, colors::MUTED));
-                                    match worn {
-                                        Some(i) => c.spawn(Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, ..default() }).with_children(|r| {
-                                            r.spawn(text(items.get(*i).title.clone(), sizes::BODY, colors::TEXT));
-                                            r.spawn(Node { width: Val::Px(34.0), height: Val::Px(34.0), ..default() }).with_children(|q| icon(q, &items, &art, Stack::new(*i, 1), 34.0, 34.0, false));
-                                        }).id(),
-                                        None => c.spawn(text("empty", sizes::BODY, colors::FAINT)).id(),
-                                    };
-                                });
-                            }
-                            // What you're wearing adds up to.
-                            col.spawn((
-                                Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(6.0), padding: UiRect::all(Val::Px(10.0)), margin: UiRect::top(Val::Px(8.0)), ..default() },
-                                theme.skin("inset"),
-                            ))
-                            .with_children(|st| {
-                                icon_line(st, theme, "icon_warmth", format!("Clothes +{:.0}°C, feels {:.0}°C", inv.insulation(&items), s.env.feels), colors::TEXT);
-                                let heavy = s.env.carried > crate::survival::vitals::CAPACITY;
-                                icon_line(st, theme, "icon_load", format!("Load {:.1} of {:.0} kg", s.env.carried, crate::survival::vitals::CAPACITY), if heavy { colors::BAD } else { colors::TEXT });
-                                let prot: Vec<String> = Layer::ALL
-                                    .iter()
-                                    .filter_map(|l| {
-                                        let p = inv.protection(&items, *l);
-                                        (p > 0.0).then(|| format!("{} -{:.0}%", l.name(), p * 100.0))
-                                    })
-                                    .collect();
-                                icon_line(st, theme, "icon_injuries", if prot.is_empty() { "No armour".into() } else { prot.join(", ") }, colors::TEXT);
-                            });
-                        });
-                        // Grids.
+                        // Everything you carry, in one grid.
                         row.spawn(Node { flex_direction: FlexDirection::Column, ..default() }).with_children(|col| {
-                            grid_node(col, theme, "Pockets".into(), &inv.pockets, GridRef::Pockets, &items, &art, hover, held);
-                            match (&inv.bag, inv.worn.get(&WearSlot::Back)) {
-                                (Some(b), Some(i)) => grid_node(col, theme, items.get(*i).title.clone(), b, GridRef::Bag, &items, &art, hover, held),
-                                _ => {
-                                    heading(col, theme, "Bag");
-                                    col.spawn(text("No bag. Wear one on your back\nto carry more.", sizes::BODY, colors::FAINT));
-                                }
-                            }
-                            if let Some(c) = ui.chest
-                                && let Some(g) = chests.map.get(&c)
-                            {
-                                grid_node(col, theme, "Chest".into(), g, GridRef::Chest(c), &items, &art, hover, held);
-                            }
+                            grid_node(col, theme, "Carried".into(), &inv.pockets, GridRef::Pockets, &items, &art, hover, held);
                         });
-                        // Crafting: what you can make now first.
-                        row.spawn(Node { flex_direction: FlexDirection::Column, width: Val::Px(380.0), ..default() }).with_children(|col| {
-                            col.spawn(Node { justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center, ..default() }).with_children(|h| {
-                                heading(h, theme, "Crafting");
-                                h.spawn(text(if at_camp { "at camp" } else { "Shift: make 5" }, sizes::SMALL, colors::MUTED));
-                            });
-                            let Some(r) = &recipes else { return };
-                            let mut order: Vec<(usize, bool)> =
-                                r.list.iter().enumerate().map(|(i, rec)| (i, rec.have_parts(&inv) && (rec.at == Station::Hand || at_camp))).collect();
-                            order.sort_by_key(|(i, can)| (!*can, r.list[*i].at == Station::Camp, *i));
-                            let rows = order.len() as f32;
-                            let max_scroll = (rows * (RECIPE_ROW + RECIPE_GAP) + 8.0 - RECIPE_VIEW).max(0.0);
-                            ui.scroll = ui.scroll.clamp(0.0, max_scroll);
-                            col.spawn((
-                                Zone::RecipeList,
-                                Node {
-                                    flex_direction: FlexDirection::Column,
-                                    row_gap: Val::Px(RECIPE_GAP),
-                                    padding: UiRect::all(Val::Px(4.0)),
-                                    height: Val::Px(RECIPE_VIEW),
-                                    overflow: Overflow::scroll_y(),
-                                    ..default()
-                                },
-                                ScrollPosition(Vec2::new(0.0, ui.scroll)),
-                                theme.skin("inset"),
-                            ))
-                            .with_children(|list| {
-                                for (i, can) in order {
-                                    let rec = &r.list[i];
-                                    let hovered = hover == Some(Hover::Recipe(i));
-                                    let skin = match (can, hovered) {
-                                        (true, true) => "button_hover",
-                                        (true, false) => "button",
-                                        (false, true) => "slot_hover",
-                                        (false, false) => "button_off",
-                                    };
-                                    let needs: Vec<String> = rec.needs.iter().map(|n| format!("{} {}", n.count, items.get(n.item).title)).collect();
-                                    let mut needs = needs.join(", ");
-                                    if rec.at == Station::Camp {
-                                        needs.push_str("  · at camp");
+                        // Side panel: tabs, then the chosen page.
+                        row.spawn(Node { flex_direction: FlexDirection::Column, width: Val::Px(SIDE_W), ..default() }).with_children(|side| {
+                            let chest = ui.chest.and_then(|c| chests.map.get(&c).map(|g| (c, g)));
+                            side.spawn(Node { column_gap: Val::Px(6.0), margin: UiRect::bottom(Val::Px(8.0)), ..default() }).with_children(|tabs| {
+                                for t in [Side::Crafting, Side::Clothes, Side::Chest] {
+                                    if t == Side::Chest && chest.is_none() {
+                                        continue;
                                     }
-                                    let title = if rec.makes.count > 1 { format!("{} x{}", items.get(rec.makes.item).title, rec.makes.count) } else { items.get(rec.makes.item).title.clone() };
-                                    list.spawn((
-                                        Zone::Recipe(i),
-                                        Node {
-                                            min_height: Val::Px(RECIPE_ROW),
-                                            flex_shrink: 0.0,
-                                            padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)),
-                                            column_gap: Val::Px(10.0),
-                                            align_items: AlignItems::Center,
-                                            ..default()
-                                        },
+                                    let skin = if ui.side == t { "button_down" } else if hover == Some(Hover::Tab(t)) { "button_hover" } else { "button" };
+                                    tabs.spawn((
+                                        Zone::Tab(t),
+                                        Node { padding: UiRect::axes(Val::Px(14.0), Val::Px(6.0)), ..default() },
                                         theme.skin(skin),
                                     ))
-                                    .with_children(|row| {
-                                        row.spawn(Node { width: Val::Px(40.0), height: Val::Px(40.0), flex_shrink: 0.0, ..default() })
-                                            .with_children(|q| icon(q, &items, &art, Stack::new(rec.makes.item, 1), 40.0, 40.0, false));
-                                        row.spawn(Node { flex_direction: FlexDirection::Column, justify_content: JustifyContent::Center, ..default() }).with_children(|c| {
-                                            c.spawn(text(title, sizes::BODY, if can { colors::TEXT } else { colors::MUTED }));
-                                            c.spawn(text(needs, sizes::SMALL, if can { colors::GOOD } else { colors::FAINT }));
-                                        });
+                                    .with_children(|b| {
+                                        b.spawn(text(t.title(), sizes::BODY, if ui.side == t { colors::HEADING } else { colors::TEXT }));
                                     });
                                 }
                             });
+                            match ui.side {
+                                Side::Chest => {
+                                    if let Some((c, g)) = chest {
+                                        grid_node(side, theme, "Chest".into(), g, GridRef::Chest(c), &items, &art, hover, held);
+                                    }
+                                }
+                                Side::Clothes => {
+                                // Worn.
+                                side.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(4.0), width: Val::Percent(100.0), ..default() }).with_children(|col| {
+                                    // No bags for now: everything goes in the one big grid.
+                                    for slot in WearSlot::ALL.into_iter().filter(|s| *s != WearSlot::Back) {
+                                        let worn = inv.worn.get(&slot);
+                                        let hovered = hover == Some(Hover::Slot(slot));
+                                        let node = Node {
+                                            width: Val::Percent(100.0),
+                                            height: Val::Px(40.0),
+                                            padding: UiRect::horizontal(Val::Px(10.0)),
+                                            align_items: AlignItems::Center,
+                                            justify_content: JustifyContent::SpaceBetween,
+                                            ..default()
+                                        };
+                                        let mut e = match worn {
+                                            Some(_) => col.spawn((Zone::Slot(slot), node, theme.skin_tinted("item", item_bg(false)))),
+                                            None => col.spawn((Zone::Slot(slot), node, theme.skin(if hovered { "slot_hover" } else { "slot" }))),
+                                        };
+                                        if hovered {
+                                            e.insert(Outline { width: Val::Px(2.0), offset: Val::Px(0.0), color: colors::GOLD });
+                                        }
+                                        e.with_children(|c| {
+                                            c.spawn(text(slot.title(), sizes::SMALL, colors::MUTED));
+                                            match worn {
+                                                Some(i) => c.spawn(Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, ..default() }).with_children(|r| {
+                                                    r.spawn(text(items.get(*i).title.clone(), sizes::BODY, colors::TEXT));
+                                                    r.spawn(Node { width: Val::Px(34.0), height: Val::Px(34.0), ..default() }).with_children(|q| icon(q, &items, &art, Stack::new(*i, 1), 34.0, 34.0, false));
+                                                }).id(),
+                                                None => c.spawn(text("empty", sizes::BODY, colors::FAINT)).id(),
+                                            };
+                                        });
+                                    }
+                                    // What you're wearing adds up to.
+                                    col.spawn((
+                                        Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(6.0), padding: UiRect::all(Val::Px(10.0)), margin: UiRect::top(Val::Px(8.0)), ..default() },
+                                        theme.skin("inset"),
+                                    ))
+                                    .with_children(|st| {
+                                        icon_line(st, theme, "icon_warmth", format!("Clothes +{:.0}°C, feels {:.0}°C", inv.insulation(&items), s.env.feels), colors::TEXT);
+                                        let heavy = s.env.carried > crate::survival::vitals::CAPACITY;
+                                        icon_line(st, theme, "icon_load", format!("Load {:.1} of {:.0} kg", s.env.carried, crate::survival::vitals::CAPACITY), if heavy { colors::BAD } else { colors::TEXT });
+                                        let prot: Vec<String> = Layer::ALL
+                                            .iter()
+                                            .filter_map(|l| {
+                                                let p = inv.protection(&items, *l);
+                                                (p > 0.0).then(|| format!("{} -{:.0}%", l.name(), p * 100.0))
+                                            })
+                                            .collect();
+                                        icon_line(st, theme, "icon_injuries", if prot.is_empty() { "No armour".into() } else { prot.join(", ") }, colors::TEXT);
+                                    });
+                                });
+                                }
+                                Side::Crafting => {
+                                // Crafting: what you can make now first.
+                                side.spawn(Node { flex_direction: FlexDirection::Column, width: Val::Percent(100.0), ..default() }).with_children(|col| {
+                                    col.spawn(Node { justify_content: JustifyContent::FlexEnd, margin: UiRect::bottom(Val::Px(2.0)), ..default() }).with_children(|h| {
+                                        h.spawn(text(if at_camp { "at camp" } else { "Shift: make 5" }, sizes::SMALL, colors::MUTED));
+                                    });
+                                    let Some(r) = &recipes else { return };
+                                    let mut order: Vec<(usize, bool)> =
+                                        r.list.iter().enumerate().map(|(i, rec)| (i, rec.have_parts(&inv) && (rec.at == Station::Hand || at_camp))).collect();
+                                    order.sort_by_key(|(i, can)| (!*can, r.list[*i].at == Station::Camp, *i));
+                                    let rows = order.len() as f32;
+                                    let max_scroll = (rows * (RECIPE_ROW + RECIPE_GAP) + 8.0 - RECIPE_VIEW).max(0.0);
+                                    ui.scroll = ui.scroll.clamp(0.0, max_scroll);
+                                    col.spawn((
+                                        Zone::RecipeList,
+                                        Node {
+                                            flex_direction: FlexDirection::Column,
+                                            row_gap: Val::Px(RECIPE_GAP),
+                                            padding: UiRect::all(Val::Px(4.0)),
+                                            height: Val::Px(RECIPE_VIEW),
+                                            overflow: Overflow::scroll_y(),
+                                            ..default()
+                                        },
+                                        ScrollPosition(Vec2::new(0.0, ui.scroll)),
+                                        theme.skin("inset"),
+                                    ))
+                                    .with_children(|list| {
+                                        for (i, can) in order {
+                                            let rec = &r.list[i];
+                                            let hovered = hover == Some(Hover::Recipe(i));
+                                            let skin = match (can, hovered) {
+                                                (true, true) => "button_hover",
+                                                (true, false) => "button",
+                                                (false, true) => "slot_hover",
+                                                (false, false) => "button_off",
+                                            };
+                                            let needs: Vec<String> = rec.needs.iter().map(|n| format!("{} {}", n.count, items.get(n.item).title)).collect();
+                                            let mut needs = needs.join(", ");
+                                            if rec.at == Station::Camp {
+                                                needs.push_str("  · at camp");
+                                            }
+                                            let title = if rec.makes.count > 1 { format!("{} x{}", items.get(rec.makes.item).title, rec.makes.count) } else { items.get(rec.makes.item).title.clone() };
+                                            list.spawn((
+                                                Zone::Recipe(i),
+                                                Node {
+                                                    min_height: Val::Px(RECIPE_ROW),
+                                                    flex_shrink: 0.0,
+                                                    padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)),
+                                                    column_gap: Val::Px(10.0),
+                                                    align_items: AlignItems::Center,
+                                                    ..default()
+                                                },
+                                                theme.skin(skin),
+                                            ))
+                                            .with_children(|row| {
+                                                row.spawn(Node { width: Val::Px(40.0), height: Val::Px(40.0), flex_shrink: 0.0, ..default() })
+                                                    .with_children(|q| icon(q, &items, &art, Stack::new(rec.makes.item, 1), 40.0, 40.0, false));
+                                                row.spawn(Node { flex_direction: FlexDirection::Column, justify_content: JustifyContent::Center, ..default() }).with_children(|c| {
+                                                    c.spawn(text(title, sizes::BODY, if can { colors::TEXT } else { colors::MUTED }));
+                                                    c.spawn(text(needs, sizes::SMALL, if can { colors::GOOD } else { colors::FAINT }));
+                                                });
+                                            });
+                                        }
+                                    });
+                                });
+                                }
+                            }
                         });
                     });
                     // Messages and controls.
@@ -843,14 +887,13 @@ fn rebuild(
                 Some(Hover::Cell(g, x, y)) => {
                     let grid = match g {
                         GridRef::Pockets => Some(&inv.pockets),
-                        GridRef::Bag => inv.bag.as_ref(),
                         GridRef::Chest(p) => chests.map.get(&p),
                     };
                     grid.and_then(|gr| gr.at(&items, x, y).map(|i| gr.items[i].stack.item))
                 }
                 Some(Hover::Slot(s)) => inv.worn.get(&s).copied(),
                 Some(Hover::Recipe(i)) => recipes.as_ref().and_then(|r| r.list.get(i)).map(|r| r.makes.item),
-                None => None,
+                Some(Hover::Tab(_)) | None => None,
             };
             if held.is_none()
                 && let Some(id) = hovered_item

@@ -230,6 +230,14 @@ def deeprock(s):
     return noisy(s, [(40, 40, 48), (58, 58, 68), (76, 76, 88)], (4, 2))
 
 
+def rootstone(s):
+    """The unbreakable world floor: near-black rock with faint dull red veins."""
+    img = noisy(s, [(18, 16, 20), (30, 26, 30), (44, 38, 40)], (8, 4, 2))
+    veins = fbm(s + 5, (8, 4)) > 0.68
+    img[veins] = (70, 30, 28, 255)
+    return img
+
+
 def glowcap(s):
     img = np.zeros((T, T, 4))
     img[18:30, 15:17] = (200, 200, 180, 255)       # stem
@@ -306,6 +314,7 @@ TILES = [
     ("swamp_leaves", lambda s: leaves(s, ((40, 60, 30), (58, 84, 36), (84, 104, 44)))),
     ("glowcap", glowcap),
     ("tall_grass", tall_grass), ("fern", fern), ("bog_bloom", bog_bloom),
+    ("rootstone", rootstone),
 ]
 
 

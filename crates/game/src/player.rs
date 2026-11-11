@@ -378,6 +378,13 @@ fn walk(
             }
         }
     }
+    // The world's ceiling: nothing can rise past it (levitation included).
+    let top = worldgen::WORLD_CEILING as f32 - p.height();
+    if p.pos.y > top {
+        p.pos.y = top;
+        p.vel.y = p.vel.y.min(0.0);
+    }
+
     // Still standing on something?
     if !p.on_ground && p.vel.y <= 0.0 && hits(&world, &blocks, p.pos - Vec3::Y * 0.02, 0.01, water) {
         p.on_ground = true;
