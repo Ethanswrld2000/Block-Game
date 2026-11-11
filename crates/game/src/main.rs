@@ -17,6 +17,7 @@ mod progress;
 mod debug;
 mod hands;
 mod hud;
+mod chop;
 mod interact;
 mod inventory;
 mod item_art;
@@ -57,6 +58,7 @@ fn main() {
             save::SavePlugin,
             world::WorldPlugin,
             interact::InteractPlugin,
+            chop::ChopPlugin,
             debug::DebugOverlayPlugin,
             autoshot::AutoShotPlugin,
         ))

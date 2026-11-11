@@ -176,19 +176,28 @@ pub struct HandAnim {
     pub right: f32,
     /// Eating progress, 0..1 (set by `survival`): the hand comes up to the mouth.
     pub eat: f32,
+    /// The right hand's swing is an axe chop at this log: slower, overhead,
+    /// and the tree shakes when it lands (`chop`).
+    pub chop: Option<BlockPos>,
     place_cooldown: f32,
     strike_cooldown: f32,
 }
 
 impl HandAnim {
-    fn start(&mut self, hand: Hand) {
+    /// Start a swing if that hand is at rest; true if one started.
+    fn start(&mut self, hand: Hand) -> bool {
         let s = match hand {
             Hand::Left => &mut self.left,
             Hand::Right => &mut self.right,
         };
-        if *s <= 0.0 {
-            *s = 1.0;
+        if *s > 0.0 {
+            return false;
         }
+        *s = 1.0;
+        if hand == Hand::Right {
+            self.chop = None;
+        }
+        true
     }
 }
 
@@ -427,7 +436,16 @@ fn use_hands(
     // Left click: mine with whatever you hold (tools are faster).
     if mouse.pressed(MouseButton::Left) {
         mined_this_frame = true;
-        anim.start(hand);
+        // An axe on a log chops: a bigger swing that shakes the tree.
+        let chop_at = target.hit.map(|h| h.block).filter(|p| {
+            world.block(*p).is_some_and(|b| {
+                let def = blocks.registry.get(b);
+                def.material == "log" && item.is_some() && items.break_time(item, def).is_some()
+            })
+        });
+        if anim.start(hand) {
+            anim.chop = chop_at;
+        }
         if let Some(hit) = target.hit
             && let Some(b) = world.block(hit.block)
             && let Some(seconds) = items.break_time(item, blocks.registry.get(b)).map(|s| s / (1.0 + perks.mining))
@@ -457,10 +475,23 @@ fn use_hands(
     }
 }
 
-fn animate_swings(time: Res<Time>, mut anim: ResMut<HandAnim>) {
+/// Seconds one axe chop takes (a bigger, slower swing).
+pub const CHOP_TIME: f32 = 0.55;
+
+fn animate_swings(time: Res<Time>, mut anim: ResMut<HandAnim>, mut chops: MessageWriter<crate::chop::Chop>) {
     let step = time.delta_secs() / SWING_TIME;
     anim.left = (anim.left - step).max(0.0);
-    anim.right = (anim.right - step).max(0.0);
+    let before = anim.right;
+    let right_step = if anim.chop.is_some() { time.delta_secs() / CHOP_TIME } else { step };
+    anim.right = (anim.right - right_step).max(0.0);
+    // The blow lands at the bottom of the chop.
+    let lands = 1.0 - crate::hands::CHOP_STRIKE;
+    if let Some(p) = anim.chop
+        && before > lands
+        && anim.right <= lands
+    {
+        chops.write(crate::chop::Chop(p));
+    }
 }
 
 fn draw_target(target: Res<Target>, mining: Res<Mining>, menus: Res<crate::camera::Menus>, mut gizmos: Gizmos) {

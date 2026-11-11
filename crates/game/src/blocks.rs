@@ -30,6 +30,10 @@ pub struct VoxelExtension {
     /// Sky-matched fog and ground mist (see `atmosphere`).
     #[uniform(104)]
     pub atmos: crate::atmosphere::AtmosParams,
+    /// A tree shaking from an axe blow: xyz = where it was hit, w = how hard
+    /// (fades from 1 to 0; see `chop`).
+    #[uniform(105)]
+    pub shake: Vec4,
 }
 
 impl MaterialExtension for VoxelExtension {
@@ -136,7 +140,7 @@ fn build_material(
             fog_enabled: false,
             ..default()
         },
-        extension: VoxelExtension { textures: textures.clone(), season: Vec4::ZERO, wind: Vec4::ZERO, atmos: default() },
+        extension: VoxelExtension { textures: textures.clone(), season: Vec4::ZERO, wind: Vec4::ZERO, atmos: default(), shake: Vec4::ZERO },
     }));
     blocks.translucent_material = Some(materials.add(VoxelMaterial {
         base: StandardMaterial {
@@ -148,6 +152,6 @@ fn build_material(
             fog_enabled: false,
             ..default()
         },
-        extension: VoxelExtension { textures, season: Vec4::ZERO, wind: Vec4::ZERO, atmos: default() },
+        extension: VoxelExtension { textures, season: Vec4::ZERO, wind: Vec4::ZERO, atmos: default(), shake: Vec4::ZERO },
     }));
 }
