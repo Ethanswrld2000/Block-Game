@@ -31,7 +31,9 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   WESL (`import bevy_pbr::render::...`, `@group(constants::MATERIAL_BIND_GROUP)`); check compiler
   hints and the 0.20.1 example shaders on GitHub before assuming older API.
 - Content (blocks, items, foods, biomes, skill nodes) goes in RON data files, not code.
-- Chunks are 32^3 (`voxel::CHUNK_SIZE`). Chunks stack vertically; no world height limit.
+- Chunks are 32^3 (`voxel::CHUNK_SIZE`). Chunks stack vertically. The world runs from unbreakable
+  `rootstone` at y -300 (`worldgen::WORLD_FLOOR`, top a little bumpy) to a ceiling at y 1000
+  (`worldgen::WORLD_CEILING`: nothing generates or can be placed there, movement stops under it).
 - Heavy work (generation, lighting, meshing) runs on `AsyncComputeTaskPool`, never the main thread.
 - Pixel art is sampled nearest-neighbour (`ImagePlugin::default_nearest()`).
 - Target: 60 fps at 16-chunk view distance on Ethan's MacBook (Apple Silicon, Metal).
@@ -73,7 +75,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `chill` and `air`. Player state saves to `player.ron` (not in screenshot runs).
   `BLOCKGAME_VITALS=damage,fatigue,blood,injuries[,food,air,warmth]` sets bars for screenshots.
 - Phase 7 (items and inventory): done. `game::inventory`: `grid` (items fill cells by size, rotate,
-  stack; saved by item name), `Inventory` (pockets 5x3, worn `WearSlot`s, bag grid; mass,
+  stack; saved by item name), `Inventory` (pockets 20x10, worn `WearSlot`s, bag grid unused for now: no bag recipes or start bag; mass,
   insulation, per-layer protection), `Chests` (chest block, `chests.ron`), `crafting`
   (`assets/data/recipes.ron`, `Station::Hand|Camp`), `drops` (`assets/data/drops.ron`; unlisted
   blocks drop their own item), `world_items` (dropped stacks, pickup), `ui` (Tab screen; hit-testing
@@ -124,7 +126,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   Font: Jersey 15 (`assets/fonts/ui.ttf`, `ui_bold.ttf`, OFL; Pixelify Sans was too hard to read; sizes in `theme::sizes` sit on its 1/27-em pixel grid) loaded into Bevy's default font
   handle so all text uses it; `theme.bold(size)` for headings; every UI `Text` gets `theme::SHADOW`
   unless it has `NoShadow`. Colours in `theme::colors`, sizes in `theme::sizes`. Inventory: one
-  framed window, item tooltips by the cursor, crafting list sorted makeable-first and scrolled with
+  framed window (the 20x10 grid, plus a side panel with Crafting / Clothes / Chest tabs), item tooltips by the cursor, crafting list sorted makeable-first and scrolled with
   the wheel; hotbar shows block pictures. Clouds went back to blocky meshes, now three layers
   (`clouds::LAYERS`: low rain deck y 200, middle y 236, high wisps y 300) whose cover follows
   `Conditions.clouds`. `BLOCKGAME_PAUSE=1` (or `=settings`) opens the pause menu for screenshots.
@@ -183,7 +185,10 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   and time, from the voxel material's `wind` uniform; how far a vertex sways is packed into UV_1.y with the
   season tint (`chunk_mesh::pack_tint_sway`). New tiles: `python3 tools/gen_placeholder_art.py --only <names>`
   paints just those into the existing blocks.png.
-- Next: follow `docs/GAMEPLAY_LOOP.md` "What's next" (shelter first), or ask Ethan.
+- Arm: `hands` turns the arm about the shoulder (`hands::ARM`, `swing_pose`: wind-up, strike, return).
+- Next: the sleeping station / fusion / hands-on stations plan (Claude Doc "Sleeping Station and Fusion: Plan"):
+  trees with vines and twigs, pebbles, the ancestral urn, tool bench, carpentry bench. New characters will start
+  with only the bedroll and clothes; the first axe is a stick plus two small rocks at the tool bench.
 
 ## Testing without a screen
 

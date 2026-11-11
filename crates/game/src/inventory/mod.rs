@@ -423,7 +423,9 @@ mod tests {
     fn start_kit_fits_and_is_dressed() {
         let (_, items) = load();
         let inv = kit(&items);
-        assert!(inv.bag.is_some());
+        // No bags for now: one big grid.
+        assert!(inv.bag.is_none());
+        assert_eq!((inv.pockets.w, inv.pockets.h), POCKETS);
         assert_eq!(inv.count(items.id("torch").unwrap()), 8);
         assert!(inv.insulation(&items) > 4.0);
         assert!(inv.mass(&items) > 5.0 && inv.mass(&items) < 20.0, "{}", inv.mass(&items));
@@ -433,6 +435,7 @@ mod tests {
     fn bag_must_be_empty_to_take_off() {
         let (_, items) = load();
         let mut inv = kit(&items);
+        inv.wear(&items, items.id("reed_satchel").unwrap()).unwrap();
         inv.bag.as_mut().unwrap().add(&items, Stack::new(items.id("dirt").unwrap(), 3));
         assert!(inv.take_off(WearSlot::Back).is_err());
         let bag = inv.bag.take().unwrap();
