@@ -661,7 +661,7 @@ mod tests {
         assert!(!ok("marsh_finch", false, 0.4, 0.8), "birds leave in the rain");
         assert!(ok("firefly", true, 0.4, 0.0) && !ok("firefly", false, 0.4, 0.0));
         assert!(!ok("firefly", true, -0.2, 0.0), "no fireflies in the cold");
-        assert!(ok("dusk_cricket", true, 0.4, 0.0) && !ok("dusk_cricket", false, 0.4, 0.0));
+        assert!(ok("dusk_cricket", true, 0.4, 0.0) && ok("dusk_cricket", false, 0.4, 0.0) && !ok("dusk_cricket", true, 0.4, 0.8), "crickets day and night, not in rain");
         assert!(ok("reed_frog", true, 0.4, 0.8) && ok("reed_frog", false, 0.4, 0.0), "frogs any time, rain or not");
     }
 
@@ -672,14 +672,6 @@ mod tests {
             for biome in ["great_swamp", "meadow", "pine_hills", "dunes", "highlands", "frost_peaks", "skyreach"] {
                 assert!(c.spawn.as_ref().unwrap().lives_in(biome), "{} doesn't live in {biome}", c.name);
             }
-        }
-    }
-
-    #[test]
-    fn critters_let_you_come_close() {
-        let k = super::super::data::tests::load();
-        for c in k.list.iter().filter_map(|c| c.critter.as_ref().map(|s| (&c.name, s))) {
-            assert_eq!(c.1.shy, 0.0, "{} startles when you come near", c.0);
         }
     }
 

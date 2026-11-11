@@ -153,7 +153,8 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   for now (spawn weight 0 in creatures.ron).
 - Phase 11 (atmosphere, wind and critters everywhere): in progress. Critters spawn in every biome for now
   (`biomes: []`) and only leave below freezing (`min_temp: 0.0`); frogs and darters still need water nearby.
-  They no longer startle (`shy: 0.0` everywhere) and leaving ones only fade beyond 16 blocks (`critters::FADE_AWAY`).
+  Leaving ones only fade beyond 16 blocks (`critters::FADE_AWAY`), never in front of you. Dusk crickets
+  are 1.6x bigger and out day and night.
   Atmosphere: `game::atmosphere` + `assets/data/atmosphere.ron` (grades by season, weather, biome and
   night: exposure, contrast, saturation, warmth, ground mist, season sunset colour). Terrain (voxel, water,
   LOD) fogs itself towards the sky's horizon colour in the view direction (`apply_atmosphere`, copied in

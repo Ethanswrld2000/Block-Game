@@ -17,8 +17,7 @@
 //            Drifter (hovers and drifts); count: most around you; ring: (min, max) spawn
 //            distance; calls: sound names, call_every: (min, max) s, hearing: blocks;
 //            height: flying/hovering height over the ground; hop: (along, up) speed;
-//            rest: (min, max) s perched/sitting/hovering; shy: startles this close (0 = never;
-//            all 0 for now, Ethan wants to walk right up to them);
+//            rest: (min, max) s perched/sitting/hovering; shy: startles this close;
 //            near_water, min_temp (local climate, -1..1), fair_weather, to_light (moths)
 //            Boxes named wing_* flap (they swing at the edge nearest the body);
 //            boxes with glow: true shine and blink (fireflies).
@@ -141,7 +140,7 @@
         spawn: Some((biomes: [], when: Day, at: Surface, group: (3, 6), weight: 1.0)),
         drops: [],
         critter: Some((motion: Bird, count: 12, ring: (20.0, 70.0), calls: ["bird_chirp_0", "bird_chirp_1", "bird_chirp_2"],
-            call_every: (1.5, 5.0), hearing: 40.0, height: (9.0, 20.0), rest: (6.0, 20.0), shy: 0.0, fair_weather: true)),
+            call_every: (1.5, 5.0), hearing: 40.0, height: (9.0, 20.0), rest: (6.0, 20.0), shy: 7.0, fair_weather: true)),
     ),
     (
         name: "grey_kite", title: "Grey Kite", temper: Critter, health: 1.0, speed: 7.0, run: 11.0,
@@ -158,7 +157,7 @@
         spawn: Some((biomes: [], when: Day, at: Surface, group: (1, 2), weight: 1.0)),
         drops: [],
         critter: Some((motion: Bird, count: 3, ring: (40.0, 95.0), calls: ["kite_call"],
-            call_every: (8.0, 22.0), hearing: 90.0, height: (28.0, 45.0), rest: (5.0, 12.0), shy: 0.0, fair_weather: true)),
+            call_every: (8.0, 22.0), hearing: 90.0, height: (28.0, 45.0), rest: (5.0, 12.0), shy: 12.0, fair_weather: true)),
     ),
     (
         name: "reed_frog", title: "Reed Frog", temper: Critter, health: 1.0, speed: 1.0, run: 2.0,
@@ -177,23 +176,23 @@
         spawn: Some((biomes: [], when: Any, at: Surface, group: (1, 3), weight: 1.0)),
         drops: [],
         critter: Some((motion: Hopper, count: 8, ring: (6.0, 30.0), calls: ["frog_croak_0", "frog_croak_1"],
-            call_every: (3.0, 12.0), hearing: 36.0, hop: (2.8, 6.0), rest: (2.0, 9.0), shy: 0.0, near_water: true, min_temp: 0.0)),
+            call_every: (3.0, 12.0), hearing: 36.0, hop: (2.8, 6.0), rest: (2.0, 9.0), shy: 3.0, near_water: true, min_temp: 0.0)),
     ),
     (
         name: "dusk_cricket", title: "Dusk Cricket", temper: Critter, health: 1.0, speed: 1.0, run: 2.0,
-        size: (0.14, 0.12),
+        size: (0.224, 0.192),
         skin: "dusk_cricket",
         model: [
-            (name: "body",            size: (0.08, 0.07, 0.18), offset: (0.0, 0.06, 0.0), color: (0.22, 0.17, 0.1)),
-            (name: "head",            size: (0.07, 0.07, 0.07), offset: (0.0, 0.07, -0.12), color: (0.18, 0.14, 0.08)),
-            (name: "leg_back_right",  size: (0.03, 0.08, 0.14), offset: (0.06, 0.06, 0.05), color: (0.3, 0.22, 0.12)),
-            (name: "leg_back_left",   size: (0.03, 0.08, 0.14), offset: (-0.06, 0.06, 0.05), color: (0.3, 0.22, 0.12)),
-            (name: "antennae",        size: (0.08, 0.02, 0.12), offset: (0.0, 0.1, -0.2), color: (0.3, 0.22, 0.12)),
+            (name: "body",            size: (0.128, 0.112, 0.288), offset: (0.0, 0.096, 0.0), color: (0.22, 0.17, 0.1)),
+            (name: "head",            size: (0.112, 0.112, 0.112), offset: (0.0, 0.112, -0.192), color: (0.18, 0.14, 0.08)),
+            (name: "leg_back_right",  size: (0.048, 0.128, 0.224), offset: (0.096, 0.096, 0.08), color: (0.3, 0.22, 0.12)),
+            (name: "leg_back_left",   size: (0.048, 0.128, 0.224), offset: (-0.096, 0.096, 0.08), color: (0.3, 0.22, 0.12)),
+            (name: "antennae",        size: (0.128, 0.032, 0.192), offset: (0.0, 0.16, -0.32), color: (0.3, 0.22, 0.12)),
         ],
-        spawn: Some((biomes: [], when: Night, at: Surface, group: (1, 2), weight: 1.0)),
+        spawn: Some((biomes: [], when: Any, at: Surface, group: (2, 4), weight: 1.0)),
         drops: [],
-        critter: Some((motion: Hopper, count: 10, ring: (5.0, 26.0), calls: ["cricket_chirp_0", "cricket_chirp_1"],
-            call_every: (1.0, 3.5), hearing: 28.0, hop: (1.4, 4.5), rest: (4.0, 15.0), shy: 0.0, min_temp: 0.0, fair_weather: true)),
+        critter: Some((motion: Hopper, count: 14, ring: (4.0, 22.0), calls: ["cricket_chirp_0", "cricket_chirp_1"],
+            call_every: (1.0, 3.5), hearing: 28.0, hop: (1.4, 4.5), rest: (4.0, 15.0), shy: 2.0, min_temp: 0.0, fair_weather: true)),
     ),
     (
         name: "firefly", title: "Firefly", temper: Critter, health: 1.0, speed: 0.7, run: 2.2,
@@ -236,6 +235,6 @@
         ],
         spawn: Some((biomes: [], when: Day, at: Surface, group: (1, 3), weight: 1.0)),
         drops: [],
-        critter: Some((motion: Drifter, count: 6, ring: (5.0, 28.0), height: (0.6, 2.0), rest: (0.4, 2.5), shy: 0.0, near_water: true, min_temp: 0.0, fair_weather: true)),
+        critter: Some((motion: Drifter, count: 6, ring: (5.0, 28.0), height: (0.6, 2.0), rest: (0.4, 2.5), shy: 2.5, near_water: true, min_temp: 0.0, fair_weather: true)),
     ),
 ]
