@@ -35,8 +35,8 @@ pub struct CampPlugin;
 impl Plugin for CampPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Sleep>()
-            .add_systems(Update, (bedroll_key, sleep_key, sleep).chain().before(SurvivalSet).after(crate::player::PlayerSet))
-            .add_systems(Update, show_bedroll);
+            .add_systems(crate::menu::GameUpdate, (bedroll_key, sleep_key, sleep).chain().before(SurvivalSet).after(crate::player::PlayerSet))
+            .add_systems(crate::menu::GameUpdate, show_bedroll);
     }
 }
 

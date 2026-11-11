@@ -18,7 +18,7 @@ pub struct SurvivalHudPlugin;
 impl Plugin for SurvivalHudPlugin {
     fn build(&self, app: &mut App) {
         // PostStartup: after the weather panel, so this stacks below it top right.
-        app.add_systems(PostStartup, spawn).add_systems(Update, (update_bars, update_meters, shake, temperature_list, toasts, overlays).after(super::SurvivalSet));
+        app.add_systems(crate::menu::GamePostStartup, spawn).add_systems(crate::menu::GameUpdate, (update_bars, update_meters, shake, temperature_list, toasts, overlays).after(super::SurvivalSet));
     }
 }
 

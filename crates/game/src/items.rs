@@ -226,7 +226,7 @@ pub struct ItemsPlugin;
 
 impl Plugin for ItemsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(PreStartup, load_items.after(crate::blocks::load_blocks));
+        app.add_systems(crate::menu::GamePreStartup, load_items.after(crate::blocks::load_blocks));
     }
 }
 

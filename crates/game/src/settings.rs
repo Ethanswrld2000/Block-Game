@@ -26,11 +26,11 @@ impl Plugin for SettingsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Settings>()
             .init_resource::<PauseMenu>()
-            .add_systems(PreStartup, load_settings)
-            .add_systems(Startup, spawn_menu)
+            .add_systems(crate::menu::GamePreStartup, load_settings)
+            .add_systems(crate::menu::GameStartup, spawn_menu)
             // Before other screens see Esc, so closing one of them doesn't also pause.
-            .add_systems(PreUpdate, open_close.after(bevy::input::InputSystems))
-            .add_systems(Update, (hover_and_click, refresh, apply).chain().in_set(SettingsPlugin::APPLY));
+            .add_systems(PreUpdate, open_close.after(bevy::input::InputSystems).run_if(crate::menu::in_game))
+            .add_systems(crate::menu::GameUpdate, (hover_and_click, refresh, apply).chain().in_set(SettingsPlugin::APPLY));
     }
 }
 

@@ -12,7 +12,7 @@ pub struct WeatherHudPlugin;
 
 impl Plugin for WeatherHudPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn).add_systems(Update, update.after(crate::weather::WeatherSet));
+        app.add_systems(crate::menu::GameStartup, spawn).add_systems(crate::menu::GameUpdate, update.after(crate::weather::WeatherSet));
     }
 }
 

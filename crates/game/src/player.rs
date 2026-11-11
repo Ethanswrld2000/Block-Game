@@ -39,7 +39,7 @@ impl Plugin for PlayerPlugin {
             .init_resource::<Body>()
             .add_message::<Damage>()
             .add_systems(
-                Update,
+                crate::menu::GameUpdate,
                 (
                     toggle_mode,
                     walk.run_if(resource_equals(MoveMode::Walk)),

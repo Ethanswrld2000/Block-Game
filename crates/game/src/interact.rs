@@ -44,7 +44,7 @@ impl Plugin for InteractPlugin {
             .add_message::<Strike>()
             .add_message::<UseCreature>()
             .add_systems(
-                Update,
+                crate::menu::GameUpdate,
                 (choose_items, wield, find_target, use_hands, animate_swings, draw_target)
                     .chain()
                     .in_set(InteractSet)

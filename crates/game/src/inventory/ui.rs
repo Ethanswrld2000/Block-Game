@@ -32,8 +32,8 @@ pub struct InventoryUiPlugin;
 impl Plugin for InventoryUiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<InvUi>()
-            .add_systems(PostStartup, open_for_screenshot)
-            .add_systems(Update, (open_close, hover, scroll, click, keys, rebuild, follow_cursor).chain().after(crate::interact::InteractSet));
+            .add_systems(crate::menu::GamePostStartup, open_for_screenshot)
+            .add_systems(crate::menu::GameUpdate, (open_close, hover, scroll, click, keys, rebuild, follow_cursor).chain().after(crate::interact::InteractSet));
     }
 }
 

@@ -16,8 +16,8 @@ pub struct ProgressUiPlugin;
 impl Plugin for ProgressUiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<TreeView>()
-            .add_systems(Startup, (spawn_hud, spawn_screen))
-            .add_systems(Update, (update_hud, open_close, pan_zoom, click, layout).chain());
+            .add_systems(crate::menu::GameStartup, (spawn_hud, spawn_screen))
+            .add_systems(crate::menu::GameUpdate, (update_hud, open_close, pan_zoom, click, layout).chain());
     }
 }
 

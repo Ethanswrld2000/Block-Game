@@ -47,17 +47,17 @@ impl Plugin for CreaturesPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Dice(Rng(0x5EED_C0FF_EE15_u64)))
             .init_resource::<Barrows>()
-            .add_systems(PostStartup, setup)
-            .add_systems(Update, aim.before(InteractSet).after(crate::player::PlayerSet))
+            .add_systems(crate::menu::GamePostStartup, setup)
+            .add_systems(crate::menu::GameUpdate, aim.before(InteractSet).after(crate::player::PlayerSet))
             .add_systems(
-                Update,
+                crate::menu::GameUpdate,
                 (take_strikes, spawn_around, spawn_wights, think, spirits, walk, tint, despawn_far)
                     .chain()
                     .in_set(CreatureSet)
                     .after(InteractSet),
             )
-            .add_systems(Update, look_at_creature.run_if(|| std::env::var_os("BLOCKGAME_LOOK").is_some()))
-            .add_systems(Update, lineup.run_if(|| std::env::var_os("BLOCKGAME_LINEUP").is_some()))
+            .add_systems(crate::menu::GameUpdate, look_at_creature.run_if(|| std::env::var_os("BLOCKGAME_LOOK").is_some()))
+            .add_systems(crate::menu::GameUpdate, lineup.run_if(|| std::env::var_os("BLOCKGAME_LINEUP").is_some()))
             .add_plugins((villagers::VillagersPlugin, critters::CrittersPlugin));
     }
 }

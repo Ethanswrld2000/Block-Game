@@ -25,10 +25,10 @@ impl Plugin for ClockPlugin {
         let seasons = Seasons::from_ron(include_str!("../../../assets/data/seasons.ron")).unwrap_or_else(|e| panic!("{e}"));
         app.insert_resource(seasons)
             .insert_resource(SaveTimer(Timer::from_seconds(30.0, TimerMode::Repeating)))
-            .add_systems(PreStartup, load_clock)
-            .add_systems(First, advance)
-            .add_systems(Update, save_clock)
-            .add_systems(Last, save_clock_on_exit);
+            .add_systems(crate::menu::GamePreStartup, load_clock)
+            .add_systems(First, advance.run_if(crate::menu::in_game))
+            .add_systems(crate::menu::GameUpdate, save_clock)
+            .add_systems(Last, save_clock_on_exit.run_if(crate::menu::in_game));
     }
 }
 

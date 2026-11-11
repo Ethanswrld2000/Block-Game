@@ -24,7 +24,7 @@ impl Plugin for VillagersPlugin {
         let lines: Talk = ron::from_str(include_str!("../../../../assets/data/villagers.ron")).unwrap_or_else(|e| panic!("villagers.ron: {e}"));
         app.insert_resource(lines)
             .init_resource::<Populated>()
-            .add_systems(Update, (populate, keep_day, talk).chain().in_set(CreatureSet).after(super::take_strikes).before(super::walk));
+            .add_systems(crate::menu::GameUpdate, (populate, keep_day, talk).chain().in_set(CreatureSet).after(super::take_strikes).before(super::walk));
     }
 }
 

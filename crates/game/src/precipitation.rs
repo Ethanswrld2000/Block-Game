@@ -24,7 +24,7 @@ pub struct PrecipitationPlugin;
 
 impl Plugin for PrecipitationPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_drops).add_systems(Update, fall);
+        app.add_systems(crate::menu::GameStartup, spawn_drops).add_systems(crate::menu::GameUpdate, fall);
     }
 }
 

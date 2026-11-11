@@ -183,10 +183,20 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   and time, from the voxel material's `wind` uniform; how far a vertex sways is packed into UV_1.y with the
   season tint (`chunk_mesh::pack_tint_sway`). New tiles: `python3 tools/gen_placeholder_art.py --only <names>`
   paints just those into the existing blocks.png.
+- Title screen: `game::menu` (Continue the last-played world, New world with a name and a seed
+  (numbers as is, words hashed, blank = random), Load world, Quit). Each world is `saves/<folder>/` with
+  `world.ron` (name, seed, created, last_played; `save::list_worlds`/`create_world`); `world::WorldSeed`
+  replaces the fixed `SEED` (kept for folders without a seed). Nothing of the game runs before a world
+  opens: plugins add systems to `menu::GamePreStartup`/`GameStartup`/`GamePostStartup`/`GameUpdate`
+  instead of Bevy's `Startup`/`Update` (entering `Screen::Game` runs the startup three once, then
+  `GameUpdate` runs inside `Update`); systems in `First`/`PreUpdate`/`Last` need `.run_if(menu::in_game)`.
+  No "quit to title" yet (game state isn't reset), so Save and quit closes the game.
 - Next: follow `docs/GAMEPLAY_LOOP.md` "What's next" (shelter first), or ask Ethan.
 
 ## Testing without a screen
 
+Screenshot and bench runs skip the title screen and open `saves/world1` (`BLOCKGAME_WORLD=<folder>` picks
+another, and also skips it in normal runs); `BLOCKGAME_MENU=1|new|load` keeps the title screen up for a screenshot.
 `BLOCKGAME_SCREENSHOT=shot.png cargo run` waits for chunk loading to settle, saves a screenshot and quits.
 `BLOCKGAME_CAMERA=x,y,z,yaw,pitch` (or `x,y,z,@tx,ty,tz` to look at a point) places the camera first.
 `BLOCKGAME_TIME=day:hour` and `BLOCKGAME_WEATHER=rain` set the scene; the clock stands still during a screenshot run.

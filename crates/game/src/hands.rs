@@ -20,7 +20,7 @@ pub struct HandsPlugin;
 
 impl Plugin for HandsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (spawn_hands, update_held, pose_hands).chain().after(crate::interact::InteractSet));
+        app.add_systems(crate::menu::GameUpdate, (spawn_hands, update_held, pose_hands).chain().after(crate::interact::InteractSet));
     }
 }
 

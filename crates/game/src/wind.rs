@@ -33,7 +33,7 @@ pub struct WindPlugin;
 
 impl Plugin for WindPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Wind>().add_systems(Update, (blow, push_to_material).chain().after(WeatherSet));
+        app.init_resource::<Wind>().add_systems(crate::menu::GameUpdate, (blow, push_to_material).chain().after(WeatherSet));
     }
 }
 

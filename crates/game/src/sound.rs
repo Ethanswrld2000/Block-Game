@@ -26,9 +26,9 @@ impl Plugin for SoundPlugin {
         let spec: SoundSpec = ron::from_str(include_str!("../../../assets/data/sounds.ron")).unwrap_or_else(|e| panic!("sounds.ron: {e}"));
         app.insert_resource(spec)
             .add_message::<PlaySound>()
-            .add_systems(Startup, (load_bank, start_loops).chain())
+            .add_systems(crate::menu::GameStartup, (load_bank, start_loops).chain())
             .add_systems(
-                Update,
+                crate::menu::GameUpdate,
                 (footsteps, mining, fights, spells, level_up, thunder, spirits, play, loops)
                     .chain()
                     .after(crate::creatures::CreatureSet)

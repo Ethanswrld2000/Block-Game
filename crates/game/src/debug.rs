@@ -18,8 +18,8 @@ pub struct DebugOverlayPlugin;
 impl Plugin for DebugOverlayPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(FrameTimeDiagnosticsPlugin::default())
-            .add_systems(Startup, spawn_overlay)
-            .add_systems(Update, (toggle_overlay, update_overlay));
+            .add_systems(crate::menu::GameStartup, spawn_overlay)
+            .add_systems(crate::menu::GameUpdate, (toggle_overlay, update_overlay));
     }
 }
 

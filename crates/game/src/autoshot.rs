@@ -18,11 +18,11 @@ pub struct AutoShotPlugin;
 impl Plugin for AutoShotPlugin {
     fn build(&self, app: &mut App) {
         if let Ok(path) = std::env::var("BLOCKGAME_SCREENSHOT") {
-            app.insert_resource(ShotPath(path)).add_systems(Update, take_shot);
+            app.insert_resource(ShotPath(path)).add_systems(crate::menu::GameUpdate, take_shot);
         }
         if let Ok(spec) = std::env::var("BLOCKGAME_CAMERA") {
             app.insert_resource(CameraSpec(spec))
-                .add_systems(PostStartup, place_camera.after(crate::world::setup_generator));
+                .add_systems(crate::menu::GamePostStartup, place_camera.after(crate::world::setup_generator));
         }
     }
 }
