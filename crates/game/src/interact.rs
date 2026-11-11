@@ -326,7 +326,7 @@ fn use_hands(
         MessageWriter<Strike>,
         MessageWriter<UseCreature>,
     ),
-    (aimed, cam, perks): (Res<Aimed>, Single<&Transform, With<FlyCamera>>, Res<crate::progress::skills::Perks>),
+    (aimed, cam, perks, station): (Res<Aimed>, Single<&Transform, With<FlyCamera>>, Res<crate::progress::skills::Perks>, Res<crate::station::StationAim>),
     blocks: Res<Blocks>,
     mode: Res<MoveMode>,
     player: Res<Player>,
@@ -371,9 +371,13 @@ fn use_hands(
         return;
     }
 
+    // A station nearer than the block you aim at takes right clicks (`station`).
+    let at_station = station.0.is_some_and(|(_, d)| block_dist.is_none_or(|b| d < b));
+
     // Right click on a chest opens it (whatever you hold).
     let chest = blocks.registry.id("chest");
     if mouse.just_pressed(MouseButton::Right)
+        && !at_station
         && let Some(hit) = target.hit
         && chest.is_some()
         && world.block(hit.block) == chest
@@ -384,6 +388,7 @@ fn use_hands(
 
     // Right click on a twig or a pebble: snap it off or pick it up.
     if mouse.just_pressed(MouseButton::Right)
+        && !at_station
         && let Some(hit) = target.hit
         && world.block(hit.block).is_some_and(|b| matches!(blocks.registry.get(b).shape, voxel::Shape::Twig | voxel::Shape::Pebble))
     {
@@ -400,6 +405,7 @@ fn use_hands(
     };
     if let (Some(place), Some(hit)) = (place, target.hit)
         && mouse.pressed(MouseButton::Right)
+        && !at_station
         && (mouse.just_pressed(MouseButton::Right) || anim.place_cooldown <= 0.0)
     {
         // Aiming at a plant puts the block in its place.

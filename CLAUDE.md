@@ -192,6 +192,12 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   canopy and trunk vines and leaf tufts; `worldgen::plants` scatters `pebble`s. Right click snaps a twig off
   (stick) or picks a pebble up (`small_rock`). Logs are material `log`: bare hands and the pickaxe can't cut
   them (a speed of 0 in items.ron = can't break), only the axe.
+- Sleeping station: `game::station` (urn and stations as models around the bedroll, packed with it; `StationAim`
+  makes `interact` leave right clicks to a station in front of the block you aim at). Pure rules in
+  `station::fusion` (`assets/data/fusion.ron`: fusion kinds, what each item gives, upgrades with `needs`/`after`/
+  `station`; upgrades spend fusion). Right click the urn with an item (Shift: whole stack); 10 earth places the
+  tool bench, 40 more the carpentry bench. Saved to `urn.ron`. `BLOCKGAME_CAMP=1` unrolls the bedroll in front of
+  you, `BLOCKGAME_URN=tool_bench,earth=5` sets upgrades and fusion (screenshots). Benches can't be worked yet.
 - Arm: `hands` turns the arm about the shoulder (`hands::ARM`, `swing_pose`: wind-up, strike, return).
 - Next: the sleeping station / fusion / hands-on stations plan (Claude Doc "Sleeping Station and Fusion: Plan"):
   trees with vines and twigs, pebbles, the ancestral urn, tool bench, carpentry bench. New characters will start
