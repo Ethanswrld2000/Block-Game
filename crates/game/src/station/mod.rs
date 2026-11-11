@@ -333,9 +333,13 @@ fn place_stations(
                 (cube(0.12, 0.72, 0.12), wood_dark.clone(), Vec3::new(-0.7, 0.36, 0.32)),
                 (cube(0.12, 0.72, 0.12), wood_dark.clone(), Vec3::new(0.7, 0.36, 0.32)),
                 (cube(1.7, 0.12, 0.9), wood.clone(), Vec3::new(0.0, 0.78, 0.0)),
-                // A vise at one end and a saw slot along the front.
+                // A vise at one end, a saw slot along the front, and the saw
+                // lying along the back (blade and handle).
                 (cube(0.2, 0.2, 0.3), wood_dark.clone(), Vec3::new(0.72, 0.94, 0.0)),
+                (cube(0.04, 0.03, 0.32), groove.clone(), Vec3::new(0.72, 1.05, 0.0)),
                 (cube(1.0, 0.012, 0.06), groove.clone(), Vec3::new(-0.2, 0.846, 0.3)),
+                (cube(0.5, 0.012, 0.11), stone.clone(), Vec3::new(0.15, 0.852, -0.3)),
+                (cube(0.16, 0.06, 0.09), wood_dark.clone(), Vec3::new(-0.16, 0.87, -0.3)),
             ],
         }
     };
@@ -418,7 +422,7 @@ fn use_station(
                 toast.write(Toast(format!("The urn places a {title} beside it")));
             }
         }
-        StationKind::ToolBench => {
+        StationKind::ToolBench | StationKind::CarpentryBench => {
             if *mode == crate::player::MoveMode::Fly {
                 toast.write(Toast("Land to work at the bench".into()));
                 return;
@@ -427,9 +431,6 @@ fn use_station(
             at_bench.enter(*st, player.pos + Vec3::Y * player.eye);
             menus.open = true;
             menus.still = true;
-        }
-        StationKind::CarpentryBench => {
-            toast.write(Toast(format!("The {} isn't ready to work yet", kind.title())));
         }
     }
 }
@@ -487,8 +488,7 @@ fn show_label(
         Some((kind, _)) if !menus.open => {
             let line = match kind {
                 StationKind::Urn => format!("{}  ·  right click to put in what you hold", next_line(&urn.0, &fusion.0)),
-                StationKind::ToolBench => "Right click to work it with your hands".to_string(),
-                _ => "Coming soon: work it with your hands".to_string(),
+                StationKind::ToolBench | StationKind::CarpentryBench => "Right click to work it with your hands".to_string(),
             };
             (kind.title().to_string(), line)
         }

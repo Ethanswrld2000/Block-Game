@@ -1,29 +1,23 @@
-// Crafting recipes, shown in the inventory screen (Tab).
+// Crafting recipes, shown in the inventory screen (Tab). Tools, planks, sticks
+// and chests are made by hand at the benches instead (benches.ron); what's left
+// here moves to its own station as those are built.
 //   makes:  (item, count)
 //   needs:  [(item, count), ...] used up when you craft
 //   at:     where you have to be: Hand (anywhere, the default) or Camp (by your bedroll)
 [
-    (makes: ("planks", 4), needs: [("log", 1)]),
-    (makes: ("planks", 4), needs: [("swamp_log", 1)]),
-    (makes: ("stick", 4), needs: [("planks", 2)]),
     (makes: ("cordage", 1), needs: [("plant_fiber", 3)]),
     (makes: ("torch", 4), needs: [("stick", 1), ("coal", 1)]),
     (makes: ("torch", 2), needs: [("stick", 1), ("peat", 1)]),
-    (makes: ("stone_pickaxe", 1), needs: [("stick", 2), ("cobblestone", 3), ("cordage", 1)]),
-    (makes: ("stone_axe", 1), needs: [("stick", 2), ("cobblestone", 2), ("cordage", 1)]),
-    (makes: ("stone_shovel", 1), needs: [("stick", 2), ("cobblestone", 1), ("cordage", 1)]),
     (makes: ("reed_hat", 1), needs: [("plant_fiber", 6)]),
     (makes: ("reed_cloak", 1), needs: [("cordage", 3), ("plant_fiber", 10)]),
     (makes: ("bark_helm", 1), needs: [("log", 2), ("cordage", 2)]),
     (makes: ("bark_vest", 1), needs: [("log", 4), ("cordage", 3)]),
-    (makes: ("chest", 1), needs: [("planks", 8)]),
     // Hide and fur come from creatures.
     (makes: ("hide_boots", 1), needs: [("hide", 1), ("cordage", 1)]),
     (makes: ("hide_leggings", 1), needs: [("hide", 2), ("cordage", 1)]),
     (makes: ("hide_jerkin", 1), needs: [("hide", 3), ("cordage", 2)]),
     (makes: ("fur_hood", 1), needs: [("fur", 1), ("cordage", 1)]),
     (makes: ("fur_coat", 1), needs: [("fur", 3), ("hide", 1), ("cordage", 2)]),
-    (makes: ("flint_spear", 1), needs: [("stick", 2), ("flint", 2), ("cordage", 1)]),
     // Cooking and spirit work happen at camp.
     (makes: ("roast_meat", 1), needs: [("raw_meat", 1)], at: Camp),
     (makes: ("ember_herb", 1), needs: [("spirit_ember", 3), ("plant_fiber", 2)], at: Camp),

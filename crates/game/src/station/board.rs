@@ -1,11 +1,12 @@
 //! Working a bench with your hands, not through a menu.
 //!
-//! Right click a bench (the tool bench for now) and the view glides down over
+//! Right click a bench (tool bench, carpentry bench) and the view glides down over
 //! its top. Your things lie in a strip along the bottom of the screen: click one
 //! to pick it up (Shift: the whole stack); it hangs under the cursor over the
 //! board. Click a slot to set it down there, or click what lies in a slot to
 //! pick it back up. When the slots match a recipe (`assets/data/benches.ron`),
-//! knock the strike stone until the new thing lies on the board, then click it
+//! work the bench's tool (knock the strike stone, saw) until the new thing lies
+//! on the board, then click it
 //! to take it. Right click puts what you hold back; A / D steps to the next
 //! bench at the camp; Esc (or walking off) leaves, and everything on the board
 //! goes back into your pockets.
@@ -31,7 +32,8 @@ use crate::theme::{colors, sizes, Theme};
 pub(super) fn board_name(kind: StationKind) -> Option<&'static str> {
     match kind {
         StationKind::ToolBench => Some("tool_bench"),
-        _ => None,
+        StationKind::CarpentryBench => Some("carpentry_bench"),
+        StationKind::Urn => None,
     }
 }
 
@@ -77,23 +79,61 @@ impl AtBench {
     }
 }
 
-/// Top of the tool bench, where things lie.
-const TOP: f32 = 0.833;
+/// Where things are on a bench's top, in its own frame (x along its length,
+/// z across, y up from its foot).
+pub(super) struct Layout {
+    /// Slots: name, centre (x, z), half size, the height things lie at, and
+    /// how to say where it is ("in the groove").
+    slots: &'static [(&'static str, Vec2, Vec2, f32, &'static str)],
+    /// The tool you work (strike stone, saw): its box.
+    tool: (Vec3, Vec3),
+    /// Where a finished thing lies: centre, half size, height.
+    made: (Vec2, Vec2, f32),
+    /// The view: how high above the top and how far out to the side.
+    view: (f32, f32),
+    /// "Knock the strike stone", and what one go is called ("knock").
+    work: (&'static str, &'static str),
+}
 
-/// Slot areas on the tool bench top, in its own frame: centre (x, z) and half size.
-fn slot_area(name: &str) -> (Vec2, Vec2) {
-    match name {
-        "handle" => (Vec2::new(-0.15, -0.12), Vec2::new(0.34, 0.11)),
-        _ => (Vec2::new(0.32, 0.12), Vec2::new(0.17, 0.17)),
+const TOOL_BENCH: Layout = Layout {
+    slots: &[
+        ("handle", Vec2::new(-0.15, -0.12), Vec2::new(0.34, 0.11), 0.833, "in the groove"),
+        ("material", Vec2::new(0.32, 0.12), Vec2::new(0.17, 0.17), 0.833, "in the hollow"),
+    ],
+    tool: (Vec3::new(0.31, 0.82, -0.33), Vec3::new(0.53, 0.96, -0.15)),
+    made: (Vec2::new(-0.2, 0.17), Vec2::new(0.28, 0.13), 0.833),
+    view: (0.95, 0.62),
+    work: ("Knock the strike stone", "knock"),
+};
+
+const CARPENTRY_BENCH: Layout = Layout {
+    slots: &[
+        ("bed", Vec2::new(-0.25, 0.0), Vec2::new(0.42, 0.18), 0.846, "on the bed"),
+        ("vise", Vec2::new(0.72, 0.0), Vec2::new(0.12, 0.17), 1.04, "in the vise"),
+    ],
+    tool: (Vec3::new(-0.25, 0.83, -0.38), Vec3::new(0.42, 0.93, -0.22)),
+    made: (Vec2::new(0.2, 0.3), Vec2::new(0.25, 0.1), 0.846),
+    view: (1.25, 0.8),
+    work: ("Saw", "stroke of the saw"),
+};
+
+pub(super) fn layout(kind: StationKind) -> &'static Layout {
+    match kind {
+        StationKind::CarpentryBench => &CARPENTRY_BENCH,
+        _ => &TOOL_BENCH,
     }
 }
 
-/// Where a finished thing lies.
-const MADE_AT: Vec2 = Vec2::new(-0.2, 0.17);
-const MADE_HALF: Vec2 = Vec2::new(0.28, 0.13);
+impl Layout {
+    fn slot(&self, name: &str) -> (Vec2, Vec2, f32, &'static str) {
+        self.slots.iter().find(|s| s.0 == name).map_or((Vec2::ZERO, Vec2::ZERO, self.made.2, "on the bench"), |s| (s.1, s.2, s.3, s.4))
+    }
 
-/// The strike stone's box, in the bench's frame.
-const STONE: (Vec3, Vec3) = (Vec3::new(0.31, 0.82, -0.33), Vec3::new(0.53, 0.96, -0.15));
+    /// The main working height.
+    fn top(&self) -> f32 {
+        self.made.2
+    }
+}
 
 fn rotation(st: &Station) -> Quat {
     if st.turned { Quat::from_rotation_y(std::f32::consts::FRAC_PI_2) } else { Quat::IDENTITY }
@@ -105,38 +145,44 @@ fn to_world(st: &Station, local: Vec3) -> Vec3 {
 
 /// Looking down at the bench top from the side you stand on.
 fn board_view(st: &Station, side: f32) -> Transform {
-    let eye = to_world(st, Vec3::new(0.0, TOP + 0.95, side * 0.62));
-    let at = to_world(st, Vec3::new(0.0, TOP, side * 0.04));
+    let l = layout(st.kind);
+    let eye = to_world(st, Vec3::new(0.0, l.top() + l.view.0, side * l.view.1));
+    let at = to_world(st, Vec3::new(0.0, l.top(), side * 0.04));
     Transform::from_translation(eye).looking_at(at, Vec3::Y)
 }
 
 /// What the cursor is over on the bench.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Spot {
-    Stone,
+    /// The bench's tool (strike stone, saw).
+    Tool,
     Slot(SlotDef),
     Made,
 }
 
 /// The ray in the bench's frame: what it meets first, and where it crosses the top.
 fn spot(st: &Station, name: &str, made: bool, origin: Vec3, dir: Vec3) -> (Option<Spot>, Option<Vec3>) {
+    let l = layout(st.kind);
     let inv = rotation(st).inverse();
     let (o, d) = (inv * (origin - st.pos), inv * dir);
-    let top = (d.y < -1e-4).then(|| o + d * ((TOP - o.y) / d.y));
-    if ray_box(o, d, STONE.0, STONE.1).is_some() {
-        return (Some(Spot::Stone), top.map(|p| to_world(st, p)));
+    let cross = |y: f32| (d.y < -1e-4).then(|| o + d * ((y - o.y) / d.y));
+    let top = cross(l.top());
+    if ray_box(o, d, l.tool.0, l.tool.1).is_some() {
+        return (Some(Spot::Tool), top.map(|p| to_world(st, p)));
     }
-    let Some(p) = top else { return (None, None) };
-    let inside = |c: Vec2, h: Vec2| (p.x - c.x).abs() <= h.x && (p.z - c.y).abs() <= h.y;
-    let hit = if made && inside(MADE_AT, MADE_HALF) {
+    let inside = |y: f32, c: Vec2, h: Vec2| cross(y).is_some_and(|p| (p.x - c.x).abs() <= h.x && (p.z - c.y).abs() <= h.y);
+    let hit = if made && inside(l.made.2, l.made.0, l.made.1) {
         Some(Spot::Made)
     } else {
-        slots_of(name).iter().find(|s| {
-            let (c, h) = slot_area(s.name);
-            inside(c, h)
-        }).map(|s| Spot::Slot(*s))
+        slots_of(name)
+            .iter()
+            .find(|s| {
+                let (c, h, y, _) = l.slot(s.name);
+                inside(y, c, h)
+            })
+            .map(|s| Spot::Slot(*s))
     };
-    (hit, Some(to_world(st, p)))
+    (hit, top.map(|p| to_world(st, p)))
 }
 
 /// Something lying on the board, and the height it rests at.
@@ -343,7 +389,7 @@ pub(super) fn board_click(
     let Ok(ray) = cam.viewport_to_world(&GlobalTransform::from(*tf), pos) else { return };
     let (hit, _) = spot(&st, name, at.board.made.is_some(), ray.origin, ray.direction.as_vec3());
     match hit {
-        Some(Spot::Stone) => match at.board.strike(&benches.0, name) {
+        Some(Spot::Tool) => match at.board.strike(&benches.0, name) {
             Work::Nothing => {
                 sound.write(PlaySound::new("hit").gain(0.35));
                 let line = if at.board.made.is_some() { "Take what you made first" } else { "That doesn't make anything here" };
@@ -393,6 +439,15 @@ fn px_for(size: UVec2) -> f32 {
     if long > 24.0 { 0.56 / long } else { 0.15 / long }
 }
 
+/// Where the `i`th of `n` small things lies, around a slot's middle: two
+/// rows of up to four.
+fn spread(i: usize, n: usize) -> Vec2 {
+    let cols = n.min(4);
+    let rows = n.div_ceil(4);
+    let (cx, cy) = ((i % 4) as f32, (i / 4) as f32);
+    Vec2::new((cx - (cols as f32 - 1.0) / 2.0) * 0.12, (cy - (rows as f32 - 1.0) / 2.0) * 0.13 + if i.is_multiple_of(2) { -0.02 } else { 0.02 })
+}
+
 /// Lying flat on the board, the sprite's top along the bench's length.
 fn flat() -> Quat {
     Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2) * Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)
@@ -434,22 +489,27 @@ pub(super) fn board_models(
         }
         if let Some(st) = at.station {
             let r = rotation(&st) * flat();
+            let l = layout(st.kind);
             for (slot, stack) in &at.board.slots {
-                let (c, _) = slot_area(slot);
-                // Small things side by side in the hollow, a little turned.
-                let n = stack.count.min(4) as usize;
+                let (c, _, y, _) = l.slot(slot);
+                // Several small things side by side, a little turned.
+                let n = stack.count.min(8) as usize;
+                // Long things (sticks) lie side by side across the slot, small ones in rows.
+                let long = art.size(stack.item).is_some_and(|z| z.max_element() > 24);
                 for i in 0..n {
-                    let off = if stack.count == 1 || px_for(art.size(stack.item).unwrap_or(UVec2::splat(20))) > 0.01 {
-                        Vec2::ZERO
+                    let (off, turn) = if n == 1 {
+                        (Vec2::ZERO, Quat::IDENTITY)
+                    } else if long {
+                        (Vec2::new(0.0, (i as f32 - (n as f32 - 1.0) / 2.0) * 0.07), Quat::IDENTITY)
                     } else {
-                        [Vec2::new(-0.06, -0.05), Vec2::new(0.06, 0.05), Vec2::new(0.06, -0.06), Vec2::new(-0.06, 0.06)][i]
+                        (spread(i, n), Quat::from_rotation_y(i as f32 * 1.3))
                     };
-                    let turn = Quat::from_rotation_y(i as f32 * 1.3);
-                    spawn(&mut commands, stack.item, to_world(&st, Vec3::new(c.x + off.x, TOP, c.y + off.y)), turn * r, true);
+                    spawn(&mut commands, stack.item, to_world(&st, Vec3::new(c.x + off.x, y, c.y + off.y)), turn * r, true);
                 }
             }
             if let Some(m) = at.board.made {
-                spawn(&mut commands, m.item, to_world(&st, Vec3::new(MADE_AT.x, TOP, MADE_AT.y)), r, true);
+                let (c, _, y) = l.made;
+                spawn(&mut commands, m.item, to_world(&st, Vec3::new(c.x, y, c.y)), r, true);
             }
         }
     } else if at.bump > 0.0 {
@@ -475,7 +535,7 @@ pub(super) fn board_models(
         .and_then(|p| cam.viewport_to_world(&GlobalTransform::from(*tf), p).ok())
         .and_then(|ray| {
             let (o, d) = (ray.origin, ray.direction.as_vec3());
-            let y = st.pos.y + TOP + 0.1;
+            let y = st.pos.y + layout(st.kind).top() + 0.1;
             (d.y < -1e-4).then(|| o + d * ((y - o.y) / d.y))
         })
     else {
@@ -606,9 +666,10 @@ pub(super) fn board_ui(
     } else if let Some(m) = at.board.made {
         format!("Click the {} to take it", items.get(m.item).title)
     } else if let Some(r) = benches.0.matching(name, &at.board) {
-        format!("Knock the strike stone to make a {}  ({} / {})", items.get(r.makes.item).title, at.board.work, r.work)
+        format!("{} to make {}  ({} / {})", layout(st.kind).work.0, a_or_some(&items, r.makes), at.board.work, r.work)
     } else if at.held.is_some() {
-        "Set it in the long groove or the hollow".to_string()
+        let places: Vec<&str> = layout(st.kind).slots.iter().map(|s| s.4).collect();
+        format!("Set it down {}", places.join(" or "))
     } else {
         "Pick something from your pockets below".to_string()
     };
@@ -620,12 +681,14 @@ pub(super) fn board_ui(
                 .slots
                 .iter()
                 .map(|(slot, s)| {
-                    let where_ = if slot == "handle" { "the groove" } else { "the hollow" };
-                    let title = items.get(s.item).title.to_lowercase();
-                    if s.count == 1 { format!("a {title} in {where_}") } else { format!("{} {title}s in {where_}", s.count) }
+                    let where_ = layout(st.kind).slot(slot).3;
+                    format!("{} {where_}", a_or_some(&items, *s).to_lowercase())
                 })
                 .collect();
-            format!("{}: {}, then {} knocks", items.get(r.makes.item).title, parts.join(" and "), r.work)
+            let (_, go) = layout(st.kind).work;
+            let gos = if r.work == 1 { format!("1 {go}") } else { format!("{} {}", r.work, plural(go)) };
+            let made = if r.makes.count > 1 { format!("{} x{}", items.get(r.makes.item).title, r.makes.count) } else { items.get(r.makes.item).title.clone() };
+            format!("{made}: {}, then {gos}", parts.join(" and "))
         })
         .collect();
     for (q, s) in [(0, st.kind.title().to_string()), (1, line), (2, recipes.join("\n"))] {
@@ -642,9 +705,25 @@ pub(super) fn board_ui(
     }
 }
 
+/// "a Stick", "2 Small Rocks".
+fn a_or_some(items: &Items, s: Stack) -> String {
+    let title = &items.get(s.item).title;
+    if s.count == 1 { format!("a {title}") } else { format!("{} {}", s.count, plural(title)) }
+}
+
+fn plural(s: &str) -> String {
+    match s.split_once(' ') {
+        // "stroke of the saw" -> "strokes of the saw"
+        Some((head, rest)) if rest.starts_with("of ") => format!("{} {rest}", plural(head)),
+        _ if s.ends_with('s') => s.to_string(),
+        _ => format!("{s}s"),
+    }
+}
+
 /// `BLOCKGAME_BOARD=stick,small_rock*2` steps up to the tool bench as soon as
 /// it stands, with those in its slots in order (a third lies there made;
-/// screenshots; needs `BLOCKGAME_CAMP=1` and `BLOCKGAME_URN=tool_bench`).
+/// `-` leaves a slot empty; `BLOCKGAME_BOARD=carpentry:log` for the carpentry
+/// bench; screenshots; needs `BLOCKGAME_CAMP=1` and `BLOCKGAME_URN=tool_bench`).
 #[allow(clippy::too_many_arguments)]
 pub(super) fn board_for_screenshot(
     stations: Query<&Station>,
@@ -661,12 +740,16 @@ pub(super) fn board_for_screenshot(
         *done = true;
         return;
     };
-    let Some(st) = stations.iter().find(|s| s.kind == StationKind::ToolBench) else { return };
+    let (kind, v) = match v.split_once(':') {
+        Some(("carpentry", rest)) => (StationKind::CarpentryBench, rest.to_string()),
+        _ => (StationKind::ToolBench, v.clone()),
+    };
+    let Some(st) = stations.iter().find(|s| s.kind == kind) else { return };
     *done = true;
     at.enter(*st, player.pos + Vec3::Y * player.eye);
     menus.open = true;
     menus.still = true;
-    let defs = slots_of("tool_bench");
+    let defs = slots_of(board_name(kind).unwrap_or_default());
     for (i, part) in v.split(',').map(str::trim).filter(|s| !s.is_empty()).enumerate() {
         let (name, n) = part.split_once('*').map_or((part, 1), |(a, b)| (a, b.parse().unwrap_or(1)));
         // "-" leaves a slot empty.
@@ -694,7 +777,7 @@ mod tests {
                 // Looking through the middle of the view lands on the board.
                 let (_, top) = spot(&st, "tool_bench", false, v.translation, f);
                 let top = top.unwrap();
-                assert!((top - to_world(&st, Vec3::new(0.0, TOP, side * 0.04))).length() < 0.05, "{top}");
+                assert!((top - to_world(&st, Vec3::new(0.0, layout(st.kind).top(), side * 0.04))).length() < 0.05, "{top}");
             }
         }
     }
@@ -706,7 +789,7 @@ mod tests {
         let from = |x: f32, z: f32| to_world(&st, Vec3::new(x, 2.0, z));
         let name = |s: Option<Spot>| match s {
             Some(Spot::Slot(d)) => d.name,
-            Some(Spot::Stone) => "stone",
+            Some(Spot::Tool) => "stone",
             Some(Spot::Made) => "made",
             None => "none",
         };
@@ -715,5 +798,31 @@ mod tests {
         assert_eq!(name(spot(&st, "tool_bench", false, from(0.42, -0.24), down).0), "stone");
         assert_eq!(name(spot(&st, "tool_bench", true, from(-0.3, 0.2), down).0), "made");
         assert_eq!(name(spot(&st, "tool_bench", false, from(-0.3, 0.2), down).0), "none");
+        let st = Station { kind: StationKind::CarpentryBench, ..st };
+        assert_eq!(name(spot(&st, "carpentry_bench", false, from(-0.4, 0.05), down).0), "bed");
+        assert_eq!(name(spot(&st, "carpentry_bench", false, from(0.72, 0.1), down).0), "vise");
+        assert_eq!(name(spot(&st, "carpentry_bench", false, from(0.1, -0.3), down).0), "stone");
+        assert_eq!(name(spot(&st, "carpentry_bench", true, from(0.2, 0.32), down).0), "made");
+    }
+
+    #[test]
+    fn every_slot_has_a_place_on_its_bench() {
+        for kind in [StationKind::ToolBench, StationKind::CarpentryBench] {
+            for s in slots_of(board_name(kind).unwrap()) {
+                assert!(layout(kind).slots.iter().any(|l| l.0 == s.name), "{kind:?} {}", s.name);
+            }
+        }
+    }
+
+    #[test]
+    fn small_things_spread_without_overlapping() {
+        for n in 2..=8 {
+            let p: Vec<Vec2> = (0..n).map(|i| spread(i, n)).collect();
+            for a in 0..n {
+                for b in a + 1..n {
+                    assert!(p[a].distance(p[b]) > 0.09, "{n}: {a} {b}");
+                }
+            }
+        }
     }
 }

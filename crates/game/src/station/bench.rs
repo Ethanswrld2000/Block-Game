@@ -49,10 +49,14 @@ pub struct SlotDef {
 /// The tool bench: a long groove for the handle and a hollow for the material.
 pub const TOOL_BENCH_SLOTS: [SlotDef; 2] = [SlotDef { name: "handle", cap: 1 }, SlotDef { name: "material", cap: 4 }];
 
+/// The carpentry bench: a bed for logs and boards, and a vise.
+pub const CARPENTRY_SLOTS: [SlotDef; 2] = [SlotDef { name: "bed", cap: 8 }, SlotDef { name: "vise", cap: 4 }];
+
 /// The slots of a bench, by its station name in fusion.ron.
 pub fn slots_of(station: &str) -> &'static [SlotDef] {
     match station {
         "tool_bench" => &TOOL_BENCH_SLOTS,
+        "carpentry_bench" => &CARPENTRY_SLOTS,
         _ => &[],
     }
 }
@@ -83,12 +87,17 @@ impl BenchData {
     }
 
     /// The recipe the board matches: every slot it names holds that item (at
-    /// least that many), and nothing else is on the board.
+    /// least that many), and nothing else is on the board. If several match
+    /// (2 or 3 cobblestone), the one that uses the most.
     pub fn matching(&self, station: &str, board: &Board) -> Option<&Recipe> {
-        self.recipes.iter().filter(|r| r.station == station).find(|r| {
-            r.slots.iter().all(|(s, want)| board.slots.get(s).is_some_and(|have| have.item == want.item && have.count >= want.count))
-                && board.slots.keys().all(|s| r.slots.contains_key(s))
-        })
+        self.recipes
+            .iter()
+            .filter(|r| r.station == station)
+            .filter(|r| {
+                r.slots.iter().all(|(s, want)| board.slots.get(s).is_some_and(|have| have.item == want.item && have.count >= want.count))
+                    && board.slots.keys().all(|s| r.slots.contains_key(s))
+            })
+            .max_by_key(|r| r.slots.values().map(|s| s.count as u32).sum::<u32>())
     }
 
     pub fn for_station<'a>(&'a self, station: &'a str) -> impl Iterator<Item = &'a Recipe> + 'a {
@@ -213,6 +222,34 @@ mod tests {
         // It lies there until picked up; working again does nothing.
         assert_eq!(b.strike(&data, "tool_bench"), Work::Nothing);
         assert_eq!(b.clear(), vec![made]);
+    }
+
+    #[test]
+    fn the_most_that_fits_wins() {
+        let (items, data) = data();
+        let id = |n| items.id(n).unwrap();
+        let [handle, material] = TOOL_BENCH_SLOTS;
+        let mut b = Board::default();
+        b.put(handle, Stack::new(id("stick"), 1));
+        b.put(material, Stack::new(id("cobblestone"), 2));
+        assert_eq!(data.matching("tool_bench", &b).unwrap().makes.item, id("stone_axe"));
+        b.put(material, Stack::new(id("cobblestone"), 1));
+        assert_eq!(data.matching("tool_bench", &b).unwrap().makes.item, id("stone_pickaxe"));
+    }
+
+    #[test]
+    fn logs_saw_into_planks() {
+        let (items, data) = data();
+        let id = |n| items.id(n).unwrap();
+        let [bed, _] = CARPENTRY_SLOTS;
+        let mut b = Board::default();
+        b.put(bed, Stack::new(id("log"), 1));
+        let made = loop {
+            if let Work::Made(s) = b.strike(&data, "carpentry_bench") {
+                break s;
+            }
+        };
+        assert_eq!(made, Stack::new(id("planks"), 4));
     }
 
     #[test]

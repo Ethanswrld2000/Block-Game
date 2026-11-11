@@ -202,13 +202,18 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   the HUD and arms step aside (`board_hides`), a strip of your things sits at the bottom; click one to pick it up,
   it hangs under the cursor; click a slot to set it down; knock the strike stone to work it; A/D next bench, Esc
   leaves and the board empties back into your pockets). Pure rules in `station::bench` (`Board`, slots per bench in
-  `slots_of`, recipes in `assets/data/benches.ron`: slots, `work` knocks, `makes`). First recipe: stick + 2 small
-  rocks, 3 knocks = `rough_axe`. `Menus.still` stops walking at a bench. `BLOCKGAME_BOARD=stick,small_rock*2[,made]`
-  opens the tool bench with those laid out (`-` skips a slot; needs CAMP and URN). The carpentry bench has no board yet.
+  `slots_of`, where things lie in `board::layout`, recipes in `assets/data/benches.ron`: slots, `work` goes, `makes`;
+  the recipe using the most wins). Tool bench: handle + material, knock the strike stone (stick + 2 small rocks =
+  `rough_axe`, the first axe; stone tools from cobblestone). Carpentry bench: bed + vise, saw (logs -> planks,
+  planks -> sticks, chest). recipes.ron (Tab) keeps only what has no station yet. `Menus.still` stops walking at a
+  bench. `BLOCKGAME_BOARD=stick,small_rock*2[,made]` (or `carpentry:log`) opens a bench with those laid out (`-` skips
+  a slot; needs CAMP and URN).
+- Chopping: an axe on a log swings `hands::chop_pose` (slower, overhead); when it lands `chop::Chop` shakes the
+  tree through the voxel material's `shake` uniform (`shake_offset` in voxel_vertex.wesl and voxel_prepass.wesl).
   New characters start with only their clothes (`start_kit.ron`); the bedroll is always there (B).
 - Arm: `hands` turns the arm about the shoulder (`hands::ARM`, `swing_pose`: wind-up, strike, return).
-- Next: the rest of the Claude Doc "Sleeping Station and Fusion: Plan": the axe chop swing with trees shaking,
-  carpentry bench recipes (then retire the Tab crafting list), the lens station that shows an item's fusion.
+- Next: the rest of the Claude Doc "Sleeping Station and Fusion: Plan": the lens station that shows an item's fusion,
+  a cooking station (then retire the Tab crafting list), twig regrowth.
 
 ## Testing without a screen
 
