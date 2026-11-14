@@ -76,8 +76,8 @@ impl Plugin for SkyPlugin {
         app.add_plugins(MaterialPlugin::<SkyMaterial>::default())
             .insert_resource(ClearColor(Color::srgb(0.46, 0.53, 0.47)))
             .insert_resource(GlobalAmbientLight { color: Color::WHITE, brightness: 400.0, ..default() })
-            .add_systems(Startup, spawn_sky)
-            .add_systems(Update, (update_sky, follow_camera, season_tint));
+            .add_systems(crate::menu::GameStartup, spawn_sky)
+            .add_systems(crate::menu::GameUpdate, (update_sky, follow_camera, season_tint));
     }
 }
 

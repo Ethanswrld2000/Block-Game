@@ -54,13 +54,13 @@ impl Plugin for InventoryPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Inventory::empty())
             .init_resource::<Chests>()
-            .add_systems(PostStartup, (setup_data, load_inventory).chain())
+            .add_systems(crate::menu::GamePostStartup, (setup_data, load_inventory).chain())
             .add_systems(
-                Update,
+                crate::menu::GameUpdate,
                 (collect_mined, auto_bind, supply_key).chain().after(crate::interact::InteractSet),
             )
-            .add_systems(Update, save_inventory)
-            .add_systems(Last, save_inventory_on_exit)
+            .add_systems(crate::menu::GameUpdate, save_inventory)
+            .add_systems(Last, save_inventory_on_exit.run_if(crate::menu::in_game))
             .add_plugins((ui::InventoryUiPlugin, world_items::WorldItemsPlugin));
     }
 }

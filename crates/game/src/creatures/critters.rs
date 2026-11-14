@@ -32,7 +32,7 @@ pub struct CrittersPlugin;
 
 impl Plugin for CrittersPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (spawn_critters, move_critters, animate, calls).chain().in_set(CreatureSet).after(super::walk));
+        app.add_systems(crate::menu::GameUpdate, (spawn_critters, move_critters, animate, calls).chain().in_set(CreatureSet).after(super::walk));
     }
 }
 

@@ -152,7 +152,7 @@ impl Plugin for AtmospherePlugin {
             .init_resource::<Atmos>()
             .init_resource::<LocalLook>()
             .add_systems(
-                Update,
+                crate::menu::GameUpdate,
                 (
                     season_sunset.before(crate::sky::update_sky),
                     (sample_biome, apply).chain().after(crate::sky::update_sky),

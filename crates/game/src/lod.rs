@@ -69,7 +69,7 @@ impl Plugin for LodPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<LodMaterial>::default())
             .init_resource::<LodTiles>()
-            .add_systems(Update, (update_mask.after(crate::world::unload_far), schedule_tiles, collect_tiles).chain());
+            .add_systems(crate::menu::GameUpdate, (update_mask.after(crate::world::unload_far), schedule_tiles, collect_tiles).chain());
     }
 }
 

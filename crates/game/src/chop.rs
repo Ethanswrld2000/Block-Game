@@ -11,7 +11,7 @@ pub struct ChopPlugin;
 
 impl Plugin for ChopPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<Chop>().init_resource::<TreeShake>().add_systems(Update, (start_shake, push_to_material).chain().after(crate::interact::InteractSet));
+        app.add_message::<Chop>().init_resource::<TreeShake>().add_systems(crate::menu::GameUpdate, (start_shake, push_to_material).chain().after(crate::interact::InteractSet));
     }
 }
 

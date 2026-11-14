@@ -22,7 +22,7 @@ pub struct WorldItemsPlugin;
 
 impl Plugin for WorldItemsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<Spill>().add_systems(Update, (spawn_spills, fall_and_spin, pick_up).chain());
+        app.add_message::<Spill>().add_systems(crate::menu::GameUpdate, (spawn_spills, fall_and_spin, pick_up).chain());
     }
 }
 

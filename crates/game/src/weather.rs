@@ -46,7 +46,7 @@ impl Plugin for WeatherPlugin {
             .insert_resource(WeatherState::new(first, start.is_some()))
             .insert_resource(conditions)
             .init_resource::<LocalClimate>()
-            .add_systems(Update, (sample_climate, change_weather, blend_conditions, lightning).chain().in_set(WeatherSet));
+            .add_systems(crate::menu::GameUpdate, (sample_climate, change_weather, blend_conditions, lightning).chain().in_set(WeatherSet));
     }
 }
 

@@ -17,8 +17,8 @@ impl Plugin for BenchPlugin {
     fn build(&self, app: &mut App) {
         if let Some(secs) = std::env::var("BLOCKGAME_BENCH").ok().and_then(|v| v.parse::<f32>().ok()) {
             app.insert_resource(Bench { secs, state: State::Loading, frames: Vec::new(), start: Vec3::ZERO, t: 0.0, idle: 0, report_at: 10.0 })
-                .add_systems(Startup, no_vsync)
-                .add_systems(Update, run.after(crate::settings::SettingsPlugin::APPLY));
+                .add_systems(crate::menu::GameStartup, no_vsync)
+                .add_systems(crate::menu::GameUpdate, run.after(crate::settings::SettingsPlugin::APPLY));
         }
     }
 }

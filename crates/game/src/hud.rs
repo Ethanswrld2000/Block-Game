@@ -35,7 +35,7 @@ impl Plugin for HudPlugin {
             ))
             .id();
         app.insert_resource(TopRight(top_right));
-        app.add_systems(PostStartup, spawn_hud).add_systems(Update, (update_hotbar, hurt_flash));
+        app.add_systems(crate::menu::GamePostStartup, spawn_hud).add_systems(crate::menu::GameUpdate, (update_hotbar, hurt_flash));
     }
 }
 
