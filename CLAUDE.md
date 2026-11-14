@@ -162,7 +162,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   to compare). Contrast is a power curve around mid grey (Bevy's linear `contrast` clips darks to black).
   Corner shading (AO) is baked by `voxel::mesher` (`Quad.ao`; quads merge only where shading stays right)
   and packed into UV_1.x's fraction (`chunk_mesh::pack_layer`). Sky: three-stop gradient, sun haze,
-  sunset spread and anti-sun band, faint star band at night. Nights: dim blue ambient, lifted by the moon.
+  sunset spread and anti-sun band; the faint star band at night is off for now (`sky::MILKY_WAY`). Nights: dim blue ambient, lifted by the moon.
 - Weather timing: each weather picks the next one when it starts (`WeatherState.next/until`);
   clouds change only in the last 30 s before a change (`weather::CLOUD_LEAD_SECONDS`), the rest
   blends in after. `game::weather_hud` shows weather, next and countdown in `hud::TopRight` (a
