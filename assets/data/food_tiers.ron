@@ -4,6 +4,8 @@
 //               (normally nothing above a mortal layer heals).
 //   buff:       extra run speed (0.10 = +10%) for `seconds` real seconds.
 [
+    // Draughts from the cauldron feed nobody: what they do is in potions.ron.
+    (tier: 0, title: "Draught", heals: {}),
     (tier: 1, title: "Snack", heals: {}, buff: Some((speed: 0.10, seconds: 120.0))),
     (tier: 2, title: "Meal", heals: { Damage: 45.0, Fatigue: 15.0 }),
     (tier: 3, title: "Hearty meal", heals: { Damage: 70.0, Fatigue: 40.0, Blood: 20.0 }),

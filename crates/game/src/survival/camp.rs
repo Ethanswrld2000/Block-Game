@@ -57,6 +57,8 @@ impl Bedroll {
 #[derive(Resource, Default, Debug)]
 pub struct Camp {
     pub bedroll: Option<Bedroll>,
+    /// What the sleeping station has built around the bedroll (`station` keeps it up to date).
+    pub bed: Bed,
     entity: Option<(Entity, Bedroll)>,
 }
 
@@ -71,6 +73,27 @@ impl Camp {
 
     pub fn near(&self, p: Vec3) -> bool {
         self.bedroll.is_some_and(|b| b.center().distance(p) <= CAMP_REACH)
+    }
+}
+
+/// The bed the ancestral urn builds around the bedroll.
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub struct Bed {
+    /// Off the wet ground: deeper sleep, warmer mornings.
+    pub frame: bool,
+    /// Wide, with furs: sleep warm through winter.
+    pub double: bool,
+}
+
+impl Bed {
+    /// What a night in this bed does on top of the bedroll's own rest:
+    /// (extra healing of injuries and blood, food saved, the warmth you wake with, °C).
+    pub fn rest(self) -> (f32, f32, Option<f32>) {
+        match (self.frame, self.double) {
+            (_, true) => (25.0, 8.0, Some(22.0)),
+            (true, false) => (15.0, 5.0, Some(16.0)),
+            _ => (0.0, 0.0, None),
+        }
     }
 }
 
@@ -221,12 +244,24 @@ fn sleep(
         clock.time = time;
         let hours = (days as f32 * 24.0 + time * 24.0 - before).max(0.0);
         s.vitals.sleep();
+        let (mend, fed, warm) = camp.bed.rest();
+        s.vitals.health.heal(Layer::Injuries, mend);
+        s.vitals.health.heal(Layer::Blood, mend);
+        s.vitals.satiety = (s.vitals.satiety + fed).min(100.0);
+        if let Some(w) = warm {
+            s.vitals.feels = s.vitals.feels.max(w);
+        }
         if let Some(p) = camp.respawn() {
             player.pos = p;
             player.vel = Vec3::ZERO;
         }
         let note = if s.vitals.health.mortal().is_some() { " Your wounds still need treating." } else { "" };
-        toast.write(Toast(format!("Slept {hours:.0} hours.{note}")));
+        let bed = match (camp.bed.frame, camp.bed.double) {
+            (_, true) => " Warm under the furs of the double bed.",
+            (true, false) => " The bedframe kept you off the wet ground.",
+            _ => "",
+        };
+        toast.write(Toast(format!("Slept {hours:.0} hours.{bed}{note}")));
     }
     if t >= END {
         *sleep = Sleep::default();
@@ -274,6 +309,15 @@ fn show_bedroll(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn better_beds_rest_you_more() {
+        let none = Bed::default().rest();
+        let frame = Bed { frame: true, double: false }.rest();
+        let double = Bed { frame: true, double: true }.rest();
+        assert!(none.0 < frame.0 && frame.0 < double.0);
+        assert!(none.2.is_none() && frame.2 < double.2);
+    }
 
     #[test]
     fn sleeping_wakes_you_in_the_morning() {

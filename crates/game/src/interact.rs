@@ -375,7 +375,13 @@ fn use_hands(
         MessageWriter<Strike>,
         MessageWriter<UseCreature>,
     ),
-    (aimed, cam, perks, station): (Res<Aimed>, Single<&Transform, With<FlyCamera>>, Res<crate::progress::skills::Perks>, Res<crate::station::StationAim>),
+    (aimed, cam, perks, station, edges): (
+        Res<Aimed>,
+        Single<&Transform, With<FlyCamera>>,
+        Res<crate::progress::skills::Perks>,
+        Res<crate::station::StationAim>,
+        Option<Res<crate::station::Edges>>,
+    ),
     blocks: Res<Blocks>,
     mode: Res<MoveMode>,
     player: Res<Player>,
@@ -480,7 +486,9 @@ fn use_hands(
     let breakable = |world: &World| {
         let hit = target.hit?;
         let b = world.block(hit.block)?;
-        let seconds = items.break_time(item, blocks.registry.get(b))? / (1.0 + perks.mining);
+        // A tool sharpened at the sharpening stone cuts faster for a while.
+        let sharp = edges.as_ref().map_or(1.0, |e| e.speed(&items, item));
+        let seconds = items.break_time(item, blocks.registry.get(b))? / (1.0 + perks.mining) / sharp;
         Some((hit.block, b, seconds))
     };
     let aim = breakable(&world);

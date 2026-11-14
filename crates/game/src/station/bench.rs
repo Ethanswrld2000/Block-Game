@@ -22,7 +22,37 @@ use crate::items::{ItemId, Items};
 struct BenchesSpec {
     #[serde(default)]
     fuel: BTreeMap<String, u32>,
+    #[serde(default)]
+    sharpen: Option<SharpenSpec>,
+    #[serde(default)]
+    study: Option<StudySpec>,
     recipes: Vec<RecipeSpec>,
+}
+
+/// The sharpening stone: any tool on it, turned this many times, works
+/// `speed` times as fast for `seconds`.
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
+pub struct SharpenSpec {
+    pub work: u8,
+    pub seconds: f32,
+    pub speed: f32,
+}
+
+/// The magical lens: anything under it, focused this many times, is studied.
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
+pub struct StudySpec {
+    pub work: u8,
+}
+
+/// What a recipe does besides make its thing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Special {
+    #[default]
+    None,
+    /// Gives the tool back sharpened (sharpening stone).
+    Sharpen,
+    /// Gives the thing back, studied (magical lens).
+    Study,
 }
 
 #[derive(Deserialize)]
@@ -51,8 +81,17 @@ pub struct Recipe {
     pub heat: u32,
     pub work: u8,
     pub makes: Stack,
-    /// The urn step that teaches it (none: known from the start).
+    /// The urn step that teaches it (none: known from the start). `a+b`: both.
+    /// `lens:item` is learned by studying that item under the magical lens.
     pub unlock: Option<String>,
+    pub special: Special,
+}
+
+impl Recipe {
+    /// Whether finishing this urn step (or study) is part of what teaches it.
+    pub fn taught_by(&self, step: &str) -> bool {
+        self.unlock.as_deref().is_some_and(|u| u.split('+').any(|p| p == step))
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -60,6 +99,7 @@ pub struct BenchData {
     pub recipes: Vec<Recipe>,
     /// What burns, and how much heat one of it gives.
     pub fuel: BTreeMap<ItemId, u32>,
+    pub sharpen: Option<SharpenSpec>,
     /// Urn steps done that teach recipes; the game keeps this up to date.
     pub learned: std::collections::BTreeSet<String>,
 }
@@ -108,6 +148,30 @@ pub const COOKING_POT_SLOTS: [SlotDef; 5] = [
 /// The cutting board: one thing on the board at a time, cut with the knife.
 pub const CUTTING_BOARD_SLOTS: [SlotDef; 1] = [plain("board", 4)];
 
+const fn fire(cap: u16) -> SlotDef {
+    SlotDef { name: "fire", cap, kind: SlotKind::Fire }
+}
+
+/// The smoking rack: what hangs on the rack, and the fire under it.
+pub const SMOKING_RACK_SLOTS: [SlotDef; 2] = [plain("rack", 4), fire(8)];
+
+/// The iron anvil: metal on the anvil, flux in the tray, a handle on the bench.
+pub const ANVIL_SLOTS: [SlotDef; 3] = [plain("anvil", 4), plain("flux", 2), plain("handle", 1)];
+
+/// The sharpening stone: one tool on the rest by the wheel.
+pub const SHARPENING_SLOTS: [SlotDef; 1] = [plain("edge", 1)];
+
+/// The magical lens: one thing on the plate under it.
+pub const LENS_SLOTS: [SlotDef; 1] = [plain("plate", 1)];
+
+/// The cauldron: up to three kinds of things in the brew, and the fire under it.
+pub const CAULDRON_SLOTS: [SlotDef; 4] = [
+    SlotDef { name: "brew_1", cap: 4, kind: SlotKind::Mix },
+    SlotDef { name: "brew_2", cap: 4, kind: SlotKind::Mix },
+    SlotDef { name: "brew_3", cap: 4, kind: SlotKind::Mix },
+    fire(8),
+];
+
 /// The slots of a bench, by its station name in urns.ron.
 pub fn slots_of(station: &str) -> &'static [SlotDef] {
     match station {
@@ -116,6 +180,11 @@ pub fn slots_of(station: &str) -> &'static [SlotDef] {
         "carpentry_bench" => &CARPENTRY_SLOTS,
         "cooking_pot" => &COOKING_POT_SLOTS,
         "cutting_board" => &CUTTING_BOARD_SLOTS,
+        "smoking_rack" => &SMOKING_RACK_SLOTS,
+        "iron_anvil" => &ANVIL_SLOTS,
+        "sharpening_stone" => &SHARPENING_SLOTS,
+        "magical_lens" => &LENS_SLOTS,
+        "cauldron" => &CAULDRON_SLOTS,
         _ => &[],
     }
 }
@@ -199,9 +268,31 @@ impl BenchData {
                 work: r.work.max(1),
                 makes: Stack::new(item(&r.makes.0)?, r.makes.1.max(1)),
                 unlock: (!r.unlock.is_empty()).then_some(r.unlock),
+                special: Special::None,
             });
         }
-        Ok(Self { recipes, fuel, learned: Default::default() })
+        // The sharpening stone takes any tool, and the lens anything at all.
+        let one = |station: &str, slot: &str, it: ItemId, work: u8, special| Recipe {
+            station: station.into(),
+            slots: BTreeMap::from([(slot.to_string(), Stack::new(it, 1))]),
+            mix: Vec::new(),
+            heat: 0,
+            work: work.max(1),
+            makes: Stack::new(it, 1),
+            unlock: None,
+            special,
+        };
+        for i in items.ids() {
+            if let Some(sh) = spec.sharpen
+                && matches!(items.get(i).kind, crate::items::ItemKind::Tool { .. })
+            {
+                recipes.push(one("sharpening_stone", "edge", i, sh.work, Special::Sharpen));
+            }
+            if let Some(st) = spec.study {
+                recipes.push(one("magical_lens", "plate", i, st.work, Special::Study));
+            }
+        }
+        Ok(Self { recipes, fuel, sharpen: spec.sharpen, learned: Default::default() })
     }
 
     /// The heat the fire slot's fuel gives.
@@ -254,14 +345,14 @@ impl BenchData {
         self.fuel.contains_key(&item)
     }
 
-    /// The recipes a bench knows now.
+    /// The recipes a bench knows now (not the sharpening and study ones made for every item).
     pub fn for_station<'a>(&'a self, station: &'a str) -> impl Iterator<Item = &'a Recipe> + 'a {
-        self.recipes.iter().filter(move |r| r.station == station && self.knows(r))
+        self.recipes.iter().filter(move |r| r.station == station && r.special == Special::None && self.knows(r))
     }
 
     /// Whether the urn has taught this recipe (or it needs no teaching).
     pub fn knows(&self, r: &Recipe) -> bool {
-        r.unlock.as_ref().is_none_or(|u| self.learned.contains(u))
+        r.unlock.as_ref().is_none_or(|u| u.split('+').all(|p| self.learned.contains(p)))
     }
 }
 
@@ -568,6 +659,81 @@ mod tests {
             assert!(!r.mix.is_empty());
         }
         assert!(data.recipes.iter().any(|r| r.station == "cutting_board"));
+    }
+
+    #[test]
+    fn steel_needs_the_steel_anvil_and_coal() {
+        let (items, mut data) = data();
+        let id = |n| items.id(n).unwrap();
+        let [anvil, flux, handle] = ANVIL_SLOTS;
+        let mut b = Board::default();
+        b.put(handle, Stack::new(id("stick"), 1));
+        b.put(anvil, Stack::new(id("raw_iron"), 3));
+        assert_eq!(data.matching("iron_anvil", &b).unwrap().makes.item, id("iron_pickaxe"));
+        b.put(flux, Stack::new(id("coal"), 2));
+        assert!(data.matching("iron_anvil", &b).is_none(), "coal in the tray spoils an iron pick");
+        data.learned.insert("steel_anvil".into());
+        assert_eq!(cook(&mut b, &data, "iron_anvil"), Stack::new(id("steel_pickaxe"), 1));
+    }
+
+    #[test]
+    fn the_rack_smokes_meat_over_fuel() {
+        let (items, data) = data();
+        let id = |n| items.id(n).unwrap();
+        let [rack, fire] = SMOKING_RACK_SLOTS;
+        let mut b = Board::default();
+        b.put(rack, Stack::new(id("raw_meat"), 2));
+        assert_eq!(data.needs_heat("smoking_rack", &b).unwrap().0.makes, Stack::new(id("cured_meat"), 2));
+        b.put(fire, Stack::new(id("peat"), 1));
+        assert_eq!(cook(&mut b, &data, "smoking_rack"), Stack::new(id("cured_meat"), 2));
+        assert!(!b.slots.contains_key("fire"), "the peat burned");
+    }
+
+    #[test]
+    fn any_tool_sharpens_and_anything_can_be_studied() {
+        let (items, data) = data();
+        let id = |n| items.id(n).unwrap();
+        let mut b = Board::default();
+        b.put(SHARPENING_SLOTS[0], Stack::new(id("stone_axe"), 1));
+        assert_eq!(data.matching("sharpening_stone", &b).unwrap().special, Special::Sharpen);
+        assert_eq!(cook(&mut b, &data, "sharpening_stone"), Stack::new(id("stone_axe"), 1));
+        let mut b = Board::default();
+        b.put(SHARPENING_SLOTS[0], Stack::new(id("stick"), 1));
+        assert!(data.matching("sharpening_stone", &b).is_none(), "a stick has no edge");
+        let mut b = Board::default();
+        b.put(LENS_SLOTS[0], Stack::new(id("cloud_moss"), 1));
+        assert_eq!(data.matching("magical_lens", &b).unwrap().special, Special::Study);
+        assert_eq!(cook(&mut b, &data, "magical_lens"), Stack::new(id("cloud_moss"), 1));
+        // Neither lists a recipe per item.
+        assert_eq!(data.for_station("sharpening_stone").count() + data.for_station("magical_lens").count(), 0);
+    }
+
+    #[test]
+    fn the_cauldron_brews_what_the_lens_has_shown() {
+        let (items, mut data) = data();
+        let id = |n| items.id(n).unwrap();
+        let mut b = Board::default();
+        b.put(CAULDRON_SLOTS[3], Stack::new(id("coal"), 1));
+        b.put_mix(&CAULDRON_SLOTS, Stack::new(id("spirit_ember"), 1));
+        b.put_mix(&CAULDRON_SLOTS, Stack::new(id("cloud_moss"), 2));
+        assert!(data.matching("cauldron", &b).is_none(), "not studied yet");
+        data.learned.insert("lens:cloud_moss".into());
+        assert_eq!(data.matching("cauldron", &b).unwrap().makes, Stack::new(id("levitation_draught"), 1));
+        data.learned.insert("steel_cauldron".into());
+        assert_eq!(cook(&mut b, &data, "cauldron"), Stack::new(id("levitation_draught"), 2));
+    }
+
+    #[test]
+    fn the_herb_rack_seasons_the_pot() {
+        let (items, mut data) = data();
+        let id = |n| items.id(n).unwrap();
+        let mut b = Board::default();
+        b.put(COOKING_POT_SLOTS[4], Stack::new(id("coal"), 1));
+        b.put_mix(&COOKING_POT_SLOTS, Stack::new(id("chopped_reeds"), 3));
+        b.put_mix(&COOKING_POT_SLOTS, Stack::new(id("marsh_berries"), 3));
+        assert_eq!(data.matching("cooking_pot", &b).unwrap().makes.item, id("reed_broth"));
+        data.learned.insert("herb_rack".into());
+        assert_eq!(data.matching("cooking_pot", &b).unwrap().makes.item, id("bog_stew"));
     }
 
     #[test]

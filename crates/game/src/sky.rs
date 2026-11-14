@@ -131,7 +131,7 @@ fn sky_axis() -> Vec3 {
 }
 
 /// How the sky has turned at this time of day (stars), one turn per day.
-fn sky_rotation(time: f32) -> Quat {
+pub fn sky_rotation(time: f32) -> Quat {
     Quat::from_axis_angle(sky_axis(), (time - 0.25) * TAU)
 }
 

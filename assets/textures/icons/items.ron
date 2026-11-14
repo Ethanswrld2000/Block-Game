@@ -51,5 +51,9 @@
         "roast_slices": (186, 234, 20, 20),
         "reed_broth": (208, 236, 20, 20),
         "bog_stew": (230, 236, 20, 40),
+        "levitation_draught": (42, 250, 20, 40),
+        "light_draught": (64, 250, 20, 40),
+        "warmth_draught": (86, 250, 20, 40),
+        "focus_tonic": (108, 250, 20, 40),
     },
 )
