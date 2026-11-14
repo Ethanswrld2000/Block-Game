@@ -493,11 +493,59 @@ def old_coin(c):
     c.rect(9, 7, 11, 13, hexc("e8c860"))
 
 
+def urn_sprite(c, body, band, mark):
+    """A carried urn, 40 x 40: foot, round belly, neck and lip, a band of marks."""
+    c.rect(13, 34, 27, 38, mul(body, 0.75))
+    c.ellipse(20, 23, 13, 12, body)
+    c.rect(14, 8, 26, 14, mul(body, 0.85))
+    c.rect(11, 5, 29, 9, body)
+    c.rect(15, 5, 25, 7, mul(body, 0.4))
+    c.rect(8, 21, 32, 24, band)
+    for x in (11, 17, 23, 29):
+        c.dot(x, 22, mark)
+
+
+def tool_urn(c):
+    urn_sprite(c, hexc("8c8e96"), hexc("5e6068"), hexc("e8e4d0"))
+
+
+def hearth_urn(c):
+    urn_sprite(c, hexc("b8503a"), hexc("7a2e20"), hexc("ffc070"))
+
+
+def star_urn(c):
+    urn_sprite(c, hexc("464e9c"), hexc("2a2e60"), hexc("ffe890"))
+
+
+def golem_urn(c):
+    urn_sprite(c, hexc("6a806a"), hexc("44544a"), hexc("a8f0c0"))
+
+
+def portable_bedroll(c):
+    """A rolled bedroll tied with two cords, 40 x 20."""
+    c.ellipse(20, 10, 18, 7, hexc("546638"))
+    c.ellipse(5, 10, 3, 6, hexc("7a8a50"))
+    c.ellipse(5, 10, 1.5, 3, hexc("3e4a28"))
+    c.rect(12, 3, 14, 17, CORD)
+    c.rect(26, 3, 28, 17, CORD)
+
+
+def portable_tent(c):
+    """A folded hide tent strapped to its poles, 40 x 40."""
+    c.line(6, 36, 30, 4, 2, WOOD)
+    c.line(12, 37, 36, 6, 2, WOOD)
+    c.rect(6, 14, 34, 30, HIDE)
+    c.rect(6, 20, 34, 22, HIDE_D)
+    c.rect(12, 12, 15, 32, CORD)
+    c.rect(26, 12, 29, 32, CORD)
+
+
 DRAW = {f.__name__: f for f in [
     stone_pickaxe, stone_axe, stone_shovel, flint_spear, torch, marsh_berries, swamp_reed, smoked_fish, bread, peat_stew,
     cured_meat, feast_platter, ember_herb, stick, plant_fiber, cordage, coal, raw_iron, flint, hide, fur, linen_shirt,
     linen_trousers, hide_boots, reed_hat, reed_cloak, fur_hood, fur_coat, hide_leggings, bark_helm, bark_vest, hide_jerkin,
     reed_satchel, hide_pack, raw_meat, roast_meat, spirit_ember, old_coin, small_rock, rough_axe,
+    tool_urn, hearth_urn, star_urn, golem_urn, portable_bedroll, portable_tent,
 ]}
 
 

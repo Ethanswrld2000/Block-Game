@@ -116,5 +116,14 @@
         (name: "old_coin", title: "Old Coin", kind: Material, mass: 0.02, stack: 64),
         // A weapon.
         (name: "flint_spear", title: "Flint Spear", mass: 1.6, size: (1, 4), damage: 10.0, kind: Tool(speeds: {})),
+        // Urns: carry one and right click the ground to set it down; its station grows around it
+        // (urns.ron). Crouch and right click an urn with an empty hand to pick it back up.
+        (name: "tool_urn", title: "Tool Urn", kind: Material, mass: 6.0, size: (2, 2), stack: 1),
+        (name: "hearth_urn", title: "Hearth Urn", kind: Material, mass: 6.0, size: (2, 2), stack: 1),
+        (name: "star_urn", title: "Star Urn", kind: Material, mass: 6.0, size: (2, 2), stack: 1),
+        (name: "golem_urn", title: "Golem Urn", kind: Material, mass: 6.0, size: (2, 2), stack: 1),
+        // Made on the camp mat once the ancestral urn teaches them; using them is still to come.
+        (name: "portable_bedroll", title: "Portable Bedroll", kind: Material, mass: 2.5, size: (2, 1), stack: 1),
+        (name: "portable_tent", title: "Portable Tent", kind: Material, mass: 5.0, size: (2, 2), stack: 1),
     ],
 )

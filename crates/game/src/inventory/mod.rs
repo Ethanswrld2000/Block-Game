@@ -34,6 +34,17 @@ use grid::{Grid, GridSave, Stack};
 pub const POCKETS: (u8, u8) = (20, 10);
 /// A chest's grid.
 pub const CHEST: (u8, u8) = (8, 5);
+
+/// Personal storage at the sleeping station is a chest that isn't in the world:
+/// it lives at this position, far under the world floor, and goes wherever the camp goes.
+pub const STORAGE_AT: (i32, i32, i32) = (0, -1_000_000, 0);
+/// Its size with the extra shelf (`station` shrinks it to `CHEST` without one).
+pub const STORAGE_BIG: (u8, u8) = (8, 7);
+
+/// The size a chest is loaded at.
+pub fn chest_size(p: BlockPos) -> (u8, u8) {
+    if (p.x, p.y, p.z) == STORAGE_AT { STORAGE_BIG } else { CHEST }
+}
 /// Armor can keep at most this share of a blow off a bar.
 pub const MAX_PROTECTION: f32 = 0.75;
 
@@ -346,7 +357,9 @@ fn load_inventory(
         match ron::from_str::<ChestsSave>(&text) {
             Ok(cs) => {
                 for ((x, y, z), g) in cs.chests {
-                    chests.map.insert(BlockPos::new(x, y, z), Grid::from_save(&g, &items, CHEST.0, CHEST.1).0);
+                    let p = BlockPos::new(x, y, z);
+                    let (w, h) = chest_size(p);
+                    chests.map.insert(p, Grid::from_save(&g, &items, w, h).0);
                 }
             }
             Err(e) => warn!("chests.ron: {e}"),

@@ -192,28 +192,39 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   canopy and trunk vines and leaf tufts; `worldgen::plants` scatters `pebble`s. Right click snaps a twig off
   (stick) or picks a pebble up (`small_rock`). Logs are material `log`: bare hands and the pickaxe can't cut
   them (a speed of 0 in items.ron = can't break), only the axe.
-- Sleeping station: `game::station` (urn and stations as models around the bedroll, packed with it; `StationAim`
-  makes `interact` leave right clicks to a station in front of the block you aim at). Pure rules in
-  `station::fusion` (`assets/data/fusion.ron`: fusion kinds, what each item gives, upgrades with `needs`/`after`/
-  `station`; upgrades spend fusion). Right click the urn with an item (Shift: whole stack); 10 earth places the
-  tool bench, 40 more the carpentry bench. Saved to `urn.ron`. `BLOCKGAME_CAMP=1` unrolls the bedroll in front of
-  you, `BLOCKGAME_URN=tool_bench,earth=5` sets upgrades and fusion (screenshots).
-- Hands-on benches: `station::board` (no menu: right click the tool bench and the camera glides down over its top,
+- Urn stations: `game::station`. Every station grows around its own urn (`assets/data/urns.ron`, pure rules in
+  `station::urns`): each urn has a tree of steps in tiers 1-3; a step takes specific items (`needs`, put in a few at
+  a time, `Progress.offer` fills open steps in tree order and passes leftovers on) and `gives` a `Station("kind")`
+  placed by the urn, an `Upgrade` (code asks `Urns::has("step")`; models change), `Recipes` (benches.ron recipes
+  with that `unlock`) or another `Urn("name")` as an item (`tool_urn`, `hearth_urn`, `star_urn`, `golem_urn`).
+  `later: true` steps fill and place their model but their use isn't built yet. The ancestral urn (sleeping station)
+  stands by the bedroll; carried urns are set down with right click on the ground and picked up by crouching and
+  right clicking with an empty hand. Hold an item + right click an urn to put one in (Shift: all it wants); empty hand
+  opens its tree (`station::tree`, "Put in" per step). Models are boxes in `station::models` (upgrades change them);
+  concept sheets for real art in `docs/stations/` (`python3 tools/gen_station_concepts.py`). Personal storage is a
+  chest at `inventory::STORAGE_AT` (not in the world; 8x5, 8x7 with the extra shelf). Saved to `urns.ron` (the old
+  fusion `urn.ron` is gone). F9 = dev menu (`station::dev`: give/set down urns, items for the next step, finish
+  steps, reset). Screenshots: `BLOCKGAME_CAMP=1` unrolls the bedroll in front of you, `BLOCKGAME_URNS=tool,hearth`
+  sets urns down in a row ahead, `BLOCKGAME_URN=camp_mat,tool_bench` finishes steps, `BLOCKGAME_URNTREE=tool`
+  opens a tree, `BLOCKGAME_DEVMENU=1` the dev menu. The planning sheet is the Claude Sheet "Station Urn Trees".
+- Hands-on benches: `station::board` (no menu: right click a bench and the camera glides down over its top,
   the HUD and arms step aside (`board_hides`), a strip of your things sits at the bottom; click one to pick it up,
-  it hangs under the cursor; click a slot to set it down; knock the strike stone to work it; A/D next bench, Esc
+  it hangs under the cursor; click a slot to set it down; knock the stone to work it; A/D next bench, Esc
   leaves and the board empties back into your pockets). Pure rules in `station::bench` (`Board`, slots per bench in
-  `slots_of`, where things lie in `board::layout`, recipes in `assets/data/benches.ron`: slots, `work` goes, `makes`;
-  the recipe using the most wins). Tool bench: handle + material, knock the strike stone (stick + 2 small rocks =
-  `rough_axe`, the first axe; stone tools from cobblestone). Carpentry bench: bed + vise, saw (logs -> planks,
-  planks -> sticks, chest). recipes.ron (Tab) keeps only what has no station yet. `Menus.still` stops walking at a
-  bench. `BLOCKGAME_BOARD=stick,small_rock*2[,made]` (or `carpentry:log`) opens a bench with those laid out (`-` skips
-  a slot; needs CAMP and URN).
+  `slots_of`, where things lie in `board::layout`, recipes in `assets/data/benches.ron`: slots, `work` goes, `makes`,
+  `unlock`; the recipe using the most wins; `BenchData.learned` = urn steps done). Camp mat (sleeping station):
+  base + tie, knapping stone (2 small rocks + stick = `rough_axe`, the first axe; portable bedroll and tent once
+  taught). Tool bench: handle + material (stick + 3 small rocks = stone pickaxe, cobblestone tools; stone axe and
+  flint spear after the improved tool bench). Carpentry bench: bed + vise, saw (logs -> planks, planks -> sticks,
+  chest). recipes.ron (Tab) keeps only what has no station yet. `Menus.still` stops walking at a bench.
+  `BLOCKGAME_BOARD=stick,small_rock*2[,made]` (or `carpentry:log`, `mat:small_rock*2,stick`) opens a bench with
+  those laid out (`-` skips a slot; the bench must stand, see above).
 - Chopping: an axe on a log swings `hands::chop_pose` (slower, overhead); when it lands `chop::Chop` shakes the
   tree through the voxel material's `shake` uniform (`shake_offset` in voxel_vertex.wesl and voxel_prepass.wesl).
   New characters start with only their clothes (`start_kit.ron`); the bedroll is always there (B).
 - Arm: `hands` turns the arm about the shoulder (`hands::ARM`, `swing_pose`: wind-up, strike, return).
-- Next: the rest of the Claude Doc "Sleeping Station and Fusion: Plan": the lens station that shows an item's fusion,
-  a cooking station (then retire the Tab crafting list), twig regrowth.
+- Next: hands-on use for the `later: true` stations (cooking pot and cutting board first, then retire the Tab
+  crafting list), portable bedroll/tent use, upgrade effects (bedframe sleep, sharpening), twig regrowth.
 
 ## Testing without a screen
 

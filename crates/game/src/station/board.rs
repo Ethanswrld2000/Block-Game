@@ -28,12 +28,13 @@ use crate::sound::PlaySound;
 use crate::survival::Toast;
 use crate::theme::{colors, sizes, Theme};
 
-/// Benches with a board, and their names in fusion.ron / benches.ron.
+/// Benches with a board, and their names in urns.ron / benches.ron.
 pub(super) fn board_name(kind: StationKind) -> Option<&'static str> {
     match kind {
+        StationKind::CampMat => Some("camp_mat"),
         StationKind::ToolBench => Some("tool_bench"),
         StationKind::CarpentryBench => Some("carpentry_bench"),
-        StationKind::Urn => None,
+        _ => None,
     }
 }
 
@@ -117,8 +118,22 @@ const CARPENTRY_BENCH: Layout = Layout {
     work: ("Saw", "stroke of the saw"),
 };
 
+/// The camp mat lies on the ground: things go on the mat or by the cord, and
+/// the flat knapping stone is what you knock.
+const CAMP_MAT: Layout = Layout {
+    slots: &[
+        ("base", Vec2::new(-0.22, 0.05), Vec2::new(0.28, 0.24), 0.035, "on the mat"),
+        ("tie", Vec2::new(0.22, -0.2), Vec2::new(0.16, 0.13), 0.035, "by the cord"),
+    ],
+    tool: (Vec3::new(0.21, 0.0, 0.1), Vec3::new(0.49, 0.16, 0.36)),
+    made: (Vec2::new(-0.22, -0.33), Vec2::new(0.26, 0.08), 0.035),
+    view: (1.05, 0.6),
+    work: ("Knock the knapping stone", "knock"),
+};
+
 pub(super) fn layout(kind: StationKind) -> &'static Layout {
     match kind {
+        StationKind::CampMat => &CAMP_MAT,
         StationKind::CarpentryBench => &CARPENTRY_BENCH,
         _ => &TOOL_BENCH,
     }
@@ -723,7 +738,9 @@ fn plural(s: &str) -> String {
 /// `BLOCKGAME_BOARD=stick,small_rock*2` steps up to the tool bench as soon as
 /// it stands, with those in its slots in order (a third lies there made;
 /// `-` leaves a slot empty; `BLOCKGAME_BOARD=carpentry:log` for the carpentry
-/// bench; screenshots; needs `BLOCKGAME_CAMP=1` and `BLOCKGAME_URN=tool_bench`).
+/// bench, `mat:small_rock*2,stick` for the camp mat; screenshots; needs the
+/// bench standing: `BLOCKGAME_CAMP=1 BLOCKGAME_URN=camp_mat` for the mat,
+/// `BLOCKGAME_URNS=tool BLOCKGAME_URN=tool_bench` for the tool bench).
 #[allow(clippy::too_many_arguments)]
 pub(super) fn board_for_screenshot(
     stations: Query<&Station>,
@@ -742,6 +759,7 @@ pub(super) fn board_for_screenshot(
     };
     let (kind, v) = match v.split_once(':') {
         Some(("carpentry", rest)) => (StationKind::CarpentryBench, rest.to_string()),
+        Some(("mat", rest)) => (StationKind::CampMat, rest.to_string()),
         _ => (StationKind::ToolBench, v.clone()),
     };
     let Some(st) = stations.iter().find(|s| s.kind == kind) else { return };
@@ -769,7 +787,7 @@ mod tests {
     #[test]
     fn the_view_looks_down_at_the_board_from_your_side() {
         for turned in [false, true] {
-            let st = Station { kind: StationKind::ToolBench, pos: Vec3::new(10.0, 5.0, -3.0), turned };
+            let st = Station { kind: StationKind::ToolBench, pos: Vec3::new(10.0, 5.0, -3.0), turned, urn: 0 };
             for side in [-1.0, 1.0] {
                 let v = board_view(&st, side);
                 let f = v.forward().as_vec3();
@@ -784,7 +802,7 @@ mod tests {
 
     #[test]
     fn clicks_find_slots_and_the_stone() {
-        let st = Station { kind: StationKind::ToolBench, pos: Vec3::new(0.0, 0.0, 0.0), turned: true };
+        let st = Station { kind: StationKind::ToolBench, pos: Vec3::new(0.0, 0.0, 0.0), turned: true, urn: 0 };
         let down = Vec3::NEG_Y;
         let from = |x: f32, z: f32| to_world(&st, Vec3::new(x, 2.0, z));
         let name = |s: Option<Spot>| match s {
@@ -803,11 +821,16 @@ mod tests {
         assert_eq!(name(spot(&st, "carpentry_bench", false, from(0.72, 0.1), down).0), "vise");
         assert_eq!(name(spot(&st, "carpentry_bench", false, from(0.1, -0.3), down).0), "stone");
         assert_eq!(name(spot(&st, "carpentry_bench", true, from(0.2, 0.32), down).0), "made");
+        let st = Station { kind: StationKind::CampMat, ..st };
+        assert_eq!(name(spot(&st, "camp_mat", false, from(-0.3, 0.1), down).0), "base");
+        assert_eq!(name(spot(&st, "camp_mat", false, from(0.25, -0.2), down).0), "tie");
+        assert_eq!(name(spot(&st, "camp_mat", false, from(0.35, 0.23), down).0), "stone");
+        assert_eq!(name(spot(&st, "camp_mat", true, from(-0.2, -0.33), down).0), "made");
     }
 
     #[test]
     fn every_slot_has_a_place_on_its_bench() {
-        for kind in [StationKind::ToolBench, StationKind::CarpentryBench] {
+        for kind in [StationKind::CampMat, StationKind::ToolBench, StationKind::CarpentryBench] {
             for s in slots_of(board_name(kind).unwrap()) {
                 assert!(layout(kind).slots.iter().any(|l| l.0 == s.name), "{kind:?} {}", s.name);
             }
