@@ -183,6 +183,10 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   and time, from the voxel material's `wind` uniform; how far a vertex sways is packed into UV_1.y with the
   season tint (`chunk_mesh::pack_tint_sway`). New tiles: `python3 tools/gen_placeholder_art.py --only <names>`
   paints just those into the existing blocks.png.
+- Tool swings: `game::swing` (pure): items have `swing: Jab|Chop|Overhead` in items.ron (axe chops diagonally
+  from the upper right, pick comes straight down). A swing is keyframed poses (wind up, strike, bounce, rest);
+  mining lands one blow per swing at `Swing::contact` (`interact::Blow`, which plays the dig knock), each worth
+  `period / break seconds`, so cracks and sound line up with the moment the tool meets the block.
 - Next: follow `docs/GAMEPLAY_LOOP.md` "What's next" (shelter first), or ask Ethan.
 
 ## Testing without a screen
@@ -193,7 +197,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
 With `BLOCKGAME_CAMERA` the shot is taken flying (`BLOCKGAME_WALK=1` stands there instead); without it, from the player standing at spawn.
 `BLOCKGAME_SLOT=n` starts with hotbar slot n in hand; `BLOCKGAME_SKILLS=n` gives n points and learns Wanderer and Mystic;
 `BLOCKGAME_CAST=levitate,light` starts spells; `BLOCKGAME_SKILLTREE=1` opens the tree; `BLOCKGAME_LOOK=fen_stag` turns the camera to the nearest creature of a kind;
-`BLOCKGAME_LINEUP=1` stands a still model of every creature skin in a row in front of the camera.
+`BLOCKGAME_SWING=0.55` freezes the right arm that far through a swing; `BLOCKGAME_LINEUP=1` stands a still model of every creature skin in a row in front of the camera.
 The home village's name and position are logged at startup.
 In the cloud container: `BEVY_ASSET_ROOT=$PWD BLOCKGAME_SCREENSHOT=/tmp/s.png WGPU_BACKEND=vulkan xvfb-run -s "-screen 0 1280x720x24" ./target/debug/block-game`
 (needs `mesa-vulkan-drivers xvfb libxkbcommon-x11-0`).

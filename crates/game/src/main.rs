@@ -27,6 +27,7 @@ mod sky;
 mod sound;
 mod theme;
 mod survival;
+mod swing;
 mod torches;
 mod weather;
 mod weather_hud;

@@ -14,6 +14,7 @@ use crate::interact::{Hand, HandAnim, Mining, Wielded};
 use crate::item_art::ItemArt;
 use crate::items::{ItemId, ItemKind, Items};
 use crate::player::{MoveMode, Player};
+use crate::swing::Swing;
 use crate::torches::{Flicker, TORCH_COLOR, TORCH_LUMENS, TORCH_RANGE};
 
 pub struct HandsPlugin;
@@ -184,18 +185,37 @@ fn update_held(
     }
 }
 
-fn pose_hands(anim: Res<HandAnim>, mining: Res<Mining>, player: Res<Player>, mode: Res<MoveMode>, mut roots: Query<(&HandRoot, &mut Transform)>) {
+/// `BLOCKGAME_SWING=0.55` holds the right arm still that far through a
+/// swing of what it holds, for screenshots of the swing.
+fn frozen_swing() -> Option<f32> {
+    std::env::var("BLOCKGAME_SWING").ok()?.parse().ok()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn pose_hands(
+    anim: Res<HandAnim>,
+    mining: Res<Mining>,
+    player: Res<Player>,
+    mode: Res<MoveMode>,
+    wielded: Res<Wielded>,
+    items: Res<Items>,
+    mut frozen: Local<Option<Option<f32>>>,
+    mut roots: Query<(&HandRoot, &mut Transform)>,
+) {
     let walking = *mode == MoveMode::Walk;
+    let frozen = *frozen.get_or_insert_with(frozen_swing);
     for (root, mut tf) in &mut roots {
         let hand = root.0;
-        let swing = match hand {
-            Hand::Left => anim.left,
-            Hand::Right => anim.right,
+        let arm = anim.arm(hand);
+        let (style, t) = match (frozen, hand) {
+            (Some(t), Hand::Right) => (wielded.0.map_or(Swing::Jab, |i| items.get(i).swing), Some(t)),
+            _ => (arm.style, arm.t),
         };
-        // 1 -> 0 over a swing: chop down and forward, then back.
-        let t = 1.0 - swing;
-        let arc = if swing > 0.0 { (t * std::f32::consts::PI).sin() } else { 0.0 };
+        // Wind up, strike, bounce off, back to rest (see `swing`).
+        let (swing_pos, swing_rot) = t.map_or((Vec3::ZERO, Quat::IDENTITY), |t| style.pose(t));
         let side = if hand == Hand::Right { 1.0 } else { -1.0 };
+        let mirror = Vec3::new(side, 1.0, 1.0);
+        let swing_rot = if hand == Hand::Right { swing_rot } else { Quat::from_xyzw(swing_rot.x, -swing_rot.y, -swing_rot.z, swing_rot.w) };
         // Sway with the steps, opposite to the head so the arms feel heavy.
         let (bob, phase) = if walking { (player.bob, player.bob_phase) } else { (0.0, 0.0) };
         let sway = Vec3::new((phase * 0.5).sin() * 0.018 * bob, -(phase.sin().abs()) * 0.02 * bob, 0.0);
@@ -204,7 +224,7 @@ fn pose_hands(anim: Res<HandAnim>, mining: Res<Mining>, player: Res<Player>, mod
         let e = (anim.eat * 4.0).min(1.0);
         let chew = (anim.eat * 40.0).sin() * 0.012 * e;
         let to_mouth = Vec3::new(-side * 0.2, 0.12 + chew, 0.12) * e;
-        tf.translation = base_position(hand) + sway + to_mouth + Vec3::new(-side * 0.06 * arc, lift - 0.05 * arc, -0.12 * arc);
-        tf.rotation = Quat::from_rotation_x(-1.1 * arc + 0.5 * e) * Quat::from_rotation_y(side * (0.25 * arc + 0.5 * e));
+        tf.translation = base_position(hand) + sway + to_mouth + Vec3::Y * lift + swing_pos * mirror;
+        tf.rotation = swing_rot * Quat::from_rotation_x(0.5 * e) * Quat::from_rotation_y(side * 0.5 * e);
     }
 }
