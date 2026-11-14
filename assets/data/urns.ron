@@ -1,0 +1,160 @@
+// Urns: every station grows around its own urn. You put things into an urn to
+// finish its steps; each finished step places a station beside it, upgrades
+// one, teaches new recipes, or gives you the urn of another station.
+//
+// urns:
+//   name:    id (the save and other urns refer to it)
+//   title:   the urn's name on screen
+//   station: the station it grows ("Sleeping Station")
+//   item:    the item you carry and set down to start it (none: the ancestral
+//            urn stands by your bedroll from the start)
+//   color:   its clay and the glow of its marks, (r, g, b) 0-1
+//   how:     how a player first gets it (shown in the urn's tree)
+//   steps:   what you fill, in the order the tree shows them
+//     name:  id, unique across all urns (benches.ron `unlock`s and code look for it)
+//     tier:  1 near home, 2 a trip out (caves, hides, iron), 3 far finds
+//            (sky islands, barrow relics)
+//     gives: Station("kind") places that station by the urn;
+//            Upgrade improves the station or camp (code asks `has("name")`);
+//            Recipes teaches the benches.ron recipes that name it in `unlock`;
+//            Urn("name") gives you that urn to carry and set down.
+//     needs: { "item": count } - all of it goes into the urn, a bit at a time
+//     after: steps (of this urn) that must be done first
+//     desc:  one line for the tree and the planning sheet
+//     later: true where what it does isn't in the game yet (the step still
+//            fills and places its model, so the tree can be played through)
+(
+    urns: [
+        (
+            name: "ancestral", title: "Ancestral Urn", station: "Sleeping Station",
+            color: (0.58, 0.36, 0.24),
+            how: "Stands by your bedroll from the start and moves with it.",
+            steps: [
+                (name: "camp_mat", title: "Camp Mat", tier: 1, gives: Station("camp_mat"),
+                 needs: { "stick": 4, "plant_fiber": 4 },
+                 desc: "A woven mat with a knapping stone. Lash rocks to a stick for your first axe."),
+                (name: "tool_urn", title: "Tool Urn", tier: 1, gives: Urn("tool"), after: ["camp_mat"],
+                 needs: { "small_rock": 6, "stick": 6, "cordage": 1 },
+                 desc: "Set it down anywhere to start the Tool Station."),
+                (name: "bedframe", title: "Bedframe", tier: 1, gives: Upgrade, after: ["tool_urn"],
+                 needs: { "planks": 6, "cordage": 2 },
+                 desc: "Lifts the bedroll off the wet ground: deeper sleep, warmer mornings.", later: true),
+                (name: "hearth_urn", title: "Hearth Urn", tier: 2, gives: Urn("hearth"), after: ["tool_urn"],
+                 needs: { "clay": 6, "small_rock": 8, "marsh_berries": 4 },
+                 desc: "Set it down anywhere to start the Cooking Station."),
+                (name: "personal_storage", title: "Personal Storage", tier: 2, gives: Station("personal_storage"), after: ["bedframe"],
+                 needs: { "planks": 8, "hide": 1 },
+                 desc: "A trunk at the foot of the bed. It packs up with your camp."),
+                (name: "portable_bedroll", title: "Portable Bedroll", tier: 2, gives: Recipes, after: ["bedframe"],
+                 needs: { "hide": 2, "cordage": 3 },
+                 desc: "The camp mat learns to roll a spare bedroll, to sleep away from home."),
+                (name: "double_bed", title: "Double-wide Bed", tier: 2, gives: Upgrade, after: ["bedframe"],
+                 needs: { "planks": 10, "fur": 2, "hide": 2 },
+                 desc: "Room for two, and fur to sleep warm through winter.", later: true),
+                (name: "storage_shelf", title: "Extra Shelf", tier: 3, gives: Upgrade, after: ["personal_storage"],
+                 needs: { "planks": 10, "raw_iron": 2 },
+                 desc: "Personal storage gets another row."),
+                (name: "portable_tent", title: "Portable Tent", tier: 3, gives: Recipes, after: ["portable_bedroll"],
+                 needs: { "hide": 4, "stick": 8, "cordage": 4 },
+                 desc: "The camp mat learns to make a tent: shelter from rain and wind on the road."),
+                (name: "star_urn", title: "Star Urn", tier: 3, gives: Urn("star"), after: ["hearth_urn"],
+                 needs: { "old_coin": 1, "flint": 6, "cobblestone": 12 },
+                 desc: "Set it down to start the Astronomy Station. Its coin comes from a barrow."),
+                (name: "golem_urn", title: "Golem Urn", tier: 3, gives: Urn("golem"), after: ["star_urn"],
+                 needs: { "raw_iron": 8, "spirit_ember": 4, "skystone": 6 },
+                 desc: "Set it down to start the Golem Station."),
+            ],
+        ),
+        (
+            name: "tool", title: "Tool Urn", station: "Tool Station", item: Some("tool_urn"),
+            color: (0.55, 0.56, 0.6),
+            how: "The ancestral urn gives it once the camp mat is built.",
+            steps: [
+                (name: "tool_bench", title: "Tool Bench", tier: 1, gives: Station("tool_bench"),
+                 needs: { "stick": 4, "small_rock": 4 },
+                 desc: "A handle groove and a strike stone: rock picks and shovels."),
+                (name: "carpentry_bench", title: "Carpentry Bench", tier: 1, gives: Station("carpentry_bench"), after: ["tool_bench"],
+                 needs: { "log": 4, "flint": 2 },
+                 desc: "Saw logs into planks and planks into sticks; build chests."),
+                (name: "improved_tool_bench", title: "Improved Tool Bench", tier: 2, gives: Recipes, after: ["tool_bench"],
+                 needs: { "planks": 6, "cordage": 4, "flint": 3 },
+                 desc: "More crafting options: the stone axe and the flint spear."),
+                (name: "sharpening_stone", title: "Sharpening Stone", tier: 2, gives: Station("sharpening_stone"), after: ["tool_bench"],
+                 needs: { "cobblestone": 8, "sand": 6, "stick": 2 },
+                 desc: "Hone an edge: a sharpened tool works faster for a while.", later: true),
+                (name: "iron_anvil", title: "Iron Anvil", tier: 2, gives: Station("iron_anvil"), after: ["improved_tool_bench"],
+                 needs: { "raw_iron": 10, "cobblestone": 12, "coal": 6 },
+                 desc: "Hammer iron into tools and fittings.", later: true),
+                (name: "steel_anvil", title: "Steel Anvil", tier: 3, gives: Upgrade, after: ["iron_anvil"],
+                 needs: { "raw_iron": 20, "coal": 16 },
+                 desc: "The anvil takes steel: harder, longer-lasting tools.", later: true),
+                (name: "alchemical_anvil", title: "Alchemical Anvil", tier: 3, gives: Upgrade, after: ["steel_anvil"],
+                 needs: { "spirit_ember": 6, "skystone": 8, "old_coin": 2 },
+                 desc: "Etched with spirit marks: tools carry a charm.", later: true),
+            ],
+        ),
+        (
+            name: "hearth", title: "Hearth Urn", station: "Cooking Station", item: Some("hearth_urn"),
+            color: (0.72, 0.3, 0.2),
+            how: "The ancestral urn gives it after the tool urn.",
+            steps: [
+                (name: "cooking_pot", title: "Cooking Pot", tier: 1, gives: Station("cooking_pot"),
+                 needs: { "clay": 6, "stick": 6, "small_rock": 4 },
+                 desc: "A clay pot on a fire: stews and roasts.", later: true),
+                (name: "cutting_board", title: "Cutting Board", tier: 1, gives: Station("cutting_board"), after: ["cooking_pot"],
+                 needs: { "planks": 4, "flint": 2 },
+                 desc: "Cut and prepare what you cook: more and better portions.", later: true),
+                (name: "smoking_rack", title: "Smoking Rack", tier: 2, gives: Station("smoking_rack"), after: ["cooking_pot"],
+                 needs: { "stick": 12, "cordage": 4, "peat": 6 },
+                 desc: "Peat smoke dries fish and meat so it keeps on long trips.", later: true),
+                (name: "herb_rack", title: "Herb Rack", tier: 2, gives: Upgrade, after: ["cutting_board"],
+                 needs: { "swamp_reed": 8, "marsh_berries": 6, "cordage": 2 },
+                 desc: "Seasoning lifts a meal a food tier.", later: true),
+                (name: "stone_fridge", title: "Stone Fridge", tier: 3, gives: Station("stone_fridge"), after: ["cutting_board"],
+                 needs: { "cobblestone": 16, "clay": 8, "moss": 8 },
+                 desc: "A cold stone box lined with moss: food stays fresh.", later: true),
+            ],
+        ),
+        (
+            name: "star", title: "Star Urn", station: "Astronomy Station", item: Some("star_urn"),
+            color: (0.28, 0.32, 0.62),
+            how: "The ancestral urn gives it, for a coin from a barrow.",
+            steps: [
+                (name: "telescope", title: "Telescope", tier: 1, gives: Station("telescope"),
+                 needs: { "planks": 6, "flint": 4, "raw_iron": 2 },
+                 desc: "Look through it at night to find constellations.", later: true),
+                (name: "magical_lens", title: "Magical Lens", tier: 2, gives: Station("magical_lens"), after: ["telescope"],
+                 needs: { "skystone": 6, "cloud_moss": 4 },
+                 desc: "Shows the flux in things: what an item is made of.", later: true),
+                (name: "improved_telescope", title: "Improved Telescope", tier: 2, gives: Upgrade, after: ["telescope"],
+                 needs: { "raw_iron": 6, "planks": 6, "skystone": 2 },
+                 desc: "A longer tube: fainter stars, more constellations.", later: true),
+                (name: "cauldron", title: "Cauldron", tier: 2, gives: Station("cauldron"), after: ["magical_lens"],
+                 needs: { "raw_iron": 8, "clay": 6, "coal": 4 },
+                 desc: "Brews potions from what the lens has shown you.", later: true),
+                (name: "diamond_lens", title: "Diamond Lens", tier: 3, gives: Upgrade, after: ["improved_telescope", "magical_lens"],
+                 needs: { "skystone": 12, "spirit_ember": 6 },
+                 desc: "The telescope sees the hidden constellations.", later: true),
+                (name: "steel_cauldron", title: "Steel Cauldron", tier: 3, gives: Upgrade, after: ["cauldron"],
+                 needs: { "raw_iron": 16, "coal": 10 },
+                 desc: "Bigger brews and stronger potions.", later: true),
+            ],
+        ),
+        (
+            name: "golem", title: "Golem Urn", station: "Golem Station", item: Some("golem_urn"),
+            color: (0.42, 0.5, 0.4),
+            how: "The ancestral urn gives it last, for sky-island stone.",
+            steps: [
+                (name: "golem_frame", title: "Golem Frame", tier: 1, gives: Station("golem_frame"),
+                 needs: { "cobblestone": 24, "clay": 12 },
+                 desc: "A stone body on a scaffold, waiting for a heart.", later: true),
+                (name: "golem_heart", title: "Golem Heart", tier: 2, gives: Upgrade, after: ["golem_frame"],
+                 needs: { "spirit_ember": 8, "old_coin": 2 },
+                 desc: "The golem wakes and follows you.", later: true),
+                (name: "golem_hands", title: "Working Hands", tier: 3, gives: Upgrade, after: ["golem_heart"],
+                 needs: { "raw_iron": 12, "cordage": 6 },
+                 desc: "The golem carries, chops and guards the camp.", later: true),
+            ],
+        ),
+    ],
+)

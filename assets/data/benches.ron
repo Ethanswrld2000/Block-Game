@@ -1,21 +1,29 @@
-// Things made by hand at the benches beside the sleeping station.
-//   station: which bench (its name in fusion.ron)
+// Things made by hand at the stations' benches.
+//   station: which bench (its station name in urns.ron)
 //   slots:   what each slot on the board must hold, (item, count)
+//            camp_mat:        "base" (what lies on the mat, up to 8), "tie" (what binds it, up to 8)
 //            tool_bench:      "handle" (the long groove, 1), "material" (the hollow, up to 4)
 //            carpentry_bench: "bed" (logs and boards, up to 8), "vise" (up to 4)
-//   work:    how many times to work the bench's tool (knock the strike stone, saw)
+//   work:    how many times to work the bench's tool (knock the stone, saw)
 //   makes:   what lies on the board afterwards, (item, count)
+//   unlock:  an urn step (urns.ron, `gives: Recipes`) that must be done before the bench
+//            knows this recipe
 // When several recipes match, the one that uses the most wins (2 or 3 cobblestone).
 (
     recipes: [
-        // Tool bench: a handle and a head.
-        (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("small_rock", 2)}, work: 3, makes: ("rough_axe", 1)),
-        (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("cobblestone", 1)}, work: 3, makes: ("stone_shovel", 1)),
-        (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("cobblestone", 2)}, work: 4, makes: ("stone_axe", 1)),
-        (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("cobblestone", 3)}, work: 5, makes: ("stone_pickaxe", 1)),
-        (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("flint", 2)}, work: 4, makes: ("flint_spear", 1)),
+        // Camp mat (sleeping station): the first axe, then gear for sleeping away from home.
+        (station: "camp_mat", slots: {"base": ("small_rock", 2), "tie": ("stick", 1)}, work: 3, makes: ("rough_axe", 1)),
+        (station: "camp_mat", slots: {"base": ("hide", 2), "tie": ("cordage", 3)}, work: 4, makes: ("portable_bedroll", 1), unlock: "portable_bedroll"),
+        (station: "camp_mat", slots: {"base": ("hide", 4), "tie": ("stick", 8)}, work: 6, makes: ("portable_tent", 1), unlock: "portable_tent"),
 
-        // Carpentry bench: saw logs into planks, planks into sticks, and build.
+        // Tool bench (tool station): a handle and a head.
+        (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("small_rock", 3)}, work: 4, makes: ("stone_pickaxe", 1)),
+        (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("cobblestone", 3)}, work: 5, makes: ("stone_pickaxe", 1)),
+        (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("cobblestone", 1)}, work: 3, makes: ("stone_shovel", 1)),
+        (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("cobblestone", 2)}, work: 4, makes: ("stone_axe", 1), unlock: "improved_tool_bench"),
+        (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("flint", 2)}, work: 4, makes: ("flint_spear", 1), unlock: "improved_tool_bench"),
+
+        // Carpentry bench (tool station): saw logs into planks, planks into sticks, and build.
         (station: "carpentry_bench", slots: {"bed": ("log", 1)}, work: 4, makes: ("planks", 4)),
         (station: "carpentry_bench", slots: {"bed": ("swamp_log", 1)}, work: 4, makes: ("planks", 4)),
         (station: "carpentry_bench", slots: {"bed": ("planks", 2)}, work: 2, makes: ("stick", 4)),

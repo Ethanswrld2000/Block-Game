@@ -23,6 +23,8 @@ struct RecipeSpec {
     slots: BTreeMap<String, (String, u16)>,
     work: u8,
     makes: (String, u16),
+    #[serde(default)]
+    unlock: String,
 }
 
 /// One recipe: what each slot must hold, how many times to work the tool, and what it makes.
@@ -32,11 +34,15 @@ pub struct Recipe {
     pub slots: BTreeMap<String, Stack>,
     pub work: u8,
     pub makes: Stack,
+    /// The urn step that teaches it (none: known from the start).
+    pub unlock: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct BenchData {
     pub recipes: Vec<Recipe>,
+    /// Urn steps done that teach recipes; the game keeps this up to date.
+    pub learned: std::collections::BTreeSet<String>,
 }
 
 /// A slot on a bench's board: its name and how many things fit in it.
@@ -52,9 +58,13 @@ pub const TOOL_BENCH_SLOTS: [SlotDef; 2] = [SlotDef { name: "handle", cap: 1 }, 
 /// The carpentry bench: a bed for logs and boards, and a vise.
 pub const CARPENTRY_SLOTS: [SlotDef; 2] = [SlotDef { name: "bed", cap: 8 }, SlotDef { name: "vise", cap: 4 }];
 
-/// The slots of a bench, by its station name in fusion.ron.
+/// The camp mat: what lies on the mat, and what binds it.
+pub const CAMP_MAT_SLOTS: [SlotDef; 2] = [SlotDef { name: "base", cap: 8 }, SlotDef { name: "tie", cap: 8 }];
+
+/// The slots of a bench, by its station name in urns.ron.
 pub fn slots_of(station: &str) -> &'static [SlotDef] {
     match station {
+        "camp_mat" => &CAMP_MAT_SLOTS,
         "tool_bench" => &TOOL_BENCH_SLOTS,
         "carpentry_bench" => &CARPENTRY_SLOTS,
         _ => &[],
@@ -81,9 +91,9 @@ impl BenchData {
                 }
                 slots.insert(name.clone(), Stack::new(item(it)?, *n));
             }
-            recipes.push(Recipe { station: r.station, slots, work: r.work.max(1), makes: Stack::new(item(&r.makes.0)?, r.makes.1.max(1)) });
+            recipes.push(Recipe { station: r.station, slots, work: r.work.max(1), makes: Stack::new(item(&r.makes.0)?, r.makes.1.max(1)), unlock: (!r.unlock.is_empty()).then_some(r.unlock) });
         }
-        Ok(Self { recipes })
+        Ok(Self { recipes, learned: Default::default() })
     }
 
     /// The recipe the board matches: every slot it names holds that item (at
@@ -92,7 +102,7 @@ impl BenchData {
     pub fn matching(&self, station: &str, board: &Board) -> Option<&Recipe> {
         self.recipes
             .iter()
-            .filter(|r| r.station == station)
+            .filter(|r| r.station == station && self.knows(r))
             .filter(|r| {
                 r.slots.iter().all(|(s, want)| board.slots.get(s).is_some_and(|have| have.item == want.item && have.count >= want.count))
                     && board.slots.keys().all(|s| r.slots.contains_key(s))
@@ -100,8 +110,14 @@ impl BenchData {
             .max_by_key(|r| r.slots.values().map(|s| s.count as u32).sum::<u32>())
     }
 
+    /// The recipes a bench knows now.
     pub fn for_station<'a>(&'a self, station: &'a str) -> impl Iterator<Item = &'a Recipe> + 'a {
-        self.recipes.iter().filter(move |r| r.station == station)
+        self.recipes.iter().filter(move |r| r.station == station && self.knows(r))
+    }
+
+    /// Whether the urn has taught this recipe (or it needs no teaching).
+    pub fn knows(&self, r: &Recipe) -> bool {
+        r.unlock.as_ref().is_none_or(|u| self.learned.contains(u))
     }
 }
 
@@ -205,28 +221,29 @@ mod tests {
     fn a_stick_and_two_rocks_make_the_first_axe() {
         let (items, data) = data();
         let id = |n| items.id(n).unwrap();
-        let [handle, material] = TOOL_BENCH_SLOTS;
+        let [base, tie] = CAMP_MAT_SLOTS;
         let mut b = Board::default();
-        assert_eq!(b.put(handle, Stack::new(id("stick"), 1)), None);
-        assert_eq!(b.put(material, Stack::new(id("small_rock"), 1)), None);
+        assert_eq!(b.put(tie, Stack::new(id("stick"), 1)), None);
+        assert_eq!(b.put(base, Stack::new(id("small_rock"), 1)), None);
         // One rock isn't enough.
-        assert_eq!(b.strike(&data, "tool_bench"), Work::Nothing);
-        assert_eq!(b.put(material, Stack::new(id("small_rock"), 1)), None);
-        let r = data.matching("tool_bench", &b).unwrap();
+        assert_eq!(b.strike(&data, "camp_mat"), Work::Nothing);
+        assert_eq!(b.put(base, Stack::new(id("small_rock"), 1)), None);
+        let r = data.matching("camp_mat", &b).unwrap();
         for k in 1..r.work {
-            assert_eq!(b.strike(&data, "tool_bench"), Work::Knock { done: k, of: r.work });
+            assert_eq!(b.strike(&data, "camp_mat"), Work::Knock { done: k, of: r.work });
         }
         let made = Stack::new(id("rough_axe"), 1);
-        assert_eq!(b.strike(&data, "tool_bench"), Work::Made(made));
+        assert_eq!(b.strike(&data, "camp_mat"), Work::Made(made));
         assert!(b.slots.is_empty());
         // It lies there until picked up; working again does nothing.
-        assert_eq!(b.strike(&data, "tool_bench"), Work::Nothing);
+        assert_eq!(b.strike(&data, "camp_mat"), Work::Nothing);
         assert_eq!(b.clear(), vec![made]);
     }
 
     #[test]
     fn the_most_that_fits_wins() {
-        let (items, data) = data();
+        let (items, mut data) = data();
+        data.learned.insert("improved_tool_bench".into());
         let id = |n| items.id(n).unwrap();
         let [handle, material] = TOOL_BENCH_SLOTS;
         let mut b = Board::default();
@@ -235,6 +252,20 @@ mod tests {
         assert_eq!(data.matching("tool_bench", &b).unwrap().makes.item, id("stone_axe"));
         b.put(material, Stack::new(id("cobblestone"), 1));
         assert_eq!(data.matching("tool_bench", &b).unwrap().makes.item, id("stone_pickaxe"));
+    }
+
+    #[test]
+    fn locked_recipes_wait_for_the_urn() {
+        let (items, mut data) = data();
+        let id = |n| items.id(n).unwrap();
+        let [handle, material] = TOOL_BENCH_SLOTS;
+        let mut b = Board::default();
+        b.put(handle, Stack::new(id("stick"), 1));
+        b.put(material, Stack::new(id("flint"), 2));
+        assert!(data.matching("tool_bench", &b).is_none(), "the spear needs the improved tool bench");
+        assert!(!data.for_station("tool_bench").any(|r| r.makes.item == id("flint_spear")));
+        data.learned.insert("improved_tool_bench".into());
+        assert_eq!(data.matching("tool_bench", &b).unwrap().makes.item, id("flint_spear"));
     }
 
     #[test]
@@ -274,11 +305,11 @@ mod tests {
         let [handle, material] = TOOL_BENCH_SLOTS;
         let mut b = Board::default();
         b.put(handle, Stack::new(id("small_rock"), 1));
-        b.put(material, Stack::new(id("small_rock"), 2));
+        b.put(material, Stack::new(id("small_rock"), 3));
         assert!(data.matching("tool_bench", &b).is_none());
         b.put(handle, Stack::new(id("stick"), 1));
-        b.put(material, Stack::new(id("small_rock"), 2));
+        b.put(material, Stack::new(id("small_rock"), 1));
         while !matches!(b.strike(&data, "tool_bench"), Work::Made(_)) {}
-        assert_eq!(b.slots.get("material"), Some(&Stack::new(id("small_rock"), 2)));
+        assert_eq!(b.slots.get("material"), Some(&Stack::new(id("small_rock"), 1)));
     }
 }
