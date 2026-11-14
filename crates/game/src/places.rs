@@ -17,8 +17,8 @@ impl Plugin for PlacesPlugin {
         app.init_resource::<Here>()
             .init_resource::<Card>()
             .add_message::<ShowCard>()
-            .add_systems(Startup, spawn_card)
-            .add_systems(Update, (notice, show, fade).chain());
+            .add_systems(crate::menu::GameStartup, spawn_card)
+            .add_systems(crate::menu::GameUpdate, (notice, show, fade).chain());
     }
 }
 

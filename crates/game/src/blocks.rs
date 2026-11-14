@@ -70,8 +70,8 @@ pub struct BlocksPlugin;
 impl Plugin for BlocksPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<VoxelMaterial>::default())
-            .add_systems(PreStartup, load_blocks)
-            .add_systems(Update, build_material.run_if(|b: Res<Blocks>| b.material.is_none()));
+            .add_systems(crate::menu::GamePreStartup, load_blocks)
+            .add_systems(crate::menu::GameUpdate, build_material.run_if(|b: Res<Blocks>| b.material.is_none()));
     }
 }
 

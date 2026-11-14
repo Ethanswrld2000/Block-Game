@@ -49,16 +49,16 @@ impl Plugin for SurvivalPlugin {
             .init_resource::<Survival>()
             .init_resource::<Camp>()
             .add_message::<Toast>()
-            .add_systems(PostStartup, (remember_spawn, load_player).chain().after(crate::world::setup_generator))
+            .add_systems(crate::menu::GamePostStartup, (remember_spawn, load_player).chain().after(crate::world::setup_generator))
             .add_systems(
-                Update,
+                crate::menu::GameUpdate,
                 (debug_keys, take_hits, eat, tick_body, die_and_respawn, set_body)
                     .chain()
                     .in_set(SurvivalSet)
                     .after(PlayerSet),
             )
-            .add_systems(Update, save_player)
-            .add_systems(Last, save_player_on_exit)
+            .add_systems(crate::menu::GameUpdate, save_player)
+            .add_systems(Last, save_player_on_exit.run_if(crate::menu::in_game))
             .add_plugins((camp::CampPlugin, hud::SurvivalHudPlugin));
     }
 }

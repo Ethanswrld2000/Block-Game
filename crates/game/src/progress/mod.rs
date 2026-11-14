@@ -34,16 +34,16 @@ impl Plugin for ProgressPlugin {
             .init_resource::<Perks>()
             .init_resource::<Spells>()
             .add_message::<GainXp>()
-            .add_systems(PostStartup, load_progress)
+            .add_systems(crate::menu::GamePostStartup, load_progress)
             .add_systems(
-                Update,
+                crate::menu::GameUpdate,
                 (xp_from_mining, xp_from_sky, gain_xp, update_perks, cast, apply_to_body, follow_light)
                     .chain()
                     .after(SurvivalSet)
                     .after(crate::interact::InteractSet),
             )
-            .add_systems(Update, save_progress)
-            .add_systems(Last, save_progress_on_exit)
+            .add_systems(crate::menu::GameUpdate, save_progress)
+            .add_systems(Last, save_progress_on_exit.run_if(crate::menu::in_game))
             .add_plugins(ui::ProgressUiPlugin);
     }
 }

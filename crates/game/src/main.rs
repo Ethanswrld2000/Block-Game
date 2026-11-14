@@ -10,6 +10,7 @@ mod clock;
 mod clouds;
 mod creatures;
 mod lod;
+mod menu;
 mod places;
 mod player;
 mod precipitation;
@@ -29,6 +30,7 @@ mod sound;
 mod station;
 mod theme;
 mod survival;
+mod swing;
 mod torches;
 mod weather;
 mod weather_hud;
@@ -51,7 +53,7 @@ fn main() {
                 // Pixel-art textures: no blurring between texels.
                 .set(ImagePlugin::default_nearest()),
         )
-        .add_plugins(theme::ThemePlugin)
+        .add_plugins((theme::ThemePlugin, menu::MenuPlugin))
         .add_plugins((
             blocks::BlocksPlugin,
             camera::FlyCameraPlugin,

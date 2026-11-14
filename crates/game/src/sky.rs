@@ -76,8 +76,8 @@ impl Plugin for SkyPlugin {
         app.add_plugins(MaterialPlugin::<SkyMaterial>::default())
             .insert_resource(ClearColor(Color::srgb(0.46, 0.53, 0.47)))
             .insert_resource(GlobalAmbientLight { color: Color::WHITE, brightness: 400.0, ..default() })
-            .add_systems(Startup, spawn_sky)
-            .add_systems(Update, (update_sky, follow_camera, season_tint));
+            .add_systems(crate::menu::GameStartup, spawn_sky)
+            .add_systems(crate::menu::GameUpdate, (update_sky, follow_camera, season_tint));
     }
 }
 
@@ -302,7 +302,7 @@ pub fn update_sky(
             haze: Vec4::new(
                 day_haze,
                 if MILKY_WAY { 1.0 - smoothstep(-0.3, 0.0, sun.y) } else { 0.0 },
-                0.0,
+                fog_veil(visibility),
                 0.0,
             ),
         };
@@ -343,9 +343,24 @@ fn season_tint(
     }
 }
 
+/// How much of the sky dome fog hides, 0..1, for how far you can see: none
+/// past 500 blocks, all of it in mist (under 100).
+pub fn fog_veil(visibility: f32) -> f32 {
+    1.0 - smoothstep(100.0, 500.0, visibility)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mist_hides_the_sky_and_clear_days_dont() {
+        let kinds = crate::weather::WeatherKinds::from_ron(include_str!("../../../assets/data/weather.ron")).unwrap();
+        let vis = |n: &str| kinds.list[kinds.find(n).unwrap()].visibility;
+        assert_eq!(fog_veil(vis("mist")), 1.0);
+        assert_eq!(fog_veil(vis("clear")), 0.0);
+        assert!(fog_veil(vis("storm")) > 0.8);
+    }
 
     #[test]
     fn stars_turn_with_the_sun() {

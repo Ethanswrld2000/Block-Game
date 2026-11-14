@@ -42,7 +42,7 @@ pub struct CloudPlugin;
 
 impl Plugin for CloudPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_clouds).add_systems(Update, update_clouds);
+        app.add_systems(crate::menu::GameStartup, spawn_clouds).add_systems(crate::menu::GameUpdate, update_clouds);
     }
 }
 

@@ -54,9 +54,9 @@ impl Plugin for StationPlugin {
             .init_resource::<tree::TreeUi>()
             .init_resource::<dev::DevMenu>()
             .add_message::<StepDone>()
-            .add_systems(Startup, (load_urns, spawn_label, board::spawn_board_ui, board::load_benches, tree::spawn_tree_ui, dev::spawn_dev_ui).chain())
+            .add_systems(crate::menu::GameStartup, (load_urns, spawn_label, board::spawn_board_ui, board::load_benches, tree::spawn_tree_ui, dev::spawn_dev_ui).chain())
             .add_systems(
-                Update,
+                crate::menu::GameUpdate,
                 (
                     aim,
                     place_urn,
@@ -83,8 +83,8 @@ impl Plugin for StationPlugin {
                     .before(crate::interact::InteractSet)
                     .after(crate::player::PlayerSet),
             )
-            .add_systems(Update, (save_urns, urns_for_screenshot))
-            .add_systems(Last, save_urns_on_exit);
+            .add_systems(crate::menu::GameUpdate, (save_urns, urns_for_screenshot))
+            .add_systems(Last, save_urns_on_exit.run_if(crate::menu::in_game));
     }
 }
 

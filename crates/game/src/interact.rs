@@ -7,6 +7,10 @@
 //! and your tool, see items.ron); right click places the block or torch you
 //! hold. In free-fly mode blocks break instantly.
 //!
+//! Mining is done in blows: each swing of the arm lands once, at the moment
+//! the tool meets the block (`swing::Swing::contact`), and that blow does its
+//! share of the work and sends a `Blow` (the knock you hear).
+//!
 //! `Hands` already has a left slot, always empty for now, so an off-hand can
 //! be added later without reworking this.
 
@@ -21,6 +25,7 @@ use crate::camera::FlyCamera;
 use crate::inventory::Inventory;
 use crate::items::{ItemId, ItemKind, Items};
 use crate::player::{MoveMode, Player};
+use crate::swing::{self, Swing};
 use crate::world::World;
 
 pub struct InteractPlugin;
@@ -39,13 +44,14 @@ impl Plugin for InteractPlugin {
             })
             .insert_resource(Hotbar { slots: vec![None; SLOTS] })
             .add_message::<Mined>()
+            .add_message::<Blow>()
             .add_message::<OpenChest>()
             .add_message::<Placed>()
             .add_message::<Strike>()
             .add_message::<UseCreature>()
             .add_systems(
-                Update,
-                (choose_items, wield, find_target, use_hands, animate_swings, draw_target)
+                crate::menu::GameUpdate,
+                (choose_items, wield, find_target, use_hands, draw_target)
                     .chain()
                     .in_set(InteractSet)
                     .after(crate::player::PlayerSet),
@@ -61,8 +67,6 @@ pub const REACH: f32 = 5.0;
 pub const FLY_REACH: f32 = 10.0;
 /// Seconds between placements while a placing click is held.
 const PLACE_REPEAT: f32 = 0.25;
-/// Seconds one swing of the arm takes.
-pub const SWING_TIME: f32 = 0.32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Hand {
@@ -87,6 +91,13 @@ pub struct Wielded(pub Option<ItemId>);
 /// A block was broken (by hand, not by world generation).
 #[derive(Message, Debug, Clone, Copy)]
 pub struct Mined {
+    pub pos: BlockPos,
+    pub block: BlockId,
+}
+
+/// A mining swing landed on a block (it may or may not have broken).
+#[derive(Message, Debug, Clone, Copy)]
+pub struct Blow {
     pub pos: BlockPos,
     pub block: BlockId,
 }
@@ -169,35 +180,62 @@ pub struct Mining {
     pub progress: f32,
 }
 
-/// Arm swings, 0 = at rest, counting down from 1 during a swing.
+/// One arm's swing.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Arm {
+    /// How far through the swing, 0..1; `None` at rest.
+    pub t: Option<f32>,
+    /// The style of the swing under way (what was held when it started).
+    pub style: Swing,
+    /// A mining swing: it lands a blow on the block in front at contact.
+    mining: bool,
+}
+
+impl Arm {
+    /// Starts a swing unless one is under way.
+    fn start(&mut self, style: Swing, mining: bool) {
+        if self.t.is_none() {
+            *self = Arm { t: Some(0.0), style, mining };
+        }
+    }
+
+    /// Moves the swing on by `dt` seconds; true on the frame a mining swing lands.
+    fn advance(&mut self, dt: f32) -> bool {
+        let Some(t) = self.t else { return false };
+        let next = t + dt / self.style.period();
+        self.t = (next < 1.0).then_some(next);
+        self.mining && swing::lands(self.style, t, next)
+    }
+}
+
+/// Both arms' swings.
 #[derive(Resource, Default, Debug)]
 pub struct HandAnim {
-    pub left: f32,
-    pub right: f32,
+    pub left: Arm,
+    pub right: Arm,
     /// Eating progress, 0..1 (set by `survival`): the hand comes up to the mouth.
     pub eat: f32,
-    /// The right hand's swing is an axe chop at this log: slower, overhead,
-    /// and the tree shakes when it lands (`chop`).
-    pub chop: Option<BlockPos>,
     place_cooldown: f32,
     strike_cooldown: f32,
 }
 
 impl HandAnim {
-    /// Start a swing if that hand is at rest; true if one started.
-    fn start(&mut self, hand: Hand) -> bool {
-        let s = match hand {
+    pub fn arm(&self, hand: Hand) -> &Arm {
+        match hand {
+            Hand::Left => &self.left,
+            Hand::Right => &self.right,
+        }
+    }
+
+    fn arm_mut(&mut self, hand: Hand) -> &mut Arm {
+        match hand {
             Hand::Left => &mut self.left,
             Hand::Right => &mut self.right,
-        };
-        if *s > 0.0 {
-            return false;
         }
-        *s = 1.0;
-        if hand == Hand::Right {
-            self.chop = None;
-        }
-        true
+    }
+
+    fn start(&mut self, hand: Hand, style: Swing) {
+        self.arm_mut(hand).start(style, false);
     }
 }
 
@@ -328,8 +366,10 @@ fn use_hands(
     wielded: Res<Wielded>,
     items: Res<Items>,
     mut inv: ResMut<Inventory>,
-    (mut mined, mut open_chest, mut placed, mut strikes, mut use_creature): (
+    (mut mined, mut blows, mut chops, mut open_chest, mut placed, mut strikes, mut use_creature): (
         MessageWriter<Mined>,
+        MessageWriter<Blow>,
+        MessageWriter<crate::chop::Chop>,
         MessageWriter<OpenChest>,
         MessageWriter<Placed>,
         MessageWriter<Strike>,
@@ -347,15 +387,17 @@ fn use_hands(
     let dt = time.delta_secs();
     anim.place_cooldown -= dt;
     anim.strike_cooldown -= dt;
+    let hand = Hand::Right;
+    let landed = anim.arm_mut(hand).advance(dt);
+    anim.left.advance(dt);
     // Clicks only act while the mouse is captured (the first click captures it).
     if cursor.grab_mode == CursorGrabMode::None || body.frozen {
         mining.block = None;
         return;
     }
-    let mut mined_this_frame = false;
-    let hand = Hand::Right;
     let item = wielded.0;
     let kind = item.map(|i| &items.get(i).kind);
+    let style = item.map_or(Swing::Jab, |i| items.get(i).swing);
 
     // A creature in front of the block you aim at takes the click.
     let block_dist = target.hit.and_then(|h| {
@@ -370,7 +412,7 @@ fn use_hands(
             use_creature.write(UseCreature(e));
         }
         if mouse.pressed(MouseButton::Left) && anim.strike_cooldown <= 0.0 {
-            anim.start(hand);
+            anim.start(hand, style);
             anim.strike_cooldown = STRIKE_COOLDOWN;
             let damage = item.map_or(crate::items::FIST_DAMAGE, |i| items.get(i).damage) * (1.0 + perks.damage);
             let mut dir = cam.forward().as_vec3();
@@ -401,7 +443,7 @@ fn use_hands(
         && let Some(hit) = target.hit
         && world.block(hit.block).is_some_and(|b| matches!(blocks.registry.get(b).shape, voxel::Shape::Twig | voxel::Shape::Pebble))
     {
-        anim.start(hand);
+        anim.start(hand, style);
         break_block(&mut world, &blocks, &mut mined, hit.block);
         return;
     }
@@ -428,69 +470,68 @@ fn use_hands(
         if free && !blocks_player && under_ceiling && item.is_some_and(|i| inv.take(i, 1)) && world.set_block(into, place) {
             placed.write(Placed { pos: into, block: place });
             remesh_around(&mut world, &blocks, into);
-            anim.start(hand);
+            anim.start(hand, style);
             anim.place_cooldown = PLACE_REPEAT;
         }
     }
 
-    // Left click: mine with whatever you hold (tools are faster).
-    if mouse.pressed(MouseButton::Left) {
-        mined_this_frame = true;
-        // An axe on a log chops: a bigger swing that shakes the tree.
-        let chop_at = target.hit.map(|h| h.block).filter(|p| {
-            world.block(*p).is_some_and(|b| {
-                let def = blocks.registry.get(b);
-                def.material == "log" && item.is_some() && items.break_time(item, def).is_some()
-            })
-        });
-        if anim.start(hand) {
-            anim.chop = chop_at;
+    // Left click: swing at the block in front. Each swing lands one blow
+    // when the tool meets the block, and the blows add up to break it.
+    let breakable = |world: &World| {
+        let hit = target.hit?;
+        let b = world.block(hit.block)?;
+        let seconds = items.break_time(item, blocks.registry.get(b))? / (1.0 + perks.mining);
+        Some((hit.block, b, seconds))
+    };
+    let aim = breakable(&world);
+    let pressed = mouse.pressed(MouseButton::Left);
+    // A blow lands on whatever is in front when the swing connects (even if
+    // you let go of the button partway through the swing).
+    let mut broke = None;
+    if landed && let Some((pos, b, seconds)) = aim {
+        if mining.block != Some(pos) {
+            *mining = Mining { block: Some(pos), hand, progress: 0.0 };
         }
-        if let Some(hit) = target.hit
-            && let Some(b) = world.block(hit.block)
-            && let Some(seconds) = items.break_time(item, blocks.registry.get(b)).map(|s| s / (1.0 + perks.mining))
-        {
-            if mining.block != Some(hit.block) {
-                *mining = Mining { block: Some(hit.block), hand, progress: 0.0 };
-            }
-            let instant = *mode == MoveMode::Fly || seconds <= 0.0;
-            if instant {
-                if mouse.just_pressed(MouseButton::Left) {
-                    mining.progress = 1.0;
-                }
-            } else {
-                mining.progress += dt / seconds;
-            }
-            if mining.progress >= 1.0 && break_block(&mut world, &blocks, &mut mined, hit.block) {
-                mining.block = None;
-                mining.progress = 0.0;
-            }
-        } else {
-            mining.block = None;
+        mining.progress += swing::blow_share(anim.arm(hand).style, seconds);
+        blows.write(Blow { pos, block: b });
+        // An axe blow on a log shakes the tree.
+        if anim.arm(hand).style == Swing::Chop && blocks.registry.get(b).material == "log" {
+            chops.write(crate::chop::Chop(pos));
+        }
+        if mining.progress >= 1.0 - 1e-4 {
+            broke = Some((pos, b));
         }
     }
-    if !mined_this_frame {
+    if pressed {
+        match aim {
+            // Free flight builds: blocks go at once, one per click.
+            Some((pos, b, seconds)) if *mode == MoveMode::Fly || seconds <= 0.0 => {
+                anim.start(hand, style);
+                if mouse.just_pressed(MouseButton::Left) {
+                    broke = Some((pos, b));
+                }
+            }
+            Some((pos, _, _)) => {
+                if mining.block != Some(pos) {
+                    *mining = Mining { block: Some(pos), hand, progress: 0.0 };
+                }
+                anim.arm_mut(hand).start(style, true);
+            }
+            None => {
+                mining.block = None;
+                anim.start(hand, style);
+            }
+        }
+    } else if anim.arm(hand).t.is_none() {
+        // Let go and the swing is over: the cracks heal.
         mining.block = None;
         mining.progress = 0.0;
     }
-}
-
-/// Seconds one axe chop takes (a bigger, slower swing).
-pub const CHOP_TIME: f32 = 0.55;
-
-fn animate_swings(time: Res<Time>, mut anim: ResMut<HandAnim>, mut chops: MessageWriter<crate::chop::Chop>) {
-    let step = time.delta_secs() / SWING_TIME;
-    anim.left = (anim.left - step).max(0.0);
-    let before = anim.right;
-    let right_step = if anim.chop.is_some() { time.delta_secs() / CHOP_TIME } else { step };
-    anim.right = (anim.right - right_step).max(0.0);
-    // The blow lands at the bottom of the chop.
-    let lands = 1.0 - crate::hands::CHOP_STRIKE;
-    if let Some(p) = anim.chop
-        && before > lands
-        && anim.right <= lands
+    if let Some((pos, _)) = broke
+        && break_block(&mut world, &blocks, &mut mined, pos)
     {
-        chops.write(crate::chop::Chop(p));
+        mining.block = None;
+        mining.progress = 0.0;
     }
 }
 

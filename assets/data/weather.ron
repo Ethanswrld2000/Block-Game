@@ -1,8 +1,8 @@
 // Weather kinds. Each weather lasts `hours` (in-game hours, random between the
 // two numbers; one in-game hour is 50 real seconds), then the next one, picked
 // by the season's chances in seasons.ron, takes over. The clouds turn into the
-// next weather's over the last 30 seconds before the change; the rest blends in
-// over about half a minute after it. The HUD's top-right panel shows the
+// next weather's over the last minute before the change; the rest blends in
+// over a minute after it. The HUD's top-right panel shows the
 // weather and the time left. docs/WEATHER.md has the full table.
 //   clouds:        share of the sky covered, 0..1
 //   cloud_shade:   cloud brightness, 1 = white
@@ -24,14 +24,14 @@
      visibility: 900.0, light: 0.55, precipitation: 0.0, wind: 5.0, lightning: false, chill: -1.0),
     (name: "rain", title: "Rain", hours: (3.0, 8.0), clouds: 0.9, cloud_shade: 0.6,
      visibility: 260.0, light: 0.35, precipitation: 0.7, wind: 6.0, lightning: false, chill: -4.0),
-    (name: "storm", title: "Thunderstorm", hours: (2.0, 5.0), clouds: 1.0, cloud_shade: 0.4,
+    (name: "storm", title: "Thunderstorm", hours: (3.0, 6.0), clouds: 1.0, cloud_shade: 0.4,
      visibility: 170.0, light: 0.2, precipitation: 1.0, wind: 12.0, lightning: true, chill: -7.0, air: 0.9),
-    (name: "mist", title: "Mist", hours: (2.0, 6.0), clouds: 0.5, cloud_shade: 0.9,
+    (name: "mist", title: "Mist", hours: (3.0, 7.0), clouds: 0.5, cloud_shade: 0.9,
      visibility: 70.0, light: 0.7, precipitation: 0.0, wind: 1.0, lightning: false, chill: -2.0, air: 0.85),
     // Autumn and winter: a sudden bitter cold under a clear sky.
     (name: "cold_snap", title: "Cold Snap", hours: (8.0, 18.0), clouds: 0.06, cloud_shade: 1.0,
      visibility: 1400.0, light: 1.0, precipitation: 0.0, wind: 4.0, lightning: false, chill: -16.0),
     // Spring and autumn: a howling gale that pushes you about and steals your breath.
-    (name: "gale", title: "Gale", hours: (2.0, 5.0), clouds: 0.85, cloud_shade: 0.6,
+    (name: "gale", title: "Gale", hours: (3.0, 6.0), clouds: 0.85, cloud_shade: 0.6,
      visibility: 400.0, light: 0.45, precipitation: 0.2, wind: 24.0, lightning: false, chill: -5.0, air: 0.8),
 ]

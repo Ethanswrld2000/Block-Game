@@ -21,10 +21,13 @@ use crate::clock::{DAY_SECONDS, Seasons, WorldClock};
 use crate::world::Generator;
 
 /// Real seconds a weather change takes to blend in.
-const BLEND_SECONDS: f32 = 30.0;
+const BLEND_SECONDS: f32 = 60.0;
 /// Real seconds (at normal clock speed) before a change that the clouds start
 /// turning into the next weather's.
-pub const CLOUD_LEAD_SECONDS: f32 = 30.0;
+pub const CLOUD_LEAD_SECONDS: f32 = 60.0;
+/// Once snowing, it keeps snowing until the temperature (biome scale, about
+/// -1..1) climbs this far above freezing.
+const SNOW_STOPS_ABOVE: f32 = 0.06;
 
 pub struct WeatherPlugin;
 
@@ -43,7 +46,7 @@ impl Plugin for WeatherPlugin {
             .insert_resource(WeatherState::new(first, start.is_some()))
             .insert_resource(conditions)
             .init_resource::<LocalClimate>()
-            .add_systems(Update, (sample_climate, change_weather, blend_conditions, lightning).chain().in_set(WeatherSet));
+            .add_systems(crate::menu::GameUpdate, (sample_climate, change_weather, blend_conditions, lightning).chain().in_set(WeatherSet));
     }
 }
 
@@ -358,7 +361,9 @@ fn blend_conditions(
     c.chill = mix(a.chill, b.chill);
     c.air = mix(a.air, b.air);
     c.lightning = b.lightning && state.blend > 0.5;
-    c.snowing = climate.temperature < 0.0;
+    // Snow starts below freezing and stops only a little above it, so
+    // wandering about near 0 (biome edges, flying) doesn't flick it to rain.
+    c.snowing = climate.temperature < if c.snowing { SNOW_STOPS_ABOVE } else { 0.0 };
 
     // Clouds: steady while a weather lasts, turning to the next one's just before it comes.
     let from = &kinds.list[state.cloud_previous];
@@ -454,7 +459,8 @@ mod tests {
         let kinds = WeatherKinds::from_ron(include_str!("../../../assets/data/weather.ron")).unwrap();
         for k in &kinds.list {
             let shortest = k.hours.0 / 24.0 * DAY_SECONDS;
-            assert!(shortest >= CLOUD_LEAD_SECONDS * 3.0, "{} can last only {shortest} s", k.name);
+            // Room for the clouds to turn before it and for it to blend in after the last change.
+            assert!(shortest >= CLOUD_LEAD_SECONDS + BLEND_SECONDS, "{} can last only {shortest} s", k.name);
         }
     }
 

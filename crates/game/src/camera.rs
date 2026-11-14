@@ -14,14 +14,14 @@ pub struct FlyCameraPlugin;
 impl Plugin for FlyCameraPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Menus>()
-            .add_systems(Startup, spawn_camera)
+            .add_systems(crate::menu::GameStartup, spawn_camera)
             .add_systems(
-            Update,
+            crate::menu::GameUpdate,
             (look, fly.run_if(resource_equals(crate::player::MoveMode::Fly))).chain(),
         )
         // After clicks are handled, so the click that captures the mouse
         // doesn't also break a block.
-        .add_systems(Update, grab_cursor.after(crate::interact::InteractSet));
+        .add_systems(crate::menu::GameUpdate, grab_cursor.after(crate::interact::InteractSet));
     }
 }
 

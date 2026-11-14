@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use voxel::{BlockDef, BlockId, BlockRegistry};
 
 use crate::survival::health::Layer;
+use crate::swing::Swing;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ItemId(pub u16);
@@ -34,6 +35,9 @@ struct ItemSpec {
     /// Damage dealt when you hit a creature with it.
     #[serde(default)]
     damage: Option<f32>,
+    /// How it is swung (see `swing`).
+    #[serde(default)]
+    swing: Swing,
 }
 
 fn default_mass() -> f32 {
@@ -119,6 +123,8 @@ pub struct Item {
     pub stack: u16,
     /// Damage when you hit a creature with it.
     pub damage: f32,
+    /// How the arm swings it; mining blows land at the swing's contact.
+    pub swing: Swing,
 }
 
 /// Damage of a bare-handed blow.
@@ -181,7 +187,7 @@ impl Items {
                 ItemKind::Tool { .. } => 4.0,
                 _ => FIST_DAMAGE,
             });
-            list.push(Item { name: s.name, title: s.title, kind, mass: s.mass, size: s.size, stack: stack.max(1), damage });
+            list.push(Item { name: s.name, title: s.title, kind, mass: s.mass, size: s.size, stack: stack.max(1), damage, swing: s.swing });
         }
         Ok(Self { hand: spec.hand, list })
     }
@@ -228,7 +234,7 @@ pub struct ItemsPlugin;
 
 impl Plugin for ItemsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(PreStartup, load_items.after(crate::blocks::load_blocks));
+        app.add_systems(crate::menu::GamePreStartup, load_items.after(crate::blocks::load_blocks));
     }
 }
 

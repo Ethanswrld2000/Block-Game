@@ -84,7 +84,7 @@ pub struct ItemArtPlugin;
 
 impl Plugin for ItemArtPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup).add_systems(Update, build_models);
+        app.add_systems(crate::menu::GameStartup, setup).add_systems(crate::menu::GameUpdate, build_models);
     }
 }
 

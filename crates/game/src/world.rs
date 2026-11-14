@@ -25,9 +25,9 @@ impl Plugin for WorldPlugin {
         app.insert_resource(ViewDistance { chunks: 12, vertical: 5 })
             .init_resource::<World>()
             .init_resource::<WorldStats>()
-            .add_systems(PostStartup, setup_generator)
+            .add_systems(crate::menu::GamePostStartup, setup_generator)
             .add_systems(
-                Update,
+                crate::menu::GameUpdate,
                 (
                     change_view_distance,
                     schedule_generation,
@@ -42,8 +42,13 @@ impl Plugin for WorldPlugin {
     }
 }
 
-/// World seed. Fixed for now; a world-creation screen can set it later.
+/// The seed every world had before the title screen; folders without a
+/// `world.ron` still get it.
 pub const SEED: u64 = 0x005E_ED0F_5A4D;
+
+/// The open world's seed (from its `world.ron`, set by the title screen).
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct WorldSeed(pub u64);
 
 /// Concurrent tasks. Enough to keep every core busy without flooding memory.
 const MAX_GEN_TASKS: usize = 48;
@@ -263,11 +268,12 @@ impl MeshInput {
 pub fn setup_generator(
     mut commands: Commands,
     blocks: Res<Blocks>,
+    seed: Res<WorldSeed>,
     mut world: ResMut<World>,
     mut player: ResMut<crate::player::Player>,
     mut cam: Query<&mut Transform, With<FlyCamera>>,
 ) {
-    let wg = WorldGen::new(SEED, &blocks.registry, include_str!("../../../assets/data/biomes.ron"))
+    let wg = WorldGen::new(seed.0, &blocks.registry, include_str!("../../../assets/data/biomes.ron"))
         .unwrap_or_else(|e| panic!("{e}"));
     let [x, y, z] = wg.find_spawn();
     info!("spawn at {x} {y} {z} in {}", wg.biome_at(x, y, z).title);

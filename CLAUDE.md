@@ -168,8 +168,9 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   and packed into UV_1.x's fraction (`chunk_mesh::pack_layer`). Sky: three-stop gradient, sun haze,
   sunset spread and anti-sun band; the faint star band at night is off for now (`sky::MILKY_WAY`). Nights: dim blue ambient, lifted by the moon.
 - Weather timing: each weather picks the next one when it starts (`WeatherState.next/until`);
-  clouds change only in the last 30 s before a change (`weather::CLOUD_LEAD_SECONDS`), the rest
-  blends in after. `game::weather_hud` shows weather, next and countdown in `hud::TopRight` (a
+  clouds change only in the last minute before a change (`weather::CLOUD_LEAD_SECONDS`), the rest
+  blends in over a minute after. Snow has hysteresis (`SNOW_STOPS_ABOVE`); fog veils the sky dome
+  (`sky::fog_veil`, `SkyParams.haze.z`). `game::weather_hud` shows weather, next and countdown in `hud::TopRight` (a
   column at the top right; spawn panels there with `ChildOf`). Low and middle cloud layers are
   opaque (blended ones flickered by view angle) and thin out at their edge. Table: `docs/WEATHER.md`
   and `docs/weather.csv` (update when weather.ron or seasons.ron change).
@@ -221,22 +222,35 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   chest). recipes.ron (Tab) keeps only what has no station yet. `Menus.still` stops walking at a bench.
   `BLOCKGAME_BOARD=stick,small_rock*2[,made]` (or `carpentry:log`, `mat:small_rock*2,stick`) opens a bench with
   those laid out (`-` skips a slot; the bench must stand, see above).
-- Chopping: an axe on a log swings `hands::chop_pose` (slower, overhead); when it lands `chop::Chop` shakes the
+- Chopping: an axe blow (`swing: Chop`) that lands on a log sends `chop::Chop`, which shakes the
   tree through the voxel material's `shake` uniform (`shake_offset` in voxel_vertex.wesl and voxel_prepass.wesl).
   New characters start with only their clothes (`start_kit.ron`); the bedroll is always there (B).
-- Arm: `hands` turns the arm about the shoulder (`hands::ARM`, `swing_pose`: wind-up, strike, return).
+- Tool swings: `game::swing` (pure): items have `swing: Jab|Chop|Overhead` in items.ron (axe chops diagonally
+  from the upper right, pick comes straight down). A swing is keyframed poses (wind up, strike, bounce, rest);
+  mining lands one blow per swing at `Swing::contact` (`interact::Blow`, which plays the dig knock), each worth
+  `period / break seconds`, so cracks and sound line up with the moment the tool meets the block.
+- Title screen: `game::menu` (Continue the last-played world, New world with a name and a seed
+  (numbers as is, words hashed, blank = random), Load world, Quit). Each world is `saves/<folder>/` with
+  `world.ron` (name, seed, created, last_played; `save::list_worlds`/`create_world`); `world::WorldSeed`
+  replaces the fixed `SEED` (kept for folders without a seed). Nothing of the game runs before a world
+  opens: plugins add systems to `menu::GamePreStartup`/`GameStartup`/`GamePostStartup`/`GameUpdate`
+  instead of Bevy's `Startup`/`Update` (entering `Screen::Game` runs the startup three once, then
+  `GameUpdate` runs inside `Update`); systems in `First`/`PreUpdate`/`Last` need `.run_if(menu::in_game)`.
+  No "quit to title" yet (game state isn't reset), so Save and quit closes the game.
 - Next: hands-on use for the `later: true` stations (cooking pot and cutting board first, then retire the Tab
   crafting list), portable bedroll/tent use, upgrade effects (bedframe sleep, sharpening), twig regrowth.
 
 ## Testing without a screen
 
+Screenshot and bench runs skip the title screen and open `saves/world1` (`BLOCKGAME_WORLD=<folder>` picks
+another, and also skips it in normal runs); `BLOCKGAME_MENU=1|new|load` keeps the title screen up for a screenshot.
 `BLOCKGAME_SCREENSHOT=shot.png cargo run` waits for chunk loading to settle, saves a screenshot and quits.
 `BLOCKGAME_CAMERA=x,y,z,yaw,pitch` (or `x,y,z,@tx,ty,tz` to look at a point) places the camera first.
 `BLOCKGAME_TIME=day:hour` and `BLOCKGAME_WEATHER=rain` set the scene; the clock stands still during a screenshot run.
 With `BLOCKGAME_CAMERA` the shot is taken flying (`BLOCKGAME_WALK=1` stands there instead); without it, from the player standing at spawn.
 `BLOCKGAME_SLOT=n` starts with hotbar slot n in hand; `BLOCKGAME_SKILLS=n` gives n points and learns Wanderer and Mystic;
 `BLOCKGAME_CAST=levitate,light` starts spells; `BLOCKGAME_SKILLTREE=1` opens the tree; `BLOCKGAME_LOOK=fen_stag` turns the camera to the nearest creature of a kind;
-`BLOCKGAME_LINEUP=1` stands a still model of every creature skin in a row in front of the camera.
+`BLOCKGAME_SWING=0.55` freezes the right arm that far through a swing; `BLOCKGAME_LINEUP=1` stands a still model of every creature skin in a row in front of the camera.
 The home village's name and position are logged at startup.
 In the cloud container: `BEVY_ASSET_ROOT=$PWD BLOCKGAME_SCREENSHOT=/tmp/s.png WGPU_BACKEND=vulkan xvfb-run -s "-screen 0 1280x720x24" ./target/debug/block-game`
 (needs `mesa-vulkan-drivers xvfb libxkbcommon-x11-0`).

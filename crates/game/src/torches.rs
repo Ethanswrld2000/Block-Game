@@ -20,8 +20,8 @@ pub struct TorchPlugin;
 impl Plugin for TorchPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Torches>()
-            .add_systems(Startup, torch_assets)
-            .add_systems(Update, (sync_torches, flicker).chain());
+            .add_systems(crate::menu::GameStartup, torch_assets)
+            .add_systems(crate::menu::GameUpdate, (sync_torches, flicker).chain());
     }
 }
 
