@@ -1,6 +1,7 @@
 // Sky dome: a three-stop gradient (horizon, mid sky, zenith), haze and glow
 // around the sun, sunrise and sunset colour across the sky, sun and moon
-// discs, and stars with a faint band across them at night. Drawn on a huge
+// discs, and stars at night (with a faint band across them when `sky::MILKY_WAY`
+// is on). Drawn on a huge
 // sphere around the camera with fog off. At the horizon it is exactly the
 // colour the terrain fogs into (`horizon_color` in voxel.wesl and lod.wesl),
 // so distant land melts into the sky behind it.
@@ -77,11 +78,12 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
 
     // Stars, turning across the sky around the same axis as the sun.
     let rd = vec3<f32>(dot(sky.star_x.xyz, dir), dot(sky.star_y.xyz, dir), dot(sky.star_z.xyz, dir));
-    // A faint band of distant stars across the sky, in blocky patches.
+    // A faint band of distant stars across the sky, in blocky patches. Its
+    // strength is haze.y, which is 0 while `sky::MILKY_WAY` is off.
     let band_n = normalize(vec3<f32>(0.35, 0.82, 0.45));
-    let band = exp(-pow(dot(rd, band_n) / 0.16, 2.0));
+    let band = exp(-pow(dot(rd, band_n) / 0.16, 2.0)) * sky.haze.y;
     let mottle = 0.55 + 0.45 * hash3(floor(rd * 28.0));
-    col += vec3<f32>(0.42, 0.46, 0.65) * 0.03 * band * mottle * sky.haze.y * clear * clamp(up * 6.0, 0.0, 1.0);
+    col += vec3<f32>(0.42, 0.46, 0.65) * 0.03 * band * mottle * clear * clamp(up * 6.0, 0.0, 1.0);
     let cell = floor(rd * 220.0);
     let h = hash3(cell);
     if (h > 0.9975 - 0.003 * band && up > -0.05) {
