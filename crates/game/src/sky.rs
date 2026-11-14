@@ -24,6 +24,10 @@ pub const SKY_RADIUS: f32 = 4500.0;
 /// Fog never reaches further than this: the edge of the distant terrain.
 pub const MAX_VISIBILITY: f32 = 1500.0;
 /// How far the sun's path leans away from straight overhead (radians).
+/// The faint band of distant stars across the night sky. Off for now (Ethan
+/// asked for it removed); set to `true` to bring it back. Stars stay either way.
+pub const MILKY_WAY: bool = false;
+
 const SUN_TILT: f32 = 0.38;
 /// The moon's path leans differently, so it crosses a different part of the sky.
 const MOON_TILT: f32 = 0.62;
@@ -48,7 +52,8 @@ pub struct SkyParams {
     /// The middle band of the three-stop gradient (horizon, mid, zenith).
     pub mid: Vec4,
     /// x: daytime haze brightening towards the sun (same as the fog's),
-    /// y: brightness of the band of faint stars across the night sky.
+    /// y: brightness of the band of faint stars across the night sky
+    /// (0 while [`MILKY_WAY`] is off).
     pub haze: Vec4,
 }
 
@@ -294,7 +299,12 @@ pub fn update_sky(
             star_y: inv.y_axis.extend(0.0),
             star_z: inv.z_axis.extend(0.0),
             mid: mid.extend(1.0),
-            haze: Vec4::new(day_haze, 1.0 - smoothstep(-0.3, 0.0, sun.y), 0.0, 0.0),
+            haze: Vec4::new(
+                day_haze,
+                if MILKY_WAY { 1.0 - smoothstep(-0.3, 0.0, sun.y) } else { 0.0 },
+                0.0,
+                0.0,
+            ),
         };
     }
 }
