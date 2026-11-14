@@ -36,6 +36,9 @@ impl Plugin for CrittersPlugin {
     }
 }
 
+/// Leaving critters (other than birds) only fade once they're this far from you.
+const FADE_AWAY: f32 = 16.0;
+
 /// Rain or snow heavier than this sends fair-weather critters away.
 const WET: f32 = 0.3;
 
@@ -300,8 +303,10 @@ fn move_critters(
             }
             Motion::Drifter => drifter(&mut c, &mut cr, k, spec, pos, startled, &around, &world, &blocks, rng),
         };
-        // Birds leave by flying off; the small ones fade.
-        if c.leaving && spec.motion != Motion::Bird {
+        // Birds leave by flying off; the small ones fade, but only out of your way, so
+        // none vanish in front of you.
+        let near = flat(tf.translation - around.player).length() < FADE_AWAY;
+        if c.leaving && spec.motion != Motion::Bird && !near {
             c.fade -= around.dt / 1.5;
         } else {
             c.fade = (c.fade + around.dt).min(1.0);
@@ -656,7 +661,7 @@ mod tests {
         assert!(!ok("marsh_finch", false, 0.4, 0.8), "birds leave in the rain");
         assert!(ok("firefly", true, 0.4, 0.0) && !ok("firefly", false, 0.4, 0.0));
         assert!(!ok("firefly", true, -0.2, 0.0), "no fireflies in the cold");
-        assert!(ok("dusk_cricket", true, 0.4, 0.0) && !ok("dusk_cricket", false, 0.4, 0.0));
+        assert!(ok("dusk_cricket", true, 0.4, 0.0) && ok("dusk_cricket", false, 0.4, 0.0) && !ok("dusk_cricket", true, 0.4, 0.8), "crickets day and night, not in rain");
         assert!(ok("reed_frog", true, 0.4, 0.8) && ok("reed_frog", false, 0.4, 0.0), "frogs any time, rain or not");
     }
 
