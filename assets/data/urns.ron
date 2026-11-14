@@ -100,10 +100,10 @@
             steps: [
                 (name: "cooking_pot", title: "Cooking Pot", tier: 1, gives: Station("cooking_pot"),
                  needs: { "clay": 6, "stick": 6, "small_rock": 4 },
-                 desc: "A clay pot on a fire: stews and roasts.", later: true),
+                 desc: "A clay pot on a fire: put food in, fuel under it, and stir. Roasts, broths and stews."),
                 (name: "cutting_board", title: "Cutting Board", tier: 1, gives: Station("cutting_board"), after: ["cooking_pot"],
                  needs: { "planks": 4, "flint": 2 },
-                 desc: "Cut and prepare what you cook: more and better portions.", later: true),
+                 desc: "Cut meat, reeds and fish with the knife first: more and better portions."),
                 (name: "smoking_rack", title: "Smoking Rack", tier: 2, gives: Station("smoking_rack"), after: ["cooking_pot"],
                  needs: { "stick": 12, "cordage": 4, "peat": 6 },
                  desc: "Peat smoke dries fish and meat so it keeps on long trips.", later: true),

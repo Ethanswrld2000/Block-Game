@@ -45,5 +45,11 @@
         "golem_urn": (0, 210, 40, 40),
         "portable_bedroll": (126, 146, 40, 20),
         "portable_tent": (144, 230, 40, 40),
+        "meat_strips": (234, 128, 20, 20),
+        "chopped_reeds": (228, 192, 20, 20),
+        "fish_flakes": (228, 214, 20, 20),
+        "roast_slices": (186, 234, 20, 20),
+        "reed_broth": (208, 236, 20, 20),
+        "bog_stew": (230, 236, 20, 40),
     },
 )

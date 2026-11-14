@@ -480,6 +480,55 @@ def roast_meat(c):
     c.dot(9, 6, hexc("c8783a"))
 
 
+def meat_strips(c):
+    # Three raw strips side by side.
+    for x, y in [(4, 4), (9, 3), (14, 5)]:
+        c.line(x, y, x - 1, y + 12, 3.5, MEAT)
+        c.line(x + 1, y + 2, x, y + 9, 1, MEAT_FAT)
+
+
+def chopped_reeds(c):
+    # A little heap of pale reed-heart rounds.
+    for x, y in [(5, 13), (10, 14), (15, 13), (7, 9), (13, 9), (10, 5)]:
+        c.ellipse(x, y, 3, 2.5, hexc("e8e0b8"))
+        c.ellipse(x, y, 1.5, 1, hexc("9eb466"))
+
+
+def fish_flakes(c):
+    # Smoked fish pulled into flakes.
+    for x, y, a in [(5, 12, 0.3), (11, 14, -0.2), (15, 9, 0.5), (8, 7, -0.4), (12, 4, 0.2)]:
+        c.line(x - 3 * math.cos(a), y - 3 * math.sin(a), x + 3 * math.cos(a), y + 3 * math.sin(a), 2.5, hexc("c08850"))
+        c.dot(x, y, hexc("8a5428"))
+
+
+def roast_slices(c):
+    # Two slices of roast, browned edges and pink middles.
+    for x, y in [(7, 8), (13, 12)]:
+        c.ellipse(x, y, 5.5, 4.5, hexc("8a4a22"))
+        c.ellipse(x, y, 3.5, 2.5, hexc("c0705a"))
+
+
+def reed_broth(c):
+    # A clay cup of green broth.
+    c.poly([(3, 9), (17, 9), (15, 18), (5, 18)], hexc("8a5a3c"))
+    c.rect(2, 7, 18, 10, hexc("9a6a48"))
+    c.ellipse(10, 8, 7, 1.6, hexc("8aa050"))
+    for x in (7, 12):
+        c.line(x, 5, x + 1, 1, 1, hexc("d8d8d0"))
+
+
+def bog_stew(c):
+    # A deep bowl of dark stew with meat in it, steam above.
+    c.poly([(2, 20), (18, 20), (17, 34), (13, 38), (7, 38), (3, 34)], hexc("6a4a34"))
+    c.rect(1, 18, 19, 21, hexc("7a5a40"))
+    c.ellipse(10, 18, 8, 2.2, hexc("5a3418"))
+    c.dot(7, 18, MEAT)
+    c.dot(12, 18, hexc("e8e0b8"))
+    c.dot(14, 18, hexc("5a2a74"))
+    for x in (5, 10, 15):
+        c.line(x, 15, x - 1, 5, 1, hexc("d8d8d0"))
+
+
 def spirit_ember(c):
     c.ellipse(10, 11, 6, 7, hexc("58b4e8"))
     c.ellipse(10, 12, 3.5, 4, hexc("b8ecff"))
@@ -545,6 +594,7 @@ DRAW = {f.__name__: f for f in [
     cured_meat, feast_platter, ember_herb, stick, plant_fiber, cordage, coal, raw_iron, flint, hide, fur, linen_shirt,
     linen_trousers, hide_boots, reed_hat, reed_cloak, fur_hood, fur_coat, hide_leggings, bark_helm, bark_vest, hide_jerkin,
     reed_satchel, hide_pack, raw_meat, roast_meat, spirit_ember, old_coin, small_rock, rough_axe,
+    meat_strips, chopped_reeds, fish_flakes, roast_slices, reed_broth, bog_stew,
     tool_urn, hearth_urn, star_urn, golem_urn, portable_bedroll, portable_tent,
 ]}
 

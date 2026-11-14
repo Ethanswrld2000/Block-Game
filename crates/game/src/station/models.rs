@@ -25,6 +25,8 @@ pub enum Mat {
     Hide,
     Moss,
     Clay,
+    /// What simmers in the cooking pot.
+    Broth,
     /// The urn's own clay, its darker foot, and its marks.
     Urn,
     UrnDark,
@@ -57,6 +59,7 @@ impl Mat {
             Mat::Hide => (c(0.55, 0.35, 0.21), 0.0),
             Mat::Moss => (c(0.3, 0.45, 0.2), 0.0),
             Mat::Clay => (c(0.62, 0.38, 0.26), 0.0),
+            Mat::Broth => (c(0.36, 0.26, 0.13), 0.15),
             Mat::Urn => (c(urn.0, urn.1, urn.2), 0.0),
             Mat::UrnDark => (c(urn.0 * 0.72, urn.1 * 0.7, urn.2 * 0.7), 0.0),
             Mat::MarkLit => (c((urn.0 + 0.6).min(1.0), (urn.1 + 0.55).min(1.0), (urn.2 + 0.4).min(1.0)), 3.0),
@@ -107,8 +110,8 @@ pub fn half(kind: StationKind) -> Vec3 {
         StationKind::PersonalStorage => Vec3::new(0.5, 0.4, 0.3),
         StationKind::SharpeningStone => Vec3::new(0.45, 0.5, 0.3),
         StationKind::IronAnvil => Vec3::new(0.35, 0.4, 0.25),
-        StationKind::CookingPot => Vec3::new(0.4, 0.5, 0.4),
-        StationKind::CuttingBoard => Vec3::new(0.4, 0.3, 0.25),
+        StationKind::CookingPot => Vec3::new(0.72, 0.32, 0.36),
+        StationKind::CuttingBoard => Vec3::new(0.43, 0.27, 0.27),
         StationKind::SmokingRack => Vec3::new(0.6, 0.65, 0.3),
         StationKind::StoneFridge => Vec3::new(0.45, 0.45, 0.35),
         StationKind::Telescope => Vec3::new(0.45, 0.65, 0.3),
@@ -233,29 +236,47 @@ pub fn parts(kind: StationKind, has: &dyn Fn(&str) -> bool, lit: u32) -> Vec<Par
             }
         }
         StationKind::CookingPot => {
+            // A clay pot sitting on a ring of stones over the fire. The fire runs
+            // out from under it into a stone-lined mouth (-x) where the fuel goes
+            // (`board::layout`); the ladle rests on a flat stone (+x).
+            let (px, r) = (0.06, 0.33);
+            v.push(b(0.56, 0.02, 0.5, px, 0.01, 0.0, StoneDark));
             for i in 0..8 {
                 let a = i as f32 / 8.0 * std::f32::consts::TAU;
-                v.push(b(0.14, 0.1, 0.14, a.cos() * 0.32, 0.05, a.sin() * 0.32, Stone));
+                if i == 4 {
+                    continue; // the fire's mouth
+                }
+                v.push(b(0.14, 0.12, 0.14, px + a.cos() * r, 0.06, a.sin() * r, Stone));
+            }
+            for x in [-0.36, -0.54] {
+                for z in [-0.18, 0.18] {
+                    v.push(b(0.15, 0.1, 0.1, x, 0.05, z, Stone));
+                }
             }
             v.extend([
-                b(0.24, 0.08, 0.24, 0.0, 0.04, 0.0, WoodDark),
-                b(0.12, 0.16, 0.12, 0.0, 0.12, 0.0, Fire),
-                b(0.44, 0.32, 0.44, 0.0, 0.46, 0.0, Clay),
-                b(0.34, 0.04, 0.34, 0.0, 0.63, 0.0, Groove),
-                b(0.03, 0.4, 0.03, 0.0, 0.86, 0.0, Cord),
-                b(0.9, 0.05, 0.05, 0.0, 1.06, 0.0, WoodDark),
+                b(0.08, 0.1, 0.28, -0.66, 0.05, 0.0, StoneDark),
+                b(0.36, 0.03, 0.24, -0.45, 0.015, 0.0, Fire),
+                b(0.2, 0.1, 0.2, px, 0.06, 0.0, Fire),
+                b(0.4, 0.04, 0.4, px, 0.13, 0.0, Groove),
+                b(0.54, 0.4, 0.54, px, 0.34, 0.0, Clay),
+                b(0.6, 0.06, 0.6, px, 0.57, 0.0, Clay),
+                b(0.46, 0.012, 0.46, px, 0.606, 0.0, Broth),
+                // The ladle on its stone.
+                b(0.2, 0.08, 0.34, 0.6, 0.04, 0.0, StoneDark),
+                b(0.04, 0.03, 0.3, 0.6, 0.095, 0.05, Wood),
+                b(0.11, 0.05, 0.1, 0.6, 0.105, -0.13, WoodDark),
             ]);
-            for sx in [-1.0, 1.0] {
-                v.push(tilted(b(0.06, 1.1, 0.06, sx * 0.38, 0.52, 0.0, Wood), sx * 0.12));
-            }
         }
         StationKind::CuttingBoard => {
+            // A stump with a wide board on it, a flint knife along the back and a
+            // clay dish the cut pieces go into.
             v.extend([
-                b(0.6, 0.44, 0.44, 0.0, 0.22, 0.0, WoodDark),
-                b(0.7, 0.06, 0.46, 0.0, 0.47, 0.0, Wood),
-                b(0.22, 0.02, 0.06, 0.12, 0.51, 0.12, Stone),
-                b(0.12, 0.03, 0.05, -0.04, 0.515, 0.12, WoodDark),
-                b(0.14, 0.05, 0.1, -0.18, 0.52, -0.08, Hide),
+                b(0.6, 0.42, 0.42, 0.0, 0.21, 0.0, WoodDark),
+                b(0.84, 0.06, 0.52, 0.0, 0.45, 0.0, Wood),
+                b(0.12, 0.035, 0.045, 0.1, 0.4975, 0.19, WoodDark),
+                b(0.24, 0.015, 0.06, 0.28, 0.4875, 0.19, StoneDark),
+                b(0.24, 0.03, 0.24, 0.26, 0.495, -0.08, Clay),
+                b(0.18, 0.01, 0.18, 0.26, 0.511, -0.08, Groove),
             ]);
         }
         StationKind::SmokingRack => {

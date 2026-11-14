@@ -4,12 +4,19 @@
 //            camp_mat:        "base" (what lies on the mat, up to 8), "tie" (what binds it, up to 8)
 //            tool_bench:      "handle" (the long groove, 1), "material" (the hollow, up to 4)
 //            carpentry_bench: "bed" (logs and boards, up to 8), "vise" (up to 4)
-//   work:    how many times to work the bench's tool (knock the stone, saw)
+//            cutting_board:   "board" (up to 4)
+//   mix:     cooking_pot only: what goes into the pot, [(item, count), ...] in any order
+//            (up to 4 kinds, 6 of each); nothing else may be in the pot
+//   heat:    cooking_pot only: how much heat the fuel in the fire must give (see `fuel`);
+//            the fuel it takes burns up, the rest stays in the fire
+//   work:    how many times to work the bench's tool (knock the stone, saw, stir, cut)
 //   makes:   what lies on the board afterwards, (item, count)
 //   unlock:  an urn step (urns.ron, `gives: Recipes`) that must be done before the bench
 //            knows this recipe
 // When several recipes match, the one that uses the most wins (2 or 3 cobblestone).
 (
+    // What burns in the cooking pot's fire, and the heat one of it gives.
+    fuel: { "plant_fiber": 1, "stick": 1, "planks": 2, "peat": 3, "log": 4, "swamp_log": 4, "coal": 6 },
     recipes: [
         // Camp mat (sleeping station): the first axe, then gear for sleeping away from home.
         (station: "camp_mat", slots: {"base": ("small_rock", 2), "tie": ("stick", 1)}, work: 3, makes: ("rough_axe", 1)),
@@ -28,5 +35,19 @@
         (station: "carpentry_bench", slots: {"bed": ("swamp_log", 1)}, work: 4, makes: ("planks", 4)),
         (station: "carpentry_bench", slots: {"bed": ("planks", 2)}, work: 2, makes: ("stick", 4)),
         (station: "carpentry_bench", slots: {"bed": ("planks", 8)}, work: 6, makes: ("chest", 1)),
+
+        // Cutting board (cooking station): cut things up first, and they go further in the pot.
+        (station: "cutting_board", slots: {"board": ("raw_meat", 1)}, work: 3, makes: ("meat_strips", 3)),
+        (station: "cutting_board", slots: {"board": ("swamp_reed", 1)}, work: 2, makes: ("chopped_reeds", 2)),
+        (station: "cutting_board", slots: {"board": ("smoked_fish", 1)}, work: 3, makes: ("fish_flakes", 3)),
+        (station: "cutting_board", slots: {"board": ("roast_meat", 1)}, work: 2, makes: ("roast_slices", 2)),
+
+        // Cooking pot (cooking station): put things in the pot, fuel in the fire, and stir.
+        (station: "cooking_pot", mix: [("raw_meat", 1)], heat: 2, work: 3, makes: ("roast_meat", 1)),
+        (station: "cooking_pot", mix: [("meat_strips", 3)], heat: 2, work: 3, makes: ("roast_meat", 2)),
+        (station: "cooking_pot", mix: [("chopped_reeds", 3), ("marsh_berries", 2)], heat: 2, work: 4, makes: ("reed_broth", 2)),
+        (station: "cooking_pot", mix: [("swamp_reed", 3), ("marsh_berries", 2), ("smoked_fish", 1)], heat: 3, work: 5, makes: ("peat_stew", 1)),
+        (station: "cooking_pot", mix: [("chopped_reeds", 2), ("marsh_berries", 1), ("fish_flakes", 3)], heat: 3, work: 5, makes: ("peat_stew", 2)),
+        (station: "cooking_pot", mix: [("meat_strips", 3), ("chopped_reeds", 2), ("marsh_berries", 1)], heat: 3, work: 5, makes: ("bog_stew", 2)),
     ],
 )

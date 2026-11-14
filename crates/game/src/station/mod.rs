@@ -11,7 +11,7 @@
 //! another urn. Marks around each urn's belly light up as its next step fills.
 //!
 //! The stations are models, not blocks. Benches with a board (camp mat, tool
-//! bench, carpentry bench) are worked by hand (`board`); personal storage
+//! bench, carpentry bench, cooking pot, cutting board) are worked by hand (`board`); personal storage
 //! opens like a chest; the rest show what they will do.
 //! F9 opens the dev menu (`dev`) to hand out urns and skip steps.
 
@@ -591,7 +591,7 @@ fn use_station(
                 done.write(StepDone(s));
             }
         }
-        StationKind::CampMat | StationKind::ToolBench | StationKind::CarpentryBench => {
+        k if board::board_name(k).is_some() => {
             if *mode == crate::player::MoveMode::Fly {
                 toast.write(Toast("Land to work at the bench".into()));
                 return;
@@ -727,7 +727,7 @@ fn show_label(
                     };
                     (format!("{} · {}", def.title, def.station), format!("{next}\nHold an item and right click to put it in · empty hand: see the tree"))
                 }
-                StationKind::CampMat | StationKind::ToolBench | StationKind::CarpentryBench => (st.kind.title().to_string(), "Right click to work it with your hands".into()),
+                k if board::board_name(k).is_some() => (k.title().to_string(), "Right click to work it with your hands".into()),
                 StationKind::PersonalStorage => (st.kind.title().to_string(), "Right click to open".into()),
                 k => {
                     let desc = k.step().and_then(|s| book.0.step(s)).map_or(String::new(), |(_, s)| s.desc.clone());

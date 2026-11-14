@@ -114,6 +114,13 @@
         // From creatures.
         (name: "raw_meat", title: "Raw Meat", kind: Food(tier: 1, satiety: 6.0), mass: 0.5, stack: 6),
         (name: "roast_meat", title: "Roast Meat", kind: Food(tier: 2, satiety: 30.0), mass: 0.4, stack: 6),
+        // Cut at the cutting board, cooked in the cooking pot (benches.ron).
+        (name: "meat_strips", title: "Meat Strips", kind: Food(tier: 1, satiety: 3.0), mass: 0.15, stack: 12),
+        (name: "chopped_reeds", title: "Chopped Reed Hearts", kind: Food(tier: 1, satiety: 4.0), mass: 0.15, stack: 12),
+        (name: "fish_flakes", title: "Fish Flakes", kind: Food(tier: 1, satiety: 9.0), mass: 0.2, stack: 12),
+        (name: "roast_slices", title: "Roast Slices", kind: Food(tier: 2, satiety: 17.0), mass: 0.2, stack: 12),
+        (name: "reed_broth", title: "Reed Broth", kind: Food(tier: 2, satiety: 22.0), mass: 0.5, stack: 4),
+        (name: "bog_stew", title: "Bog Stew", kind: Food(tier: 3, satiety: 50.0), mass: 1.2, size: (1, 2), stack: 2),
         (name: "spirit_ember", title: "Spirit Ember", kind: Material, mass: 0.05, stack: 16),
         (name: "old_coin", title: "Old Coin", kind: Material, mass: 0.02, stack: 64),
         // A weapon.
