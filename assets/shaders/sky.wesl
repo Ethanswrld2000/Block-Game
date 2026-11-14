@@ -28,7 +28,8 @@ struct SkyParams {
     star_y: vec4<f32>,
     star_z: vec4<f32>,
     mid: vec4<f32>,
-    // x: daytime haze towards the sun, y: star band brightness
+    // x: daytime haze towards the sun, y: star band brightness,
+    // z: fog veil (thick fog or mist hides the sky, sun, moon and stars)
     haze: vec4<f32>,
 }
 
@@ -121,6 +122,15 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         }
     }
     col += vec3<f32>(0.5, 0.55, 0.7) * pow(max(md, 0.0), 300.0) * 0.25 * sky.moon_dir.w * sky.extra.y * clear;
+
+    // Thick fog: the whole sky turns to the colour the land fogs into in this
+    // direction (the horizon, with the same haze and glow), so nothing shows
+    // through above the fog either.
+    let flat_to_sun = max(dot(flat_dir, sun), 0.0);
+    var fogged = sky.horizon.rgb * (1.0 + sky.haze.x * pow(flat_to_sun, 5.0));
+    let fog_glow = sky.sun_dir.w * (pow(flat_toward, 3.0) * 0.8 + pow(flat_to_sun, 12.0) * 0.5);
+    fogged = mix(fogged, sky.sun_color.rgb, clamp(fog_glow, 0.0, 0.9));
+    col = mix(col, fogged, sky.haze.z);
 
     // Lightning lights up the whole sky.
     col += vec3<f32>(0.75, 0.8, 1.0) * sky.extra.z;
