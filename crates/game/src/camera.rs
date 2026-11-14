@@ -29,6 +29,8 @@ impl Plugin for FlyCameraPlugin {
 #[derive(Resource, Default, Debug)]
 pub struct Menus {
     pub open: bool,
+    /// Standing still at a bench: no walking.
+    pub still: bool,
 }
 
 #[derive(Component)]
@@ -146,5 +148,7 @@ pub fn fly(
             speed *= cam.fast_multiplier;
         }
         tf.translation += dir.normalize_or_zero() * speed * time.delta_secs();
+        // The world ends at its ceiling; flying stops just under it.
+        tf.translation.y = tf.translation.y.min(worldgen::WORLD_CEILING as f32);
     }
 }

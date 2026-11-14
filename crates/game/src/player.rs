@@ -250,12 +250,12 @@ fn walk(
     blocks: Res<Blocks>,
     cam: Query<&FlyCamera>,
     body: Res<Body>,
-    wind: Res<crate::wind::Wind>,
+    (wind, menus): (Res<crate::wind::Wind>, Res<crate::camera::Menus>),
     mut player: ResMut<Player>,
     mut damage: MessageWriter<Damage>,
 ) {
     let Ok(look) = cam.single() else { return };
-    if body.frozen {
+    if body.frozen || menus.still {
         player.vel = Vec3::ZERO;
         player.sprinting = false;
         return;
@@ -378,6 +378,13 @@ fn walk(
             }
         }
     }
+    // The world's ceiling: nothing can rise past it (levitation included).
+    let top = worldgen::WORLD_CEILING as f32 - p.height();
+    if p.pos.y > top {
+        p.pos.y = top;
+        p.vel.y = p.vel.y.min(0.0);
+    }
+
     // Still standing on something?
     if !p.on_ground && p.vel.y <= 0.0 && hits(&world, &blocks, p.pos - Vec3::Y * 0.02, 0.01, water) {
         p.on_ground = true;

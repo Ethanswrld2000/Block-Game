@@ -4,11 +4,13 @@
 use voxel::chunk::index;
 use voxel::{BlockId, ChunkPos, CHUNK_SIZE_I32};
 
-use crate::util::{hash2, unit};
+use crate::util::{hash2, hash3, unit};
 use crate::{TreeKind, WorldGen, SEA_LEVEL};
 
 /// How far a canopy can reach sideways from its trunk.
-const REACH: i32 = 3;
+const REACH: i32 = 4;
+/// Radius of a swamp tree's canopy (vines hang one block outside it, hence `REACH`).
+const SWAMP_CANOPY: i32 = 3;
 /// Tallest a tree reaches above its ground block (pine: trunk up to 16, tip 2 more).
 const TALLEST: i32 = 20;
 /// Highest chance any biome uses, for a cheap first filter.
@@ -32,6 +34,11 @@ impl Canvas<'_> {
         if let Some(i) = self.idx(x, y, z) {
             self.dense[i] = b;
         }
+    }
+
+    /// Is this spot air? `None` when it's outside the chunk.
+    pub fn is_air(&self, x: i32, y: i32, z: i32) -> Option<bool> {
+        self.idx(x, y, z).map(|i| self.dense[i].is_air())
     }
 
     /// Set a block only where there is air (leaves never replace terrain).
@@ -89,7 +96,7 @@ pub(crate) fn draw(wg: &WorldGen, c: &mut Canvas, kind: TreeKind, x: i32, ground
                 }
             }
             for dy in -1..=1 {
-                let r = if dy == 1 { REACH - 1 } else { REACH };
+                let r = if dy == 1 { SWAMP_CANOPY - 1 } else { SWAMP_CANOPY };
                 disc(c, x, top + dy, z, r, ids.swamp_leaves);
             }
             // Hanging leaves under the canopy edge.
@@ -102,6 +109,10 @@ pub(crate) fn draw(wg: &WorldGen, c: &mut Canvas, kind: TreeKind, x: i32, ground
                     }
                 }
             }
+            // Swamp trees are the most overgrown.
+            twigs(wg, c, x, ground + 2, top - 3, z, h, 0.14);
+            canopy_vines(wg, c, x, top - 1, z, SWAMP_CANOPY, h, 0.55, 5);
+            trunk_vines(wg, c, x, top - 2, ground + 1, z, h, 0.5);
         }
         TreeKind::Oak => {
             let top = ground + 7 + var % 4;
@@ -113,6 +124,10 @@ pub(crate) fn draw(wg: &WorldGen, c: &mut Canvas, kind: TreeKind, x: i32, ground
                 disc(c, x, top + dy, z, r, ids.leaves);
             }
             c.fill(x, top + 2, z, ids.leaves);
+            tufts(c, x, top - 1, z, 3, h, ids.leaves);
+            twigs(wg, c, x, ground + 2, top - 4, z, h, 0.12);
+            canopy_vines(wg, c, x, top - 2, z, 2, h, 0.3, 3);
+            trunk_vines(wg, c, x, top - 4, ground + 1, z, h, 0.15);
         }
         TreeKind::Pine => {
             let top = ground + 11 + var % 6;
@@ -129,6 +144,84 @@ pub(crate) fn draw(wg: &WorldGen, c: &mut Canvas, kind: TreeKind, x: i32, ground
                 }
             }
             c.fill(x, top + 2, z, ids.leaves);
+            twigs(wg, c, x, ground + 1, ground + 5, z, h, 0.15);
+            trunk_vines(wg, c, x, ground + 4, ground + 1, z, h, 0.1);
+        }
+    }
+}
+
+/// Sides in the order of `Ids::vine` / `Ids::twig`, with the step from the
+/// trunk or canopy edge out to the cell that clings to it.
+const SIDES: [(usize, i32, i32); 4] = [
+    // A cell south of the trunk clings to its north side, and so on.
+    (0, 0, 1),  // north-attached, sits at +Z
+    (1, 0, -1), // south-attached, sits at -Z
+    (2, -1, 0), // east-attached, sits at -X
+    (3, 1, 0),  // west-attached, sits at +X
+];
+
+/// Twigs poking out of the trunk between `y0` and `y1`: right click one for a stick.
+#[allow(clippy::too_many_arguments)]
+fn twigs(wg: &WorldGen, c: &mut Canvas, x: i32, y0: i32, y1: i32, z: i32, h: u64, chance: f32) {
+    for y in y0..=y1 {
+        for (i, dx, dz) in SIDES {
+            if unit(hash3(h ^ 0x7_1C5, x + dx, y, z + dz)) < chance {
+                c.fill(x + dx, y, z + dz, wg.ids.twig[i]);
+            }
+        }
+    }
+}
+
+/// Vines hanging down the outside of the canopy, from the leaf ring of radius
+/// `r` at height `y`.
+#[allow(clippy::too_many_arguments)]
+fn canopy_vines(wg: &WorldGen, c: &mut Canvas, x: i32, y: i32, z: i32, r: i32, h: u64, chance: f32, longest: i32) {
+    for (i, dx, dz) in SIDES {
+        for along in -1..=1 {
+            let k = hash3(h ^ 0x51_4E, i as i32, along, 0);
+            if unit(k) >= chance {
+                continue;
+            }
+            // The outside cell beside the canopy edge.
+            let (vx, vz) = if dx != 0 { (x + dx * (r + 1), z + along) } else { (x + along, z + dz * (r + 1)) };
+            hang(c, vx, y, vz, 1 + (k >> 8) as i32 % longest, wg.ids.vine[i]);
+        }
+    }
+}
+
+/// Vines climbing down the trunk from `top` to `bottom`.
+#[allow(clippy::too_many_arguments)]
+fn trunk_vines(wg: &WorldGen, c: &mut Canvas, x: i32, top: i32, bottom: i32, z: i32, h: u64, chance: f32) {
+    for (i, dx, dz) in SIDES {
+        let k = hash3(h ^ 0xB1_7E, i as i32, 1, 0);
+        if unit(k) < chance {
+            let len = 2 + (k >> 8) as i32 % (top - bottom + 1).max(1);
+            hang(c, x + dx, top, z + dz, len, wg.ids.vine[i]);
+        }
+    }
+}
+
+/// A strand of vine from `y` down, stopping at anything in the way.
+fn hang(c: &mut Canvas, x: i32, y: i32, z: i32, len: i32, vine: BlockId) {
+    for j in 0..len {
+        if c.is_air(x, y - j, z) == Some(false) {
+            break;
+        }
+        c.fill(x, y - j, z, vine);
+    }
+}
+
+/// Extra leaf clumps sticking out of the canopy so it reads less like a box.
+fn tufts(c: &mut Canvas, x: i32, y: i32, z: i32, r: i32, h: u64, leaves: BlockId) {
+    for (i, dx, dz) in SIDES {
+        let k = hash3(h ^ 0x70_F7, i as i32, 2, 0);
+        if unit(k) < 0.6 {
+            let along = (k >> 8) as i32 % 3 - 1;
+            let (tx, tz) = if dx != 0 { (x + dx * r, z + along) } else { (x + along, z + dz * r) };
+            c.fill(tx, y, tz, leaves);
+            if (k >> 12) & 1 == 1 {
+                c.fill(tx, y - 1, tz, leaves);
+            }
         }
     }
 }

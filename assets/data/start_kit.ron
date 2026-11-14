@@ -1,14 +1,9 @@
-// What a new character starts with.
+// What a new character starts with: the clothes they stand in. Everything
+// else is gathered: twigs and small rocks to begin with, put into the urn by
+// the bedroll (B), then made by hand at the benches it places.
 //   wear:  items put on (one per slot; a Bag goes on your back)
 //   carry: (item, count) put into pockets and bag
 (
-    wear: ["linen_shirt", "linen_trousers", "hide_boots", "reed_satchel"],
-    carry: [
-        ("stone_pickaxe", 1),
-        ("stone_axe", 1),
-        ("torch", 8),
-        ("marsh_berries", 6),
-        ("smoked_fish", 3),
-        ("cordage", 2),
-    ],
+    wear: ["linen_shirt", "linen_trousers", "hide_boots"],
+    carry: [],
 )

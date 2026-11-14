@@ -1,0 +1,24 @@
+// Things made by hand at the benches beside the sleeping station.
+//   station: which bench (its name in fusion.ron)
+//   slots:   what each slot on the board must hold, (item, count)
+//            tool_bench:      "handle" (the long groove, 1), "material" (the hollow, up to 4)
+//            carpentry_bench: "bed" (logs and boards, up to 8), "vise" (up to 4)
+//   work:    how many times to work the bench's tool (knock the strike stone, saw)
+//   makes:   what lies on the board afterwards, (item, count)
+// When several recipes match, the one that uses the most wins (2 or 3 cobblestone).
+(
+    recipes: [
+        // Tool bench: a handle and a head.
+        (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("small_rock", 2)}, work: 3, makes: ("rough_axe", 1)),
+        (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("cobblestone", 1)}, work: 3, makes: ("stone_shovel", 1)),
+        (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("cobblestone", 2)}, work: 4, makes: ("stone_axe", 1)),
+        (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("cobblestone", 3)}, work: 5, makes: ("stone_pickaxe", 1)),
+        (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("flint", 2)}, work: 4, makes: ("flint_spear", 1)),
+
+        // Carpentry bench: saw logs into planks, planks into sticks, and build.
+        (station: "carpentry_bench", slots: {"bed": ("log", 1)}, work: 4, makes: ("planks", 4)),
+        (station: "carpentry_bench", slots: {"bed": ("swamp_log", 1)}, work: 4, makes: ("planks", 4)),
+        (station: "carpentry_bench", slots: {"bed": ("planks", 2)}, work: 2, makes: ("stick", 4)),
+        (station: "carpentry_bench", slots: {"bed": ("planks", 8)}, work: 6, makes: ("chest", 1)),
+    ],
+)

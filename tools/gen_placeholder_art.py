@@ -230,6 +230,32 @@ def deeprock(s):
     return noisy(s, [(40, 40, 48), (58, 58, 68), (76, 76, 88)], (4, 2))
 
 
+def rootstone(s):
+    """The unbreakable world floor: near-black rock with faint dull red veins."""
+    img = noisy(s, [(18, 16, 20), (30, 26, 30), (44, 38, 40)], (8, 4, 2))
+    veins = fbm(s + 5, (8, 4)) > 0.68
+    img[veins] = (70, 30, 28, 255)
+    return img
+
+
+def vine(s):
+    """Thin hanging vine strands with small leaves; transparent between them."""
+    img = np.zeros((T, T, 4))
+    r = np.random.default_rng(s)
+    for x0 in (3, 10, 17, 25):
+        x = x0 + int(r.integers(-1, 2))
+        bottom = int(r.integers(18, T))
+        for y in range(bottom):
+            xx = (x + int(round(np.sin(y * 0.4 + x0) * 1.2))) % T
+            img[y, xx] = (52, 86, 34, 255)
+            if r.random() < 0.3:
+                lx = (xx + (1 if r.random() < 0.5 else -1)) % T
+                img[y, lx] = (82, 124, 50, 255)
+                if y + 1 < T:
+                    img[y + 1, lx] = (66, 108, 42, 255)
+    return img
+
+
 def glowcap(s):
     img = np.zeros((T, T, 4))
     img[18:30, 15:17] = (200, 200, 180, 255)       # stem
@@ -306,6 +332,8 @@ TILES = [
     ("swamp_leaves", lambda s: leaves(s, ((40, 60, 30), (58, 84, 36), (84, 104, 44)))),
     ("glowcap", glowcap),
     ("tall_grass", tall_grass), ("fern", fern), ("bog_bloom", bog_bloom),
+    ("rootstone", rootstone),
+    ("vine", vine),
 ]
 
 

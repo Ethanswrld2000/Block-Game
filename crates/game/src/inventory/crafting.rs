@@ -74,24 +74,20 @@ mod tests {
     use crate::items::tests::load;
 
     #[test]
-    fn craft_a_basic_kit_from_raw_materials() {
+    fn craft_by_hand_from_raw_materials() {
         let (_, items) = load();
         let recipes = Recipes::from_ron(include_str!("../../../../assets/data/recipes.ron"), &items).unwrap();
         let find = |name: &str| recipes.list.iter().find(|r| items.get(r.makes.item).name == name).unwrap();
         let mut inv = Inventory::empty();
         let id = |n: &str| items.id(n).unwrap();
-        // Logs from trees, stone from the ground, fiber from the grass.
-        inv.add(&items, Stack::new(id("log"), 3));
-        inv.add(&items, Stack::new(id("cobblestone"), 3));
+        // Fiber from the grass.
         inv.add(&items, Stack::new(id("plant_fiber"), 12));
-        assert!(!find("stone_pickaxe").have_parts(&inv));
-        for name in ["planks", "stick", "cordage", "stone_pickaxe"] {
-            assert!(find(name).craft(&mut inv, &items).is_some(), "{name}");
-        }
-        assert_eq!(inv.count(id("stone_pickaxe")), 1);
-        assert_eq!(inv.count(id("cobblestone")), 0);
+        assert!(find("cordage").craft(&mut inv, &items).is_some());
+        assert_eq!(inv.count(id("cordage")), 1);
         // Fiber left for a hat; not enough for a cloak.
         assert!(find("reed_hat").have_parts(&inv));
         assert!(!find("reed_cloak").have_parts(&inv));
+        // Tools are made at the tool bench, not here.
+        assert!(recipes.list.iter().all(|r| !matches!(items.get(r.makes.item).kind, crate::items::ItemKind::Tool { .. })));
     }
 }

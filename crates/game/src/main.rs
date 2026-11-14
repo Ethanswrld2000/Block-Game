@@ -17,6 +17,7 @@ mod progress;
 mod debug;
 mod hands;
 mod hud;
+mod chop;
 mod interact;
 mod inventory;
 mod item_art;
@@ -25,6 +26,7 @@ mod save;
 mod settings;
 mod sky;
 mod sound;
+mod station;
 mod theme;
 mod survival;
 mod torches;
@@ -56,6 +58,7 @@ fn main() {
             save::SavePlugin,
             world::WorldPlugin,
             interact::InteractPlugin,
+            chop::ChopPlugin,
             debug::DebugOverlayPlugin,
             autoshot::AutoShotPlugin,
         ))
@@ -80,6 +83,6 @@ fn main() {
             survival::SurvivalPlugin,
             inventory::InventoryPlugin,
         ))
-        .add_plugins((creatures::CreaturesPlugin, places::PlacesPlugin, progress::ProgressPlugin, settings::SettingsPlugin, sound::SoundPlugin, bench::BenchPlugin))
+        .add_plugins((creatures::CreaturesPlugin, places::PlacesPlugin, progress::ProgressPlugin, station::StationPlugin, settings::SettingsPlugin, sound::SoundPlugin, bench::BenchPlugin))
         .run();
 }

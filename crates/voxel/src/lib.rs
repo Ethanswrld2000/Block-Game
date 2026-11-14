@@ -11,7 +11,7 @@ pub mod raycast;
 pub mod save;
 pub mod tiles;
 
-pub use block::{BlockDef, BlockId, BlockRegistry, Shape};
+pub use block::{BlockDef, BlockId, BlockRegistry, Shape, Side};
 pub use chunk::Chunk;
 pub use coords::{BlockPos, ChunkPos, CHUNK_SIZE, CHUNK_SIZE_I32};
 pub use mesher::{Face, PaddedChunk, Quad};

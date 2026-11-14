@@ -25,7 +25,7 @@ impl Plugin for HandsPlugin {
 }
 
 #[derive(Component)]
-struct HandRoot(Hand);
+pub(crate) struct HandRoot(Hand);
 
 /// Holds the model of the item in a hand; rebuilt when the item changes.
 #[derive(Component)]
@@ -40,11 +40,67 @@ const HAND_PX: f32 = 0.0095;
 const SKIN: Color = Color::srgb(0.86, 0.66, 0.5);
 const SLEEVE: Color = Color::srgb(0.32, 0.36, 0.26);
 
+/// Where the fist rests, relative to the eye.
 fn base_position(hand: Hand) -> Vec3 {
     match hand {
         Hand::Right => Vec3::new(0.27, -0.27, -0.46),
         Hand::Left => Vec3::new(-0.27, -0.27, -0.46),
     }
+}
+
+/// From the shoulder to the fist. The arm turns about the shoulder (behind and
+/// below the view), so a swing moves the fist in an arc like a real arm instead
+/// of pivoting the whole arm around the fist.
+const ARM: Vec3 = Vec3::new(0.0, 0.05, -0.4);
+
+fn shoulder(hand: Hand) -> Vec3 {
+    base_position(hand) - ARM
+}
+
+/// The arm's turn over a swing, `t` going 0 -> 1: a short wind-up (fist
+/// rises), a quick strike down and across, then an easy return.
+/// Returns (pitch, yaw toward the middle, roll) in radians.
+pub(crate) fn swing_pose(t: f32) -> (f32, f32, f32) {
+    let ease = |x: f32| x * x * (3.0 - 2.0 * x);
+    let (wind, strike) = (0.2, 0.45);
+    let (pitch, across) = if t < wind {
+        let k = ease(t / wind);
+        (0.25 * k, -0.05 * k)
+    } else if t < strike {
+        let k = ease((t - wind) / (strike - wind));
+        (0.25 + (-0.55 - 0.25) * k, -0.05 + (0.32 + 0.05) * k)
+    } else {
+        let k = ease((t - strike) / (1.0 - strike));
+        (-0.55 * (1.0 - k), 0.32 * (1.0 - k))
+    };
+    (pitch, across, -across * 0.6)
+}
+
+/// When an axe chop lands, as a share of the swing.
+pub(crate) const CHOP_STRIKE: f32 = 0.5;
+
+/// An axe chop, `t` going 0 -> 1: the axe comes up high over the shoulder,
+/// hangs there a moment, then drives down hard and a little across, lands at
+/// `CHOP_STRIKE`, and comes back up slowly.
+/// Returns (pitch, yaw toward the middle, roll) in radians.
+pub(crate) fn chop_pose(t: f32) -> (f32, f32, f32) {
+    let ease = |x: f32| x * x * (3.0 - 2.0 * x);
+    let (lift, hold) = (0.32, 0.4);
+    let (up, down, across) = (1.05, -0.75, 0.18);
+    let (pitch, side) = if t < lift {
+        let k = ease(t / lift);
+        (up * k, -0.08 * k)
+    } else if t < hold {
+        (up, -0.08)
+    } else if t < CHOP_STRIKE {
+        // Fast and accelerating: no ease at the bottom.
+        let k = ((t - hold) / (CHOP_STRIKE - hold)).powi(2);
+        (up + (down - up) * k, -0.08 + (across + 0.08) * k)
+    } else {
+        let k = ease((t - CHOP_STRIKE) / (1.0 - CHOP_STRIKE));
+        (down * (1.0 - k), across * (1.0 - k))
+    };
+    (pitch, side, -side * 0.8)
 }
 
 #[allow(clippy::single_element_loop)] // one hand for now
@@ -66,15 +122,16 @@ fn spawn_hands(
     // One hand for now; add Hand::Left here with the off-hand slot.
     for hand in [Hand::Right] {
         commands.entity(cam).with_children(|c| {
-            c.spawn((HandRoot(hand), Transform::from_translation(base_position(hand)), Visibility::default())).with_children(|h| {
-                h.spawn((Mesh3d(sleeve.clone()), MeshMaterial3d(sleeve_mat.clone()), Transform::from_xyz(0.0, -0.015, 0.2), NotShadowCaster));
-                h.spawn((Mesh3d(fist.clone()), MeshMaterial3d(skin_mat.clone()), Transform::default(), NotShadowCaster));
+            // The root is the shoulder; the arm hangs forward from it to the fist.
+            c.spawn((HandRoot(hand), Transform::from_translation(shoulder(hand)), Visibility::default())).with_children(|h| {
+                h.spawn((Mesh3d(sleeve.clone()), MeshMaterial3d(sleeve_mat.clone()), Transform::from_translation(ARM + Vec3::new(0.0, -0.015, 0.2)), NotShadowCaster));
+                h.spawn((Mesh3d(fist.clone()), MeshMaterial3d(skin_mat.clone()), Transform::from_translation(ARM), NotShadowCaster));
                 // Items are held tilted up and forward.
                 h.spawn((
                     Held { hand, showing: None },
                     // Items are life-size; at arm's length in front of the
                     // eye they read better a bit smaller.
-                    Transform::from_xyz(0.0, 0.03, -0.02).with_rotation(Quat::from_rotation_x(0.9)).with_scale(Vec3::splat(0.42)),
+                    Transform::from_translation(ARM + Vec3::new(0.0, 0.03, -0.02)).with_rotation(Quat::from_rotation_x(0.9)).with_scale(Vec3::splat(0.42)),
                     Visibility::default(),
                 ));
             });
@@ -192,9 +249,13 @@ fn pose_hands(anim: Res<HandAnim>, mining: Res<Mining>, player: Res<Player>, mod
             Hand::Left => anim.left,
             Hand::Right => anim.right,
         };
-        // 1 -> 0 over a swing: chop down and forward, then back.
-        let t = 1.0 - swing;
-        let arc = if swing > 0.0 { (t * std::f32::consts::PI).sin() } else { 0.0 };
+        // 1 -> 0 over a swing.
+        let chopping = hand == Hand::Right && anim.chop.is_some();
+        let (pitch, across, roll) = match (swing > 0.0, chopping) {
+            (false, _) => (0.0, 0.0, 0.0),
+            (true, false) => swing_pose(1.0 - swing),
+            (true, true) => chop_pose(1.0 - swing),
+        };
         let side = if hand == Hand::Right { 1.0 } else { -1.0 };
         // Sway with the steps, opposite to the head so the arms feel heavy.
         let (bob, phase) = if walking { (player.bob, player.bob_phase) } else { (0.0, 0.0) };
@@ -203,8 +264,51 @@ fn pose_hands(anim: Res<HandAnim>, mining: Res<Mining>, player: Res<Player>, mod
         // Eating: bring the food up toward the mouth and bob while chewing.
         let e = (anim.eat * 4.0).min(1.0);
         let chew = (anim.eat * 40.0).sin() * 0.012 * e;
-        let to_mouth = Vec3::new(-side * 0.2, 0.12 + chew, 0.12) * e;
-        tf.translation = base_position(hand) + sway + to_mouth + Vec3::new(-side * 0.06 * arc, lift - 0.05 * arc, -0.12 * arc);
-        tf.rotation = Quat::from_rotation_x(-1.1 * arc + 0.5 * e) * Quat::from_rotation_y(side * (0.25 * arc + 0.5 * e));
+        // (The turn about the shoulder below already brings the fist up and in.)
+        let to_mouth = Vec3::new(-side * 0.02, chew, 0.12) * e;
+        // A little reach forward at the bottom of the strike.
+        let reach = (-pitch).max(0.0) * 0.12;
+        tf.translation = shoulder(hand) + sway + to_mouth + Vec3::new(0.0, lift, -reach);
+        tf.rotation = Quat::from_rotation_y(side * (across + 0.5 * e)) * Quat::from_rotation_x(pitch + 0.5 * e) * Quat::from_rotation_z(side * roll);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn swing_starts_and_ends_at_rest_and_strikes_down() {
+        let (p0, a0, _) = swing_pose(0.0);
+        let (p1, a1, _) = swing_pose(1.0);
+        assert!(p0.abs() < 1e-4 && a0.abs() < 1e-4 && p1.abs() < 1e-4 && a1.abs() < 1e-4);
+        assert!(swing_pose(0.2).0 > 0.2, "winds up first");
+        assert!(swing_pose(0.45).0 < -0.5, "then strikes down");
+        // No jumps between frames.
+        let mut last = swing_pose(0.0);
+        for i in 1..=200 {
+            let p = swing_pose(i as f32 / 200.0);
+            assert!((p.0 - last.0).abs() < 0.05 && (p.1 - last.1).abs() < 0.05);
+            last = p;
+        }
+    }
+
+    #[test]
+    fn chop_raises_high_then_lands_hard_at_the_strike() {
+        let (p0, ..) = chop_pose(0.0);
+        let (p1, ..) = chop_pose(1.0);
+        assert!(p0.abs() < 1e-4 && p1.abs() < 1e-4);
+        assert!(chop_pose(0.36).0 > 1.0, "axe up over the shoulder");
+        assert!(chop_pose(CHOP_STRIKE).0 < -0.7, "lands low");
+        // Fastest just before it lands.
+        let speed = |t: f32| (chop_pose(t + 0.01).0 - chop_pose(t).0).abs();
+        assert!(speed(CHOP_STRIKE - 0.012) > speed(0.15));
+        // Smooth (no jumps), though the blow itself is a few frames' snap.
+        let mut last = chop_pose(0.0);
+        for i in 1..=400 {
+            let p = chop_pose(i as f32 / 400.0);
+            assert!((p.0 - last.0).abs() < 0.1 && (p.1 - last.1).abs() < 0.1, "at {i}");
+            last = p;
+        }
     }
 }

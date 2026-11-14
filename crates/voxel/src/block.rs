@@ -41,6 +41,33 @@ struct BlockSpec {
     material: String,
     #[serde(default)]
     shape: Shape,
+    /// For vines and twigs: the side of the cell they cling to.
+    #[serde(default)]
+    attach: Option<Side>,
+}
+
+/// One of the four sides of a cell (north is -Z, east is +X).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Side {
+    North,
+    South,
+    East,
+    West,
+}
+
+impl Side {
+    pub const ALL: [Side; 4] = [Side::North, Side::South, Side::East, Side::West];
+
+    /// Step from the cell to the neighbour on this side.
+    pub fn offset(self) -> [i32; 3] {
+        match self {
+            Side::North => [0, 0, -1],
+            Side::South => [0, 0, 1],
+            Side::East => [1, 0, 0],
+            Side::West => [-1, 0, 0],
+        }
+    }
 }
 
 fn one() -> f32 {
@@ -64,6 +91,21 @@ pub enum Shape {
     /// Two crossed see-through quads (grass, reeds, ferns), meshed with the
     /// chunk into their own mesh; the top sways in the wind.
     Plant,
+    /// A flat hanging panel against one side of the cell (`attach`); its lower
+    /// edge sways. Held up by what it clings to, or by the same vine above.
+    Vine,
+    /// A short stick poking out of the side it's attached to (`attach`), such
+    /// as a twig on a trunk. Snaps off by hand.
+    Twig,
+    /// A small stone lying on the block below.
+    Pebble,
+}
+
+impl Shape {
+    /// Small details drawn with the plants mesh (not full cubes, not torches).
+    pub fn is_detail(self) -> bool {
+        matches!(self, Shape::Plant | Shape::Vine | Shape::Twig | Shape::Pebble)
+    }
 }
 
 fn yes() -> bool {
@@ -88,6 +130,22 @@ pub struct BlockDef {
     /// Material class tools are rated against ("stone", "wood", "soil", ...).
     pub material: String,
     pub shape: Shape,
+    /// Vines and twigs: the side they cling to.
+    pub attach: Option<Side>,
+}
+
+impl BlockDef {
+    /// Offsets to the blocks that can hold this one up (any one is enough):
+    /// the ground for plants and pebbles, the attached side for twigs, and for
+    /// vines the attached side or the vine above. Empty = needs no support.
+    pub fn supports(&self) -> Vec<[i32; 3]> {
+        match (self.shape, self.attach) {
+            (Shape::Plant | Shape::Pebble, _) => vec![[0, -1, 0]],
+            (Shape::Twig, Some(a)) => vec![a.offset()],
+            (Shape::Vine, Some(a)) => vec![a.offset(), [0, 1, 0]],
+            _ => Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -156,6 +214,7 @@ impl BlockRegistry {
                 hardness: s.hardness,
                 material: s.material,
                 shape: s.shape,
+                attach: s.attach,
             });
         }
         Ok(Self { defs, by_name })

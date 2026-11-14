@@ -7,7 +7,7 @@
 // fragment shader (voxel.wesl) sees what it always did. The sway itself is a
 // function of world position and time, so corners shared by neighbouring
 // leaf faces move together and never crack apart. voxel_prepass.wesl does
-// the same for shadows; keep `sway_offset` in step with it.
+// the same for shadows; keep `sway_offset` and `shake_offset` in step with it.
 
 import bevy_pbr::render::{
     mesh_functions,
@@ -18,6 +18,8 @@ import bevy_pbr::render::{
 
 // xy: wind direction (x, z); z: how hard to sway (0..~1.3).
 @group(constants::MATERIAL_BIND_GROUP) @binding(103) var<uniform> wind: vec4<f32>;
+// A tree shaking from an axe blow (`chop`): xyz = the block hit, w = how hard (1 -> 0).
+@group(constants::MATERIAL_BIND_GROUP) @binding(105) var<uniform> shake: vec4<f32>;
 
 const SWAY_STEPS: f32 = 8.0;
 
@@ -42,6 +44,26 @@ fn sway_offset(p: vec3<f32>, s: f32, t: f32) -> vec3<f32> {
     return off;
 }
 
+// How far a vertex moves while a tree shakes: everything above the blow and
+// near it rocks back and forth (more the higher it is), leaves shiver too.
+fn shake_offset(p: vec3<f32>, s: f32, t: f32) -> vec3<f32> {
+    let amt = shake.w;
+    if (amt <= 0.0) {
+        return vec3<f32>(0.0);
+    }
+    let r = length(p.xz - shake.xz);
+    let h = p.y - shake.y;
+    if (r > 5.5 || h < 0.0) {
+        return vec3<f32>(0.0);
+    }
+    let up = clamp(h / 7.0, 0.0, 1.0);
+    let near = 1.0 - smoothstep(3.0, 5.5, r);
+    let ph = p.x * 2.3 + p.z * 1.9 + p.y * 1.1;
+    let rock = vec3<f32>(sin(t * 26.0), 0.0, cos(t * 21.0)) * 0.08 * up;
+    let shiver = vec3<f32>(sin(t * 43.0 + ph), sin(t * 37.0 + ph * 1.3) * 0.5, cos(t * 47.0 + ph * 0.7)) * 0.12 * s;
+    return (rock + shiver) * amt * amt * near;
+}
+
 @vertex
 fn vertex(vertex_in: Vertex) -> VertexOutput {
     var out: VertexOutput;
@@ -53,7 +75,8 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     let tint = packed - 2.0 * k;
 
     var world = mesh_functions::mesh_position_local_to_world(world_from_local, vec4<f32>(vertex.position, 1.0));
-    world = vec4<f32>(world.xyz + sway_offset(world.xyz, k / SWAY_STEPS, globals.time), world.w);
+    let s = k / SWAY_STEPS;
+    world = vec4<f32>(world.xyz + sway_offset(world.xyz, s, globals.time) + shake_offset(world.xyz, s, globals.time), world.w);
     out.world_position = world;
     out.position = position_world_to_clip(world.xyz);
     out.world_normal = mesh_functions::mesh_normal_local_to_world(vertex.normal, vertex_in.instance_index);

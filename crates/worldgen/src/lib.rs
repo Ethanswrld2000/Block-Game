@@ -34,8 +34,13 @@ use util::{hash3, lerp, noise, smoothstep, spline};
 pub const SEA_LEVEL: i32 = 0;
 /// Below this, stone turns to deeprock.
 pub const DEEP_LEVEL: i32 = -64;
-/// The bottom of the world: solid deeprock, no caves.
-pub const WORLD_FLOOR: i32 = -192;
+/// The bottom of the world: unbreakable rootstone at and below this height
+/// (its top is a little uneven, up to `FLOOR_BUMPS` higher), no caves near it.
+pub const WORLD_FLOOR: i32 = -300;
+/// How far the rootstone floor's top can rise above `WORLD_FLOOR`.
+pub const FLOOR_BUMPS: i32 = 3;
+/// The top of the world: nothing generates or can be built at or above this height.
+pub const WORLD_CEILING: i32 = 1000;
 /// Sky islands float in this band.
 pub const SKY_MIN: i32 = 340;
 pub const SKY_MAX: i32 = 600;
@@ -64,6 +69,7 @@ pub struct Column {
 struct Ids {
     stone: BlockId,
     deeprock: BlockId,
+    rootstone: BlockId,
     dirt: BlockId,
     water: BlockId,
     coal: BlockId,
@@ -80,6 +86,11 @@ struct Ids {
     peat: BlockId,
     torch: BlockId,
     chest: BlockId,
+    /// Vines clinging to the north, south, east and west side of their cell.
+    vine: [BlockId; 4],
+    /// Twigs poking out of the trunk beside them, by the side they're attached to.
+    twig: [BlockId; 4],
+    pebble: BlockId,
 }
 
 /// The world generator. Build once, share between threads with `Arc`.
@@ -114,6 +125,10 @@ impl WorldGen {
         let ids = Ids {
             stone: b("stone")?,
             deeprock: b("deeprock")?,
+            rootstone: b("rootstone")?,
+            vine: [b("vine_north")?, b("vine_south")?, b("vine_east")?, b("vine_west")?],
+            twig: [b("twig_north")?, b("twig_south")?, b("twig_east")?, b("twig_west")?],
+            pebble: b("pebble")?,
             dirt: b("dirt")?,
             water: b("water")?,
             coal: b("coal_ore")?,
@@ -268,10 +283,10 @@ impl WorldGen {
         let (min_y, max_y) = (origin.y, origin.y + CHUNK_SIZE_I32 - 1);
 
         if max_y < WORLD_FLOOR {
-            return Chunk::filled(self.ids.deeprock);
+            return Chunk::filled(self.ids.rootstone);
         }
         let island_chunk = max_y >= SKY_MIN - 80 && min_y <= SKY_MAX;
-        if min_y > SKY_MAX {
+        if min_y > SKY_MAX || min_y >= WORLD_CEILING {
             return Chunk::filled(BlockId::AIR);
         }
 
@@ -329,7 +344,12 @@ impl WorldGen {
                 }
                 for ly in (0..CHUNK_SIZE).rev() {
                     let y = min_y + ly as i32;
-                    let solid = y <= WORLD_FLOOR || self.solid_at(wx, y, wz, col);
+                    if y <= WORLD_FLOOR + floor_bump(wx, wz) {
+                        dense[index(lx, ly, lz)] = ids.rootstone;
+                        depth += 1;
+                        continue;
+                    }
+                    let solid = y < WORLD_CEILING && self.solid_at(wx, y, wz, col);
                     let b = if !solid {
                         depth = 0;
                         if y <= SEA_LEVEL { ids.water } else { BlockId::AIR }
@@ -462,7 +482,49 @@ mod tests {
     fn high_sky_is_air_and_floor_is_solid() {
         let g = wg();
         assert_eq!(g.generate(ChunkPos::new(0, 40, 0)).is_uniform(), Some(BlockId::AIR));
-        assert_eq!(g.generate(ChunkPos::new(0, -10, 0)).is_uniform(), Some(g.ids.deeprock));
+        assert_eq!(g.generate(ChunkPos::new(0, -11, 0)).is_uniform(), Some(g.ids.rootstone));
+        assert_eq!(g.generate(ChunkPos::new(0, 32, 0)).is_uniform(), Some(BlockId::AIR));
+    }
+
+    #[test]
+    fn swamp_has_twigs_vines_and_pebbles() {
+        let g = wg();
+        let [sx, sy, sz] = g.find_spawn();
+        let (mut twigs, mut vines, mut pebbles) = (0, 0, 0);
+        for cz in -2..=2 {
+            for cx in -2..=2 {
+                for cy in -1..=0 {
+                    let p = ChunkPos::new(sx.div_euclid(32) + cx, sy.div_euclid(32) + cy, sz.div_euclid(32) + cz);
+                    for b in g.generate(p).to_dense() {
+                        twigs += g.ids.twig.contains(&b) as u32;
+                        vines += g.ids.vine.contains(&b) as u32;
+                        pebbles += (b == g.ids.pebble) as u32;
+                    }
+                }
+            }
+        }
+        assert!(twigs > 5 && vines > 10 && pebbles > 3, "twigs {twigs}, vines {vines}, pebbles {pebbles}");
+    }
+
+    #[test]
+    fn floor_is_rootstone_with_a_bumpy_top() {
+        let g = wg();
+        // Chunk y -10 spans -320..=-289 and holds the floor.
+        let c = g.generate(ChunkPos::new(0, -10, 0)).to_dense();
+        let origin = ChunkPos::new(0, -10, 0).origin().y;
+        for lz in 0..CHUNK_SIZE {
+            for lx in 0..CHUNK_SIZE {
+                for ly in 0..CHUNK_SIZE {
+                    let y = origin + ly as i32;
+                    let b = c[index(lx, ly, lz)];
+                    if y <= WORLD_FLOOR {
+                        assert_eq!(b, g.ids.rootstone, "floor at y {y}");
+                    } else if y > WORLD_FLOOR + FLOOR_BUMPS {
+                        assert_ne!(b, g.ids.rootstone, "rootstone above the floor at y {y}");
+                    }
+                }
+            }
+        }
     }
 
     #[test]
@@ -504,4 +566,11 @@ mod tests {
         }
         assert!(air > 1000, "some cave air between y -64 and -33 ({air})");
     }
+}
+
+/// How many blocks the rootstone floor rises above `WORLD_FLOOR` in this column (0..=FLOOR_BUMPS).
+fn floor_bump(x: i32, z: i32) -> i32 {
+    let h = (x as u32).wrapping_mul(0x9E37_79B1) ^ (z as u32).wrapping_mul(0x85EB_CA77);
+    let h = (h ^ (h >> 15)).wrapping_mul(0x2C1B_3C6D);
+    ((h >> 13) % (FLOOR_BUMPS as u32 + 1)) as i32
 }

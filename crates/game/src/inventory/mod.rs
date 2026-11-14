@@ -31,7 +31,7 @@ use drops::Drops;
 use grid::{Grid, GridSave, Stack};
 
 /// Pockets and belt, always with you.
-pub const POCKETS: (u8, u8) = (5, 3);
+pub const POCKETS: (u8, u8) = (20, 10);
 /// A chest's grid.
 pub const CHEST: (u8, u8) = (8, 5);
 /// Armor can keep at most this share of a blow off a bar.
@@ -423,16 +423,19 @@ mod tests {
     fn start_kit_fits_and_is_dressed() {
         let (_, items) = load();
         let inv = kit(&items);
-        assert!(inv.bag.is_some());
-        assert_eq!(inv.count(items.id("torch").unwrap()), 8);
+        // No bags for now: one big grid.
+        assert!(inv.bag.is_none());
+        assert_eq!((inv.pockets.w, inv.pockets.h), POCKETS);
+        // Only the clothes you stand in: everything else is gathered and made.
+        assert!(inv.pockets.is_empty());
         assert!(inv.insulation(&items) > 4.0);
-        assert!(inv.mass(&items) > 5.0 && inv.mass(&items) < 20.0, "{}", inv.mass(&items));
     }
 
     #[test]
     fn bag_must_be_empty_to_take_off() {
         let (_, items) = load();
         let mut inv = kit(&items);
+        inv.wear(&items, items.id("reed_satchel").unwrap()).unwrap();
         inv.bag.as_mut().unwrap().add(&items, Stack::new(items.id("dirt").unwrap(), 3));
         assert!(inv.take_off(WearSlot::Back).is_err());
         let bag = inv.bag.take().unwrap();

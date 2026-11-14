@@ -176,19 +176,28 @@ pub struct HandAnim {
     pub right: f32,
     /// Eating progress, 0..1 (set by `survival`): the hand comes up to the mouth.
     pub eat: f32,
+    /// The right hand's swing is an axe chop at this log: slower, overhead,
+    /// and the tree shakes when it lands (`chop`).
+    pub chop: Option<BlockPos>,
     place_cooldown: f32,
     strike_cooldown: f32,
 }
 
 impl HandAnim {
-    fn start(&mut self, hand: Hand) {
+    /// Start a swing if that hand is at rest; true if one started.
+    fn start(&mut self, hand: Hand) -> bool {
         let s = match hand {
             Hand::Left => &mut self.left,
             Hand::Right => &mut self.right,
         };
-        if *s <= 0.0 {
-            *s = 1.0;
+        if *s > 0.0 {
+            return false;
         }
+        *s = 1.0;
+        if hand == Hand::Right {
+            self.chop = None;
+        }
+        true
     }
 }
 
@@ -246,6 +255,59 @@ fn find_target(
     });
 }
 
+/// Break the block at `p` (it drops as usual), then anything that was held up
+/// by it: plants and pebbles on top, twigs and vines on its sides, and vines
+/// hanging below those. Returns false if nothing was there to break.
+fn break_block(world: &mut World, blocks: &Blocks, mined: &mut MessageWriter<Mined>, p: BlockPos) -> bool {
+    let Some(b) = world.block(p).filter(|b| !b.is_air()) else { return false };
+    if !world.set_block(p, BlockId::AIR) {
+        return false;
+    }
+    mined.write(Mined { pos: p, block: b });
+    remesh_around(world, blocks, p);
+    let mut check: Vec<BlockPos> = neighbours(p).collect();
+    // A long vine can drop a strand at a time; keep it bounded.
+    let mut budget = 256;
+    while let Some(q) = check.pop() {
+        budget -= 1;
+        if budget == 0 {
+            break;
+        }
+        let Some(qb) = world.block(q).filter(|b| !b.is_air()) else { continue };
+        let def = blocks.registry.get(qb);
+        let supports = def.supports();
+        if supports.is_empty() || supports.iter().any(|o| holds(world, blocks, def, q, *o)) {
+            continue;
+        }
+        if world.set_block(q, BlockId::AIR) {
+            mined.write(Mined { pos: q, block: qb });
+            remesh_around(world, blocks, q);
+            check.extend(neighbours(q));
+        }
+    }
+    true
+}
+
+fn neighbours(p: BlockPos) -> impl Iterator<Item = BlockPos> {
+    [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]].into_iter().map(move |d| BlockPos::new(p.x + d[0], p.y + d[1], p.z + d[2]))
+}
+
+/// Does the block at offset `o` from `p` hold up `def`? The ground under a
+/// plant must be solid; a vine can also hang from the vine above; anything
+/// else clings to any block that isn't itself a small detail or a torch.
+fn holds(world: &World, blocks: &Blocks, def: &voxel::BlockDef, p: BlockPos, o: [i32; 3]) -> bool {
+    let Some(n) = world.block(BlockPos::new(p.x + o[0], p.y + o[1], p.z + o[2])) else { return true };
+    if n.is_air() {
+        return false;
+    }
+    let nd = blocks.registry.get(n);
+    match def.shape {
+        voxel::Shape::Vine if o == [0, 1, 0] => nd.shape == voxel::Shape::Vine,
+        voxel::Shape::Plant | voxel::Shape::Pebble => nd.solid,
+        _ => !nd.shape.is_detail() && nd.shape != voxel::Shape::Torch && !nd.translucent,
+    }
+}
+
 /// Remesh the chunk holding `p` and any neighbour sharing a face, right away.
 fn remesh_around(world: &mut World, blocks: &Blocks, p: BlockPos) {
     let c = p.chunk();
@@ -273,7 +335,7 @@ fn use_hands(
         MessageWriter<Strike>,
         MessageWriter<UseCreature>,
     ),
-    (aimed, cam, perks): (Res<Aimed>, Single<&Transform, With<FlyCamera>>, Res<crate::progress::skills::Perks>),
+    (aimed, cam, perks, station): (Res<Aimed>, Single<&Transform, With<FlyCamera>>, Res<crate::progress::skills::Perks>, Res<crate::station::StationAim>),
     blocks: Res<Blocks>,
     mode: Res<MoveMode>,
     player: Res<Player>,
@@ -318,14 +380,29 @@ fn use_hands(
         return;
     }
 
+    // A station nearer than the block you aim at takes right clicks (`station`).
+    let at_station = station.0.is_some_and(|(_, d)| block_dist.is_none_or(|b| d < b));
+
     // Right click on a chest opens it (whatever you hold).
     let chest = blocks.registry.id("chest");
     if mouse.just_pressed(MouseButton::Right)
+        && !at_station
         && let Some(hit) = target.hit
         && chest.is_some()
         && world.block(hit.block) == chest
     {
         open_chest.write(OpenChest(hit.block));
+        return;
+    }
+
+    // Right click on a twig or a pebble: snap it off or pick it up.
+    if mouse.just_pressed(MouseButton::Right)
+        && !at_station
+        && let Some(hit) = target.hit
+        && world.block(hit.block).is_some_and(|b| matches!(blocks.registry.get(b).shape, voxel::Shape::Twig | voxel::Shape::Pebble))
+    {
+        anim.start(hand);
+        break_block(&mut world, &blocks, &mut mined, hit.block);
         return;
     }
 
@@ -337,15 +414,18 @@ fn use_hands(
     };
     if let (Some(place), Some(hit)) = (place, target.hit)
         && mouse.pressed(MouseButton::Right)
+        && !at_station
         && (mouse.just_pressed(MouseButton::Right) || anim.place_cooldown <= 0.0)
     {
         // Aiming at a plant puts the block in its place.
-        let is_plant = |p: BlockPos| world.block(p).is_some_and(|b| blocks.registry.get(b).shape == voxel::Shape::Plant);
+        let is_plant = |p: BlockPos| world.block(p).is_some_and(|b| blocks.registry.get(b).shape.is_detail());
         let into = if is_plant(hit.block) { hit.block } else { hit.before };
         let free = world.block(into).is_some_and(|b| !blocks.registry.get(b).solid && blocks.registry.get(b).shape != voxel::Shape::Torch);
         // Never inside yourself (solid blocks only; a torch can go at your feet).
         let blocks_player = blocks.registry.get(place).solid && player.overlaps(into);
-        if free && !blocks_player && item.is_some_and(|i| inv.take(i, 1)) && world.set_block(into, place) {
+        // Nothing can be built at or above the world's ceiling.
+        let under_ceiling = into.y < worldgen::WORLD_CEILING;
+        if free && !blocks_player && under_ceiling && item.is_some_and(|i| inv.take(i, 1)) && world.set_block(into, place) {
             placed.write(Placed { pos: into, block: place });
             remesh_around(&mut world, &blocks, into);
             anim.start(hand);
@@ -356,7 +436,16 @@ fn use_hands(
     // Left click: mine with whatever you hold (tools are faster).
     if mouse.pressed(MouseButton::Left) {
         mined_this_frame = true;
-        anim.start(hand);
+        // An axe on a log chops: a bigger swing that shakes the tree.
+        let chop_at = target.hit.map(|h| h.block).filter(|p| {
+            world.block(*p).is_some_and(|b| {
+                let def = blocks.registry.get(b);
+                def.material == "log" && item.is_some() && items.break_time(item, def).is_some()
+            })
+        });
+        if anim.start(hand) {
+            anim.chop = chop_at;
+        }
         if let Some(hit) = target.hit
             && let Some(b) = world.block(hit.block)
             && let Some(seconds) = items.break_time(item, blocks.registry.get(b)).map(|s| s / (1.0 + perks.mining))
@@ -372,17 +461,7 @@ fn use_hands(
             } else {
                 mining.progress += dt / seconds;
             }
-            if mining.progress >= 1.0 && world.set_block(hit.block, BlockId::AIR) {
-                mined.write(Mined { pos: hit.block, block: b });
-                // A plant standing on the block goes with it.
-                let above = BlockPos::new(hit.block.x, hit.block.y + 1, hit.block.z);
-                if let Some(p) = world.block(above).filter(|p| blocks.registry.get(*p).shape == voxel::Shape::Plant)
-                    && world.set_block(above, BlockId::AIR)
-                {
-                    mined.write(Mined { pos: above, block: p });
-                    remesh_around(&mut world, &blocks, above);
-                }
-                remesh_around(&mut world, &blocks, hit.block);
+            if mining.progress >= 1.0 && break_block(&mut world, &blocks, &mut mined, hit.block) {
                 mining.block = None;
                 mining.progress = 0.0;
             }
@@ -396,14 +475,27 @@ fn use_hands(
     }
 }
 
-fn animate_swings(time: Res<Time>, mut anim: ResMut<HandAnim>) {
+/// Seconds one axe chop takes (a bigger, slower swing).
+pub const CHOP_TIME: f32 = 0.55;
+
+fn animate_swings(time: Res<Time>, mut anim: ResMut<HandAnim>, mut chops: MessageWriter<crate::chop::Chop>) {
     let step = time.delta_secs() / SWING_TIME;
     anim.left = (anim.left - step).max(0.0);
-    anim.right = (anim.right - step).max(0.0);
+    let before = anim.right;
+    let right_step = if anim.chop.is_some() { time.delta_secs() / CHOP_TIME } else { step };
+    anim.right = (anim.right - right_step).max(0.0);
+    // The blow lands at the bottom of the chop.
+    let lands = 1.0 - crate::hands::CHOP_STRIKE;
+    if let Some(p) = anim.chop
+        && before > lands
+        && anim.right <= lands
+    {
+        chops.write(crate::chop::Chop(p));
+    }
 }
 
-fn draw_target(target: Res<Target>, mining: Res<Mining>, mut gizmos: Gizmos) {
-    if let Some(hit) = target.hit {
+fn draw_target(target: Res<Target>, mining: Res<Mining>, menus: Res<crate::camera::Menus>, mut gizmos: Gizmos) {
+    if let Some(hit) = target.hit.filter(|_| !menus.open) {
         let p = hit.block;
         let center = Vec3::new(p.x as f32 + 0.5, p.y as f32 + 0.5, p.z as f32 + 0.5);
         gizmos.cube(Transform::from_translation(center).with_scale(Vec3::splat(1.003)), Color::srgba(0.05, 0.05, 0.05, 0.9));

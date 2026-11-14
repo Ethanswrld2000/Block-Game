@@ -31,7 +31,9 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   WESL (`import bevy_pbr::render::...`, `@group(constants::MATERIAL_BIND_GROUP)`); check compiler
   hints and the 0.20.1 example shaders on GitHub before assuming older API.
 - Content (blocks, items, foods, biomes, skill nodes) goes in RON data files, not code.
-- Chunks are 32^3 (`voxel::CHUNK_SIZE`). Chunks stack vertically; no world height limit.
+- Chunks are 32^3 (`voxel::CHUNK_SIZE`). Chunks stack vertically. The world runs from unbreakable
+  `rootstone` at y -300 (`worldgen::WORLD_FLOOR`, top a little bumpy) to a ceiling at y 1000
+  (`worldgen::WORLD_CEILING`: nothing generates or can be placed there, movement stops under it).
 - Heavy work (generation, lighting, meshing) runs on `AsyncComputeTaskPool`, never the main thread.
 - Pixel art is sampled nearest-neighbour (`ImagePlugin::default_nearest()`).
 - Target: 60 fps at 16-chunk view distance on Ethan's MacBook (Apple Silicon, Metal).
@@ -73,7 +75,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `chill` and `air`. Player state saves to `player.ron` (not in screenshot runs).
   `BLOCKGAME_VITALS=damage,fatigue,blood,injuries[,food,air,warmth]` sets bars for screenshots.
 - Phase 7 (items and inventory): done. `game::inventory`: `grid` (items fill cells by size, rotate,
-  stack; saved by item name), `Inventory` (pockets 5x3, worn `WearSlot`s, bag grid; mass,
+  stack; saved by item name), `Inventory` (pockets 20x10, worn `WearSlot`s, bag grid unused for now: no bag recipes or start bag; mass,
   insulation, per-layer protection), `Chests` (chest block, `chests.ron`), `crafting`
   (`assets/data/recipes.ron`, `Station::Hand|Camp`), `drops` (`assets/data/drops.ron`; unlisted
   blocks drop their own item), `world_items` (dropped stacks, pickup), `ui` (Tab screen; hit-testing
@@ -124,7 +126,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   Font: Jersey 15 (`assets/fonts/ui.ttf`, `ui_bold.ttf`, OFL; Pixelify Sans was too hard to read; sizes in `theme::sizes` sit on its 1/27-em pixel grid) loaded into Bevy's default font
   handle so all text uses it; `theme.bold(size)` for headings; every UI `Text` gets `theme::SHADOW`
   unless it has `NoShadow`. Colours in `theme::colors`, sizes in `theme::sizes`. Inventory: one
-  framed window, item tooltips by the cursor, crafting list sorted makeable-first and scrolled with
+  framed window (the 20x10 grid, plus a side panel with Crafting / Clothes / Chest tabs), item tooltips by the cursor, crafting list sorted makeable-first and scrolled with
   the wheel; hotbar shows block pictures. Clouds went back to blocky meshes, now three layers
   (`clouds::LAYERS`: low rain deck y 200, middle y 236, high wisps y 300) whose cover follows
   `Conditions.clouds`. `BLOCKGAME_PAUSE=1` (or `=settings`) opens the pause menu for screenshots.
@@ -183,7 +185,35 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   and time, from the voxel material's `wind` uniform; how far a vertex sways is packed into UV_1.y with the
   season tint (`chunk_mesh::pack_tint_sway`). New tiles: `python3 tools/gen_placeholder_art.py --only <names>`
   paints just those into the existing blocks.png.
-- Next: follow `docs/GAMEPLAY_LOOP.md` "What's next" (shelter first), or ask Ethan.
+- Tree details: `voxel::Shape::{Vine, Twig, Pebble}` (+ `Plant`) are small "detail" blocks (`Shape::is_detail`)
+  meshed into the plants mesh by `chunk_mesh::push_detail`; vines and twigs have `attach: north|south|east|west`
+  in blocks.ron (`vine_*`, `twig_*`), `BlockDef::supports()` says what holds each up, and `interact::break_block`
+  drops whatever loses its support (a vine strand falls with the leaf above it). `worldgen::trees` adds twigs,
+  canopy and trunk vines and leaf tufts; `worldgen::plants` scatters `pebble`s. Right click snaps a twig off
+  (stick) or picks a pebble up (`small_rock`). Logs are material `log`: bare hands and the pickaxe can't cut
+  them (a speed of 0 in items.ron = can't break), only the axe.
+- Sleeping station: `game::station` (urn and stations as models around the bedroll, packed with it; `StationAim`
+  makes `interact` leave right clicks to a station in front of the block you aim at). Pure rules in
+  `station::fusion` (`assets/data/fusion.ron`: fusion kinds, what each item gives, upgrades with `needs`/`after`/
+  `station`; upgrades spend fusion). Right click the urn with an item (Shift: whole stack); 10 earth places the
+  tool bench, 40 more the carpentry bench. Saved to `urn.ron`. `BLOCKGAME_CAMP=1` unrolls the bedroll in front of
+  you, `BLOCKGAME_URN=tool_bench,earth=5` sets upgrades and fusion (screenshots).
+- Hands-on benches: `station::board` (no menu: right click the tool bench and the camera glides down over its top,
+  the HUD and arms step aside (`board_hides`), a strip of your things sits at the bottom; click one to pick it up,
+  it hangs under the cursor; click a slot to set it down; knock the strike stone to work it; A/D next bench, Esc
+  leaves and the board empties back into your pockets). Pure rules in `station::bench` (`Board`, slots per bench in
+  `slots_of`, where things lie in `board::layout`, recipes in `assets/data/benches.ron`: slots, `work` goes, `makes`;
+  the recipe using the most wins). Tool bench: handle + material, knock the strike stone (stick + 2 small rocks =
+  `rough_axe`, the first axe; stone tools from cobblestone). Carpentry bench: bed + vise, saw (logs -> planks,
+  planks -> sticks, chest). recipes.ron (Tab) keeps only what has no station yet. `Menus.still` stops walking at a
+  bench. `BLOCKGAME_BOARD=stick,small_rock*2[,made]` (or `carpentry:log`) opens a bench with those laid out (`-` skips
+  a slot; needs CAMP and URN).
+- Chopping: an axe on a log swings `hands::chop_pose` (slower, overhead); when it lands `chop::Chop` shakes the
+  tree through the voxel material's `shake` uniform (`shake_offset` in voxel_vertex.wesl and voxel_prepass.wesl).
+  New characters start with only their clothes (`start_kit.ron`); the bedroll is always there (B).
+- Arm: `hands` turns the arm about the shoulder (`hands::ARM`, `swing_pose`: wind-up, strike, return).
+- Next: the rest of the Claude Doc "Sleeping Station and Fusion: Plan": the lens station that shows an item's fusion,
+  a cooking station (then retire the Tab crafting list), twig regrowth.
 
 ## Testing without a screen
 

@@ -24,9 +24,9 @@
     (name: "clay", top: "clay", hardness: 1.0, material: "soil"),
     (name: "cobblestone", top: "cobblestone", hardness: 3.0, material: "stone"),
     (name: "planks", top: "planks", hardness: 2.0, material: "wood"),
-    (name: "log", top: "log_top", side: "log_side", hardness: 2.5, material: "wood"),
+    (name: "log", top: "log_top", side: "log_side", hardness: 2.5, material: "log"),
     (name: "leaves", top: "leaves", opaque: false, foliage: true, hardness: 0.3, material: "plant"),
-    (name: "swamp_log", top: "swamp_log_top", side: "swamp_log_side", hardness: 2.5, material: "wood"),
+    (name: "swamp_log", top: "swamp_log_top", side: "swamp_log_side", hardness: 2.5, material: "log"),
     (name: "swamp_leaves", top: "swamp_leaves", opaque: false, foliage: true, hardness: 0.3, material: "plant"),
     (name: "water", top: "water", solid: false, opaque: false, translucent: true, hardness: -1.0),
     (name: "snow", top: "snow", hardness: 0.5, material: "soil"),
@@ -44,4 +44,18 @@
     (name: "reeds", top: "reed", solid: false, opaque: false, hardness: 0.05, material: "plant", shape: plant),
     (name: "fern", top: "fern", solid: false, opaque: false, foliage: true, hardness: 0.05, material: "plant", shape: plant),
     (name: "bog_bloom", top: "bog_bloom", solid: false, opaque: false, hardness: 0.05, material: "plant", shape: plant),
+    // The floor of the world (y -300): can't be mined.
+    (name: "rootstone", top: "rootstone", hardness: -1.0, material: "stone"),
+    // Tree details (worldgen::trees): vines hang against a side, twigs poke out of trunks
+    // (pull one off for a stick), pebbles lie on the ground (pick up for a small rock).
+    // `attach` is the side of the cell they cling to.
+    (name: "vine_north", top: "vine", solid: false, opaque: false, foliage: true, hardness: 0.05, material: "plant", shape: vine, attach: north),
+    (name: "vine_south", top: "vine", solid: false, opaque: false, foliage: true, hardness: 0.05, material: "plant", shape: vine, attach: south),
+    (name: "vine_east", top: "vine", solid: false, opaque: false, foliage: true, hardness: 0.05, material: "plant", shape: vine, attach: east),
+    (name: "vine_west", top: "vine", solid: false, opaque: false, foliage: true, hardness: 0.05, material: "plant", shape: vine, attach: west),
+    (name: "twig_north", top: "log_side", solid: false, opaque: false, hardness: 0.0, material: "plant", shape: twig, attach: north),
+    (name: "twig_south", top: "log_side", solid: false, opaque: false, hardness: 0.0, material: "plant", shape: twig, attach: south),
+    (name: "twig_east", top: "log_side", solid: false, opaque: false, hardness: 0.0, material: "plant", shape: twig, attach: east),
+    (name: "twig_west", top: "log_side", solid: false, opaque: false, hardness: 0.0, material: "plant", shape: twig, attach: west),
+    (name: "pebble", top: "cobblestone", solid: false, opaque: false, hardness: 0.0, material: "stone", shape: pebble),
 ]
