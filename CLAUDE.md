@@ -219,10 +219,13 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   chest). recipes.ron (Tab) keeps only what has no station yet. `Menus.still` stops walking at a bench.
   `BLOCKGAME_BOARD=stick,small_rock*2[,made]` (or `carpentry:log`, `mat:small_rock*2,stick`) opens a bench with
   those laid out (`-` skips a slot; the bench must stand, see above).
-- Chopping: an axe on a log swings `hands::chop_pose` (slower, overhead); when it lands `chop::Chop` shakes the
+- Chopping: an axe blow (`swing: Chop`) that lands on a log sends `chop::Chop`, which shakes the
   tree through the voxel material's `shake` uniform (`shake_offset` in voxel_vertex.wesl and voxel_prepass.wesl).
   New characters start with only their clothes (`start_kit.ron`); the bedroll is always there (B).
-- Arm: `hands` turns the arm about the shoulder (`hands::ARM`, `swing_pose`: wind-up, strike, return).
+- Tool swings: `game::swing` (pure): items have `swing: Jab|Chop|Overhead` in items.ron (axe chops diagonally
+  from the upper right, pick comes straight down). A swing is keyframed poses (wind up, strike, bounce, rest);
+  mining lands one blow per swing at `Swing::contact` (`interact::Blow`, which plays the dig knock), each worth
+  `period / break seconds`, so cracks and sound line up with the moment the tool meets the block.
 - Next: hands-on use for the `later: true` stations (cooking pot and cutting board first, then retire the Tab
   crafting list), portable bedroll/tent use, upgrade effects (bedframe sleep, sharpening), twig regrowth.
 
@@ -234,7 +237,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
 With `BLOCKGAME_CAMERA` the shot is taken flying (`BLOCKGAME_WALK=1` stands there instead); without it, from the player standing at spawn.
 `BLOCKGAME_SLOT=n` starts with hotbar slot n in hand; `BLOCKGAME_SKILLS=n` gives n points and learns Wanderer and Mystic;
 `BLOCKGAME_CAST=levitate,light` starts spells; `BLOCKGAME_SKILLTREE=1` opens the tree; `BLOCKGAME_LOOK=fen_stag` turns the camera to the nearest creature of a kind;
-`BLOCKGAME_LINEUP=1` stands a still model of every creature skin in a row in front of the camera.
+`BLOCKGAME_SWING=0.55` freezes the right arm that far through a swing; `BLOCKGAME_LINEUP=1` stands a still model of every creature skin in a row in front of the camera.
 The home village's name and position are logged at startup.
 In the cloud container: `BEVY_ASSET_ROOT=$PWD BLOCKGAME_SCREENSHOT=/tmp/s.png WGPU_BACKEND=vulkan xvfb-run -s "-screen 0 1280x720x24" ./target/debug/block-game`
 (needs `mesa-vulkan-drivers xvfb libxkbcommon-x11-0`).

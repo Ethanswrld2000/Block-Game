@@ -29,6 +29,7 @@ mod sound;
 mod station;
 mod theme;
 mod survival;
+mod swing;
 mod torches;
 mod weather;
 mod weather_hud;

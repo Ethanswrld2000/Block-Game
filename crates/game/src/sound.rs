@@ -12,7 +12,7 @@ use voxel::BlockPos;
 
 use crate::blocks::Blocks;
 use crate::creatures::Creature;
-use crate::interact::{Mined, Mining, Placed, Strike};
+use crate::interact::{Blow, Mined, Placed, Strike};
 use crate::player::{Damage, MoveMode, Player};
 use crate::progress::{Progress, Spells};
 use crate::settings::Settings;
@@ -213,29 +213,20 @@ fn footsteps(
     out.write(PlaySound::new(format!("{}_{}", spec.of(&material).step, *which)).gain(gain));
 }
 
-/// A knock with each blow while mining; a crunch when the block goes.
-#[allow(clippy::too_many_arguments)]
+/// A knock with each blow while mining, the moment it lands; a crunch when the block goes.
 fn mining(
-    time: Res<Time>,
-    m: Res<Mining>,
-    world: Res<World>,
     blocks: Res<Blocks>,
     spec: Res<SoundSpec>,
+    mut blows: MessageReader<Blow>,
     mut mined: MessageReader<Mined>,
     mut placed: MessageReader<Placed>,
     mut out: MessageWriter<PlaySound>,
-    mut timer: Local<f32>,
 ) {
-    if let Some(p) = m.block {
-        *timer -= time.delta_secs();
-        if *timer <= 0.0 {
-            *timer = crate::interact::SWING_TIME;
-            if let Some(material) = material_at(&world, &blocks, p) {
-                out.write(PlaySound::new(spec.of(&material).dig.clone()));
-            }
-        }
-    } else {
-        *timer = 0.0;
+    for b in blows.read() {
+        let material = &blocks.registry.get(b.block).material;
+        // From the block, so a blow off to one side sounds from that side.
+        let at = Vec3::new(b.pos.x as f32, b.pos.y as f32, b.pos.z as f32) + Vec3::splat(0.5);
+        out.write(PlaySound { at: Some(at), ..PlaySound::new(spec.of(material).dig.clone()) });
     }
     for _ in mined.read() {
         out.write(PlaySound::new("break"));
