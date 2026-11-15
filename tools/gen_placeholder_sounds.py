@@ -100,6 +100,16 @@ def main():
     save("dig_plant", highpass(noise(0.15), 0.15) * env(int(RATE * 0.15), 0.005, 0.04))
     save("break", lowpass(noise(0.4), 0.15) * env(int(RATE * 0.4), 0.002, 0.12) + thud(0.4, 0.04, 0.1))
     save("place", thud(0.15, 0.1, 0.04, pitch=140))
+    # Cooking: a slosh of the ladle with a few bubbles, and a knife through food onto wood.
+    tt = t(0.45)
+    slosh = lowpass(noise(0.45), 0.06) * np.sin(np.pi * tt / 0.45) ** 2
+    bubbles = np.zeros_like(tt)
+    for k, (start, f) in enumerate([(0.08, 420), (0.17, 560), (0.26, 380), (0.33, 640)]):
+        seg = t(0.06)
+        i = int(RATE * start)
+        bubbles[i:i + len(seg)] += np.sin(2 * np.pi * (f + 900 * seg) * seg) * env(len(seg), 0.002, 0.015) * 0.5
+    save("stir", slosh + bubbles)
+    save("knife", np.concatenate([highpass(noise(0.05), 0.3) * env(int(RATE * 0.05), 0.001, 0.015) * 0.5, thud(0.12, 0.18, 0.03, pitch=260)]))
     # Fighting.
     save("swing", highpass(noise(0.22), 0.1) * np.sin(np.pi * t(0.22) / 0.22) ** 2 * 0.6)
     save("hit", thud(0.2, 0.3, 0.05, pitch=110))

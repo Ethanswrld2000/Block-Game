@@ -33,11 +33,12 @@ impl Plugin for ProgressPlugin {
             .insert_resource(progress)
             .init_resource::<Perks>()
             .init_resource::<Spells>()
+            .insert_resource(Potions::from_ron(include_str!("../../../../assets/data/potions.ron")).unwrap_or_else(|e| panic!("{e}")))
             .add_message::<GainXp>()
             .add_systems(crate::menu::GamePostStartup, load_progress)
             .add_systems(
                 crate::menu::GameUpdate,
-                (xp_from_mining, xp_from_sky, gain_xp, update_perks, cast, apply_to_body, follow_light)
+                (xp_from_mining, xp_from_sky, gain_xp, update_perks, drink, cast, apply_to_body, follow_light)
                     .chain()
                     .after(SurvivalSet)
                     .after(crate::interact::InteractSet),
@@ -95,6 +96,71 @@ pub struct Spells {
     pub warmth: bool,
     /// Focus ran dry mid-air: drift down instead of dropping.
     pub feather: bool,
+    /// Seconds left of a cauldron draught running each spell for free
+    /// (levitation, light, warmth).
+    pub brewed: [f32; 3],
+}
+
+const SPELLS: [Spell; 3] = [Spell::Levitation, Spell::Light, Spell::Warmth];
+
+impl Spells {
+    fn on(&mut self, spell: Spell) -> &mut bool {
+        match spell {
+            Spell::Levitation => &mut self.levitate,
+            Spell::Light => &mut self.light,
+            Spell::Warmth => &mut self.warmth,
+        }
+    }
+
+    /// Whether a draught is running this spell now.
+    pub fn free(&self, spell: Spell) -> bool {
+        self.brewed[SPELLS.iter().position(|s| *s == spell).unwrap_or(0)] > 0.0
+    }
+}
+
+/// What each cauldron draught does, from `assets/data/potions.ron`.
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
+pub struct Potion {
+    #[serde(default)]
+    pub spell: Option<Spell>,
+    #[serde(default)]
+    pub seconds: f32,
+    #[serde(default)]
+    pub focus: f32,
+}
+
+#[derive(Resource, Debug, Clone, Default)]
+pub struct Potions(pub std::collections::BTreeMap<String, Potion>);
+
+impl Potions {
+    pub fn from_ron(text: &str) -> Result<Self, String> {
+        ron::from_str(text).map(Self).map_err(|e| format!("potions.ron: {e}"))
+    }
+}
+
+/// Drinking a draught: its spell runs for free a while, or focus comes back.
+fn drink(
+    mut ate: MessageReader<crate::survival::Ate>,
+    items: Res<crate::items::Items>,
+    potions: Res<Potions>,
+    perks: Res<Perks>,
+    mut spells: ResMut<Spells>,
+    mut progress: ResMut<Progress>,
+    mut toast: MessageWriter<Toast>,
+) {
+    for crate::survival::Ate(id) in ate.read() {
+        let Some(p) = potions.0.get(&items.get(*id).name) else { continue };
+        if let Some(spell) = p.spell {
+            let i = SPELLS.iter().position(|s| *s == spell).unwrap_or(0);
+            spells.brewed[i] = spells.brewed[i].max(p.seconds);
+            *spells.on(spell) = true;
+            spells.feather = false;
+            toast.write(Toast(format!("{} for {:.0} seconds, without focus", spell.title(), p.seconds)));
+        }
+        if p.focus > 0.0 {
+            progress.focus = (progress.focus + p.focus).min(perks.max_focus());
+        }
+    }
 }
 
 impl Perks {
@@ -204,10 +270,28 @@ fn cast(
     if dead {
         *spells = Spells::default();
     }
+    // Draughts wear off; a spell you know keeps going on your own focus.
+    for (i, spell) in SPELLS.iter().enumerate() {
+        if spells.brewed[i] <= 0.0 {
+            continue;
+        }
+        spells.brewed[i] = (spells.brewed[i] - dt).max(0.0);
+        if spells.brewed[i] <= 0.0 {
+            let known = perks.spells.contains(spell);
+            if !known {
+                if *spell == Spell::Levitation && spells.levitate {
+                    spells.feather = true;
+                }
+                *spells.on(*spell) = false;
+            }
+            toast.write(Toast(format!("The {} draught wears off", spell.title())));
+        }
+    }
     let max = perks.max_focus();
-    let drain = if spells.levitate { LEVITATE_DRAIN * (1.0 - perks.levitate_cost.min(0.8)) } else { 0.0 }
-        + if spells.light { LIGHT_DRAIN } else { 0.0 }
-        + if spells.warmth { WARMTH_DRAIN } else { 0.0 };
+    let costs = |s: Spell| !spells.free(s);
+    let drain = if spells.levitate && costs(Spell::Levitation) { LEVITATE_DRAIN * (1.0 - perks.levitate_cost.min(0.8)) } else { 0.0 }
+        + if spells.light && costs(Spell::Light) { LIGHT_DRAIN } else { 0.0 }
+        + if spells.warmth && costs(Spell::Warmth) { WARMTH_DRAIN } else { 0.0 };
     let p = progress.bypass_change_detection();
     // Like the clock, focus stands still during a screenshot run.
     let drain = if screenshot_run() { 0.0 } else { drain };
@@ -219,13 +303,15 @@ fn cast(
     p.focus = p.focus.min(max);
     if p.focus <= 0.0 {
         p.focus = 0.0;
-        if spells.levitate {
+        if spells.levitate && !spells.free(Spell::Levitation) {
             spells.feather = true;
             toast.write(Toast("Your focus is spent: drifting down".into()));
         }
-        spells.levitate = false;
-        spells.light = false;
-        spells.warmth = false;
+        for spell in SPELLS {
+            if !spells.free(spell) {
+                *spells.on(spell) = false;
+            }
+        }
     }
     // Feather fall lasts until you land.
     if spells.feather && (player.on_ground || player.in_water) {

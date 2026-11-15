@@ -11,14 +11,19 @@
 //! another urn. Marks around each urn's belly light up as its next step fills.
 //!
 //! The stations are models, not blocks. Benches with a board (camp mat, tool
-//! bench, carpentry bench) are worked by hand (`board`); personal storage
-//! opens like a chest; the rest show what they will do.
+//! bench, carpentry bench, cooking pot, cutting board, smoking rack, iron anvil,
+//! sharpening stone, magical lens, cauldron) are worked by hand (`board`);
+//! personal storage and the stone fridge open like chests; the telescope is
+//! looked through at night (`telescope`); the golem wakes and walks (`golem`);
+//! the bedframe and double bed change how you sleep (`survival::camp::Bed`).
 //! F9 opens the dev menu (`dev`) to hand out urns and skip steps.
 
 pub mod bench;
 pub mod board;
 mod dev;
+pub mod golem;
 pub mod models;
+pub mod telescope;
 mod tree;
 pub mod urns;
 
@@ -53,8 +58,24 @@ impl Plugin for StationPlugin {
             .init_resource::<board::AtBench>()
             .init_resource::<tree::TreeUi>()
             .init_resource::<dev::DevMenu>()
+            .init_resource::<telescope::Scope>()
             .add_message::<StepDone>()
-            .add_systems(crate::menu::GameStartup, (load_urns, spawn_label, board::spawn_board_ui, board::load_benches, tree::spawn_tree_ui, dev::spawn_dev_ui).chain())
+            .add_systems(
+                crate::menu::GameStartup,
+                (
+                    load_urns,
+                    load_edges,
+                    golem::load_golem,
+                    telescope::load_constellations,
+                    spawn_label,
+                    board::spawn_board_ui,
+                    board::load_benches,
+                    tree::spawn_tree_ui,
+                    telescope::spawn_scope_ui,
+                    dev::spawn_dev_ui,
+                )
+                    .chain(),
+            )
             .add_systems(
                 crate::menu::GameUpdate,
                 (
@@ -83,8 +104,16 @@ impl Plugin for StationPlugin {
                     .before(crate::interact::InteractSet)
                     .after(crate::player::PlayerSet),
             )
+            .add_systems(
+                crate::menu::GameUpdate,
+                (sync_bed, dull_edges, golem::golem_rebuild, golem::golem_walk, telescope::scope_view, telescope::draw_constellations)
+                    .chain()
+                    .after(board::board_ui)
+                    .before(crate::interact::InteractSet)
+                    .after(crate::player::PlayerSet),
+            )
             .add_systems(crate::menu::GameUpdate, (save_urns, urns_for_screenshot))
-            .add_systems(Last, save_urns_on_exit.run_if(crate::menu::in_game));
+            .add_systems(Last, (save_urns_on_exit, save_edges_on_exit, golem::save_golem_on_exit).run_if(crate::menu::in_game));
     }
 }
 
@@ -110,6 +139,77 @@ pub struct Urns {
     pub progress: BTreeMap<String, Progress>,
     #[serde(default)]
     pub placed: BTreeMap<String, Placed>,
+    /// Items studied under the magical lens (item names): they teach the cauldron.
+    #[serde(default)]
+    pub studied: std::collections::BTreeSet<String>,
+    /// Constellations charted through the telescope.
+    #[serde(default)]
+    pub charted: std::collections::BTreeSet<String>,
+}
+
+/// Tools sharpened at the sharpening stone: item name -> seconds of edge left,
+/// and how much faster a sharp tool works. Saved to `edges.ron`.
+#[derive(Resource, Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Edges {
+    pub left: BTreeMap<String, f32>,
+    #[serde(default)]
+    pub speed: f32,
+}
+
+impl Edges {
+    /// How much faster what's in hand works.
+    pub fn speed(&self, items: &Items, held: Option<crate::items::ItemId>) -> f32 {
+        held.filter(|i| self.left.get(&items.get(*i).name).is_some_and(|s| *s > 0.0)).map_or(1.0, |_| self.speed.max(1.0))
+    }
+
+    /// Time passes: edges dull. Returns the tools that just went dull.
+    pub fn wear(&mut self, dt: f32) -> Vec<String> {
+        let mut dull = Vec::new();
+        self.left.retain(|name, s| {
+            *s -= dt;
+            if *s <= 0.0 {
+                dull.push(name.clone());
+            }
+            *s > 0.0
+        });
+        dull
+    }
+}
+
+fn load_edges(mut commands: Commands, dir: Res<SaveDir>) {
+    let e = if screenshot_run() { None } else { std::fs::read_to_string(dir.file("edges.ron")).ok().and_then(|t| ron::from_str::<Edges>(&t).ok()) };
+    commands.insert_resource(e.unwrap_or_default());
+}
+
+fn save_edges_on_exit(mut exit: MessageReader<AppExit>, dir: Res<SaveDir>, edges: Res<Edges>) {
+    if exit.read().next().is_some() && !screenshot_run() {
+        match ron::ser::to_string_pretty(&*edges, ron::ser::PrettyConfig::default()) {
+            Ok(text) => {
+                if let Err(e) = std::fs::write(dir.file("edges.ron"), text) {
+                    warn!("saving edges.ron: {e}");
+                }
+            }
+            Err(e) => warn!("edges.ron: {e}"),
+        }
+    }
+}
+
+fn dull_edges(time: Res<Time>, items: Res<Items>, mut edges: ResMut<Edges>, mut toast: MessageWriter<Toast>) {
+    if edges.left.is_empty() {
+        return;
+    }
+    for name in edges.wear(time.delta_secs()) {
+        let title = items.id(&name).map_or(name.clone(), |i| items.get(i).title.clone());
+        toast.write(Toast(format!("Your {title} has gone dull: sharpen it again at the sharpening stone")));
+    }
+}
+
+/// The camp sleeps in whatever bed the sleeping station has built.
+fn sync_bed(urns: Res<Urns>, mut camp: ResMut<Camp>) {
+    let bed = crate::survival::camp::Bed { frame: urns.has("bedframe"), double: urns.has("double_bed") };
+    if camp.bed != bed {
+        camp.bed = bed;
+    }
 }
 
 static NOTHING_YET: Progress = Progress { done: Vec::new(), given: BTreeMap::new() };
@@ -153,6 +253,8 @@ pub enum StationKind {
     GolemFrame,
     /// Drawn around the bedroll once the ancestral urn's bedframe is done.
     Bedframe,
+    /// The golem once its heart is in: it walks (`golem`).
+    Golem,
 }
 
 impl StationKind {
@@ -195,6 +297,7 @@ impl StationKind {
             Self::Cauldron => "Cauldron",
             Self::GolemFrame => "Golem Frame",
             Self::Bedframe => "Bedframe",
+            Self::Golem => "Golem",
         }
     }
 
@@ -216,6 +319,7 @@ impl StationKind {
             Self::Cauldron => "cauldron",
             Self::GolemFrame => "golem_frame",
             Self::Bedframe => "bedframe",
+            Self::Golem => "golem_heart",
             Self::Urn => return None,
         })
     }
@@ -531,6 +635,7 @@ fn use_station(
     (book, wielded, items): (Option<Res<UrnBook>>, Res<Wielded>, Res<Items>),
     (mut inv, mut chests, mut urns, mut tree): (ResMut<Inventory>, ResMut<Chests>, ResMut<Urns>, ResMut<tree::TreeUi>),
     (mut toast, mut done, mut open_chest, mut spill): (MessageWriter<Toast>, MessageWriter<StepDone>, MessageWriter<crate::interact::OpenChest>, MessageWriter<Spill>),
+    (mut scope, mut golem, clock, conditions): (ResMut<telescope::Scope>, ResMut<golem::Golem>, Res<crate::clock::WorldClock>, Res<crate::weather::Conditions>),
 ) {
     if !mouse.just_pressed(MouseButton::Right) || cursor.grab_mode == CursorGrabMode::None || menus.open {
         return;
@@ -591,7 +696,7 @@ fn use_station(
                 done.write(StepDone(s));
             }
         }
-        StationKind::CampMat | StationKind::ToolBench | StationKind::CarpentryBench => {
+        k if board::board_name(k).is_some() => {
             if *mode == crate::player::MoveMode::Fly {
                 toast.write(Toast("Land to work at the bench".into()));
                 return;
@@ -599,6 +704,34 @@ fn use_station(
             at_bench.enter(st, player.pos + Vec3::Y * player.eye);
             menus.open = true;
             menus.still = true;
+        }
+        StationKind::StoneFridge => {
+            let at = BlockPos::new(crate::inventory::FRIDGE_AT.0, crate::inventory::FRIDGE_AT.1, crate::inventory::FRIDGE_AT.2);
+            chests.map.entry(at).or_insert_with(|| Grid::new(crate::inventory::CHEST.0, crate::inventory::CHEST.1));
+            open_chest.write(crate::interact::OpenChest(at));
+        }
+        StationKind::Telescope => {
+            if *mode == crate::player::MoveMode::Fly {
+                toast.write(Toast("Land to look through the telescope".into()));
+                return;
+            }
+            telescope::look_through(&mut scope, &mut menus, clock.hour(), conditions.clouds, &mut toast);
+        }
+        StationKind::GolemFrame => {
+            let line = if urns.has("golem_heart") { "The frame stands empty: its golem is up and about" } else { "A stone body waiting for a heart: put the golem heart into the golem urn" };
+            toast.write(Toast(line.into()));
+        }
+        StationKind::Golem => {
+            if player.crouching && urns.has("golem_hands") {
+                let at = BlockPos::new(crate::inventory::GOLEM_PACK_AT.0, crate::inventory::GOLEM_PACK_AT.1, crate::inventory::GOLEM_PACK_AT.2);
+                let size = crate::inventory::GOLEM_PACK;
+                chests.map.entry(at).or_insert_with(|| Grid::new(size.0, size.1));
+                open_chest.write(crate::interact::OpenChest(at));
+            } else {
+                golem.follow = !golem.follow;
+                let line = if golem.follow { "The golem follows you" } else { "The golem stays here" };
+                toast.write(Toast(line.into()));
+            }
         }
         StationKind::PersonalStorage => {
             let at = BlockPos::new(crate::inventory::STORAGE_AT.0, crate::inventory::STORAGE_AT.1, crate::inventory::STORAGE_AT.2);
@@ -656,7 +789,7 @@ fn steps_done(
             Gives::Upgrade => format!("{} done", step.title),
             Gives::Recipes => {
                 let taught: Vec<String> =
-                    benches.0.recipes.iter().filter(|r| r.unlock.as_deref() == Some(name.as_str())).map(|r| items.get(r.makes.item).title.clone()).collect();
+                    benches.0.recipes.iter().filter(|r| r.taught_by(name)).map(|r| items.get(r.makes.item).title.clone()).collect();
                 if taught.is_empty() { format!("{} done", step.title) } else { format!("{}: you can now make {}", step.title, taught.join(", ")) }
             }
             Gives::Urn(other) => {
@@ -679,7 +812,8 @@ fn sync_learned(urns: Res<Urns>, mut benches: ResMut<board::Benches>) {
     if !urns.is_changed() && !benches.is_added() {
         return;
     }
-    let learned: std::collections::BTreeSet<String> = urns.progress.values().flat_map(|p| p.done.iter().cloned()).collect();
+    let learned: std::collections::BTreeSet<String> =
+        urns.progress.values().flat_map(|p| p.done.iter().cloned()).chain(urns.studied.iter().map(|i| format!("lens:{i}"))).collect();
     if benches.0.learned != learned {
         benches.0.learned = learned;
     }
@@ -727,8 +861,13 @@ fn show_label(
                     };
                     (format!("{} · {}", def.title, def.station), format!("{next}\nHold an item and right click to put it in · empty hand: see the tree"))
                 }
-                StationKind::CampMat | StationKind::ToolBench | StationKind::CarpentryBench => (st.kind.title().to_string(), "Right click to work it with your hands".into()),
-                StationKind::PersonalStorage => (st.kind.title().to_string(), "Right click to open".into()),
+                k if board::board_name(k).is_some() => (k.title().to_string(), "Right click to work it with your hands".into()),
+                StationKind::PersonalStorage | StationKind::StoneFridge => (st.kind.title().to_string(), "Right click to open".into()),
+                StationKind::Telescope => (st.kind.title().to_string(), "Right click to look through it on a clear night".into()),
+                StationKind::Golem => {
+                    let what = if urns.has("golem_hands") { "Right click: follow / stay · crouch + right click: its pack" } else { "Right click: follow / stay" };
+                    (st.kind.title().to_string(), what.into())
+                }
                 k => {
                     let desc = k.step().and_then(|s| book.0.step(s)).map_or(String::new(), |(_, s)| s.desc.clone());
                     (k.title().to_string(), desc)

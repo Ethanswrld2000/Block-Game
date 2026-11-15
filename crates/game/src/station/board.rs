@@ -1,7 +1,7 @@
 //! Working a bench with your hands, not through a menu.
 //!
-//! Right click a bench (tool bench, carpentry bench) and the view glides down over
-//! its top. Your things lie in a strip along the bottom of the screen: click one
+//! Right click a bench (camp mat, tool bench, carpentry bench, cooking pot,
+//! cutting board) and the view glides down over its top. Your things lie in a strip along the bottom of the screen: click one
 //! to pick it up (Shift: the whole stack); it hangs under the cursor over the
 //! board. Click a slot to set it down there, or click what lies in a slot to
 //! pick it back up. When the slots match a recipe (`assets/data/benches.ron`),
@@ -10,13 +10,18 @@
 //! to take it. Right click puts what you hold back; A / D steps to the next
 //! bench at the camp; Esc (or walking off) leaves, and everything on the board
 //! goes back into your pockets.
+//!
+//! The cooking pot takes things into the pot in any order (click the pot with
+//! something in hand; with an empty hand you take the last kind back out),
+//! fuel goes into the fire beside it, and the ladle stirs: what's in the pot
+//! swirls round with every stir. The cutting board's knife cuts what lies on it.
 
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
-use super::bench::{slots_of, BenchData, Board, SlotDef, Work};
-use super::{Station, StationKind};
+use super::bench::{slots_of, BenchData, Board, SlotDef, SlotKind, Special, Work};
+use super::{Edges, Station, StationKind, Urns};
 use crate::camera::{FlyCamera, Menus};
 use crate::interact::ray_box;
 use crate::inventory::grid::Stack;
@@ -34,6 +39,13 @@ pub(super) fn board_name(kind: StationKind) -> Option<&'static str> {
         StationKind::CampMat => Some("camp_mat"),
         StationKind::ToolBench => Some("tool_bench"),
         StationKind::CarpentryBench => Some("carpentry_bench"),
+        StationKind::CookingPot => Some("cooking_pot"),
+        StationKind::CuttingBoard => Some("cutting_board"),
+        StationKind::SmokingRack => Some("smoking_rack"),
+        StationKind::IronAnvil => Some("iron_anvil"),
+        StationKind::SharpeningStone => Some("sharpening_stone"),
+        StationKind::MagicalLens => Some("magical_lens"),
+        StationKind::Cauldron => Some("cauldron"),
         _ => None,
     }
 }
@@ -62,6 +74,11 @@ pub struct AtBench {
     dirty: bool,
     /// Shown under the bench's name for a moment.
     note: Option<(String, f32)>,
+    /// How far what's in the pot has swirled round, and where it's going.
+    spin: f32,
+    spin_to: f32,
+    /// What the magical lens showed last, until the board changes.
+    study: Option<String>,
 }
 
 impl AtBench {
@@ -94,6 +111,12 @@ pub(super) struct Layout {
     view: (f32, f32),
     /// "Knock the strike stone", and what one go is called ("knock").
     work: (&'static str, &'static str),
+    /// The sound of one go.
+    sound: &'static str,
+    /// How big things look lying here (1 = as on the tool bench).
+    scale: f32,
+    /// The middle of the pot, for stations whose slots mix (things swirl round it).
+    pot: Vec2,
 }
 
 const TOOL_BENCH: Layout = Layout {
@@ -105,6 +128,9 @@ const TOOL_BENCH: Layout = Layout {
     made: (Vec2::new(-0.2, 0.17), Vec2::new(0.28, 0.13), 0.833),
     view: (0.95, 0.62),
     work: ("Knock the strike stone", "knock"),
+    sound: "dig_hard",
+    scale: 1.0,
+    pot: Vec2::ZERO,
 };
 
 const CARPENTRY_BENCH: Layout = Layout {
@@ -116,6 +142,9 @@ const CARPENTRY_BENCH: Layout = Layout {
     made: (Vec2::new(0.2, 0.3), Vec2::new(0.25, 0.1), 0.846),
     view: (1.25, 0.8),
     work: ("Saw", "stroke of the saw"),
+    sound: "dig_wood",
+    scale: 1.0,
+    pot: Vec2::ZERO,
 };
 
 /// The camp mat lies on the ground: things go on the mat or by the cord, and
@@ -129,12 +158,141 @@ const CAMP_MAT: Layout = Layout {
     made: (Vec2::new(-0.22, -0.33), Vec2::new(0.26, 0.08), 0.035),
     view: (1.05, 0.6),
     work: ("Knock the knapping stone", "knock"),
+    sound: "dig_hard",
+    scale: 1.0,
+    pot: Vec2::ZERO,
+};
+
+/// Where the cooking pot's mouth is, in its own frame (see `models`).
+const POT: Vec2 = Vec2::new(0.06, 0.0);
+/// The broth's surface, where things float.
+const BROTH: f32 = 0.614;
+
+/// The cooking pot: four quarters of the pot's mouth (one kind of thing in
+/// each; clicking anywhere on the pot fills them in turn), the fire's mouth
+/// beside it, and the ladle on its stone.
+const COOKING_POT: Layout = Layout {
+    slots: &[
+        ("pot_1", Vec2::new(POT.x - 0.11, -0.11), Vec2::new(0.11, 0.11), BROTH, "in the pot"),
+        ("pot_2", Vec2::new(POT.x + 0.11, -0.11), Vec2::new(0.11, 0.11), BROTH, "in the pot"),
+        ("pot_3", Vec2::new(POT.x - 0.11, 0.11), Vec2::new(0.11, 0.11), BROTH, "in the pot"),
+        ("pot_4", Vec2::new(POT.x + 0.11, 0.11), Vec2::new(0.11, 0.11), BROTH, "in the pot"),
+        ("fire", Vec2::new(-0.47, 0.0), Vec2::new(0.17, 0.16), 0.035, "in the fire"),
+    ],
+    tool: (Vec3::new(0.49, 0.0, -0.2), Vec3::new(0.71, 0.16, 0.22)),
+    made: (POT, Vec2::new(0.21, 0.21), BROTH),
+    view: (0.85, 0.6),
+    work: ("Stir with the ladle", "stir"),
+    sound: "stir",
+    scale: 0.75,
+    pot: POT,
+};
+
+/// The cutting board: what you cut lies on the board, the knife along the
+/// back, and the cut pieces go into the dish.
+const CUTTING_BOARD: Layout = Layout {
+    slots: &[("board", Vec2::new(-0.14, -0.02), Vec2::new(0.24, 0.2), 0.48, "on the board")],
+    tool: (Vec3::new(0.02, 0.46, 0.15), Vec3::new(0.42, 0.53, 0.24)),
+    made: (Vec2::new(0.26, -0.08), Vec2::new(0.13, 0.13), 0.512),
+    view: (0.8, 0.55),
+    work: ("Cut with the knife", "cut"),
+    sound: "knife",
+    scale: 0.85,
+    pot: Vec2::ZERO,
+};
+
+/// The smoking rack: meat lies on the grate, fuel goes into the fire's mouth
+/// at the end, and the reed fan on the ground works the smoke.
+const SMOKING_RACK: Layout = Layout {
+    slots: &[
+        ("rack", Vec2::new(-0.05, 0.0), Vec2::new(0.42, 0.17), 1.02, "on the rack"),
+        ("fire", Vec2::new(0.65, 0.0), Vec2::new(0.15, 0.15), 0.035, "in the fire"),
+    ],
+    tool: (Vec3::new(-0.89, 0.0, -0.12), Vec3::new(-0.61, 0.08, 0.28)),
+    made: (Vec2::new(-0.05, 0.0), Vec2::new(0.42, 0.17), 1.02),
+    view: (0.8, 0.7),
+    work: ("Fan the smoke", "wave of the fan"),
+    sound: "swing",
+    scale: 1.0,
+    pot: Vec2::ZERO,
+};
+
+/// The iron anvil: metal on the anvil's face, flux in the tray and the handle
+/// on the bench beside it, and the hammer on the bench.
+const IRON_ANVIL: Layout = Layout {
+    slots: &[
+        ("anvil", Vec2::new(0.1, 0.0), Vec2::new(0.27, 0.14), 0.78, "on the anvil"),
+        ("flux", Vec2::new(-0.6, 0.16), Vec2::new(0.16, 0.08), 0.545, "in the flux tray"),
+        ("handle", Vec2::new(-0.6, -0.02), Vec2::new(0.22, 0.09), 0.525, "on the bench"),
+    ],
+    tool: (Vec3::new(-0.8, 0.5, -0.25), Vec3::new(-0.45, 0.62, -0.13)),
+    made: (Vec2::new(0.1, 0.0), Vec2::new(0.27, 0.14), 0.78),
+    view: (1.0, 0.65),
+    work: ("Strike with the hammer", "blow of the hammer"),
+    sound: "dig_hard",
+    scale: 1.0,
+    pot: Vec2::ZERO,
+};
+
+/// The sharpening stone: a tool on the rest in front of the wheel; you turn
+/// the wheel, and it comes back sharp where it lay.
+const SHARPENING_STONE: Layout = Layout {
+    slots: &[("edge", Vec2::new(0.2, 0.13), Vec2::new(0.19, 0.11), 0.53, "on the rest")],
+    tool: (Vec3::new(-0.13, 0.52, -0.29), Vec3::new(0.03, 1.04, 0.25)),
+    made: (Vec2::new(0.2, 0.13), Vec2::new(0.19, 0.11), 0.53),
+    view: (0.8, 0.62),
+    work: ("Turn the wheel", "turn of the wheel"),
+    sound: "dig_hard",
+    scale: 0.8,
+    pot: Vec2::ZERO,
+};
+
+/// The magical lens: something on the plate under the crystal ring, and the
+/// focusing knob on top of the post.
+const MAGICAL_LENS: Layout = Layout {
+    slots: &[("plate", Vec2::new(0.0, 0.0), Vec2::new(0.2, 0.2), 0.095, "on the plate")],
+    tool: (Vec3::new(-0.36, 0.74, -0.24), Vec3::new(-0.24, 0.86, -0.12)),
+    made: (Vec2::new(0.0, 0.0), Vec2::new(0.2, 0.2), 0.095),
+    view: (0.95, 0.55),
+    work: ("Turn the focusing knob", "turn of the knob"),
+    sound: "spell_off",
+    scale: 1.0,
+    pot: Vec2::ZERO,
+};
+
+/// Where the cauldron's mouth is, and the brew's surface.
+const CAULDRON_AT: Vec2 = Vec2::new(0.08, 0.0);
+const BREW: f32 = 0.64;
+
+/// The cauldron: three parts of the brew across its mouth (clicking anywhere
+/// on it fills them in turn), the fire's mouth at -x, and the paddle at +x.
+const CAULDRON: Layout = Layout {
+    slots: &[
+        ("brew_1", Vec2::new(CAULDRON_AT.x - 0.17, 0.0), Vec2::new(0.085, 0.25), BREW, "in the cauldron"),
+        ("brew_2", Vec2::new(CAULDRON_AT.x, 0.0), Vec2::new(0.085, 0.25), BREW, "in the cauldron"),
+        ("brew_3", Vec2::new(CAULDRON_AT.x + 0.17, 0.0), Vec2::new(0.085, 0.25), BREW, "in the cauldron"),
+        ("fire", Vec2::new(-0.47, 0.0), Vec2::new(0.15, 0.15), 0.035, "in the fire"),
+    ],
+    tool: (Vec3::new(0.51, 0.0, -0.2), Vec3::new(0.73, 0.16, 0.22)),
+    made: (CAULDRON_AT, Vec2::new(0.25, 0.25), BREW),
+    view: (0.85, 0.6),
+    work: ("Stir with the paddle", "stir"),
+    sound: "stir",
+    scale: 0.75,
+    pot: CAULDRON_AT,
 };
 
 pub(super) fn layout(kind: StationKind) -> &'static Layout {
     match kind {
         StationKind::CampMat => &CAMP_MAT,
         StationKind::CarpentryBench => &CARPENTRY_BENCH,
+        StationKind::CookingPot => &COOKING_POT,
+        StationKind::CuttingBoard => &CUTTING_BOARD,
+        StationKind::SmokingRack => &SMOKING_RACK,
+        StationKind::IronAnvil => &IRON_ANVIL,
+        StationKind::SharpeningStone => &SHARPENING_STONE,
+        StationKind::MagicalLens => &MAGICAL_LENS,
+        StationKind::Cauldron => &CAULDRON,
         _ => &TOOL_BENCH,
     }
 }
@@ -147,6 +305,17 @@ impl Layout {
     /// The main working height.
     fn top(&self) -> f32 {
         self.made.2
+    }
+
+    /// The places things can be set down, each said once ("in the pot or in the fire").
+    fn places(&self) -> String {
+        let mut out: Vec<&str> = Vec::new();
+        for s in self.slots {
+            if !out.contains(&s.4) {
+                out.push(s.4);
+            }
+        }
+        out.join(" or ")
     }
 }
 
@@ -206,6 +375,14 @@ pub(super) struct BoardModel(f32);
 
 #[derive(Component)]
 pub(super) struct HeldModel;
+
+/// Something floating in the pot: it swirls round the pot's middle when stirred.
+#[derive(Component)]
+pub(super) struct Swirl {
+    centre: Vec3,
+    off: Vec3,
+    rot: Quat,
+}
 
 #[derive(Component)]
 pub(super) struct BoardUi;
@@ -365,6 +542,8 @@ pub(super) fn board_click(
     mut inv: ResMut<Inventory>,
     (mut spill, mut sound, mut toast, mut gain): (MessageWriter<Spill>, MessageWriter<PlaySound>, MessageWriter<Toast>, MessageWriter<crate::progress::GainXp>),
     prog: Option<Res<crate::progress::xp::Progression>>,
+    (mut urns, mut edges): (ResMut<Urns>, ResMut<Edges>),
+    (recipes, drops, blocks): (Option<Res<crate::inventory::crafting::Recipes>>, Option<Res<crate::inventory::drops::Drops>>, Res<crate::blocks::Blocks>),
 ) {
     let Some(st) = at.station else { return };
     let Some(name) = board_name(st.kind) else { return };
@@ -404,30 +583,77 @@ pub(super) fn board_click(
     let Ok(ray) = cam.viewport_to_world(&GlobalTransform::from(*tf), pos) else { return };
     let (hit, _) = spot(&st, name, at.board.made.is_some(), ray.origin, ray.direction.as_vec3());
     match hit {
-        Some(Spot::Tool) => match at.board.strike(&benches.0, name) {
-            Work::Nothing => {
-                sound.write(PlaySound::new("hit").gain(0.35));
-                let line = if at.board.made.is_some() { "Take what you made first" } else { "That doesn't make anything here" };
-                at.note = Some((line.into(), 2.0));
-            }
-            Work::Knock { .. } => {
-                sound.write(PlaySound::new("dig_hard_0").gain(0.9));
-                sound.write(PlaySound::new("hit").gain(0.5));
-                at.bump = 1.0;
-                at.dirty = true;
-            }
-            Work::Made(s) => {
-                sound.write(PlaySound::new("hit").gain(0.8));
-                sound.write(PlaySound::new("place").gain(0.9));
-                at.bump = 1.0;
-                at.dirty = true;
-                at.note = Some((format!("You made a {}", items.get(s.item).title), 3.0));
-                toast.write(Toast(format!("Made a {}", items.get(s.item).title)));
-                if let Some(p) = &prog {
-                    gain.write(crate::progress::GainXp { xp: p.xp.craft, why: String::new() });
+        Some(Spot::Tool) => {
+            let special = benches.0.matching(name, &at.board).map(|r| r.special);
+            let work = at.board.strike(&benches.0, name);
+            match (work, special) {
+                (Work::Made(s), Some(Special::Sharpen)) => {
+                    sound.write(PlaySound::new("dig_hard").gain(0.9));
+                    sound.write(PlaySound::new("spell_on").gain(0.4));
+                    at.dirty = true;
+                    if let Some(sh) = benches.0.sharpen {
+                        edges.left.insert(items.get(s.item).name.clone(), sh.seconds);
+                        edges.speed = sh.speed;
+                        let line = format!("Your {} is sharp: {:.1}x as fast for {:.0} minutes", items.get(s.item).title, sh.speed, sh.seconds / 60.0);
+                        at.note = Some((line.clone(), 4.0));
+                        toast.write(Toast(line));
+                    }
+                }
+                (Work::Made(s), Some(Special::Study)) => {
+                    sound.write(PlaySound::new("spell_on").gain(0.6));
+                    at.dirty = true;
+                    let item_name = items.get(s.item).name.clone();
+                    let new = urns.studied.insert(item_name.clone());
+                    let brews: Vec<String> = benches
+                        .0
+                        .recipes
+                        .iter()
+                        .filter(|r| r.taught_by(&format!("lens:{item_name}")) && r.unlock.as_deref().is_some_and(|u| !u.contains('+')))
+                        .map(|r| items.get(r.makes.item).title.clone())
+                        .collect();
+                    let mut line = format!("You studied the {}", items.get(s.item).title);
+                    if new && !brews.is_empty() {
+                        line = format!("{line}: the cauldron can brew {} now", brews.join(", "));
+                        gain.write(crate::progress::GainXp { xp: 15.0, why: String::new() });
+                    }
+                    at.note = Some((line.clone(), 4.0));
+                    toast.write(Toast(line));
+                    at.study = Some(study_text(s.item, &items, &benches.0, recipes.as_deref(), drops.as_deref(), &blocks));
+                }
+                (Work::Nothing, _) => {
+                    sound.write(PlaySound::new("hit").gain(0.35));
+                    let line = if at.board.made.is_some() {
+                        "Take what you made first".to_string()
+                    } else if let Some((r, have)) = benches.0.needs_heat(name, &at.board) {
+                        format!("The fire is too low for {}: put more fuel in it ({have} of {} heat)", items.get(r.makes.item).title, r.heat)
+                    } else {
+                        "That doesn't make anything here".to_string()
+                    };
+                    at.note = Some((line, 2.5));
+                }
+                (Work::Knock { .. }, _) => {
+                    sound.write(PlaySound::new(layout(st.kind).sound).gain(0.9));
+                    if !matches!(st.kind, StationKind::CookingPot | StationKind::Cauldron | StationKind::MagicalLens | StationKind::SmokingRack) {
+                        sound.write(PlaySound::new("hit").gain(0.5));
+                    }
+                    at.bump = 1.0;
+                    at.spin_to += 1.7;
+                    at.dirty = true;
+                }
+                (Work::Made(s), _) => {
+                    sound.write(PlaySound::new(layout(st.kind).sound).gain(0.9));
+                    sound.write(PlaySound::new("place").gain(0.9));
+                    at.bump = 1.0;
+                    at.spin_to += 1.7;
+                    at.dirty = true;
+                    at.note = Some((format!("You made a {}", items.get(s.item).title), 3.0));
+                    toast.write(Toast(format!("Made a {}", items.get(s.item).title)));
+                    if let Some(p) = &prog {
+                        gain.write(crate::progress::GainXp { xp: p.xp.craft, why: String::new() });
+                    }
                 }
             }
-        },
+        }
         Some(Spot::Made) => {
             if let Some(s) = at.board.made.take() {
                 give_back(&mut inv, &items, &mut spill, feet, s);
@@ -437,21 +663,41 @@ pub(super) fn board_click(
             }
         }
         Some(Spot::Slot(def)) => {
-            match at.held.take() {
-                Some(h) => at.held = at.board.put(def, h),
-                None => at.held = at.board.take(def.name),
+            let defs = slots_of(name);
+            match (at.held.take(), def.kind) {
+                (Some(h), SlotKind::Fire) if !benches.0.is_fuel(h.item) => {
+                    at.held = Some(h);
+                    at.note = Some((format!("{} won't burn", items.get(h.item).title), 2.0));
+                    return;
+                }
+                (Some(h), SlotKind::Mix) => {
+                    at.held = at.board.put_mix(defs, h);
+                    if at.held == Some(h) {
+                        at.note = Some(("The pot holds four kinds of things at most: take one out first".into(), 2.5));
+                        return;
+                    }
+                }
+                (None, SlotKind::Mix) => at.held = at.board.take_mix(defs),
+                (Some(h), _) => at.held = at.board.put(def, h),
+                (None, _) => at.held = at.board.take(def.name),
             }
-            sound.write(PlaySound::new("dig_hard_1").gain(0.45));
+            let s = match def.kind {
+                SlotKind::Mix => PlaySound::new("stir").gain(0.35),
+                SlotKind::Fire => PlaySound::new("dig_wood").gain(0.45),
+                SlotKind::Plain => PlaySound::new("dig_hard").gain(0.45),
+            };
+            sound.write(s);
             at.dirty = true;
+            at.study = None;
         }
         None => {}
     }
 }
 
 /// How big a thing lies on the board: long things fill the groove, small ones the hollow.
-fn px_for(size: UVec2) -> f32 {
+fn px_for(size: UVec2, scale: f32) -> f32 {
     let long = size.max_element() as f32;
-    if long > 24.0 { 0.56 / long } else { 0.15 / long }
+    if long > 24.0 { 0.56 / long * scale } else { 0.15 / long * scale }
 }
 
 /// Where the `i`th of `n` small things lies, around a slot's middle: two
@@ -477,16 +723,19 @@ pub(super) fn board_models(
     art: Option<Res<ItemArt>>,
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &Transform), With<FlyCamera>>,
-    mut models: Query<(Entity, &mut Transform, &BoardModel), Without<FlyCamera>>,
+    mut models: Query<(Entity, &mut Transform, &BoardModel, Option<&Swirl>), Without<FlyCamera>>,
     mut held_model: Query<(Entity, &mut Transform), (With<HeldModel>, Without<BoardModel>, Without<FlyCamera>)>,
     mut showing: Local<Option<Stack>>,
 ) {
     let Some(art) = art else { return };
     let dt = time.delta_secs().min(0.1);
     at.bump = (at.bump - dt * 3.5).max(0.0);
+    let swirling = (at.spin_to - at.spin).abs() > 1e-3;
+    at.spin = if swirling { at.spin + (at.spin_to - at.spin) * (1.0 - (-dt * 4.0).exp()) } else { at.spin_to };
+    let scale = at.station.map_or(1.0, |st| layout(st.kind).scale);
     let spawn = |commands: &mut Commands, item: ItemId, at_world: Vec3, rot: Quat, marker: bool| -> Option<Entity> {
         let (mesh, mat) = art.model(item)?;
-        let px = px_for(art.size(item)?);
+        let px = px_for(art.size(item)?, scale);
         let tf = Transform::from_translation(at_world + Vec3::Y * (px * 0.5 + 0.004)).with_rotation(rot).with_scale(Vec3::splat(px));
         let mut e = commands.spawn((Mesh3d(mesh), MeshMaterial3d(mat), tf, NotShadowCaster));
         if marker {
@@ -505,8 +754,13 @@ pub(super) fn board_models(
         if let Some(st) = at.station {
             let r = rotation(&st) * flat();
             let l = layout(st.kind);
+            let defs = slots_of(board_name(st.kind).unwrap_or_default());
+            let spin = Quat::from_rotation_y(at.spin);
             for (slot, stack) in &at.board.slots {
                 let (c, _, y, _) = l.slot(slot);
+                // In the pot: closer to the middle, and turned by the stirring so far.
+                let in_pot = defs.iter().any(|d| d.name == slot && d.kind == SlotKind::Mix);
+                let c = if in_pot { l.pot + (c - l.pot) * 0.7 } else { c };
                 // Several small things side by side, a little turned.
                 let n = stack.count.min(8) as usize;
                 // Long things (sticks) lie side by side across the slot, small ones in rows.
@@ -519,7 +773,17 @@ pub(super) fn board_models(
                     } else {
                         (spread(i, n), Quat::from_rotation_y(i as f32 * 1.3))
                     };
-                    spawn(&mut commands, stack.item, to_world(&st, Vec3::new(c.x + off.x, y, c.y + off.y)), turn * r, true);
+                    let off = if in_pot { off * 0.6 } else { off };
+                    let place = to_world(&st, Vec3::new(c.x + off.x, y, c.y + off.y));
+                    if in_pot {
+                        let centre = to_world(&st, Vec3::new(l.pot.x, y, l.pot.y));
+                        let (o, rot) = (place - centre, turn * r);
+                        if let Some(e) = spawn(&mut commands, stack.item, centre + spin * o, spin * rot, true) {
+                            commands.entity(e).insert(Swirl { centre, off: o, rot });
+                        }
+                    } else {
+                        spawn(&mut commands, stack.item, place, turn * r, true);
+                    }
                 }
             }
             if let Some(m) = at.board.made {
@@ -527,10 +791,18 @@ pub(super) fn board_models(
                 spawn(&mut commands, m.item, to_world(&st, Vec3::new(c.x, y, c.y)), r, true);
             }
         }
-    } else if at.bump > 0.0 {
+    } else if at.bump > 0.0 || swirling {
         let hop = (at.bump * std::f32::consts::PI).sin() * 0.03 * at.bump;
-        for (_, mut t, base) in &mut models {
-            t.translation.y = base.0 + hop;
+        let spin = Quat::from_rotation_y(at.spin);
+        for (_, mut t, base, swirl) in &mut models {
+            if let Some(sw) = swirl {
+                // Floating things bob less and go round instead.
+                let p = sw.centre + spin * sw.off;
+                t.translation = Vec3::new(p.x, base.0 + hop * 0.3, p.z);
+                t.rotation = spin * sw.rot;
+            } else {
+                t.translation.y = base.0 + hop;
+            }
         }
     }
     // What you hold hangs under the cursor, just above the board.
@@ -681,18 +953,28 @@ pub(super) fn board_ui(
     } else if let Some(m) = at.board.made {
         format!("Click the {} to take it", items.get(m.item).title)
     } else if let Some(r) = benches.0.matching(name, &at.board) {
-        format!("{} to make {}  ({} / {})", layout(st.kind).work.0, a_or_some(&items, r.makes), at.board.work, r.work)
-    } else if at.held.is_some() {
-        let places: Vec<&str> = layout(st.kind).slots.iter().map(|s| s.4).collect();
-        format!("Set it down {}", places.join(" or "))
+        let what = match r.special {
+            Special::Sharpen => format!("sharpen the {}", items.get(r.makes.item).title),
+            Special::Study => format!("study the {}", items.get(r.makes.item).title),
+            Special::None => format!("make {}", a_or_some(&items, r.makes)),
+        };
+        format!("{} to {what}  ({} / {})", layout(st.kind).work.0, at.board.work, r.work)
+    } else if let Some((r, have)) = benches.0.needs_heat(name, &at.board) {
+        format!("Put fuel in the fire to make {}  ({have} of {} heat)", a_or_some(&items, r.makes), r.heat)
+    } else if let Some(h) = at.held {
+        if matches!(st.kind, StationKind::CookingPot | StationKind::Cauldron) && !benches.0.is_fuel(h.item) {
+            format!("Put it {}", layout(st.kind).slots[0].4)
+        } else {
+            format!("Set it down {}", layout(st.kind).places())
+        }
     } else {
         "Pick something from your pockets below".to_string()
     };
-    let recipes: Vec<String> = benches
+    let mut recipes: Vec<String> = benches
         .0
         .for_station(name)
         .map(|r| {
-            let parts: Vec<String> = r
+            let mut parts: Vec<String> = r
                 .slots
                 .iter()
                 .map(|(slot, s)| {
@@ -700,12 +982,46 @@ pub(super) fn board_ui(
                     format!("{} {where_}", a_or_some(&items, *s).to_lowercase())
                 })
                 .collect();
+            if !r.mix.is_empty() {
+                let things: Vec<String> = r.mix.iter().map(|s| a_or_some(&items, *s).to_lowercase()).collect();
+                parts.push(format!("{} {}", and_list(&things), layout(st.kind).slots[0].4));
+            }
+            if r.heat > 0 {
+                parts.push(format!("fuel worth {} heat in the fire", r.heat));
+            }
             let (_, go) = layout(st.kind).work;
             let gos = if r.work == 1 { format!("1 {go}") } else { format!("{} {}", r.work, plural(go)) };
             let made = if r.makes.count > 1 { format!("{} x{}", items.get(r.makes.item).title, r.makes.count) } else { items.get(r.makes.item).title.clone() };
-            format!("{made}: {}, then {gos}", parts.join(" and "))
+            format!("{made}: {}, then {gos}", and_list(&parts))
         })
         .collect();
+    match st.kind {
+        StationKind::SharpeningStone => {
+            if let Some(sh) = benches.0.sharpen {
+                recipes.push(format!(
+                    "Any tool on the rest, then {} {}: it works {:.1}x as fast for {:.0} minutes",
+                    sh.work,
+                    plural(layout(st.kind).work.1),
+                    sh.speed,
+                    sh.seconds / 60.0
+                ));
+            }
+        }
+        StationKind::MagicalLens => match &at.study {
+            Some(t) => recipes.push(t.clone()),
+            None => recipes.push(
+                "Anything on the plate, then focus the lens: it shows what the thing is made of, and teaches the cauldron the draughts it goes into".into(),
+            ),
+        },
+        StationKind::Cauldron if recipes.is_empty() => recipes.push("The cauldron knows no draughts yet: study their parts under the magical lens".into()),
+        _ => {}
+    }
+    if matches!(st.kind, StationKind::CookingPot | StationKind::SmokingRack | StationKind::Cauldron) && !benches.0.fuel.is_empty() {
+        let mut fuel: Vec<(u32, &str)> = benches.0.fuel.iter().map(|(i, h)| (*h, items.get(*i).title.as_str())).collect();
+        fuel.sort();
+        let fuel: Vec<String> = fuel.iter().map(|(h, t)| format!("{t} {h}")).collect();
+        recipes.push(format!("Heat from each fuel: {}", fuel.join(" · ")));
+    }
     for (q, s) in [(0, st.kind.title().to_string()), (1, line), (2, recipes.join("\n"))] {
         let set = |t: &mut Text| {
             if t.0 != s {
@@ -717,6 +1033,72 @@ pub(super) fn board_ui(
             1 => texts.p1().iter_mut().for_each(|mut t| set(&mut t)),
             _ => texts.p2().iter_mut().for_each(|mut t| set(&mut t)),
         }
+    }
+}
+
+/// What the magical lens shows about a thing: what makes it, where it's
+/// found, what it goes into, and the draughts it teaches the cauldron.
+fn study_text(
+    item: ItemId,
+    items: &Items,
+    benches: &BenchData,
+    recipes: Option<&crate::inventory::crafting::Recipes>,
+    drops: Option<&crate::inventory::drops::Drops>,
+    blocks: &crate::blocks::Blocks,
+) -> String {
+    let title = |i: ItemId| items.get(i).title.clone();
+    let station = |s: &str| StationKind::from_name(s).map_or(s.to_string(), |k| k.title().to_string());
+    let mut lines = vec![format!("The flux of the {}", title(item))];
+    let mut made: Vec<String> = Vec::new();
+    for r in benches.recipes.iter().filter(|r| r.special == Special::None && r.makes.item == item) {
+        let parts: Vec<String> = r.slots.values().chain(&r.mix).map(|s| a_or_some(items, *s).to_lowercase()).collect();
+        let line = format!("{}: {}", station(&r.station), and_list(&parts));
+        if !made.contains(&line) {
+            made.push(line);
+        }
+    }
+    for r in recipes.map(|r| r.list.as_slice()).unwrap_or_default().iter().filter(|r| r.makes.item == item) {
+        let parts: Vec<String> = r.needs.iter().map(|s| a_or_some(items, *s).to_lowercase()).collect();
+        made.push(format!("By hand: {}", and_list(&parts)));
+    }
+    if !made.is_empty() {
+        lines.push(format!("Made from: {}", made.join(" · ")));
+    }
+    let mut found: Vec<String> = drops.map(|d| d.sources(item)).unwrap_or_default().iter().map(|b| blocks.registry.get(*b).name.replace('_', " ")).collect();
+    if let crate::items::ItemKind::Block(b) = items.get(item).kind {
+        found.push(format!("{} blocks", blocks.registry.get(b).name.replace('_', " ")));
+    }
+    if !found.is_empty() {
+        lines.push(format!("Found in: {}", found.join(", ")));
+    }
+    let mut into: Vec<String> = Vec::new();
+    for r in benches.recipes.iter().filter(|r| r.special == Special::None && r.slots.values().chain(&r.mix).any(|s| s.item == item)) {
+        let t = title(r.makes.item);
+        if !into.contains(&t) {
+            into.push(t);
+        }
+    }
+    for r in recipes.map(|r| r.list.as_slice()).unwrap_or_default().iter().filter(|r| r.needs.iter().any(|s| s.item == item)) {
+        let t = title(r.makes.item);
+        if !into.contains(&t) {
+            into.push(t);
+        }
+    }
+    if !into.is_empty() {
+        lines.push(format!("Goes into: {}", into.join(", ")));
+    }
+    if made.is_empty() && into.is_empty() && lines.len() == 1 {
+        lines.push("Nothing you know of is made from it".into());
+    }
+    lines.join("\n")
+}
+
+/// "a, b and c".
+fn and_list(parts: &[String]) -> String {
+    match parts {
+        [] => String::new(),
+        [one] => one.clone(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
     }
 }
 
@@ -736,9 +1118,12 @@ fn plural(s: &str) -> String {
 }
 
 /// `BLOCKGAME_BOARD=stick,small_rock*2` steps up to the tool bench as soon as
-/// it stands, with those in its slots in order (a third lies there made;
+/// it stands, with those in its slots in order (one more lies there made;
 /// `-` leaves a slot empty; `BLOCKGAME_BOARD=carpentry:log` for the carpentry
-/// bench, `mat:small_rock*2,stick` for the camp mat; screenshots; needs the
+/// bench, `mat:small_rock*2,stick` for the camp mat, `pot:raw_meat,-,-,-,stick*2`
+/// for the cooking pot (four parts of the pot, then the fire), `cut:raw_meat`
+/// for the cutting board, any other bench by its name (`cauldron:moss*2,spirit_ember,-,coal`);
+/// screenshots; needs the
 /// bench standing: `BLOCKGAME_CAMP=1 BLOCKGAME_URN=camp_mat` for the mat,
 /// `BLOCKGAME_URNS=tool BLOCKGAME_URN=tool_bench` for the tool bench).
 #[allow(clippy::too_many_arguments)]
@@ -760,6 +1145,10 @@ pub(super) fn board_for_screenshot(
     let (kind, v) = match v.split_once(':') {
         Some(("carpentry", rest)) => (StationKind::CarpentryBench, rest.to_string()),
         Some(("mat", rest)) => (StationKind::CampMat, rest.to_string()),
+        Some(("pot", rest)) => (StationKind::CookingPot, rest.to_string()),
+        Some(("cut", rest)) => (StationKind::CuttingBoard, rest.to_string()),
+        // Any other bench by its urns.ron name: `smoking_rack:raw_meat*2,peat`.
+        Some((k, rest)) if StationKind::from_name(k).and_then(board_name).is_some() => (StationKind::from_name(k).unwrap_or(StationKind::ToolBench), rest.to_string()),
         _ => (StationKind::ToolBench, v.clone()),
     };
     let Some(st) = stations.iter().find(|s| s.kind == kind) else { return };
@@ -826,11 +1215,53 @@ mod tests {
         assert_eq!(name(spot(&st, "camp_mat", false, from(0.25, -0.2), down).0), "tie");
         assert_eq!(name(spot(&st, "camp_mat", false, from(0.35, 0.23), down).0), "stone");
         assert_eq!(name(spot(&st, "camp_mat", true, from(-0.2, -0.33), down).0), "made");
+        let st = Station { kind: StationKind::CookingPot, ..st };
+        for (x, z) in [(0.0, -0.1), (0.15, -0.1), (0.0, 0.15), (0.2, 0.15)] {
+            assert!(name(spot(&st, "cooking_pot", false, from(x, z), down).0).starts_with("pot_"), "{x} {z}");
+        }
+        assert_eq!(name(spot(&st, "cooking_pot", false, from(-0.5, 0.05), down).0), "fire");
+        assert_eq!(name(spot(&st, "cooking_pot", false, from(0.6, -0.1), down).0), "stone");
+        assert_eq!(name(spot(&st, "cooking_pot", true, from(0.1, 0.1), down).0), "made");
+        let st = Station { kind: StationKind::CuttingBoard, ..st };
+        assert_eq!(name(spot(&st, "cutting_board", false, from(-0.2, 0.0), down).0), "board");
+        assert_eq!(name(spot(&st, "cutting_board", false, from(0.3, 0.19), down).0), "stone");
+        assert_eq!(name(spot(&st, "cutting_board", true, from(0.26, -0.1), down).0), "made");
+        assert_eq!(name(spot(&st, "cutting_board", false, from(0.26, -0.1), down).0), "none");
+        let at = |kind, x: f32, z: f32, made: bool| {
+            let st = Station { kind, ..st };
+            name(spot(&st, board_name(kind).unwrap(), made, from(x, z), down).0)
+        };
+        assert_eq!(at(StationKind::SmokingRack, -0.2, 0.05, false), "rack");
+        assert_eq!(at(StationKind::SmokingRack, 0.65, 0.0, false), "fire");
+        assert_eq!(at(StationKind::SmokingRack, -0.75, 0.0, false), "stone");
+        assert_eq!(at(StationKind::IronAnvil, 0.1, 0.0, false), "anvil");
+        assert_eq!(at(StationKind::IronAnvil, -0.55, 0.17, false), "flux");
+        assert_eq!(at(StationKind::IronAnvil, -0.5, -0.03, false), "handle");
+        assert_eq!(at(StationKind::IronAnvil, -0.65, -0.19, false), "stone");
+        assert_eq!(at(StationKind::SharpeningStone, 0.22, 0.14, false), "edge");
+        assert_eq!(at(StationKind::SharpeningStone, -0.05, 0.0, false), "stone");
+        assert_eq!(at(StationKind::MagicalLens, 0.05, 0.05, false), "plate");
+        assert_eq!(at(StationKind::MagicalLens, -0.3, -0.18, false), "stone");
+        assert!(at(StationKind::Cauldron, 0.1, 0.1, false).starts_with("brew_"));
+        assert_eq!(at(StationKind::Cauldron, -0.47, 0.0, false), "fire");
+        assert_eq!(at(StationKind::Cauldron, 0.62, 0.0, false), "stone");
+        assert_eq!(at(StationKind::Cauldron, 0.1, 0.1, true), "made");
     }
 
     #[test]
     fn every_slot_has_a_place_on_its_bench() {
-        for kind in [StationKind::CampMat, StationKind::ToolBench, StationKind::CarpentryBench] {
+        for kind in [
+            StationKind::CampMat,
+            StationKind::ToolBench,
+            StationKind::CarpentryBench,
+            StationKind::CookingPot,
+            StationKind::CuttingBoard,
+            StationKind::SmokingRack,
+            StationKind::IronAnvil,
+            StationKind::SharpeningStone,
+            StationKind::MagicalLens,
+            StationKind::Cauldron,
+        ] {
             for s in slots_of(board_name(kind).unwrap()) {
                 assert!(layout(kind).slots.iter().any(|l| l.0 == s.name), "{kind:?} {}", s.name);
             }

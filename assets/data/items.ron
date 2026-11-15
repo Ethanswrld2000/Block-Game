@@ -114,9 +114,47 @@
         // From creatures.
         (name: "raw_meat", title: "Raw Meat", kind: Food(tier: 1, satiety: 6.0), mass: 0.5, stack: 6),
         (name: "roast_meat", title: "Roast Meat", kind: Food(tier: 2, satiety: 30.0), mass: 0.4, stack: 6),
+        // Cut at the cutting board, cooked in the cooking pot (benches.ron).
+        (name: "meat_strips", title: "Meat Strips", kind: Food(tier: 1, satiety: 3.0), mass: 0.15, stack: 12),
+        (name: "chopped_reeds", title: "Chopped Reed Hearts", kind: Food(tier: 1, satiety: 4.0), mass: 0.15, stack: 12),
+        (name: "fish_flakes", title: "Fish Flakes", kind: Food(tier: 1, satiety: 9.0), mass: 0.2, stack: 12),
+        (name: "roast_slices", title: "Roast Slices", kind: Food(tier: 2, satiety: 17.0), mass: 0.2, stack: 12),
+        (name: "reed_broth", title: "Reed Broth", kind: Food(tier: 2, satiety: 22.0), mass: 0.5, stack: 4),
+        (name: "bog_stew", title: "Bog Stew", kind: Food(tier: 3, satiety: 50.0), mass: 1.2, size: (1, 2), stack: 2),
+        // Brewed in the cauldron; drinking one runs a spell for free for a while (potions.ron).
+        (name: "levitation_draught", title: "Levitation Draught", kind: Food(tier: 0, satiety: 1.0), mass: 0.3, size: (1, 2), stack: 4),
+        (name: "light_draught", title: "Light Draught", kind: Food(tier: 0, satiety: 1.0), mass: 0.3, size: (1, 2), stack: 4),
+        (name: "warmth_draught", title: "Warmth Draught", kind: Food(tier: 0, satiety: 1.0), mass: 0.3, size: (1, 2), stack: 4),
+        (name: "focus_tonic", title: "Focus Tonic", kind: Food(tier: 0, satiety: 1.0), mass: 0.3, size: (1, 2), stack: 4),
         (name: "spirit_ember", title: "Spirit Ember", kind: Material, mass: 0.05, stack: 16),
         (name: "old_coin", title: "Old Coin", kind: Material, mass: 0.02, stack: 64),
         // A weapon.
+        // Hammered at the iron anvil (benches.ron); steel and spirit ones once it's upgraded.
+        (
+            name: "iron_pickaxe", title: "Iron Pickaxe", mass: 2.8, size: (2, 3), damage: 7.0, swing: Overhead,
+            kind: Tool(speeds: { "stone": 6.0, "ore": 5.5, "soil": 1.6 }),
+        ),
+        (
+            name: "iron_axe", title: "Iron Axe", mass: 2.2, size: (1, 3), damage: 9.0, swing: Chop,
+            kind: Tool(speeds: { "log": 6.0, "wood": 6.0, "plant": 4.0 }),
+        ),
+        (name: "iron_shovel", title: "Iron Shovel", mass: 2.0, size: (1, 3), damage: 5.0, kind: Tool(speeds: { "soil": 6.0 })),
+        (
+            name: "steel_pickaxe", title: "Steel Pickaxe", mass: 2.6, size: (2, 3), damage: 9.0, swing: Overhead,
+            kind: Tool(speeds: { "stone": 8.5, "ore": 8.0, "soil": 2.0 }),
+        ),
+        (
+            name: "steel_axe", title: "Steel Axe", mass: 2.0, size: (1, 3), damage: 11.0, swing: Chop,
+            kind: Tool(speeds: { "log": 8.5, "wood": 8.5, "plant": 5.0 }),
+        ),
+        (
+            name: "spirit_pickaxe", title: "Spirit-Etched Pickaxe", mass: 2.2, size: (2, 3), damage: 10.0, swing: Overhead,
+            kind: Tool(speeds: { "stone": 11.0, "ore": 10.5, "soil": 2.5 }),
+        ),
+        (
+            name: "spirit_axe", title: "Spirit-Etched Axe", mass: 1.8, size: (1, 3), damage: 14.0, swing: Chop,
+            kind: Tool(speeds: { "log": 11.0, "wood": 11.0, "plant": 6.0 }),
+        ),
         (name: "flint_spear", title: "Flint Spear", mass: 1.6, size: (1, 4), damage: 10.0, kind: Tool(speeds: {})),
         // Urns: carry one and right click the ground to set it down; its station grows around it
         // (urns.ron). Crouch and right click an urn with an empty hand to pick it back up.

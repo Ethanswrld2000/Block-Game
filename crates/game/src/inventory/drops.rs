@@ -28,6 +28,13 @@ impl Drops {
         Ok(Self { map })
     }
 
+    /// The blocks whose breaking can give this item.
+    pub fn sources(&self, item: ItemId) -> Vec<BlockId> {
+        let mut out: Vec<BlockId> = self.map.iter().filter(|(_, l)| l.iter().any(|(i, ..)| *i == item)).map(|(b, _)| *b).collect();
+        out.sort_by_key(|b| b.0);
+        out
+    }
+
     /// What a broken block gives. `roll` varies the chances between breaks.
     pub fn roll(&self, items: &Items, block: BlockId, at: BlockPos, roll: u64) -> Vec<Stack> {
         match self.map.get(&block) {

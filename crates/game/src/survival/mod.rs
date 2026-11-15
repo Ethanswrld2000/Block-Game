@@ -49,6 +49,7 @@ impl Plugin for SurvivalPlugin {
             .init_resource::<Survival>()
             .init_resource::<Camp>()
             .add_message::<Toast>()
+            .add_message::<Ate>()
             .add_systems(crate::menu::GamePostStartup, (remember_spawn, load_player).chain().after(crate::world::setup_generator))
             .add_systems(
                 crate::menu::GameUpdate,
@@ -132,6 +133,11 @@ fn take_hits(mut hits: MessageReader<Damage>, inv: Res<Inventory>, items: Res<It
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Something was eaten or drunk (cauldron draughts act on it in `progress`).
+#[derive(Message, Debug, Clone, Copy)]
+pub struct Ate(pub crate::items::ItemId);
+
+#[allow(clippy::too_many_arguments)]
 fn eat(
     time: Res<Time>,
     mouse: Res<ButtonInput<MouseButton>>,
@@ -144,6 +150,7 @@ fn eat(
     mut anim: ResMut<HandAnim>,
     mut s: ResMut<Survival>,
     mut toast: MessageWriter<Toast>,
+    mut ate: MessageWriter<Ate>,
 ) {
     let held = wielded.0;
     let food = held.and_then(|i| match items.get(i).kind {
@@ -167,7 +174,9 @@ fn eat(
             return;
         }
         s.vitals.eat(t, satiety);
-        toast.write(Toast(format!("Ate {} ({})", items.get(id).title, t.title)));
+        let verb = if tier == 0 { "Drank" } else { "Ate" };
+        toast.write(Toast(format!("{verb} {} ({})", items.get(id).title, t.title)));
+        ate.write(Ate(id));
     }
 }
 

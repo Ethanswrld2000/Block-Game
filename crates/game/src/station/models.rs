@@ -25,6 +25,8 @@ pub enum Mat {
     Hide,
     Moss,
     Clay,
+    /// What simmers in the cooking pot.
+    Broth,
     /// The urn's own clay, its darker foot, and its marks.
     Urn,
     UrnDark,
@@ -57,6 +59,7 @@ impl Mat {
             Mat::Hide => (c(0.55, 0.35, 0.21), 0.0),
             Mat::Moss => (c(0.3, 0.45, 0.2), 0.0),
             Mat::Clay => (c(0.62, 0.38, 0.26), 0.0),
+            Mat::Broth => (c(0.36, 0.26, 0.13), 0.15),
             Mat::Urn => (c(urn.0, urn.1, urn.2), 0.0),
             Mat::UrnDark => (c(urn.0 * 0.72, urn.1 * 0.7, urn.2 * 0.7), 0.0),
             Mat::MarkLit => (c((urn.0 + 0.6).min(1.0), (urn.1 + 0.55).min(1.0), (urn.2 + 0.4).min(1.0)), 3.0),
@@ -94,6 +97,30 @@ fn legs(v: &mut Vec<Part>, w: f32, d: f32, h: f32, t: f32, mat: Mat) {
     }
 }
 
+/// The golem's stone body: asleep on its frame, or awake (glowing heart and
+/// eyes), with iron hands once it has them. Faces `face` along z (+1 or -1).
+fn golem_body(v: &mut Vec<Part>, awake: bool, hands: bool, face: f32) {
+    use Mat::*;
+    v.extend([
+        b(0.18, 0.3, 0.2, -0.14, 0.15, 0.0, StoneDark),
+        b(0.18, 0.3, 0.2, 0.14, 0.15, 0.0, StoneDark),
+        b(0.6, 0.6, 0.4, 0.0, 0.62, 0.0, Stone),
+        b(0.36, 0.3, 0.32, 0.0, 1.1, 0.0, Stone),
+        b(0.18, 0.5, 0.2, -0.42, 0.62, 0.0, Stone),
+        b(0.18, 0.5, 0.2, 0.42, 0.62, 0.0, Stone),
+    ]);
+    let core = if awake { Spirit } else { MarkUnlit };
+    v.push(b(0.14, 0.14, 0.02, 0.0, 0.7, face * 0.205, core));
+    v.push(b(0.06, 0.05, 0.02, -0.08, 1.12, face * 0.165, core));
+    v.push(b(0.06, 0.05, 0.02, 0.08, 1.12, face * 0.165, core));
+    if hands {
+        v.push(b(0.22, 0.16, 0.24, -0.42, 0.3, 0.0, Iron));
+        v.push(b(0.22, 0.16, 0.24, 0.42, 0.3, 0.0, Iron));
+        // The pack on its back.
+        v.push(b(0.46, 0.4, 0.18, 0.0, 0.7, -face * 0.29, Hide));
+    }
+}
+
 /// Marks around the urn's belly.
 pub const MARKS: u32 = 10;
 
@@ -106,16 +133,17 @@ pub fn half(kind: StationKind) -> Vec3 {
         StationKind::CarpentryBench => Vec3::new(0.85, 0.45, 0.45),
         StationKind::PersonalStorage => Vec3::new(0.5, 0.4, 0.3),
         StationKind::SharpeningStone => Vec3::new(0.45, 0.5, 0.3),
-        StationKind::IronAnvil => Vec3::new(0.35, 0.4, 0.25),
-        StationKind::CookingPot => Vec3::new(0.4, 0.5, 0.4),
-        StationKind::CuttingBoard => Vec3::new(0.4, 0.3, 0.25),
-        StationKind::SmokingRack => Vec3::new(0.6, 0.65, 0.3),
+        StationKind::IronAnvil => Vec3::new(0.86, 0.42, 0.3),
+        StationKind::CookingPot => Vec3::new(0.72, 0.32, 0.36),
+        StationKind::CuttingBoard => Vec3::new(0.43, 0.27, 0.27),
+        StationKind::SmokingRack => Vec3::new(0.9, 0.6, 0.3),
         StationKind::StoneFridge => Vec3::new(0.45, 0.45, 0.35),
         StationKind::Telescope => Vec3::new(0.45, 0.65, 0.3),
-        StationKind::MagicalLens => Vec3::new(0.3, 0.6, 0.2),
-        StationKind::Cauldron => Vec3::new(0.4, 0.4, 0.4),
+        StationKind::MagicalLens => Vec3::new(0.36, 0.42, 0.26),
+        StationKind::Cauldron => Vec3::new(0.72, 0.36, 0.42),
         StationKind::GolemFrame => Vec3::new(0.6, 0.85, 0.4),
         StationKind::Bedframe => Vec3::new(0.5, 0.15, 1.0),
+        StationKind::Golem => Vec3::new(0.45, 0.8, 0.3),
     }
 }
 
@@ -204,73 +232,112 @@ pub fn parts(kind: StationKind, has: &dyn Fn(&str) -> bool, lit: u32) -> Vec<Par
             }
         }
         StationKind::SharpeningStone => {
+            // A grinding wheel on a table, a crank, a pot of water, and a rest
+            // in front of the wheel where the tool lies (`board::layout`).
             legs(&mut v, 0.8, 0.5, 0.45, 0.08, WoodDark);
             v.extend([
                 b(0.8, 0.06, 0.5, 0.0, 0.48, 0.0, Wood),
-                b(0.14, 0.52, 0.52, 0.0, 0.78, 0.0, Stone),
-                b(0.16, 0.36, 0.36, 0.0, 0.78, 0.0, StoneDark),
-                b(0.5, 0.05, 0.05, 0.0, 0.78, 0.0, Iron),
-                b(0.05, 0.2, 0.05, 0.27, 0.7, 0.0, Iron),
-                b(0.3, 0.1, 0.3, -0.25, 0.56, 0.0, Clay),
+                b(0.14, 0.52, 0.52, -0.05, 0.78, -0.02, Stone),
+                b(0.16, 0.36, 0.36, -0.05, 0.78, -0.02, StoneDark),
+                b(0.5, 0.05, 0.05, -0.05, 0.78, -0.02, Iron),
+                b(0.05, 0.2, 0.05, 0.22, 0.7, -0.02, Iron),
+                b(0.18, 0.12, 0.14, -0.3, 0.57, -0.15, Clay),
+                b(0.3, 0.02, 0.18, 0.22, 0.52, 0.14, WoodDark),
             ]);
         }
         StationKind::IronAnvil => {
+            // The anvil on its stump (+x), and a low bench (-x) with the
+            // hammer, a flux tray and room for a handle.
             let metal = if has("alchemical_anvil") || has("steel_anvil") { Steel } else { Iron };
             v.extend([
-                b(0.5, 0.42, 0.46, 0.0, 0.21, 0.0, WoodDark),
-                b(0.34, 0.1, 0.26, 0.0, 0.47, 0.0, metal),
-                b(0.2, 0.14, 0.16, 0.0, 0.59, 0.0, metal),
-                b(0.56, 0.12, 0.24, 0.0, 0.72, 0.0, metal),
-                b(0.16, 0.08, 0.12, 0.35, 0.72, 0.0, metal),
-                b(0.24, 0.05, 0.05, -0.12, 0.81, 0.08, WoodDark),
-                b(0.08, 0.08, 0.1, -0.24, 0.81, 0.08, Iron),
+                b(0.5, 0.42, 0.46, 0.1, 0.21, 0.0, WoodDark),
+                b(0.34, 0.1, 0.26, 0.1, 0.47, 0.0, metal),
+                b(0.2, 0.14, 0.16, 0.1, 0.59, 0.0, metal),
+                b(0.56, 0.12, 0.28, 0.1, 0.72, 0.0, metal),
+                b(0.16, 0.08, 0.12, 0.45, 0.72, 0.0, metal),
+            ]);
+            for (x, z) in [(-0.8, -0.2), (-0.4, -0.2), (-0.8, 0.2), (-0.4, 0.2)] {
+                v.push(b(0.06, 0.5, 0.06, x, 0.25, z, WoodDark));
+            }
+            v.extend([
+                b(0.5, 0.05, 0.5, -0.6, 0.5, 0.0, Wood),
+                b(0.3, 0.02, 0.14, -0.6, 0.535, 0.16, Clay),
+                b(0.26, 0.05, 0.05, -0.6, 0.55, -0.19, WoodDark),
+                b(0.08, 0.08, 0.1, -0.75, 0.565, -0.19, Iron),
             ]);
             if has("alchemical_anvil") {
-                for x in [-0.18, 0.0, 0.18] {
-                    v.push(b(0.05, 0.05, 0.01, x, 0.72, 0.125, Spirit));
-                    v.push(b(0.05, 0.05, 0.01, x, 0.72, -0.125, Spirit));
+                for x in [-0.08, 0.1, 0.28] {
+                    v.push(b(0.05, 0.05, 0.01, x, 0.72, 0.145, Spirit));
+                    v.push(b(0.05, 0.05, 0.01, x, 0.72, -0.145, Spirit));
                 }
             }
         }
         StationKind::CookingPot => {
+            // A clay pot sitting on a ring of stones over the fire. The fire runs
+            // out from under it into a stone-lined mouth (-x) where the fuel goes
+            // (`board::layout`); the ladle rests on a flat stone (+x).
+            let (px, r) = (0.06, 0.33);
+            v.push(b(0.56, 0.02, 0.5, px, 0.01, 0.0, StoneDark));
             for i in 0..8 {
                 let a = i as f32 / 8.0 * std::f32::consts::TAU;
-                v.push(b(0.14, 0.1, 0.14, a.cos() * 0.32, 0.05, a.sin() * 0.32, Stone));
+                if i == 4 {
+                    continue; // the fire's mouth
+                }
+                v.push(b(0.14, 0.12, 0.14, px + a.cos() * r, 0.06, a.sin() * r, Stone));
+            }
+            for x in [-0.36, -0.54] {
+                for z in [-0.18, 0.18] {
+                    v.push(b(0.15, 0.1, 0.1, x, 0.05, z, Stone));
+                }
             }
             v.extend([
-                b(0.24, 0.08, 0.24, 0.0, 0.04, 0.0, WoodDark),
-                b(0.12, 0.16, 0.12, 0.0, 0.12, 0.0, Fire),
-                b(0.44, 0.32, 0.44, 0.0, 0.46, 0.0, Clay),
-                b(0.34, 0.04, 0.34, 0.0, 0.63, 0.0, Groove),
-                b(0.03, 0.4, 0.03, 0.0, 0.86, 0.0, Cord),
-                b(0.9, 0.05, 0.05, 0.0, 1.06, 0.0, WoodDark),
+                b(0.08, 0.1, 0.28, -0.66, 0.05, 0.0, StoneDark),
+                b(0.36, 0.03, 0.24, -0.45, 0.015, 0.0, Fire),
+                b(0.2, 0.1, 0.2, px, 0.06, 0.0, Fire),
+                b(0.4, 0.04, 0.4, px, 0.13, 0.0, Groove),
+                b(0.54, 0.4, 0.54, px, 0.34, 0.0, Clay),
+                b(0.6, 0.06, 0.6, px, 0.57, 0.0, Clay),
+                b(0.46, 0.012, 0.46, px, 0.606, 0.0, Broth),
+                // The ladle on its stone.
+                b(0.2, 0.08, 0.34, 0.6, 0.04, 0.0, StoneDark),
+                b(0.04, 0.03, 0.3, 0.6, 0.095, 0.05, Wood),
+                b(0.11, 0.05, 0.1, 0.6, 0.105, -0.13, WoodDark),
             ]);
-            for sx in [-1.0, 1.0] {
-                v.push(tilted(b(0.06, 1.1, 0.06, sx * 0.38, 0.52, 0.0, Wood), sx * 0.12));
-            }
         }
         StationKind::CuttingBoard => {
+            // A stump with a wide board on it, a flint knife along the back and a
+            // clay dish the cut pieces go into.
             v.extend([
-                b(0.6, 0.44, 0.44, 0.0, 0.22, 0.0, WoodDark),
-                b(0.7, 0.06, 0.46, 0.0, 0.47, 0.0, Wood),
-                b(0.22, 0.02, 0.06, 0.12, 0.51, 0.12, Stone),
-                b(0.12, 0.03, 0.05, -0.04, 0.515, 0.12, WoodDark),
-                b(0.14, 0.05, 0.1, -0.18, 0.52, -0.08, Hide),
+                b(0.6, 0.42, 0.42, 0.0, 0.21, 0.0, WoodDark),
+                b(0.84, 0.06, 0.52, 0.0, 0.45, 0.0, Wood),
+                b(0.12, 0.035, 0.045, 0.1, 0.4975, 0.19, WoodDark),
+                b(0.24, 0.015, 0.06, 0.28, 0.4875, 0.19, StoneDark),
+                b(0.24, 0.03, 0.24, 0.26, 0.495, -0.08, Clay),
+                b(0.18, 0.01, 0.18, 0.26, 0.511, -0.08, Groove),
             ]);
         }
         StationKind::SmokingRack => {
-            v.extend([
-                b(0.07, 1.25, 0.07, -0.56, 0.62, 0.0, Wood),
-                b(0.07, 1.25, 0.07, 0.56, 0.62, 0.0, Wood),
-                b(1.2, 0.05, 0.05, 0.0, 1.2, 0.0, WoodDark),
-                b(1.2, 0.05, 0.05, 0.0, 0.9, 0.0, WoodDark),
-                b(0.5, 0.12, 0.4, 0.0, 0.06, 0.0, StoneDark),
-                b(0.36, 0.06, 0.28, 0.0, 0.14, 0.0, Fire),
-            ]);
-            for x in [-0.36, -0.12, 0.12, 0.36] {
-                v.push(b(0.1, 0.22, 0.04, x, 1.03, 0.0, Hide));
-                v.push(b(0.1, 0.18, 0.04, x + 0.06, 0.75, 0.0, Hide));
+            // A grate on four posts over a long peat fire whose mouth sticks
+            // out at +x; a reed fan lies at -x to work the smoke.
+            for (x, z) in [(-0.52, -0.2), (0.52, -0.2), (-0.52, 0.2), (0.52, 0.2)] {
+                v.push(b(0.06, 1.0, 0.06, x, 0.5, z, Wood));
             }
+            for x in [-0.52, 0.52] {
+                v.push(b(0.06, 0.05, 0.46, x, 0.98, 0.0, WoodDark));
+            }
+            for z in [-0.14, -0.05, 0.05, 0.14] {
+                v.push(b(1.04, 0.025, 0.025, 0.0, 1.0, z, Wood));
+            }
+            v.extend([
+                b(0.9, 0.1, 0.42, 0.05, 0.05, 0.0, StoneDark),
+                b(0.7, 0.03, 0.3, 0.1, 0.11, 0.0, Fire),
+                b(0.3, 0.1, 0.06, 0.65, 0.05, -0.17, StoneDark),
+                b(0.3, 0.1, 0.06, 0.65, 0.05, 0.17, StoneDark),
+                b(0.06, 0.1, 0.4, 0.83, 0.05, 0.0, StoneDark),
+                b(0.24, 0.03, 0.24, 0.65, 0.015, 0.0, Fire),
+                b(0.24, 0.02, 0.2, -0.75, 0.01, 0.0, Reed),
+                b(0.03, 0.03, 0.18, -0.75, 0.02, 0.18, Wood),
+            ]);
         }
         StationKind::StoneFridge => {
             v.extend([
@@ -292,27 +359,42 @@ pub fn parts(kind: StationKind, has: &dyn Fn(&str) -> bool, lit: u32) -> Vec<Par
             v.push(tilted(b(0.04, 0.16, 0.16, tip.x, tip.y, tip.z, lens), 0.45));
         }
         StationKind::MagicalLens => {
+            // A plate on a stone base; a brass arm holds a ring of crystal
+            // over it, and a knob on top of the post focuses it.
             v.extend([
-                b(0.36, 0.08, 0.3, 0.0, 0.04, 0.0, StoneDark),
-                b(0.06, 0.6, 0.06, 0.0, 0.38, 0.0, Brass),
-                b(0.5, 0.06, 0.06, 0.0, 0.7, 0.0, Brass),
-                b(0.5, 0.06, 0.06, 0.0, 1.16, 0.0, Brass),
-                b(0.06, 0.46, 0.06, -0.22, 0.93, 0.0, Brass),
-                b(0.06, 0.46, 0.06, 0.22, 0.93, 0.0, Brass),
-                b(0.38, 0.4, 0.02, 0.0, 0.93, 0.0, Crystal),
+                b(0.7, 0.08, 0.5, 0.0, 0.04, 0.0, StoneDark),
+                b(0.4, 0.015, 0.4, 0.0, 0.0875, 0.0, Linen),
+                b(0.05, 0.7, 0.05, -0.3, 0.43, -0.18, Brass),
+                b(0.3, 0.04, 0.04, -0.15, 0.6, -0.18, Brass),
+                b(0.04, 0.04, 0.2, 0.0, 0.6, -0.08, Brass),
+                b(0.32, 0.02, 0.03, 0.0, 0.6, -0.16, Crystal),
+                b(0.32, 0.02, 0.03, 0.0, 0.6, 0.16, Crystal),
+                b(0.03, 0.02, 0.32, -0.16, 0.6, 0.0, Crystal),
+                b(0.03, 0.02, 0.32, 0.16, 0.6, 0.0, Crystal),
+                b(0.11, 0.08, 0.11, -0.3, 0.8, -0.18, Brass),
             ]);
         }
         StationKind::Cauldron => {
+            // An iron pot on three legs over a fire whose mouth runs out at -x;
+            // the paddle rests on a stone at +x.
             let metal = if has("steel_cauldron") { Steel } else { Iron };
             let s = if has("steel_cauldron") { 1.15 } else { 1.0 };
+            let cx = 0.08;
             for (x, z) in [(-0.22, -0.2), (0.22, -0.2), (0.0, 0.24)] {
-                v.push(b(0.07, 0.2, 0.07, x * s, 0.1, z * s, metal));
+                v.push(b(0.07, 0.2, 0.07, cx + x * s, 0.1, z * s, metal));
             }
             v.extend([
-                b(0.62 * s, 0.42 * s, 0.62 * s, 0.0, 0.2 + 0.21 * s, 0.0, metal),
-                b(0.7 * s, 0.06, 0.7 * s, 0.0, 0.2 + 0.42 * s, 0.0, metal),
-                b(0.5 * s, 0.03, 0.5 * s, 0.0, 0.19 + 0.42 * s, 0.0, Brew),
-                b(0.2, 0.08, 0.2, 0.0, 0.04, 0.0, Fire),
+                b(0.62 * s, 0.42 * s, 0.62 * s, cx, 0.2 + 0.21 * s, 0.0, metal),
+                b(0.7 * s, 0.06, 0.7 * s, cx, 0.2 + 0.42 * s, 0.0, metal),
+                b(0.5 * s, 0.03, 0.5 * s, cx, 0.19 + 0.42 * s, 0.0, Brew),
+                b(0.2, 0.08, 0.2, cx, 0.04, 0.0, Fire),
+                b(0.15, 0.1, 0.1, -0.45, 0.05, -0.17, Stone),
+                b(0.15, 0.1, 0.1, -0.45, 0.05, 0.17, Stone),
+                b(0.08, 0.1, 0.28, -0.62, 0.05, 0.0, StoneDark),
+                b(0.3, 0.03, 0.24, -0.45, 0.015, 0.0, Fire),
+                b(0.2, 0.08, 0.34, 0.62, 0.04, 0.0, StoneDark),
+                b(0.04, 0.03, 0.3, 0.62, 0.095, 0.05, Wood),
+                b(0.1, 0.03, 0.12, 0.62, 0.095, -0.14, WoodDark),
             ]);
         }
         StationKind::GolemFrame => {
@@ -320,26 +402,18 @@ pub fn parts(kind: StationKind, has: &dyn Fn(&str) -> bool, lit: u32) -> Vec<Par
                 b(0.07, 1.7, 0.07, -0.55, 0.85, -0.3, Wood),
                 b(0.07, 1.7, 0.07, 0.55, 0.85, -0.3, Wood),
                 b(1.2, 0.06, 0.06, 0.0, 1.66, -0.3, WoodDark),
-                b(0.5, 0.3, 0.36, 0.0, 0.15, 0.0, StoneDark),
-                b(0.6, 0.6, 0.4, 0.0, 0.62, 0.0, Stone),
-                b(0.36, 0.3, 0.32, 0.0, 1.1, 0.0, Stone),
-                b(0.18, 0.5, 0.2, -0.42, 0.62, 0.0, Stone),
-                b(0.18, 0.5, 0.2, 0.42, 0.62, 0.0, Stone),
             ]);
-            let core = if has("golem_heart") { Spirit } else { MarkUnlit };
-            v.push(b(0.14, 0.14, 0.02, 0.0, 0.7, 0.205, core));
-            v.push(b(0.06, 0.05, 0.02, -0.08, 1.12, 0.165, core));
-            v.push(b(0.06, 0.05, 0.02, 0.08, 1.12, 0.165, core));
-            if has("golem_hands") {
-                v.push(b(0.22, 0.16, 0.24, -0.42, 0.3, 0.0, Iron));
-                v.push(b(0.22, 0.16, 0.24, 0.42, 0.3, 0.0, Iron));
-            }
-            // Cords holding it up until it wakes.
-            if !has("golem_heart") {
+            if has("golem_heart") {
+                // It has walked off: only the scaffold and its cut cords are left.
+                v.push(b(0.03, 0.12, 0.03, -0.3, 1.58, -0.1, Cord));
+                v.push(b(0.03, 0.12, 0.03, 0.3, 1.58, -0.1, Cord));
+            } else {
+                golem_body(&mut v, false, false, 1.0);
                 v.push(b(0.03, 0.3, 0.03, -0.3, 1.5, -0.1, Cord));
                 v.push(b(0.03, 0.3, 0.03, 0.3, 1.5, -0.1, Cord));
             }
         }
+        StationKind::Golem => golem_body(&mut v, true, has("golem_hands"), -1.0),
         StationKind::Bedframe => {
             // Rails around the bedroll (0.9 x 1.9, x across, z along), posts at the corners.
             let w = if has("double_bed") { 2.0 } else { 1.04 };

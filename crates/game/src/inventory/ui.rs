@@ -187,9 +187,9 @@ fn open_close(
         ui.dirty = true;
     }
     // Walked away from the chest, or it was broken: stop showing it.
-    // (Personal storage isn't in the world: it stays open until you close it.)
+    // (Personal storage, the fridge and the golem's pack aren't in the world: they stay open until you close them.)
     if let Some(c) = ui.chest
-        && (c.x, c.y, c.z) != super::STORAGE_AT
+        && !super::virtual_chest(c)
         && (Vec3::new(c.x as f32 + 0.5, c.y as f32 + 0.5, c.z as f32 + 0.5).distance(player.pos + Vec3::Y) > 6.0 || !chests.map.contains_key(&c))
     {
         ui.chest = None;

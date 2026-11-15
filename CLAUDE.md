@@ -237,8 +237,22 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   instead of Bevy's `Startup`/`Update` (entering `Screen::Game` runs the startup three once, then
   `GameUpdate` runs inside `Update`); systems in `First`/`PreUpdate`/`Last` need `.run_if(menu::in_game)`.
   No "quit to title" yet (game state isn't reset), so Save and quit closes the game.
-- Next: hands-on use for the `later: true` stations (cooking pot and cutting board first, then retire the Tab
-  crafting list), portable bedroll/tent use, upgrade effects (bedframe sleep, sharpening), twig regrowth.
+- Every station works now (no `later: true` steps left). Boards (`station::board`, rules in `station::bench`)
+  also cover the cooking pot (`SlotKind::Mix` slots fill in any order, recipes list a `mix`; a `Fire` slot burns
+  `fuel` from benches.ron for a recipe's `heat`; stirring swirls the pot), cutting board, smoking rack, iron anvil
+  (steel/alchemical anvil steps teach steel and spirit tools), sharpening stone (any tool: `Special::Sharpen`,
+  `station::Edges` speeds mining, saved to `edges.ron`), magical lens (anything: `Special::Study` shows what it's
+  made of and adds `lens:item` to the learned set; `Urns.studied`) and cauldron (draughts, unlocked by
+  `lens:item`, `a+b` unlocks need both; drinking one (`survival::Ate`, `assets/data/potions.ron`, food tier 0)
+  runs a spell free via `Spells.brewed` or gives focus). Herb rack teaches seasoned pot recipes. Stone fridge and
+  the golem's pack are chests not in the world (`inventory::virtual_chest`). Bedframe/double bed: `camp::Bed::rest`.
+  Telescope (`station::telescope`, `assets/data/constellations.ron`): on a clear night, look through it (zoomed
+  view, gizmo stars) and hold a constellation in the middle to chart it (`Urns.charted`, XP); improved telescope /
+  diamond lens show tier 2 / 3. Golem (`station::golem`): `golem_heart` wakes it (a walking `StationKind::Golem`,
+  right click follow/stay), `golem_hands` gives it a pack (crouch + right click) and it strikes hostile creatures
+  near it; saved to `golem.ron`. Cooking moved out of the Tab list (roast meat, peat stew).
+  `BLOCKGAME_BOARD=<station name>:...` opens any bench for screenshots (`pot:`, `cut:` short forms).
+- Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen
 

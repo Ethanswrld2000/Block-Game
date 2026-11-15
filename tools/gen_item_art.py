@@ -244,6 +244,61 @@ def flint_spear(c):
     c.rect(7, 16, 12, 22, CORD)
 
 
+def metal_pickaxe(c, metal, edge):
+    handle(c, 18, 10, 59, 4)
+    c.poly([(1, 15), (8, 6), (20, 3), (32, 6), (39, 15), (33, 11), (20, 9), (7, 11)], metal)
+    c.line(4, 13, 14, 6, 1, edge)
+    c.line(26, 6, 36, 13, 1, edge)
+    c.rect(16, 4, 24, 12, mul(metal, 0.7))
+
+
+def metal_axe(c, metal, edge):
+    handle(c, 4, 4, 59, 3)
+    c.poly([(7, 5), (17, 2), (20, 7), (20, 21), (17, 25), (7, 19)], metal)
+    c.line(19, 4, 19, 23, 1, edge)
+    c.rect(3, 9, 8, 15, mul(metal, 0.7))
+
+
+IRON, IRON_L = hexc("6e7078"), hexc("b8bcc4")
+STEEL, STEEL_L = hexc("9aa4b2"), hexc("e8f0f8")
+SPIRIT, SPIRIT_L = hexc("5a6e8a"), hexc("8ee0ff")
+
+
+def iron_pickaxe(c):
+    metal_pickaxe(c, IRON, IRON_L)
+
+
+def iron_axe(c):
+    metal_axe(c, IRON, IRON_L)
+
+
+def iron_shovel(c):
+    handle(c, 8, 20, 59, 3)
+    c.poly([(3, 6), (6, 2), (13, 2), (16, 6), (16, 18), (12, 22), (7, 22), (3, 18)], IRON)
+    c.line(4, 6, 4, 17, 1, IRON_L)
+    c.rect(8, 17, 11, 24, mul(IRON, 0.7))
+
+
+def steel_pickaxe(c):
+    metal_pickaxe(c, STEEL, STEEL_L)
+
+
+def steel_axe(c):
+    metal_axe(c, STEEL, STEEL_L)
+
+
+def spirit_pickaxe(c):
+    metal_pickaxe(c, SPIRIT, SPIRIT_L)
+    for x in (12, 20, 28):
+        c.dot(x, 8, SPIRIT_L)
+
+
+def spirit_axe(c):
+    metal_axe(c, SPIRIT, SPIRIT_L)
+    for y in (9, 14, 19):
+        c.dot(14, y, SPIRIT_L)
+
+
 # --- items -------------------------------------------------------------------
 
 
@@ -480,6 +535,80 @@ def roast_meat(c):
     c.dot(9, 6, hexc("c8783a"))
 
 
+def meat_strips(c):
+    # Three raw strips side by side.
+    for x, y in [(4, 4), (9, 3), (14, 5)]:
+        c.line(x, y, x - 1, y + 12, 3.5, MEAT)
+        c.line(x + 1, y + 2, x, y + 9, 1, MEAT_FAT)
+
+
+def chopped_reeds(c):
+    # A little heap of pale reed-heart rounds.
+    for x, y in [(5, 13), (10, 14), (15, 13), (7, 9), (13, 9), (10, 5)]:
+        c.ellipse(x, y, 3, 2.5, hexc("e8e0b8"))
+        c.ellipse(x, y, 1.5, 1, hexc("9eb466"))
+
+
+def fish_flakes(c):
+    # Smoked fish pulled into flakes.
+    for x, y, a in [(5, 12, 0.3), (11, 14, -0.2), (15, 9, 0.5), (8, 7, -0.4), (12, 4, 0.2)]:
+        c.line(x - 3 * math.cos(a), y - 3 * math.sin(a), x + 3 * math.cos(a), y + 3 * math.sin(a), 2.5, hexc("c08850"))
+        c.dot(x, y, hexc("8a5428"))
+
+
+def roast_slices(c):
+    # Two slices of roast, browned edges and pink middles.
+    for x, y in [(7, 8), (13, 12)]:
+        c.ellipse(x, y, 5.5, 4.5, hexc("8a4a22"))
+        c.ellipse(x, y, 3.5, 2.5, hexc("c0705a"))
+
+
+def reed_broth(c):
+    # A clay cup of green broth.
+    c.poly([(3, 9), (17, 9), (15, 18), (5, 18)], hexc("8a5a3c"))
+    c.rect(2, 7, 18, 10, hexc("9a6a48"))
+    c.ellipse(10, 8, 7, 1.6, hexc("8aa050"))
+    for x in (7, 12):
+        c.line(x, 5, x + 1, 1, 1, hexc("d8d8d0"))
+
+
+def bog_stew(c):
+    # A deep bowl of dark stew with meat in it, steam above.
+    c.poly([(2, 20), (18, 20), (17, 34), (13, 38), (7, 38), (3, 34)], hexc("6a4a34"))
+    c.rect(1, 18, 19, 21, hexc("7a5a40"))
+    c.ellipse(10, 18, 8, 2.2, hexc("5a3418"))
+    c.dot(7, 18, MEAT)
+    c.dot(12, 18, hexc("e8e0b8"))
+    c.dot(14, 18, hexc("5a2a74"))
+    for x in (5, 10, 15):
+        c.line(x, 15, x - 1, 5, 1, hexc("d8d8d0"))
+
+
+def draught(c, brew, glow):
+    """A stoppered clay flask of something bright, 20 x 40."""
+    c.rect(8, 4, 12, 9, hexc("8a6a48"))
+    c.rect(7, 9, 13, 13, hexc("b0a080"))
+    c.ellipse(10, 26, 8, 11, hexc("a0a8a8"))
+    c.ellipse(10, 28, 6.5, 8.5, brew)
+    c.ellipse(8, 25, 2, 3, glow)
+
+
+def levitation_draught(c):
+    draught(c, hexc("8cc8e8"), hexc("e8f8ff"))
+
+
+def light_draught(c):
+    draught(c, hexc("e8d050"), hexc("fff8c8"))
+
+
+def warmth_draught(c):
+    draught(c, hexc("d86a30"), hexc("ffc890"))
+
+
+def focus_tonic(c):
+    draught(c, hexc("9a60c8"), hexc("e8c8ff"))
+
+
 def spirit_ember(c):
     c.ellipse(10, 11, 6, 7, hexc("58b4e8"))
     c.ellipse(10, 12, 3.5, 4, hexc("b8ecff"))
@@ -545,6 +674,9 @@ DRAW = {f.__name__: f for f in [
     cured_meat, feast_platter, ember_herb, stick, plant_fiber, cordage, coal, raw_iron, flint, hide, fur, linen_shirt,
     linen_trousers, hide_boots, reed_hat, reed_cloak, fur_hood, fur_coat, hide_leggings, bark_helm, bark_vest, hide_jerkin,
     reed_satchel, hide_pack, raw_meat, roast_meat, spirit_ember, old_coin, small_rock, rough_axe,
+    meat_strips, chopped_reeds, fish_flakes, roast_slices, reed_broth, bog_stew,
+    iron_pickaxe, iron_axe, iron_shovel, steel_pickaxe, steel_axe, spirit_pickaxe, spirit_axe,
+    levitation_draught, light_draught, warmth_draught, focus_tonic,
     tool_urn, hearth_urn, star_urn, golem_urn, portable_bedroll, portable_tent,
 ]}
 
