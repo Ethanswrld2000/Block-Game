@@ -385,6 +385,14 @@ fn walk(
         p.vel.y = p.vel.y.min(0.0);
     }
 
+    // Fell off the island into the void: that's the end.
+    let floor = worldgen::WORLD_FLOOR as f32;
+    if p.pos.y < floor {
+        p.pos.y = floor;
+        p.vel = Vec3::ZERO;
+        damage.write(Damage { amount: 1000.0, cause: DamageCause::HeavyFall });
+    }
+
     // Still standing on something?
     if !p.on_ground && p.vel.y <= 0.0 && hits(&world, &blocks, p.pos - Vec3::Y * 0.02, 0.01, water) {
         p.on_ground = true;

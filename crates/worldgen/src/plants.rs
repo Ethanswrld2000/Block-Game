@@ -8,7 +8,7 @@ use voxel::chunk::index;
 use voxel::{BlockId, ChunkPos, CHUNK_SIZE, CHUNK_SIZE_I32};
 
 use crate::util::{hash2, smoothstep, unit};
-use crate::{Column, WorldGen, SEA_LEVEL};
+use crate::{Column, WorldGen};
 
 /// Chance of a pebble on a surface block (bare stone, gravel, sand: more).
 const PEBBLES: f32 = 0.006;
@@ -20,7 +20,7 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, cols: &[[Column; CHUNK_SIZE]; 
     for (lz, row) in cols.iter().enumerate() {
         for (lx, col) in row.iter().enumerate() {
             let biome = wg.biomes.get(col.biome);
-            if col.climate.overhang > 0.02 || col.height < SEA_LEVEL {
+            if col.land == crate::Land::Void || col.climate.overhang > 0.02 || col.height < col.water {
                 continue;
             }
             // The plant goes in the block above the ground.
@@ -50,7 +50,7 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, cols: &[[Column; CHUNK_SIZE]; 
             }
             let patch = smoothstep(-0.45, 0.35, wg.plant_patch.get_noise_2d(x as f32, z as f32)) * 1.5;
             for (i, p) in biome.plants.iter().enumerate() {
-                if p.shore && col.height > SEA_LEVEL + 1 {
+                if p.shore && col.height > col.water.saturating_add(1) {
                     continue;
                 }
                 // Reeds by the water grow thick wherever there is shore.
