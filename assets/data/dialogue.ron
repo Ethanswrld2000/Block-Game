@@ -1,0 +1,115 @@
+// Dialogue trees (game::npc::dialogue), one per NPC kind (npcs.ron names it).
+//
+// A node: `say` = lines spoken one after another (click, Space or E moves on),
+// `mood` = Neutral | Happy | Curious | Worried | Sad | Angry | Surprised (face and hands),
+// `sets` = flags set on entering, `choices` = your replies, `then` = go straight on
+// when there are no replies.
+// A reply: `text`, optional `tone` tag, `goto` a node, `end: true` to finish,
+// `act: Follow | Stay | Wander` to give an order, `once: true` = gone after picking,
+// `needs` / `without` flags to show it, `sets` flags. The flag `following` is on while
+// the NPC follows you.
+// `start` opens the first talk; `again` opens later ones (flag `met`).
+{
+    "mossa": (
+        start: "greet",
+        again: "again",
+        nodes: {
+            "greet": (
+                mood: Surprised,
+                say: [
+                    "Oh! Mind the moss, it bites back. Well, it sulks.",
+                    "A dry face in the Great Swamp. That's rare as a straight reed.",
+                    "Name's Mossa. Mossa Tarn. I trade, I wander, I talk too much.",
+                ],
+                choices: [
+                    (text: "What do you trade?", tone: "Ask", goto: "trade"),
+                    (text: "Tell me about this swamp.", tone: "Ask", goto: "swamp"),
+                    (text: "Walk with me a while.", tone: "Kind", goto: "follow"),
+                    (text: "I have to go.", end: true),
+                ],
+            ),
+            "again": (
+                mood: Happy,
+                say: ["Back again! The frogs said you would be. They lie, mostly, but not today."],
+                choices: [
+                    (text: "What do you trade?", tone: "Ask", goto: "trade"),
+                    (text: "Tell me about this swamp.", tone: "Ask", goto: "swamp"),
+                    (text: "Walk with me a while.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "Go on, wander as you like.", goto: "wander", needs: ["following"]),
+                    (text: "Goodbye, Mossa.", end: true),
+                ],
+            ),
+            "hub": (
+                mood: Neutral,
+                say: ["What else is on your mind?"],
+                choices: [
+                    (text: "What do you trade?", tone: "Ask", goto: "trade"),
+                    (text: "Tell me about this swamp.", tone: "Ask", goto: "swamp"),
+                    (text: "Walk with me a while.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "That's all for now.", end: true),
+                ],
+            ),
+            "trade": (
+                mood: Happy,
+                say: [
+                    "Reed rope, bog salt, a lens with only one crack in it.",
+                    "And stories. Stories are free. The rope is not.",
+                ],
+                choices: [
+                    (text: "A cracked lens? Who'd buy that?", tone: "Blunt", goto: "lens", once: true),
+                    (text: "Maybe later.", goto: "hub"),
+                ],
+            ),
+            "lens": (
+                mood: Curious,
+                say: [
+                    "Someone who wants to see two of everything!",
+                    "No, truly. Hold it to the stars and the crack splits them. Old charters used that trick.",
+                ],
+                then: "hub",
+            ),
+            "swamp": (
+                mood: Worried,
+                say: [
+                    "It's older than the villages on their stilts. Older than the barrows, they say.",
+                    "Keep a torch near you after dark. Things walk the reeds that don't like the light.",
+                ],
+                choices: [
+                    (text: "What things?", tone: "Ask", goto: "things"),
+                    (text: "I'm not afraid of the dark.", tone: "Bold", goto: "brave"),
+                    (text: "Thanks for the warning.", goto: "hub"),
+                ],
+            ),
+            "things": (
+                mood: Worried,
+                say: [
+                    "Cold things. Wights from the barrows, mostly. They remember being people, and it makes them angry.",
+                    "Don't go into a barrow at night. Don't go into one in the day either, if you can help it.",
+                ],
+                choices: [(text: "I'll be careful.", goto: "hub")],
+            ),
+            "brave": (
+                mood: Angry,
+                say: ["Then you're a fool, and fools make short stories. Take a torch anyway."],
+                choices: [(text: "Fine. A torch.", tone: "Kind", goto: "hub")],
+            ),
+            "follow": (
+                mood: Happy,
+                say: ["A walk! My legs were getting bored. Lead on, I'll keep up."],
+                choices: [(text: "Let's go.", act: Follow, end: true)],
+            ),
+            "stay": (
+                mood: Neutral,
+                say: ["Right here? Fine. I'll count the frogs until you're back."],
+                choices: [(text: "I won't be long.", act: Stay, end: true)],
+            ),
+            "wander": (
+                mood: Happy,
+                say: ["Free as a bog moth. Come find me, I won't go far."],
+                choices: [(text: "See you around.", act: Wander, end: true)],
+            ),
+        },
+    ),
+}
