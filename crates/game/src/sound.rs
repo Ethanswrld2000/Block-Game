@@ -72,11 +72,13 @@ pub struct PlaySound {
     pub at: Option<Vec3>,
     /// Part of the ambience: follows the ambience volume setting too.
     pub ambient: bool,
+    /// Playback speed (pitch); `None` = a little random jitter.
+    pub speed: Option<f32>,
 }
 
 impl PlaySound {
     pub fn new(name: impl Into<String>) -> Self {
-        Self { name: name.into(), gain: 1.0, at: None, ambient: false }
+        Self { name: name.into(), gain: 1.0, at: None, ambient: false, speed: None }
     }
 
     pub fn gain(mut self, gain: f32) -> Self {
@@ -84,9 +86,15 @@ impl PlaySound {
         self
     }
 
+    /// Play at this speed (and so pitch) instead of a random jitter.
+    pub fn speed(mut self, speed: f32) -> Self {
+        self.speed = Some(speed);
+        self
+    }
+
     /// An ambient sound from a place in the world.
     pub fn ambient_at(name: impl Into<String>, at: Vec3, gain: f32) -> Self {
-        Self { name: name.into(), gain, at: Some(at), ambient: true }
+        Self { name: name.into(), gain, at: Some(at), ambient: true, speed: None }
     }
 }
 
@@ -175,7 +183,7 @@ fn play(
             continue;
         }
         let h = bank.handles.entry(m.name.clone()).or_insert_with(|| server.load(format!("sounds/{}.ogg", m.name))).clone();
-        let speed = jitter(&mut seed);
+        let speed = m.speed.unwrap_or_else(|| jitter(&mut seed));
         let playback = PlaybackSettings::DESPAWN.with_volume(Volume::Linear(v)).with_speed(speed);
         match m.at {
             Some(at) => commands.spawn((AudioPlayer(h), playback.with_spatial(true).with_spatial_scale(PAN_ONLY), Transform::from_translation(at))),
