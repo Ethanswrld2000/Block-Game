@@ -31,8 +31,7 @@ pub struct FoodTiers {
 
 impl FoodTiers {
     pub fn from_ron(text: &str) -> Result<Self, String> {
-        let list: Vec<FoodTier> =
-            ron::from_str(text).map_err(|e| format!("food_tiers.ron: {e}"))?;
+        let list: Vec<FoodTier> = ron::from_str(text).map_err(|e| format!("food_tiers.ron: {e}"))?;
         Ok(Self { list })
     }
 

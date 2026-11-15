@@ -22,6 +22,7 @@ pub enum Spell {
 }
 
 impl Spell {
+
     pub fn title(self) -> &'static str {
         match self {
             Spell::Levitation => "Levitation",
@@ -103,37 +104,18 @@ pub struct Tree {
 impl Tree {
     pub fn from_ron(text: &str) -> Result<Self, String> {
         let spec: TreeSpec = ron::from_str(text).map_err(|e| format!("skills.ron: {e}"))?;
-        let find = |n: &str| {
-            spec.majors
-                .iter()
-                .position(|m| m.name == n)
-                .ok_or_else(|| format!("skills.ron: no major '{n}'"))
-        };
+        let find = |n: &str| spec.majors.iter().position(|m| m.name == n).ok_or_else(|| format!("skills.ron: no major '{n}'"));
         for m in &spec.majors {
             if m.ring.len() != RING {
-                return Err(format!(
-                    "skills.ron: '{}' has {} ring nodes, not {RING}",
-                    m.name,
-                    m.ring.len()
-                ));
+                return Err(format!("skills.ron: '{}' has {} ring nodes, not {RING}", m.name, m.ring.len()));
             }
         }
-        let links = spec
-            .links
-            .iter()
-            .map(|(a, b, w)| Ok((find(a)?, find(b)?, *w)))
-            .collect::<Result<Vec<_>, String>>()?;
-        Ok(Self {
-            root: find(&spec.root)?,
-            majors: spec.majors.clone(),
-            links,
-        })
+        let links = spec.links.iter().map(|(a, b, w)| Ok((find(a)?, find(b)?, *w))).collect::<Result<Vec<_>, String>>()?;
+        Ok(Self { root: find(&spec.root)?, majors: spec.majors.clone(), links })
     }
 
     pub fn nodes(&self) -> impl Iterator<Item = Node> + '_ {
-        (0..self.majors.len()).flat_map(|m| {
-            std::iter::once(Node::Major(m)).chain((0..RING).map(move |i| Node::Minor(m, i)))
-        })
+        (0..self.majors.len()).flat_map(|m| std::iter::once(Node::Major(m)).chain((0..RING).map(move |i| Node::Minor(m, i))))
     }
 
     pub fn title(&self, n: Node) -> &str {
@@ -156,8 +138,7 @@ impl Tree {
             Node::Major(m) => self.majors[m].pos,
             Node::Minor(m, i) => {
                 let (x, y) = self.majors[m].pos;
-                let a =
-                    i as f32 / RING as f32 * std::f32::consts::TAU - std::f32::consts::FRAC_PI_2;
+                let a = i as f32 / RING as f32 * std::f32::consts::TAU - std::f32::consts::FRAC_PI_2;
                 (x + a.cos() * RING_RADIUS, y + a.sin() * RING_RADIUS)
             }
         }
@@ -171,19 +152,11 @@ impl Tree {
                 .links
                 .iter()
                 .filter_map(|&(a, b, w)| {
-                    let other = if a == m {
-                        b
-                    } else if b == m {
-                        a
-                    } else {
-                        return None;
-                    };
+                    let other = if a == m { b } else if b == m { a } else { return None };
                     taken.contains(&Node::Major(other)).then_some(w)
                 })
                 .min(),
-            Node::Minor(m, i) => taken
-                .contains(&Node::Major(m))
-                .then_some(self.majors[m].ring[i].cost),
+            Node::Minor(m, i) => taken.contains(&Node::Major(m)).then_some(self.majors[m].ring[i].cost),
         }
     }
 
@@ -192,9 +165,7 @@ impl Tree {
         match n {
             Node::Major(_) => false,
             Node::Minor(m, i) => {
-                !taken.contains(&n)
-                    && (taken.contains(&Node::Minor(m, (i + 1) % RING))
-                        || taken.contains(&Node::Minor(m, (i + RING - 1) % RING)))
+                !taken.contains(&n) && (taken.contains(&Node::Minor(m, (i + 1) % RING)) || taken.contains(&Node::Minor(m, (i + RING - 1) % RING)))
             }
         }
     }
@@ -276,20 +247,12 @@ impl Perks {
 
     /// Thin air, made up for in part (water stays water).
     pub fn breathe(&self, air: f32) -> f32 {
-        if air <= 0.0 {
-            0.0
-        } else {
-            (air + (1.0 - air) * self.air.min(0.9)).min(1.0)
-        }
+        if air <= 0.0 { 0.0 } else { (air + (1.0 - air) * self.air.min(0.9)).min(1.0) }
     }
 
     /// Felt temperature with cold shrugged off (heat is untouched).
     pub fn feel(&self, feels: f32, comfortable: f32) -> f32 {
-        if feels >= comfortable {
-            feels
-        } else {
-            (feels + self.cold).min(comfortable)
-        }
+        if feels >= comfortable { feels } else { (feels + self.cold).min(comfortable) }
     }
 
     /// Carried weight as it feels with a bigger capacity.
@@ -310,10 +273,7 @@ mod tests {
     fn root_first_then_links() {
         let t = tree();
         let mystic = t.majors.iter().position(|m| m.name == "mystic").unwrap();
-        let mut l = Learned {
-            points: 1,
-            ..default_learned()
-        };
+        let mut l = Learned { points: 1, ..default_learned() };
         assert_eq!(l.check(&t, Node::Major(mystic)), Err("not reachable yet"));
         l.take(&t, Node::Major(t.root)).unwrap();
         assert_eq!(l.points, 0);
@@ -327,10 +287,7 @@ mod tests {
     #[test]
     fn a_minor_closes_its_neighbours() {
         let t = tree();
-        let mut l = Learned {
-            points: 20,
-            ..default_learned()
-        };
+        let mut l = Learned { points: 20, ..default_learned() };
         let r = t.root;
         l.take(&t, Node::Major(r)).unwrap();
         l.take(&t, Node::Minor(r, 0)).unwrap();
@@ -340,20 +297,13 @@ mod tests {
         for i in [2, 4, 6] {
             l.take(&t, Node::Minor(r, i)).unwrap();
         }
-        assert!(
-            (0..RING)
-                .all(|i| l.taken.contains(&Node::Minor(r, i))
-                    || t.closed(&l.taken, Node::Minor(r, i)))
-        );
+        assert!((0..RING).all(|i| l.taken.contains(&Node::Minor(r, i)) || t.closed(&l.taken, Node::Minor(r, i))));
     }
 
     #[test]
     fn perks_add_up() {
         let t = tree();
-        let mut l = Learned {
-            points: 5,
-            ..default_learned()
-        };
+        let mut l = Learned { points: 5, ..default_learned() };
         l.take(&t, Node::Major(t.root)).unwrap();
         l.take(&t, Node::Minor(t.root, 1)).unwrap();
         let p = l.perks(&t);
@@ -366,10 +316,7 @@ mod tests {
     #[test]
     fn every_ring_has_eight_and_every_major_is_reachable() {
         let t = tree();
-        let mut l = Learned {
-            points: 1000,
-            ..default_learned()
-        };
+        let mut l = Learned { points: 1000, ..default_learned() };
         // Take every reachable major until nothing changes.
         loop {
             let before = l.taken.len();

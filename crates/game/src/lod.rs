@@ -22,12 +22,12 @@ use bevy::shader::ShaderRef;
 use bevy::tasks::futures::check_ready;
 use bevy::tasks::{AsyncComputeTaskPool, Task};
 use voxel::BlockRegistry;
-use worldgen::{SEA_LEVEL, WorldGen};
+use worldgen::{WorldGen, SEA_LEVEL};
 
 use crate::blocks::Blocks;
 use crate::camera::FlyCamera;
 use crate::sky::MAX_VISIBILITY;
-use crate::world::{Generator, World, camera_chunk};
+use crate::world::{camera_chunk, Generator, World};
 
 /// Tile size in blocks.
 pub const TILE: i32 = 256;
@@ -69,15 +69,7 @@ impl Plugin for LodPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<LodMaterial>::default())
             .init_resource::<LodTiles>()
-            .add_systems(
-                crate::menu::GameUpdate,
-                (
-                    update_mask.after(crate::world::unload_far),
-                    schedule_tiles,
-                    collect_tiles,
-                )
-                    .chain(),
-            );
+            .add_systems(crate::menu::GameUpdate, (update_mask.after(crate::world::unload_far), schedule_tiles, collect_tiles).chain());
     }
 }
 
@@ -112,11 +104,7 @@ fn update_mask(
     let bytes = |m: &[u32]| m.iter().flat_map(|w| w.to_le_bytes()).collect::<Vec<u8>>();
     let Some(h) = lod.material.clone() else {
         let image = Image::new(
-            Extent3d {
-                width: MASK_N,
-                height: MASK_N,
-                depth_or_array_layers: 1,
-            },
+            Extent3d { width: MASK_N, height: MASK_N, depth_or_array_layers: 1 },
             TextureDimension::D2,
             bytes(&mask),
             TextureFormat::R32Uint,
@@ -124,17 +112,8 @@ fn update_mask(
         );
         lod.mask = Some(images.add(image));
         lod.material = Some(materials.add(LodMaterial {
-            base: StandardMaterial {
-                perceptual_roughness: 1.0,
-                reflectance: 0.05,
-                fog_enabled: false,
-                ..default()
-            },
-            extension: LodExtension {
-                center: center.as_vec3().extend(MASK_HALF as f32),
-                mask: lod.mask.clone().unwrap(),
-                atmos: default(),
-            },
+            base: StandardMaterial { perceptual_roughness: 1.0, reflectance: 0.05, fog_enabled: false, ..default() },
+            extension: LodExtension { center: center.as_vec3().extend(MASK_HALF as f32), mask: lod.mask.clone().unwrap(), atmos: default() },
         }));
         *last = (Some(center), mask);
         return;
@@ -153,10 +132,7 @@ fn update_mask(
 }
 
 fn tile_of(p: Vec3) -> IVec2 {
-    IVec2::new(
-        (p.x / TILE as f32).floor() as i32,
-        (p.z / TILE as f32).floor() as i32,
-    )
+    IVec2::new((p.x / TILE as f32).floor() as i32, (p.z / TILE as f32).floor() as i32)
 }
 
 fn tile_distance(t: IVec2, p: Vec3) -> f32 {
@@ -173,28 +149,19 @@ fn schedule_tiles(
     blocks: Res<Blocks>,
     cam: Query<&Transform, With<FlyCamera>>,
 ) {
-    let (Some(g), Some(colors), Ok(cam)) = (generator, blocks.tile_colors.clone(), cam.single())
-    else {
-        return;
-    };
+    let (Some(g), Some(colors), Ok(cam)) = (generator, blocks.tile_colors.clone(), cam.single()) else { return };
     let p = cam.translation;
     let center = tile_of(p);
     let reach = (RANGE / TILE as f32).ceil() as i32 + 1;
 
     // Drop tiles that fell out of range.
-    let far: Vec<IVec2> = lod
-        .tiles
-        .keys()
-        .filter(|t| tile_distance(**t, p) > RANGE + TILE as f32)
-        .copied()
-        .collect();
+    let far: Vec<IVec2> = lod.tiles.keys().filter(|t| tile_distance(**t, p) > RANGE + TILE as f32).copied().collect();
     for t in far {
         if let Some(e) = lod.tiles.remove(&t) {
             commands.entity(e).despawn();
         }
     }
-    lod.tasks
-        .retain(|t, _| tile_distance(*t, p) <= RANGE + TILE as f32);
+    lod.tasks.retain(|t, _| tile_distance(*t, p) <= RANGE + TILE as f32);
 
     // Start the nearest missing tiles.
     if lod.tasks.len() >= MAX_TASKS {
@@ -204,10 +171,7 @@ fn schedule_tiles(
     for dz in -reach..=reach {
         for dx in -reach..=reach {
             let t = center + IVec2::new(dx, dz);
-            if tile_distance(t, p) <= RANGE
-                && !lod.tiles.contains_key(&t)
-                && !lod.tasks.contains_key(&t)
-            {
+            if tile_distance(t, p) <= RANGE && !lod.tiles.contains_key(&t) && !lod.tasks.contains_key(&t) {
                 wanted.push(t);
             }
         }
@@ -216,21 +180,12 @@ fn schedule_tiles(
     let pool = AsyncComputeTaskPool::get();
     for t in wanted.into_iter().take(MAX_TASKS - lod.tasks.len()) {
         let (g, reg, colors) = (g.0.clone(), blocks.registry.clone(), colors.clone());
-        lod.tasks.insert(
-            t,
-            pool.spawn(async move { build_tile(&g, &reg, &colors, t) }),
-        );
+        lod.tasks.insert(t, pool.spawn(async move { build_tile(&g, &reg, &colors, t) }));
     }
 }
 
-fn collect_tiles(
-    mut commands: Commands,
-    mut lod: ResMut<LodTiles>,
-    mut meshes: ResMut<Assets<Mesh>>,
-) {
-    let Some(mat) = lod.material.clone() else {
-        return;
-    };
+fn collect_tiles(mut commands: Commands, mut lod: ResMut<LodTiles>, mut meshes: ResMut<Assets<Mesh>>) {
+    let Some(mat) = lod.material.clone() else { return };
     let mut done = Vec::new();
     for (t, task) in lod.tasks.iter_mut() {
         if let Some(mesh) = check_ready(task) {
@@ -241,14 +196,7 @@ fn collect_tiles(
         lod.tasks.remove(&t);
         let tf = Transform::from_xyz((t.x * TILE) as f32, 0.0, (t.y * TILE) as f32);
         let e = match mesh {
-            Some(m) => commands
-                .spawn((
-                    Mesh3d(meshes.add(m)),
-                    MeshMaterial3d(mat.clone()),
-                    tf,
-                    NotShadowCaster,
-                ))
-                .id(),
+            Some(m) => commands.spawn((Mesh3d(meshes.add(m)), MeshMaterial3d(mat.clone()), tf, NotShadowCaster)).id(),
             // Nothing to draw (can't happen for land, but keep the slot filled).
             None => commands.spawn(tf).id(),
         };
@@ -283,8 +231,7 @@ impl MeshBuf {
             self.nor.push(n.to_array());
             self.col.push([color.x, color.y, color.z, 1.0]);
         }
-        self.idx
-            .extend_from_slice(&[s, s + 1, s + 2, s, s + 2, s + 3]);
+        self.idx.extend_from_slice(&[s, s + 1, s + 2, s, s + 2, s + 3]);
     }
 
     /// Blocky columns on an n x n grid (with a one-cell border of neighbours
@@ -297,69 +244,15 @@ impl MeshBuf {
                 let (x0, z0) = (x as f32 * step, z as f32 * step);
                 let (x1, z1) = (x0 + step, z0 + step);
                 let (b, t) = (c.bottom, c.top);
-                self.quad(
-                    [
-                        Vec3::new(x0, t, z0),
-                        Vec3::new(x0, t, z1),
-                        Vec3::new(x1, t, z1),
-                        Vec3::new(x1, t, z0),
-                    ],
-                    Vec3::Y,
-                    c.top_color,
-                );
+                self.quad([Vec3::new(x0, t, z0), Vec3::new(x0, t, z1), Vec3::new(x1, t, z1), Vec3::new(x1, t, z0)], Vec3::Y, c.top_color);
                 if b > -1000.0 {
-                    self.quad(
-                        [
-                            Vec3::new(x0, b, z0),
-                            Vec3::new(x1, b, z0),
-                            Vec3::new(x1, b, z1),
-                            Vec3::new(x0, b, z1),
-                        ],
-                        Vec3::NEG_Y,
-                        c.bottom_color,
-                    );
+                    self.quad([Vec3::new(x0, b, z0), Vec3::new(x1, b, z0), Vec3::new(x1, b, z1), Vec3::new(x0, b, z1)], Vec3::NEG_Y, c.bottom_color);
                 }
                 let walls = [
-                    (
-                        at(x + 1, z),
-                        Vec3::X,
-                        [
-                            Vec3::new(x1, 0.0, z0),
-                            Vec3::new(x1, 1.0, z0),
-                            Vec3::new(x1, 1.0, z1),
-                            Vec3::new(x1, 0.0, z1),
-                        ],
-                    ),
-                    (
-                        at(x - 1, z),
-                        Vec3::NEG_X,
-                        [
-                            Vec3::new(x0, 0.0, z1),
-                            Vec3::new(x0, 1.0, z1),
-                            Vec3::new(x0, 1.0, z0),
-                            Vec3::new(x0, 0.0, z0),
-                        ],
-                    ),
-                    (
-                        at(x, z + 1),
-                        Vec3::Z,
-                        [
-                            Vec3::new(x1, 0.0, z1),
-                            Vec3::new(x1, 1.0, z1),
-                            Vec3::new(x0, 1.0, z1),
-                            Vec3::new(x0, 0.0, z1),
-                        ],
-                    ),
-                    (
-                        at(x, z - 1),
-                        Vec3::NEG_Z,
-                        [
-                            Vec3::new(x0, 0.0, z0),
-                            Vec3::new(x0, 1.0, z0),
-                            Vec3::new(x1, 1.0, z0),
-                            Vec3::new(x1, 0.0, z0),
-                        ],
-                    ),
+                    (at(x + 1, z), Vec3::X, [Vec3::new(x1, 0.0, z0), Vec3::new(x1, 1.0, z0), Vec3::new(x1, 1.0, z1), Vec3::new(x1, 0.0, z1)]),
+                    (at(x - 1, z), Vec3::NEG_X, [Vec3::new(x0, 0.0, z1), Vec3::new(x0, 1.0, z1), Vec3::new(x0, 1.0, z0), Vec3::new(x0, 0.0, z0)]),
+                    (at(x, z + 1), Vec3::Z, [Vec3::new(x1, 0.0, z1), Vec3::new(x1, 1.0, z1), Vec3::new(x0, 1.0, z1), Vec3::new(x0, 0.0, z1)]),
+                    (at(x, z - 1), Vec3::NEG_Z, [Vec3::new(x0, 0.0, z0), Vec3::new(x0, 1.0, z0), Vec3::new(x1, 1.0, z0), Vec3::new(x1, 0.0, z0)]),
                 ];
                 for (other, normal, quad) in walls {
                     // The exposed parts of [b, t]: above the neighbour, and below it.
@@ -377,8 +270,7 @@ impl MeshBuf {
                     }
                     for (lo, hi) in spans {
                         if hi > lo {
-                            let q =
-                                quad.map(|v| Vec3::new(v.x, if v.y == 0.0 { lo } else { hi }, v.z));
+                            let q = quad.map(|v| Vec3::new(v.x, if v.y == 0.0 { lo } else { hi }, v.z));
                             self.quad(q, normal, c.side_color);
                         }
                     }
@@ -389,35 +281,19 @@ impl MeshBuf {
 
     fn into_mesh(self) -> Option<Mesh> {
         (!self.idx.is_empty()).then(|| {
-            Mesh::new(
-                PrimitiveTopology::TriangleList,
-                RenderAssetUsages::RENDER_WORLD,
-            )
-            .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, self.pos)
-            .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.nor)
-            .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, self.col)
-            .with_inserted_indices(Indices::U32(self.idx))
+            Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::RENDER_WORLD)
+                .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, self.pos)
+                .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.nor)
+                .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, self.col)
+                .with_inserted_indices(Indices::U32(self.idx))
         })
     }
 }
 
-fn build_tile(
-    g: &WorldGen,
-    reg: &BlockRegistry,
-    colors: &Arc<Vec<Vec3>>,
-    tile: IVec2,
-) -> Option<Mesh> {
+fn build_tile(g: &WorldGen, reg: &BlockRegistry, colors: &Arc<Vec<Vec3>>, tile: IVec2) -> Option<Mesh> {
     let (ox, oz) = (tile.x * TILE, tile.y * TILE);
-    let color = |b: voxel::BlockId, face: usize| {
-        colors
-            .get(reg.get(b).textures[face] as usize)
-            .copied()
-            .unwrap_or(Vec3::splat(0.5))
-    };
-    let water = reg
-        .id("water")
-        .map(|w| color(w, 2))
-        .unwrap_or(Vec3::new(0.1, 0.2, 0.4));
+    let color = |b: voxel::BlockId, face: usize| colors.get(reg.get(b).textures[face] as usize).copied().unwrap_or(Vec3::splat(0.5));
+    let water = reg.id("water").map(|w| color(w, 2)).unwrap_or(Vec3::new(0.1, 0.2, 0.4));
     let deep = Vec3::new(0.01, 0.035, 0.08);
     let mut buf = MeshBuf::default();
 
@@ -426,22 +302,13 @@ fn build_tile(
     let mut grid = Vec::with_capacity(((n + 2) * (n + 2)) as usize);
     for z in -1..=n {
         for x in -1..=n {
-            let (wx, wz) = (
-                ox + x * LAND_STEP + LAND_STEP / 2,
-                oz + z * LAND_STEP + LAND_STEP / 2,
-            );
+            let (wx, wz) = (ox + x * LAND_STEP + LAND_STEP / 2, oz + z * LAND_STEP + LAND_STEP / 2);
             let col = g.column(wx, wz);
             let biome = g.biomes.get(col.biome);
             let c = if col.height < SEA_LEVEL {
                 let depth = (SEA_LEVEL - col.height) as f32;
                 let tint = water.lerp(deep, (depth / 30.0).clamp(0.0, 1.0));
-                Col {
-                    bottom: -10_000.0,
-                    top: SEA_LEVEL as f32 - 0.2,
-                    top_color: tint,
-                    side_color: tint,
-                    bottom_color: tint,
-                }
+                Col { bottom: -10_000.0, top: SEA_LEVEL as f32 - 0.2, top_color: tint, side_color: tint, bottom_color: tint }
             } else {
                 Col {
                     bottom: -10_000.0,
@@ -458,19 +325,13 @@ fn build_tile(
 
     // Sky islands, on a finer grid.
     let sky = g.biomes.get(g.biomes.sky);
-    let skystone = reg
-        .id("skystone")
-        .map(|b| color(b, 2))
-        .unwrap_or(Vec3::splat(0.6));
+    let skystone = reg.id("skystone").map(|b| color(b, 2)).unwrap_or(Vec3::splat(0.6));
     let n = TILE / ISLAND_STEP;
     let mut grid = Vec::with_capacity(((n + 2) * (n + 2)) as usize);
     let mut any = false;
     for z in -1..=n {
         for x in -1..=n {
-            let (wx, wz) = (
-                ox + x * ISLAND_STEP + ISLAND_STEP / 2,
-                oz + z * ISLAND_STEP + ISLAND_STEP / 2,
-            );
+            let (wx, wz) = (ox + x * ISLAND_STEP + ISLAND_STEP / 2, oz + z * ISLAND_STEP + ISLAND_STEP / 2);
             let c = g.island_span(wx, wz).map(|(b, t)| {
                 any = true;
                 Col {

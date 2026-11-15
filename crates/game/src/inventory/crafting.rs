@@ -3,8 +3,8 @@
 use bevy::prelude::Resource;
 use serde::Deserialize;
 
-use super::Inventory;
 use super::grid::Stack;
+use super::Inventory;
 use crate::items::{ItemId, Items};
 
 #[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -38,26 +38,13 @@ pub struct Recipes {
 
 impl Recipes {
     pub fn from_ron(text: &str, items: &Items) -> Result<Self, String> {
-        let specs: Vec<RecipeSpec> =
-            ron::from_str(text).map_err(|e| format!("recipes.ron: {e}"))?;
-        let id = |n: &str| -> Result<ItemId, String> {
-            items
-                .id(n)
-                .ok_or_else(|| format!("recipes.ron: no item '{n}'"))
-        };
+        let specs: Vec<RecipeSpec> = ron::from_str(text).map_err(|e| format!("recipes.ron: {e}"))?;
+        let id = |n: &str| -> Result<ItemId, String> { items.id(n).ok_or_else(|| format!("recipes.ron: no item '{n}'")) };
         let mut list = Vec::new();
         for s in specs {
             let makes = Stack::new(id(&s.makes.0)?, s.makes.1.max(1));
-            let needs = s
-                .needs
-                .iter()
-                .map(|(n, c)| Ok(Stack::new(id(n)?, *c)))
-                .collect::<Result<Vec<_>, String>>()?;
-            list.push(Recipe {
-                makes,
-                needs,
-                at: s.at,
-            });
+            let needs = s.needs.iter().map(|(n, c)| Ok(Stack::new(id(n)?, *c))).collect::<Result<Vec<_>, String>>()?;
+            list.push(Recipe { makes, needs, at: s.at });
         }
         Ok(Self { list })
     }
@@ -65,9 +52,7 @@ impl Recipes {
 
 impl Recipe {
     pub fn have_parts(&self, inv: &Inventory) -> bool {
-        self.needs
-            .iter()
-            .all(|n| inv.count(n.item) >= n.count as u32)
+        self.needs.iter().all(|n| inv.count(n.item) >= n.count as u32)
     }
 
     /// Use up the parts and pack the result. Returns what didn't fit, or
@@ -91,15 +76,8 @@ mod tests {
     #[test]
     fn craft_by_hand_from_raw_materials() {
         let (_, items) = load();
-        let recipes =
-            Recipes::from_ron(include_str!("../../../../assets/data/recipes.ron"), &items).unwrap();
-        let find = |name: &str| {
-            recipes
-                .list
-                .iter()
-                .find(|r| items.get(r.makes.item).name == name)
-                .unwrap()
-        };
+        let recipes = Recipes::from_ron(include_str!("../../../../assets/data/recipes.ron"), &items).unwrap();
+        let find = |name: &str| recipes.list.iter().find(|r| items.get(r.makes.item).name == name).unwrap();
         let mut inv = Inventory::empty();
         let id = |n: &str| items.id(n).unwrap();
         // Fiber from the grass.
@@ -110,9 +88,6 @@ mod tests {
         assert!(find("reed_hat").have_parts(&inv));
         assert!(!find("reed_cloak").have_parts(&inv));
         // Tools are made at the tool bench, not here.
-        assert!(recipes.list.iter().all(|r| !matches!(
-            items.get(r.makes.item).kind,
-            crate::items::ItemKind::Tool { .. }
-        )));
+        assert!(recipes.list.iter().all(|r| !matches!(items.get(r.makes.item).kind, crate::items::ItemKind::Tool { .. })));
     }
 }

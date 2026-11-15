@@ -13,13 +13,13 @@ use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
 use super::urns::State;
-use super::{StepDone, UrnBook, Urns, placed_facing};
+use super::{placed_facing, StepDone, UrnBook, Urns};
 use crate::camera::{FlyCamera, Menus};
 use crate::inventory::grid::Stack;
 use crate::inventory::{Inventory, Spill};
 use crate::items::Items;
 use crate::survival::Toast;
-use crate::theme::{Theme, colors, sizes, text};
+use crate::theme::{colors, sizes, text, Theme};
 
 #[derive(Resource, Default)]
 pub struct DevMenu {
@@ -43,14 +43,7 @@ enum Act {
     Reset,
 }
 
-const ACTS: [(Act, &str); 6] = [
-    (Act::Give, "Give urn"),
-    (Act::SetDown, "Set down"),
-    (Act::Items, "Items"),
-    (Act::Next, "Next step"),
-    (Act::All, "All steps"),
-    (Act::Reset, "Reset"),
-];
+const ACTS: [(Act, &str); 6] = [(Act::Give, "Give urn"), (Act::SetDown, "Set down"), (Act::Items, "Items"), (Act::Next, "Next step"), (Act::All, "All steps"), (Act::Reset, "Reset")];
 
 #[derive(Component)]
 pub(super) struct DevButton(usize, Act);
@@ -59,26 +52,13 @@ pub(super) fn spawn_dev_ui(mut commands: Commands) {
     commands
         .spawn((
             DevRoot,
-            Node {
-                position_type: PositionType::Absolute,
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                ..default()
-            },
+            Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() },
             BackgroundColor(Color::srgba(0.0, 0.0, 0.02, 0.45)),
             GlobalZIndex(26),
             Visibility::Hidden,
         ))
         .with_children(|c| {
-            c.spawn((
-                DevPanel,
-                Node {
-                    flex_direction: FlexDirection::Column,
-                    ..default()
-                },
-            ));
+            c.spawn((DevPanel, Node { flex_direction: FlexDirection::Column, ..default() }));
         });
 }
 
@@ -130,24 +110,11 @@ pub(super) fn dev_click(
     mouse: Res<ButtonInput<MouseButton>>,
     window: Single<&Window, With<PrimaryWindow>>,
     theme: Res<Theme>,
-    mut buttons: Query<(
-        &DevButton,
-        &ComputedNode,
-        &UiGlobalTransform,
-        &InheritedVisibility,
-        &mut ImageNode,
-    )>,
+    mut buttons: Query<(&DevButton, &ComputedNode, &UiGlobalTransform, &InheritedVisibility, &mut ImageNode)>,
     (book, items, dev): (Option<Res<UrnBook>>, Res<Items>, Res<DevMenu>),
-    (player, cam): (
-        Res<crate::player::Player>,
-        Single<&Transform, With<FlyCamera>>,
-    ),
+    (player, cam): (Res<crate::player::Player>, Single<&Transform, With<FlyCamera>>),
     (mut inv, mut urns): (ResMut<Inventory>, ResMut<Urns>),
-    (mut done, mut spill, mut toast): (
-        MessageWriter<StepDone>,
-        MessageWriter<Spill>,
-        MessageWriter<Toast>,
-    ),
+    (mut done, mut spill, mut toast): (MessageWriter<StepDone>, MessageWriter<Spill>, MessageWriter<Toast>),
 ) {
     let Some(book) = book else { return };
     if !dev.open {
@@ -180,10 +147,7 @@ pub(super) fn dev_click(
         while left > 0 {
             let k = left.min(items.get(id).stack as u32).max(1);
             if let Some(rest) = inv.add(&items, Stack::new(id, k as u16)) {
-                spill.write(Spill {
-                    stack: rest,
-                    at: player.pos + Vec3::Y,
-                });
+                spill.write(Spill { stack: rest, at: player.pos + Vec3::Y });
             }
             left -= k;
         }
@@ -200,12 +164,8 @@ pub(super) fn dev_click(
                 let mut f = cam.forward().as_vec3();
                 f.y = 0.0;
                 let f = f.normalize_or(Vec3::NEG_Z);
-                urns.placed
-                    .insert(def.name.clone(), placed_facing(player.pos + f * 3.0, f));
-                toast.write(Toast(format!(
-                    "Dev: set the {} down in front of you",
-                    def.title
-                )));
+                urns.placed.insert(def.name.clone(), placed_facing(player.pos + f * 3.0, f));
+                toast.write(Toast(format!("Dev: set the {} down in front of you", def.title)));
             }
         }
         Act::Items => {
@@ -224,9 +184,7 @@ pub(super) fn dev_click(
         }
         Act::Next | Act::All => loop {
             let p = urns.of_mut(&def.name);
-            let Some(s) = def.steps.iter().find(|s| p.state(s) == State::Open) else {
-                break;
-            };
+            let Some(s) = def.steps.iter().find(|s| p.state(s) == State::Open) else { break };
             p.finish(&s.name);
             done.write(StepDone(s.name.clone()));
             if act == Act::Next {
@@ -254,9 +212,7 @@ pub(super) fn dev_build(
     }
     let Some(book) = book else { return };
     dev.dirty = false;
-    let (Ok(mut vis), Ok((panel, kids))) = (root.single_mut(), panel.single()) else {
-        return;
-    };
+    let (Ok(mut vis), Ok((panel, kids))) = (root.single_mut(), panel.single()) else { return };
     for k in kids.into_iter().flatten() {
         commands.entity(*k).despawn();
     }
@@ -266,26 +222,10 @@ pub(super) fn dev_build(
     }
     *vis = Visibility::Inherited;
     let theme = &*theme;
-    commands.entity(panel).insert((
-        Node {
-            flex_direction: FlexDirection::Column,
-            padding: UiRect::axes(Val::Px(20.0), Val::Px(14.0)),
-            row_gap: Val::Px(8.0),
-            ..default()
-        },
-        theme.skin("panel"),
-    ));
+    commands.entity(panel).insert((Node { flex_direction: FlexDirection::Column, padding: UiRect::axes(Val::Px(20.0), Val::Px(14.0)), row_gap: Val::Px(8.0), ..default() }, theme.skin("panel")));
     commands.entity(panel).with_children(|c| {
-        c.spawn((
-            theme.bold(sizes::TITLE),
-            Text::new("Dev: Urns"),
-            TextColor(colors::HEADING),
-        ));
-        c.spawn(text(
-            "Hand yourself urns and skip steps to test the stations. F9 or Esc closes.",
-            sizes::SMALL,
-            colors::MUTED,
-        ));
+        c.spawn((theme.bold(sizes::TITLE), Text::new("Dev: Urns"), TextColor(colors::HEADING)));
+        c.spawn(text("Hand yourself urns and skip steps to test the stations. F9 or Esc closes.", sizes::SMALL, colors::MUTED));
         for (i, def) in book.0.urns.iter().enumerate() {
             let p = urns.of(&def.name);
             let n = def.steps.iter().filter(|s| p.is_done(&s.name)).count();
@@ -296,51 +236,21 @@ pub(super) fn dev_build(
             } else {
                 "not set down"
             };
-            c.spawn(Node {
-                align_items: AlignItems::Center,
-                column_gap: Val::Px(6.0),
-                ..default()
-            })
-            .with_children(|r| {
-                r.spawn(Node {
-                    flex_direction: FlexDirection::Column,
-                    width: Val::Px(250.0),
-                    ..default()
-                })
-                .with_children(|t| {
-                    t.spawn((
-                        theme.bold(sizes::BODY),
-                        Text::new(format!("{} · {}", def.title, def.station)),
-                        TextColor(colors::TEXT),
-                    ));
-                    let next = p
-                        .next(def)
-                        .map_or("all done".to_string(), |s| format!("next: {}", s.title));
-                    t.spawn(text(
-                        format!("{n}/{} steps, {where_}, {next}", def.steps.len()),
-                        sizes::TINY,
-                        colors::MUTED,
-                    ));
+            c.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(6.0), ..default() }).with_children(|r| {
+                r.spawn(Node { flex_direction: FlexDirection::Column, width: Val::Px(250.0), ..default() }).with_children(|t| {
+                    t.spawn((theme.bold(sizes::BODY), Text::new(format!("{} · {}", def.title, def.station)), TextColor(colors::TEXT)));
+                    let next = p.next(def).map_or("all done".to_string(), |s| format!("next: {}", s.title));
+                    t.spawn(text(format!("{n}/{} steps, {where_}, {next}", def.steps.len()), sizes::TINY, colors::MUTED));
                 });
                 for (act, label) in ACTS {
                     let off = def.item.is_none() && matches!(act, Act::Give | Act::SetDown);
                     if off {
-                        r.spawn((Node {
-                            width: Val::Px(112.0),
-                            height: Val::Px(36.0),
-                            ..default()
-                        },));
+                        r.spawn((Node { width: Val::Px(112.0), height: Val::Px(36.0), ..default() },));
                         continue;
                     }
                     r.spawn((
                         DevButton(i, act),
-                        Node {
-                            width: Val::Px(112.0),
-                            height: Val::Px(36.0),
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            ..default()
-                        },
+                        Node { width: Val::Px(112.0), height: Val::Px(36.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() },
                         theme.skin("button"),
                         children![text(label, sizes::SMALL, colors::TEXT)],
                     ));

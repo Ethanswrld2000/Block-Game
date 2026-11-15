@@ -48,34 +48,16 @@ impl Plugin for CreaturesPlugin {
         app.insert_resource(Dice(Rng(0x5EED_C0FF_EE15_u64)))
             .init_resource::<Barrows>()
             .add_systems(crate::menu::GamePostStartup, setup)
+            .add_systems(crate::menu::GameUpdate, aim.before(InteractSet).after(crate::player::PlayerSet))
             .add_systems(
                 crate::menu::GameUpdate,
-                aim.before(InteractSet).after(crate::player::PlayerSet),
-            )
-            .add_systems(
-                crate::menu::GameUpdate,
-                (
-                    take_strikes,
-                    spawn_around,
-                    spawn_wights,
-                    think,
-                    spirits,
-                    walk,
-                    tint,
-                    despawn_far,
-                )
+                (take_strikes, spawn_around, spawn_wights, think, spirits, walk, tint, despawn_far)
                     .chain()
                     .in_set(CreatureSet)
                     .after(InteractSet),
             )
-            .add_systems(
-                crate::menu::GameUpdate,
-                look_at_creature.run_if(|| std::env::var_os("BLOCKGAME_LOOK").is_some()),
-            )
-            .add_systems(
-                crate::menu::GameUpdate,
-                lineup.run_if(|| std::env::var_os("BLOCKGAME_LINEUP").is_some()),
-            )
+            .add_systems(crate::menu::GameUpdate, look_at_creature.run_if(|| std::env::var_os("BLOCKGAME_LOOK").is_some()))
+            .add_systems(crate::menu::GameUpdate, lineup.run_if(|| std::env::var_os("BLOCKGAME_LINEUP").is_some()))
             .add_plugins((villagers::VillagersPlugin, critters::CrittersPlugin));
     }
 }
@@ -185,16 +167,8 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let kinds = Kinds::from_ron(
-        include_str!("../../../../assets/data/creatures.ron"),
-        &items,
-    )
-    .unwrap_or_else(|e| panic!("{e}"));
-    let flat_hurt = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.85, 0.15, 0.1),
-        emissive: LinearRgba::rgb(0.4, 0.0, 0.0),
-        ..default()
-    });
+    let kinds = Kinds::from_ron(include_str!("../../../../assets/data/creatures.ron"), &items).unwrap_or_else(|e| panic!("{e}"));
+    let flat_hurt = materials.add(StandardMaterial { base_color: Color::srgb(0.85, 0.15, 0.1), emissive: LinearRgba::rgb(0.4, 0.0, 0.0), ..default() });
     let assets_dir = bevy::asset::io::file::FileAssetReader::get_base_path().join("assets");
     let looks = kinds
         .list
@@ -295,12 +269,7 @@ fn skinned_box(b: &skin::CreatureBox, layout: &skin::Layout, part: usize) -> Mes
     use bevy::asset::RenderAssetUsages;
     use bevy::mesh::{Indices, PrimitiveTopology};
     let e = [b.size.0 * 0.5, b.size.1 * 0.5, b.size.2 * 0.5];
-    let (mut pos, mut nor, mut uv, mut idx) = (
-        Vec::with_capacity(24),
-        Vec::with_capacity(24),
-        Vec::with_capacity(24),
-        Vec::with_capacity(36),
-    );
+    let (mut pos, mut nor, mut uv, mut idx) = (Vec::with_capacity(24), Vec::with_capacity(24), Vec::with_capacity(24), Vec::with_capacity(36));
     for face in skin::Face::ALL {
         let base = pos.len() as u32;
         pos.extend(skin::face_corners(face, e));
@@ -309,69 +278,42 @@ fn skinned_box(b: &skin::CreatureBox, layout: &skin::Layout, part: usize) -> Mes
         // Corners run TL, TR, BR, BL seen from outside: counter-clockwise is 0-3-2, 0-2-1.
         idx.extend([base, base + 3, base + 2, base, base + 2, base + 1]);
     }
-    Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::default(),
-    )
-    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nor)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
-    .with_inserted_indices(Indices::U32(idx))
+    Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nor)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+        .with_inserted_indices(Indices::U32(idx))
 }
 
 /// Spawn a creature standing at `pos` (feet), facing `yaw`.
-pub fn spawn_creature(
-    commands: &mut Commands,
-    kinds: &Kinds,
-    assets: &CreatureAssets,
-    kind: usize,
-    pos: Vec3,
-    yaw: f32,
-) -> Entity {
+pub fn spawn_creature(commands: &mut Commands, kinds: &Kinds, assets: &CreatureAssets, kind: usize, pos: Vec3, yaw: f32) -> Entity {
     let k = kinds.get(kind);
     let mut c = Creature::new(kind, k.health, yaw);
     if k.temper != Temper::Spirit {
         c.fade = 1.0;
     }
-    let scale = if k.temper == Temper::Spirit {
-        0.01
-    } else {
-        1.0
-    };
+    let scale = if k.temper == Temper::Spirit { 0.01 } else { 1.0 };
     let mut e = commands.spawn((
         c,
-        Transform::from_translation(pos)
-            .with_rotation(Quat::from_rotation_y(yaw))
-            .with_scale(Vec3::splat(scale)),
+        Transform::from_translation(pos).with_rotation(Quat::from_rotation_y(yaw)).with_scale(Vec3::splat(scale)),
         Visibility::default(),
     ));
     e.with_children(|p| {
         // Pick a skin from where it stands, so a group gets a mix.
         let looks = &assets.looks[kind];
-        let h = (pos.x.to_bits() ^ pos.z.to_bits().rotate_left(16) ^ yaw.to_bits().rotate_left(8))
-            .wrapping_mul(0x9E37_79B9);
+        let h = (pos.x.to_bits() ^ pos.z.to_bits().rotate_left(16) ^ yaw.to_bits().rotate_left(8)).wrapping_mul(0x9E37_79B9);
         for (index, part) in looks[(h >> 16) as usize % looks.len()].iter().enumerate() {
             p.spawn((
                 Mesh3d(part.mesh.clone()),
                 MeshMaterial3d(part.normal.clone()),
                 Transform::from_translation(part.offset),
-                Part {
-                    normal: part.normal.clone(),
-                    hurt: part.hurt.clone(),
-                    index,
-                },
+                Part { normal: part.normal.clone(), hurt: part.hurt.clone(), index },
                 NotShadowCaster,
             ));
         }
         if let Some(g) = k.glow {
             p.spawn((
-                PointLight {
-                    color: Color::srgb(g.0, g.1, g.2),
-                    intensity: 40_000.0,
-                    range: 8.0,
-                    shadow_maps_enabled: false,
-                    ..default()
-                },
+                PointLight { color: Color::srgb(g.0, g.1, g.2), intensity: 40_000.0, range: 8.0, shadow_maps_enabled: false, ..default() },
                 Transform::from_xyz(0.0, k.height * 0.6, 0.0),
             ));
         }
@@ -380,21 +322,11 @@ pub fn spawn_creature(
 }
 
 /// Which creature is under the crosshair, within reach.
-fn aim(
-    cam: Single<&Transform, With<FlyCamera>>,
-    kinds: Option<Res<Kinds>>,
-    mode: Res<MoveMode>,
-    q: Query<(Entity, &Transform, &Creature)>,
-    mut aimed: ResMut<Aimed>,
-) {
+fn aim(cam: Single<&Transform, With<FlyCamera>>, kinds: Option<Res<Kinds>>, mode: Res<MoveMode>, q: Query<(Entity, &Transform, &Creature)>, mut aimed: ResMut<Aimed>) {
     let Some(kinds) = kinds else { return };
     let origin = cam.translation;
     let dir = cam.forward().as_vec3();
-    let reach = if *mode == MoveMode::Fly {
-        crate::interact::FLY_REACH
-    } else {
-        crate::interact::REACH
-    };
+    let reach = if *mode == MoveMode::Fly { crate::interact::FLY_REACH } else { crate::interact::REACH };
     let mut best: Option<(Entity, f32)> = None;
     for (e, tf, c) in &q {
         let k = kinds.get(c.kind);
@@ -411,10 +343,7 @@ fn aim(
             best = Some((e, t));
         }
     }
-    *aimed = Aimed {
-        entity: best.map(|b| b.0),
-        dist: best.map_or(f32::MAX, |b| b.1),
-    };
+    *aimed = Aimed { entity: best.map(|b| b.0), dist: best.map_or(f32::MAX, |b| b.1) };
 }
 
 /// Blows land: knockback, anger or fear, and death with drops.
@@ -427,16 +356,11 @@ fn take_strikes(
     mut spill: MessageWriter<crate::inventory::Spill>,
     mut toast: MessageWriter<crate::survival::Toast>,
     mut dice: ResMut<Dice>,
-    (mut gain, prog): (
-        MessageWriter<crate::progress::GainXp>,
-        Res<crate::progress::xp::Progression>,
-    ),
+    (mut gain, prog): (MessageWriter<crate::progress::GainXp>, Res<crate::progress::xp::Progression>),
 ) {
     let Some(kinds) = kinds else { return };
     for s in strikes.read() {
-        let Ok((tf, mut c, villager)) = q.get_mut(s.entity) else {
-            continue;
-        };
+        let Ok((tf, mut c, villager)) = q.get_mut(s.entity) else { continue };
         if c.health <= 0.0 {
             continue;
         }
@@ -453,10 +377,7 @@ fn take_strikes(
             let at = tf.translation + Vec3::Y * (k.height * 0.5);
             for (item, n, p) in &k.drops {
                 if *p >= 1.0 || dice.0.unit() < *p {
-                    spill.write(crate::inventory::Spill {
-                        stack: Stack::new(*item, *n),
-                        at,
-                    });
+                    spill.write(crate::inventory::Spill { stack: Stack::new(*item, *n), at });
                 }
             }
             let msg = match villager {
@@ -465,10 +386,7 @@ fn take_strikes(
             };
             toast.write(crate::survival::Toast(msg));
             if villager.is_none() {
-                gain.write(crate::progress::GainXp {
-                    xp: k.health * prog.xp.kill,
-                    why: String::new(),
-                });
+                gain.write(crate::progress::GainXp { xp: k.health * prog.xp.kill, why: String::new() });
             }
             commands.entity(s.entity).despawn();
         }
@@ -477,51 +395,19 @@ fn take_strikes(
 
 /// Feet height of open ground in a column near `y`: a solid block with two
 /// open, dry blocks above it. `None` if there is none or it isn't loaded.
-pub fn ground_near(
-    world: &World,
-    blocks: &Blocks,
-    x: i32,
-    z: i32,
-    from: i32,
-    to: i32,
-    dry: bool,
-) -> Option<i32> {
+pub fn ground_near(world: &World, blocks: &Blocks, x: i32, z: i32, from: i32, to: i32, dry: bool) -> Option<i32> {
     let water = blocks.registry.id("water");
-    let open = |y: i32| {
-        world
-            .block(BlockPos::new(x, y, z))
-            .is_some_and(|b| !blocks.registry.get(b).solid && (!dry || Some(b) != water))
-    };
-    (to..=from)
-        .rev()
-        .find(|&y| {
-            world
-                .block(BlockPos::new(x, y, z))
-                .is_some_and(|b| blocks.registry.get(b).solid)
-                && open(y + 1)
-                && open(y + 2)
-        })
-        .map(|y| y + 1)
+    let open = |y: i32| world.block(BlockPos::new(x, y, z)).is_some_and(|b| !blocks.registry.get(b).solid && (!dry || Some(b) != water));
+    (to..=from).rev().find(|&y| {
+        world.block(BlockPos::new(x, y, z)).is_some_and(|b| blocks.registry.get(b).solid) && open(y + 1) && open(y + 2)
+    }).map(|y| y + 1)
 }
 
 /// Light sources a spirit keeps away from (and moths flutter round): placed torches,
 /// a torch in your hand, the Light spell.
-pub(crate) fn lights(
-    torches: &Torches,
-    player: &Player,
-    wielded: &Wielded,
-    items: &Items,
-    spell: bool,
-) -> Vec<Vec3> {
-    let mut l: Vec<Vec3> = torches
-        .positions()
-        .map(|p| Vec3::new(p.x as f32 + 0.5, p.y as f32 + 0.5, p.z as f32 + 0.5))
-        .collect();
-    if spell
-        || wielded
-            .0
-            .is_some_and(|i| matches!(items.get(i).kind, ItemKind::Torch))
-    {
+pub(crate) fn lights(torches: &Torches, player: &Player, wielded: &Wielded, items: &Items, spell: bool) -> Vec<Vec3> {
+    let mut l: Vec<Vec3> = torches.positions().map(|p| Vec3::new(p.x as f32 + 0.5, p.y as f32 + 0.5, p.z as f32 + 0.5)).collect();
+    if spell || wielded.0.is_some_and(|i| matches!(items.get(i).kind, ItemKind::Torch)) {
         l.push(player.pos + Vec3::Y);
     }
     l
@@ -546,9 +432,7 @@ fn spawn_around(
     mut dice: ResMut<Dice>,
     mut timer: Local<f32>,
 ) {
-    let (Some(kinds), Some(assets), Some(generator)) = (kinds, assets, generator) else {
-        return;
-    };
+    let (Some(kinds), Some(assets), Some(generator)) = (kinds, assets, generator) else { return };
     *timer -= time.delta_secs();
     if *timer > 0.0 || !(player.ready || *mode == MoveMode::Fly) {
         return;
@@ -574,9 +458,7 @@ fn spawn_around(
         let x = (player.pos.x + angle.cos() * dist).floor() as i32;
         let z = (player.pos.z + angle.sin() * dist).floor() as i32;
         let py = player.pos.y.floor() as i32;
-        let Some(y) = ground_near(&world, &blocks, x, z, py + 24, py - 32, true) else {
-            continue;
-        };
+        let Some(y) = ground_near(&world, &blocks, x, z, py + 24, py - 32, true) else { continue };
         // Not in the middle of a village.
         if !generator.0.villages_in(x, z, x, z).is_empty() {
             continue;
@@ -588,14 +470,8 @@ fn spawn_around(
             Temper::Spirit => counts[2] >= MAX_SPIRITS,
             Temper::Villager | Temper::Critter => true,
         };
-        let list: Vec<(usize, f32)> = kinds
-            .candidates(biome, night)
-            .into_iter()
-            .filter(|(i, _)| !full(kinds.get(*i).temper))
-            .collect();
-        let Some(kind) = data::pick(&list, rng.unit()) else {
-            continue;
-        };
+        let list: Vec<(usize, f32)> = kinds.candidates(biome, night).into_iter().filter(|(i, _)| !full(kinds.get(*i).temper)).collect();
+        let Some(kind) = data::pick(&list, rng.unit()) else { continue };
         let k = kinds.get(kind);
         let at = Vec3::new(x as f32 + 0.5, y as f32, z as f32 + 0.5);
         if k.temper == Temper::Spirit && brain::flee_light(at, lights.iter().copied()).is_some() {
@@ -604,27 +480,11 @@ fn spawn_around(
         let (lo, hi) = k.spawn.as_ref().map_or((1, 1), |s| s.group);
         let n = lo + (rng.next() % (hi.saturating_sub(lo) as u64 + 1)) as u8;
         for i in 0..n {
-            let (dx, dz) = (
-                rng.range(-3.0, 3.0) * (i > 0) as u8 as f32,
-                rng.range(-3.0, 3.0) * (i > 0) as u8 as f32,
-            );
+            let (dx, dz) = (rng.range(-3.0, 3.0) * (i > 0) as u8 as f32, rng.range(-3.0, 3.0) * (i > 0) as u8 as f32);
             let (gx, gz) = ((at.x + dx).floor() as i32, (at.z + dz).floor() as i32);
-            let Some(gy) = ground_near(&world, &blocks, gx, gz, y + 3, y - 3, true) else {
-                continue;
-            };
-            let pos = Vec3::new(
-                gx as f32 + 0.5,
-                gy as f32 + if k.temper == Temper::Spirit { 0.6 } else { 0.0 },
-                gz as f32 + 0.5,
-            );
-            spawn_creature(
-                &mut commands,
-                &kinds,
-                &assets,
-                kind,
-                pos,
-                rng.range(0.0, std::f32::consts::TAU),
-            );
+            let Some(gy) = ground_near(&world, &blocks, gx, gz, y + 3, y - 3, true) else { continue };
+            let pos = Vec3::new(gx as f32 + 0.5, gy as f32 + if k.temper == Temper::Spirit { 0.6 } else { 0.0 }, gz as f32 + 0.5);
+            spawn_creature(&mut commands, &kinds, &assets, kind, pos, rng.range(0.0, std::f32::consts::TAU));
         }
         match k.temper {
             Temper::Skittish | Temper::Neutral => counts[0] += n as usize,
@@ -649,44 +509,20 @@ fn spawn_wights(
     mut barrows: ResMut<Barrows>,
     mut dice: ResMut<Dice>,
 ) {
-    let (Some(kinds), Some(assets), Some(generator)) = (kinds, assets, generator) else {
-        return;
-    };
-    let Some(wight) = kinds.id("barrow_wight") else {
-        return;
-    };
+    let (Some(kinds), Some(assets), Some(generator)) = (kinds, assets, generator) else { return };
+    let Some(wight) = kinds.id("barrow_wight") else { return };
     let (px, pz) = (player.pos.x as i32, player.pos.z as i32);
     for b in generator.0.barrows_in(px - 40, pz - 40, px + 40, pz + 40) {
-        let hall = Vec3::new(
-            b.hall[0] as f32 + 0.5,
-            b.hall[1] as f32,
-            b.hall[2] as f32 + 0.5,
-        );
-        if hall.distance(player.pos) > 40.0
-            || barrows
-                .woke
-                .get(&b.id)
-                .is_some_and(|t| clock.total_days() - t < 1.0)
-        {
+        let hall = Vec3::new(b.hall[0] as f32 + 0.5, b.hall[1] as f32, b.hall[2] as f32 + 0.5);
+        if hall.distance(player.pos) > 40.0 || barrows.woke.get(&b.id).is_some_and(|t| clock.total_days() - t < 1.0) {
             continue;
         }
         let (lo, hi) = kinds.get(wight).spawn.as_ref().map_or((3, 3), |s| s.group);
         let mut spawned = 0;
         for _ in 0..hi.max(lo) {
-            let (x, z) = (
-                b.hall[0] + dice.0.range(-4.0, 4.0) as i32,
-                b.hall[2] + dice.0.range(-4.0, 4.0) as i32,
-            );
-            if let Some(y) = ground_near(&world, &blocks, x, z, b.hall[1] + 3, b.hall[1] - 3, true)
-            {
-                let e = spawn_creature(
-                    &mut commands,
-                    &kinds,
-                    &assets,
-                    wight,
-                    Vec3::new(x as f32 + 0.5, y as f32, z as f32 + 0.5),
-                    dice.0.range(0.0, std::f32::consts::TAU),
-                );
+            let (x, z) = (b.hall[0] + dice.0.range(-4.0, 4.0) as i32, b.hall[2] + dice.0.range(-4.0, 4.0) as i32);
+            if let Some(y) = ground_near(&world, &blocks, x, z, b.hall[1] + 3, b.hall[1] - 3, true) {
+                let e = spawn_creature(&mut commands, &kinds, &assets, wight, Vec3::new(x as f32 + 0.5, y as f32, z as f32 + 0.5), dice.0.range(0.0, std::f32::consts::TAU));
                 let mut c = Creature::new(wight, kinds.get(wight).health, 0.0);
                 c.fade = 1.0;
                 c.leash = Some((hall, 10.0));
@@ -721,8 +557,7 @@ fn think(
     let Some(kinds) = kinds else { return };
     let dt = time.delta_secs();
     // Nobody hunts a flying or dead player.
-    let target =
-        (*mode == MoveMode::Walk && s.dead_for.is_none() && player.ready).then_some(player.pos);
+    let target = (*mode == MoveMode::Walk && s.dead_for.is_none() && player.ready).then_some(player.pos);
     for (tf, mut c) in &mut q {
         let k = kinds.get(c.kind);
         c.hurt = (c.hurt - dt).max(0.0);
@@ -736,15 +571,13 @@ fn think(
         let pos = tf.translation;
         let to = target.map(|t| t - pos);
         let dist = to.map_or(f32::MAX, |v| flat(v).length());
-        let leashed =
-            |p: Vec3, c: &Creature| c.leash.is_none_or(|(at, r)| flat(p - at).length() < r);
+        let leashed = |p: Vec3, c: &Creature| c.leash.is_none_or(|(at, r)| flat(p - at).length() < r);
         let hunting = match k.temper {
             Temper::Hostile => dist < 18.0,
             Temper::Neutral => c.angry > 0.0 && dist < 30.0,
             _ => false,
         } && to.is_some_and(|v| v.y.abs() < 6.0);
-        let fleeing = c.scared > 0.0
-            || (k.temper == Temper::Skittish && (dist < 4.0 || (dist < 11.0 && !player.crouching)));
+        let fleeing = c.scared > 0.0 || (k.temper == Temper::Skittish && (dist < 4.0 || (dist < 11.0 && !player.crouching)));
         if fleeing && let Some(to) = to {
             c.want = -flat(to).normalize_or_zero() * k.run;
             c.goal = None;
@@ -760,10 +593,7 @@ fn think(
                 && dist < a.reach + k.half
                 && c.cooldown <= 0.0
             {
-                hits.write(Damage {
-                    amount: a.damage,
-                    cause: a.cause.into(),
-                });
+                hits.write(Damage { amount: a.damage, cause: a.cause.into() });
                 c.cooldown = a.every;
             }
         } else {
@@ -817,8 +647,7 @@ fn spirits(
     let dt = time.delta_secs();
     let night = brain::spirit_hours(clock.hour());
     let lights = lights(&torches, &player, &wielded, &items, spells.light);
-    let target = (*mode == MoveMode::Walk && s.dead_for.is_none() && player.ready)
-        .then_some(player.pos + Vec3::Y * 0.3);
+    let target = (*mode == MoveMode::Walk && s.dead_for.is_none() && player.ready).then_some(player.pos + Vec3::Y * 0.3);
     let t = time.elapsed_secs();
     for (e, mut tf, mut c) in &mut q {
         let k = kinds.get(c.kind);
@@ -828,11 +657,7 @@ fn spirits(
         if !night {
             c.leaving = true;
         }
-        c.fade = if c.leaving {
-            c.fade - dt / 3.0
-        } else {
-            (c.fade + dt / 2.0).min(1.0)
-        };
+        c.fade = if c.leaving { c.fade - dt / 3.0 } else { (c.fade + dt / 2.0).min(1.0) };
         if c.fade <= 0.0 {
             commands.entity(e).despawn();
             continue;
@@ -847,19 +672,12 @@ fn spirits(
                 && dist < a.reach + k.half
                 && c.cooldown <= 0.0
             {
-                hits.write(Damage {
-                    amount: a.damage,
-                    cause: a.cause.into(),
-                });
+                hits.write(Damage { amount: a.damage, cause: a.cause.into() });
                 c.cooldown = a.every;
             }
             // Close in, but stay an arm's length off rather than inside you.
             let pace = if dist < 10.0 { k.run } else { k.speed };
-            let mut v = if flat(to).length() > 1.4 {
-                flat(to).normalize() * pace
-            } else {
-                Vec3::ZERO
-            };
+            let mut v = if flat(to).length() > 1.4 { flat(to).normalize() * pace } else { Vec3::ZERO };
             v.y = to.y.clamp(-1.0, 1.0) * k.speed;
             v
         } else {
@@ -877,9 +695,7 @@ fn spirits(
         if face.length_squared() > 0.01 {
             c.yaw = (-face.x).atan2(-face.z);
         }
-        tf.rotation = tf
-            .rotation
-            .slerp(Quat::from_rotation_y(c.yaw), (dt * 4.0).min(1.0));
+        tf.rotation = tf.rotation.slerp(Quat::from_rotation_y(c.yaw), (dt * 4.0).min(1.0));
         tf.scale = Vec3::splat(c.fade.max(0.01));
     }
 }
@@ -888,52 +704,31 @@ fn spirits(
 pub(crate) fn blocked(world: &World, blocks: &Blocks, pos: Vec3, half: f32, height: f32) -> bool {
     let min = pos - Vec3::new(half, 0.0, half);
     let max = pos + Vec3::new(half, height, half);
-    crate::player::blocks_in(min, max).any(|b| {
-        world
-            .block(b)
-            .is_none_or(|id| blocks.registry.get(id).solid)
-    })
+    crate::player::blocks_in(min, max).any(|b| world.block(b).is_none_or(|id| blocks.registry.get(id).solid))
 }
 
 /// Walking physics for everything but spirits and flying critters: gravity, hops up steps,
 /// floating in water.
-fn walk(
-    time: Res<Time>,
-    kinds: Option<Res<Kinds>>,
-    world: Res<World>,
-    blocks: Res<Blocks>,
-    mut q: Query<(&mut Transform, &mut Creature, &Visibility)>,
-) {
+fn walk(time: Res<Time>, kinds: Option<Res<Kinds>>, world: Res<World>, blocks: Res<Blocks>, mut q: Query<(&mut Transform, &mut Creature, &Visibility)>) {
     let Some(kinds) = kinds else { return };
     let dt = time.delta_secs().min(0.05);
     let water = blocks.registry.id("water");
     for (mut tf, mut c, vis) in &mut q {
         let k = kinds.get(c.kind);
         // Of the critters, only hoppers walk (and swim); fliers move themselves.
-        let flies = k
-            .critter
-            .as_ref()
-            .is_some_and(|c| c.motion != data::Motion::Hopper);
+        let flies = k.critter.as_ref().is_some_and(|c| c.motion != data::Motion::Hopper);
         if k.temper == Temper::Spirit || flies || *vis == Visibility::Hidden {
             continue;
         }
         // Not loaded under it yet: wait.
-        if world
-            .block(BlockPos::from_world(tf.translation.to_array()))
-            .is_none()
-        {
+        if world.block(BlockPos::from_world(tf.translation.to_array())).is_none() {
             continue;
         }
         let mid = tf.translation + Vec3::Y * (k.height * 0.4);
-        let swimming =
-            water.is_some() && world.block(BlockPos::from_world(mid.to_array())) == water;
+        let swimming = water.is_some() && world.block(BlockPos::from_world(mid.to_array())) == water;
         let speed = if swimming { 0.6 } else { 1.0 };
         // Steer towards the wanted velocity; knockback dies down.
-        let blend = if c.on_ground || swimming {
-            (10.0 * dt).min(1.0)
-        } else {
-            (1.5 * dt).min(1.0)
-        };
+        let blend = if c.on_ground || swimming { (10.0 * dt).min(1.0) } else { (1.5 * dt).min(1.0) };
         let target = c.want * speed;
         c.vel.x += (target.x - c.vel.x) * blend;
         c.vel.z += (target.z - c.vel.z) * blend;
@@ -978,26 +773,15 @@ fn walk(
         if face.length_squared() > 0.01 && c.angry <= 0.0 {
             c.yaw = (-face.x).atan2(-face.z);
         }
-        tf.rotation = tf
-            .rotation
-            .slerp(Quat::from_rotation_y(c.yaw), (dt * 8.0).min(1.0));
+        tf.rotation = tf.rotation.slerp(Quat::from_rotation_y(c.yaw), (dt * 8.0).min(1.0));
     }
 }
 
 /// Hit creatures flash red.
-fn tint(
-    creatures: Query<&Creature>,
-    mut parts: Query<(&ChildOf, &Part, &mut MeshMaterial3d<StandardMaterial>)>,
-) {
+fn tint(creatures: Query<&Creature>, mut parts: Query<(&ChildOf, &Part, &mut MeshMaterial3d<StandardMaterial>)>) {
     for (parent, part, mut mat) in &mut parts {
-        let Ok(c) = creatures.get(parent.parent()) else {
-            continue;
-        };
-        let want = if c.hurt > 0.0 {
-            &part.hurt
-        } else {
-            &part.normal
-        };
+        let Ok(c) = creatures.get(parent.parent()) else { continue };
+        let want = if c.hurt > 0.0 { &part.hurt } else { &part.normal };
         if mat.0 != *want {
             mat.0 = want.clone();
         }
@@ -1017,11 +801,7 @@ fn look_at_creature(
     let name = name.get_or_insert_with(|| std::env::var("BLOCKGAME_LOOK").unwrap_or_default());
     let Some(kind) = kinds.id(name) else { return };
     let eye = cam.0.translation;
-    let nearest = q
-        .iter()
-        .filter(|(_, c)| c.kind == kind)
-        .map(|(tf, _)| tf.translation + Vec3::Y * kinds.get(kind).height * 0.5)
-        .min_by(|a, b| a.distance(eye).total_cmp(&b.distance(eye)));
+    let nearest = q.iter().filter(|(_, c)| c.kind == kind).map(|(tf, _)| tf.translation + Vec3::Y * kinds.get(kind).height * 0.5).min_by(|a, b| a.distance(eye).total_cmp(&b.distance(eye)));
     if let Some(p) = nearest {
         let d = (p - eye).normalize_or(Vec3::NEG_Z);
         cam.1.yaw = (-d.x).atan2(-d.z);
@@ -1041,9 +821,7 @@ fn lineup(
     cam: Single<&Transform, With<FlyCamera>>,
     mut done: Local<bool>,
 ) {
-    let (Some(kinds), Some(assets)) = (kinds, assets) else {
-        return;
-    };
+    let (Some(kinds), Some(assets)) = (kinds, assets) else { return };
     if *done {
         return;
     }
@@ -1053,47 +831,21 @@ fn lineup(
     let spacing = 1.8;
     let mut spots = Vec::new();
     for i in 0..models.len() {
-        let p = cam.translation
-            + fwd * (3.0 + models.len() as f32 * 0.9)
-            + side * (i as f32 - (models.len() - 1) as f32 * 0.5) * spacing;
+        let p = cam.translation + fwd * (3.0 + models.len() as f32 * 0.9) + side * (i as f32 - (models.len() - 1) as f32 * 0.5) * spacing;
         let (x, z) = (p.x.floor() as i32, p.z.floor() as i32);
         // Wait until the ground there has loaded.
-        let Some(y) = ground_near(
-            &world,
-            &blocks,
-            x,
-            z,
-            cam.translation.y as i32 + 8,
-            cam.translation.y as i32 - 40,
-            false,
-        ) else {
-            return;
-        };
+        let Some(y) = ground_near(&world, &blocks, x, z, cam.translation.y as i32 + 8, cam.translation.y as i32 - 40, false) else { return };
         spots.push(Vec3::new(x as f32 + 0.5, y as f32, z as f32 + 0.5));
     }
     let face = Quat::from_rotation_y((fwd.x).atan2(fwd.z));
     for (parts, pos) in models.into_iter().zip(spots) {
-        commands
-            .spawn((
-                Transform::from_translation(pos).with_rotation(face),
-                Visibility::default(),
-            ))
-            .with_children(|p| {
-                for part in parts {
-                    p.spawn((
-                        Mesh3d(part.mesh.clone()),
-                        MeshMaterial3d(part.normal.clone()),
-                        Transform::from_translation(part.offset),
-                        NotShadowCaster,
-                    ));
-                }
-            });
+        commands.spawn((Transform::from_translation(pos).with_rotation(face), Visibility::default())).with_children(|p| {
+            for part in parts {
+                p.spawn((Mesh3d(part.mesh.clone()), MeshMaterial3d(part.normal.clone()), Transform::from_translation(part.offset), NotShadowCaster));
+            }
+        });
     }
-    info!(
-        "lineup of {} creature skins ({} kinds)",
-        assets.looks.iter().map(Vec::len).sum::<usize>(),
-        kinds.list.len()
-    );
+    info!("lineup of {} creature skins ({} kinds)", assets.looks.iter().map(Vec::len).sum::<usize>(), kinds.list.len());
     *done = true;
 }
 

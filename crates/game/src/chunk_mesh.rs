@@ -38,15 +38,12 @@ struct Buffers {
 impl Buffers {
     fn into_mesh(self) -> Option<Mesh> {
         (!self.idx.is_empty()).then(|| {
-            Mesh::new(
-                PrimitiveTopology::TriangleList,
-                RenderAssetUsages::RENDER_WORLD,
-            )
-            .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, self.pos)
-            .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.nor)
-            .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, self.uv)
-            .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, self.layer)
-            .with_inserted_indices(Indices::U32(self.idx))
+            Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::RENDER_WORLD)
+                .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, self.pos)
+                .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.nor)
+                .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, self.uv)
+                .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, self.layer)
+                .with_inserted_indices(Indices::U32(self.idx))
         })
     }
 }
@@ -79,20 +76,12 @@ pub fn build(chunk: &PaddedChunk, registry: &BlockRegistry, opaque: &[bool]) -> 
         if registry.get(q.block).shape != voxel::Shape::Cube {
             continue;
         }
-        let b = if registry.get(q.block).translucent {
-            &mut clear
-        } else {
-            &mut solid
-        };
+        let b = if registry.get(q.block).translucent { &mut clear } else { &mut solid };
         push_quad(q, registry, b);
     }
     let mut plants = Buffers::default();
     push_plants(chunk, registry, &mut plants);
-    ChunkMeshes {
-        opaque: solid.into_mesh(),
-        translucent: clear.into_mesh(),
-        plants: plants.into_mesh(),
-    }
+    ChunkMeshes { opaque: solid.into_mesh(), translucent: clear.into_mesh(), plants: plants.into_mesh() }
 }
 
 /// Two crossed quads per plant block, each drawn from both sides. Normals
@@ -119,17 +108,11 @@ fn push_plants(chunk: &PaddedChunk, registry: &BlockRegistry, b: &mut Buffers) {
                 let tex = def.textures[voxel::Face::PosY as usize] as f32;
                 let tint = if def.foliage { 1.0 } else { 0.0 };
                 // A little jitter so a field of grass isn't a grid.
-                let h = (x as u32).wrapping_mul(73_856_093)
-                    ^ (y as u32).wrapping_mul(19_349_663)
-                    ^ (z as u32).wrapping_mul(83_492_791);
+                let h = (x as u32).wrapping_mul(73_856_093) ^ (y as u32).wrapping_mul(19_349_663) ^ (z as u32).wrapping_mul(83_492_791);
                 let jx = ((h & 0xFF) as f32 / 255.0 - 0.5) * 0.3;
                 let jz = (((h >> 8) & 0xFF) as f32 / 255.0 - 0.5) * 0.3;
                 let tall = 0.85 + ((h >> 16) & 0xFF) as f32 / 255.0 * 0.25;
-                let (cx, cy, cz) = (
-                    (x - 1) as f32 + 0.5 + jx,
-                    (y - 1) as f32,
-                    (z - 1) as f32 + 0.5 + jz,
-                );
+                let (cx, cy, cz) = ((x - 1) as f32 + 0.5 + jx, (y - 1) as f32, (z - 1) as f32 + 0.5 + jz);
                 let r = 0.45;
                 for (dx, dz) in [(r, r), (r, -r)] {
                     let a = [cx - dx, cy, cz - dz];
@@ -143,25 +126,10 @@ fn push_plants(chunk: &PaddedChunk, registry: &BlockRegistry, b: &mut Buffers) {
                         b.pos.push(corners[i]);
                         b.nor.push([0.0, 1.0, 0.0]);
                         b.uv.push(uvs[i]);
-                        b.layer
-                            .push([pack_layer(tex, 0), pack_tint_sway(tint, sway[i])]);
+                        b.layer.push([pack_layer(tex, 0), pack_tint_sway(tint, sway[i])]);
                     }
-                    b.idx.extend_from_slice(&[
-                        start,
-                        start + 1,
-                        start + 2,
-                        start,
-                        start + 2,
-                        start + 3,
-                    ]);
-                    b.idx.extend_from_slice(&[
-                        start,
-                        start + 2,
-                        start + 1,
-                        start,
-                        start + 3,
-                        start + 2,
-                    ]);
+                    b.idx.extend_from_slice(&[start, start + 1, start + 2, start, start + 2, start + 3]);
+                    b.idx.extend_from_slice(&[start, start + 2, start + 1, start, start + 3, start + 2]);
                 }
             }
         }
@@ -171,9 +139,7 @@ fn push_plants(chunk: &PaddedChunk, registry: &BlockRegistry, b: &mut Buffers) {
 /// A vine panel, a twig or a pebble in the cell whose low corner is `cell`.
 /// `key` varies the placement a little from block to block.
 fn push_detail(def: &voxel::BlockDef, cell: [f32; 3], key: [u32; 3], b: &mut Buffers) {
-    let h = key[0].wrapping_mul(73_856_093)
-        ^ key[1].wrapping_mul(19_349_663)
-        ^ key[2].wrapping_mul(83_492_791);
+    let h = key[0].wrapping_mul(73_856_093) ^ key[1].wrapping_mul(19_349_663) ^ key[2].wrapping_mul(83_492_791);
     let jit = |shift: u32| ((h >> shift) & 0xFF) as f32 / 255.0 - 0.5;
     let tint = if def.foliage { 1.0 } else { 0.0 };
     let side_tex = def.textures[voxel::Face::PosX as usize] as f32;
@@ -184,11 +150,7 @@ fn push_detail(def: &voxel::BlockDef, cell: [f32; 3], key: [u32; 3], b: &mut Buf
             // A panel just off the wall it clings to, seen from both sides; the
             // lower edge sways a little.
             let gap = 0.04;
-            let (axis, toward) = if off[0] != 0 {
-                (0, off[0])
-            } else {
-                (2, off[2])
-            };
+            let (axis, toward) = if off[0] != 0 { (0, off[0]) } else { (2, off[2]) };
             let plane = if toward > 0 { 1.0 - gap } else { gap };
             let other = if axis == 0 { 2 } else { 0 };
             let corner = |u: f32, v: f32| {
@@ -198,12 +160,7 @@ fn push_detail(def: &voxel::BlockDef, cell: [f32; 3], key: [u32; 3], b: &mut Buf
                 c[1] += v;
                 c
             };
-            let corners = [
-                corner(0.0, 0.0),
-                corner(1.0, 0.0),
-                corner(1.0, 1.0),
-                corner(0.0, 1.0),
-            ];
+            let corners = [corner(0.0, 0.0), corner(1.0, 0.0), corner(1.0, 1.0), corner(0.0, 1.0)];
             let mut normal = [0.0; 3];
             normal[axis] = -(toward as f32);
             let uvs = [[0.0, 0.999], [0.999, 0.999], [0.999, 0.0], [0.0, 0.0]];
@@ -213,13 +170,10 @@ fn push_detail(def: &voxel::BlockDef, cell: [f32; 3], key: [u32; 3], b: &mut Buf
                 b.pos.push(corners[i]);
                 b.nor.push(normal);
                 b.uv.push(uvs[i]);
-                b.layer
-                    .push([pack_layer(top_tex, 0), pack_tint_sway(tint, sway[i])]);
+                b.layer.push([pack_layer(top_tex, 0), pack_tint_sway(tint, sway[i])]);
             }
-            b.idx
-                .extend_from_slice(&[start, start + 1, start + 2, start, start + 2, start + 3]);
-            b.idx
-                .extend_from_slice(&[start, start + 2, start + 1, start, start + 3, start + 2]);
+            b.idx.extend_from_slice(&[start, start + 1, start + 2, start, start + 2, start + 3]);
+            b.idx.extend_from_slice(&[start, start + 2, start + 1, start, start + 3, start + 2]);
         }
         voxel::Shape::Twig => {
             // A stick from the wall towards the middle of the cell, a little
@@ -234,11 +188,7 @@ fn push_detail(def: &voxel::BlockDef, cell: [f32; 3], key: [u32; 3], b: &mut Buf
             for axis in [0, 2] {
                 if off[axis] != 0 {
                     // From the attached wall inwards.
-                    let (a, z) = if off[axis] > 0 {
-                        (1.0 - len, 1.0)
-                    } else {
-                        (0.0, len)
-                    };
+                    let (a, z) = if off[axis] > 0 { (1.0 - len, 1.0) } else { (0.0, len) };
                     lo[axis] = a;
                     hi[axis] = z;
                 } else {
@@ -249,20 +199,9 @@ fn push_detail(def: &voxel::BlockDef, cell: [f32; 3], key: [u32; 3], b: &mut Buf
             push_box(b, cell, lo, hi, side_tex, tint);
         }
         voxel::Shape::Pebble => {
-            let (w, d, hgt) = (
-                0.26 + jit(0) * 0.08,
-                0.2 + jit(8) * 0.08,
-                0.1 + jit(24) * 0.04,
-            );
+            let (w, d, hgt) = (0.26 + jit(0) * 0.08, 0.2 + jit(8) * 0.08, 0.1 + jit(24) * 0.04);
             let (cx, cz) = (0.5 + jit(16) * 0.4, 0.5 + jit(20) * 0.4);
-            push_box(
-                b,
-                cell,
-                [cx - w / 2.0, 0.0, cz - d / 2.0],
-                [cx + w / 2.0, hgt, cz + d / 2.0],
-                top_tex,
-                tint,
-            );
+            push_box(b, cell, [cx - w / 2.0, 0.0, cz - d / 2.0], [cx + w / 2.0, hgt, cz + d / 2.0], top_tex, tint);
         }
         _ => {}
     }
@@ -274,11 +213,7 @@ fn push_box(b: &mut Buffers, cell: [f32; 3], lo: [f32; 3], hi: [f32; 3], tex: f3
     for face in voxel::Face::ALL {
         let axis = face.axis();
         let (ua, va) = face.plane_axes();
-        let at = if face.is_positive() {
-            hi[axis]
-        } else {
-            lo[axis]
-        };
+        let at = if face.is_positive() { hi[axis] } else { lo[axis] };
         let corner = |u: f32, v: f32| {
             let mut c = [0.0; 3];
             c[axis] = at;
@@ -286,12 +221,7 @@ fn push_box(b: &mut Buffers, cell: [f32; 3], lo: [f32; 3], hi: [f32; 3], tex: f3
             c[va] = v;
             c
         };
-        let local = [
-            corner(lo[ua], lo[va]),
-            corner(hi[ua], lo[va]),
-            corner(hi[ua], hi[va]),
-            corner(lo[ua], hi[va]),
-        ];
+        let local = [corner(lo[ua], lo[va]), corner(hi[ua], lo[va]), corner(hi[ua], hi[va]), corner(lo[ua], hi[va])];
         let normal = face.normal().map(|v| v as f32);
         let start = b.pos.len() as u32;
         for c in local {
@@ -300,17 +230,14 @@ fn push_box(b: &mut Buffers, cell: [f32; 3], lo: [f32; 3], hi: [f32; 3], tex: f3
             // Sample the tile where this face sits (flip v so up is up on the sides).
             let v = if va == 1 { 1.0 - c[va] } else { c[va] };
             b.uv.push([c[ua].clamp(0.0, 0.999), v.clamp(0.0, 0.999)]);
-            b.layer
-                .push([pack_layer(tex, 0), pack_tint_sway(tint, 0.0)]);
+            b.layer.push([pack_layer(tex, 0), pack_tint_sway(tint, 0.0)]);
         }
         // Wind counter-clockwise seen from outside: u x v points along +X, -Y
         // and +Z for the three plane layouts, so flip where the face is the other way.
         if face.is_positive() == (axis != 1) {
-            b.idx
-                .extend_from_slice(&[start, start + 1, start + 2, start, start + 2, start + 3]);
+            b.idx.extend_from_slice(&[start, start + 1, start + 2, start, start + 2, start + 3]);
         } else {
-            b.idx
-                .extend_from_slice(&[start, start + 2, start + 1, start, start + 3, start + 2]);
+            b.idx.extend_from_slice(&[start, start + 2, start + 1, start, start + 3, start + 2]);
         }
     }
 }
@@ -340,12 +267,7 @@ fn push_quad(q: &Quad, registry: &BlockRegistry, b: &mut Buffers) {
     let def = registry.get(q.block);
     // Water surfaces sit a little lower than a full block, like a real waterline.
     let lower_top = def.translucent && !def.solid && q.face == voxel::Face::PosY;
-    let corners = [
-        corner(0.0, 0.0),
-        corner(su, 0.0),
-        corner(su, sv),
-        corner(0.0, sv),
-    ];
+    let corners = [corner(0.0, 0.0), corner(su, 0.0), corner(su, sv), corner(0.0, sv)];
     let normal = q.face.normal().map(|v| v as f32);
     let tex = def.textures[q.face as usize] as f32;
     // UV_1.y: how strongly the season tints this face (see `foliage` in
@@ -356,17 +278,9 @@ fn push_quad(q: &Quad, registry: &BlockRegistry, b: &mut Buffers) {
         _ => 0.0,
     };
     // Corner shading in `corners` order; none on water and ice.
-    let ao = if def.translucent {
-        [0; 4]
-    } else {
-        [q.ao[0], q.ao[1], q.ao[3], q.ao[2]]
-    };
+    let ao = if def.translucent { [0; 4] } else { [q.ao[0], q.ao[1], q.ao[3], q.ao[2]] };
     // Leaves (see-through foliage) rustle a little.
-    let sway = if def.foliage && !def.opaque {
-        LEAF_SWAY
-    } else {
-        0.0
-    };
+    let sway = if def.foliage && !def.opaque { LEAF_SWAY } else { 0.0 };
     let start = b.pos.len() as u32;
     for (i, mut c) in corners.into_iter().enumerate() {
         if lower_top {
@@ -381,8 +295,7 @@ fn push_quad(q: &Quad, registry: &BlockRegistry, b: &mut Buffers) {
             1 => [c[0], c[2]],
             _ => [c[0], -c[1]],
         });
-        b.layer
-            .push([pack_layer(tex, ao[i]), pack_tint_sway(foliage, sway)]);
+        b.layer.push([pack_layer(tex, ao[i]), pack_tint_sway(foliage, sway)]);
     }
     // u x v points along +axis for x and z faces, and along -axis for y faces.
     let flip = (axis == 1) == q.face.is_positive();
@@ -408,10 +321,7 @@ mod tests {
             for k in 0..=SWAY_STEPS as u32 {
                 let sway = k as f32 / SWAY_STEPS;
                 let (t, s) = unpack_tint_sway(pack_tint_sway(tint, sway));
-                assert!(
-                    (t - tint).abs() < 1e-4 && (s - sway).abs() < 1e-4,
-                    "{tint} {sway} -> {t} {s}"
-                );
+                assert!((t - tint).abs() < 1e-4 && (s - sway).abs() < 1e-4, "{tint} {sway} -> {t} {s}");
             }
         }
         assert_eq!(pack_tint_sway(0.5, 0.0), 0.5);
@@ -420,23 +330,13 @@ mod tests {
     #[test]
     fn box_faces_point_outward() {
         let mut b = Buffers::default();
-        push_box(
-            &mut b,
-            [3.0, 4.0, 5.0],
-            [0.2, 0.0, 0.3],
-            [0.6, 0.1, 0.5],
-            1.0,
-            0.0,
-        );
+        push_box(&mut b, [3.0, 4.0, 5.0], [0.2, 0.0, 0.3], [0.6, 0.1, 0.5], 1.0, 0.0);
         assert_eq!(b.idx.len(), 36);
         for tri in b.idx.chunks(3) {
             let [a, c, d] = [tri[0], tri[1], tri[2]].map(|i| Vec3::from(b.pos[i as usize]));
             let n = (c - a).cross(d - a).normalize();
             let want = Vec3::from(b.nor[tri[0] as usize]);
-            assert!(
-                n.dot(want) > 0.99,
-                "triangle normal {n} vs face normal {want}"
-            );
+            assert!(n.dot(want) > 0.99, "triangle normal {n} vs face normal {want}");
         }
     }
 }

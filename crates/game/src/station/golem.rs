@@ -13,8 +13,8 @@ use serde::{Deserialize, Serialize};
 use super::models::{self, Mat};
 use super::{Station, StationKind, UrnBook, Urns};
 use crate::blocks::Blocks;
-use crate::creatures::Creature;
 use crate::creatures::data::{Kinds, Temper};
+use crate::creatures::Creature;
 use crate::interact::Strike;
 use crate::player::{MoveMode, Player};
 use crate::save::SaveDir;
@@ -66,29 +66,15 @@ pub fn step(from: Vec3, goal: Vec3, keep: f32, dt: f32) -> Vec3 {
 pub(super) struct GolemBody;
 
 fn screenshot_run() -> bool {
-    std::env::var_os("BLOCKGAME_SCREENSHOT").is_some()
-        || std::env::var_os("BLOCKGAME_BENCH").is_some()
+    std::env::var_os("BLOCKGAME_SCREENSHOT").is_some() || std::env::var_os("BLOCKGAME_BENCH").is_some()
 }
 
 pub(super) fn load_golem(mut commands: Commands, dir: Res<SaveDir>) {
-    let g = if screenshot_run() {
-        None
-    } else {
-        std::fs::read_to_string(dir.file("golem.ron"))
-            .ok()
-            .and_then(|t| ron::from_str::<Golem>(&t).ok())
-    };
-    commands.insert_resource(g.unwrap_or(Golem {
-        follow: true,
-        ..default()
-    }));
+    let g = if screenshot_run() { None } else { std::fs::read_to_string(dir.file("golem.ron")).ok().and_then(|t| ron::from_str::<Golem>(&t).ok()) };
+    commands.insert_resource(g.unwrap_or(Golem { follow: true, ..default() }));
 }
 
-pub(super) fn save_golem_on_exit(
-    mut exit: MessageReader<AppExit>,
-    dir: Res<SaveDir>,
-    golem: Res<Golem>,
-) {
+pub(super) fn save_golem_on_exit(mut exit: MessageReader<AppExit>, dir: Res<SaveDir>, golem: Res<Golem>) {
     if exit.read().next().is_some() && !screenshot_run() {
         match ron::ser::to_string_pretty(&*golem, ron::ser::PrettyConfig::default()) {
             Ok(text) => {
@@ -131,9 +117,7 @@ pub(super) fn golem_walk(
     let mut pos = match g.pos {
         Some(p) => Vec3::new(p.0, p.1, p.2),
         None => {
-            let Some(f) = frames.iter().find(|s| s.kind == StationKind::GolemFrame) else {
-                return;
-            };
+            let Some(f) = frames.iter().find(|s| s.kind == StationKind::GolemFrame) else { return };
             f.pos + Vec3::new(0.0, 0.0, 1.0)
         }
     };
@@ -159,10 +143,7 @@ pub(super) fn golem_walk(
     {
         let foe = creatures
             .iter()
-            .filter(|(_, _, c)| {
-                matches!(kinds.get(c.kind).temper, Temper::Hostile | Temper::Spirit)
-                    || c.angry > 0.0
-            })
+            .filter(|(_, _, c)| matches!(kinds.get(c.kind).temper, Temper::Hostile | Temper::Spirit) || c.angry > 0.0)
             .map(|(e, t, _)| (e, t.translation, t.translation.distance(pos)))
             .filter(|(.., d)| *d < GUARD)
             .min_by(|a, b| a.2.total_cmp(&b.2));
@@ -172,31 +153,16 @@ pub(super) fn golem_walk(
             } else if g.cooldown <= 0.0 {
                 g.cooldown = BLOW_SECONDS;
                 let dir = (at - pos).with_y(0.0).normalize_or(Vec3::X);
-                strikes.write(Strike {
-                    entity: e,
-                    damage: DAMAGE,
-                    dir,
-                });
+                strikes.write(Strike { entity: e, damage: DAMAGE, dir });
             }
             let d = at - pos;
             g.yaw = (-d.x).atan2(-d.z);
         }
     }
     g.pos = Some((pos.x, pos.y, pos.z));
-    let station = Station {
-        kind: StationKind::Golem,
-        pos,
-        turned: false,
-        urn: book
-            .0
-            .urns
-            .iter()
-            .position(|u| u.name == "golem")
-            .unwrap_or(0),
-    };
+    let station = Station { kind: StationKind::Golem, pos, turned: false, urn: book.0.urns.iter().position(|u| u.name == "golem").unwrap_or(0) };
     let bob = (g.walked * 3.0).sin().abs() * 0.05;
-    let tf = Transform::from_translation(pos + Vec3::Y * bob)
-        .with_rotation(Quat::from_rotation_y(g.yaw));
+    let tf = Transform::from_translation(pos + Vec3::Y * bob).with_rotation(Quat::from_rotation_y(g.yaw));
     if let Ok((_, mut st, mut t)) = body.single_mut() {
         *st = station;
         *t = tf;
@@ -205,40 +171,24 @@ pub(super) fn golem_walk(
     // Build its body from the station model's parts.
     let color = book.0.urns[station.urn].color;
     let hands = urns.has("golem_hands");
-    commands
-        .spawn((GolemBody, station, tf, Visibility::default()))
-        .with_children(|c| {
-            for p in models::parts(StationKind::Golem, &|s| s == "golem_hands" && hands, 0) {
-                let (base, glow) = p.mat.look(color);
-                let lin = base.to_linear();
-                let mat = materials.add(StandardMaterial {
-                    base_color: base,
-                    emissive: LinearRgba::rgb(lin.red * glow, lin.green * glow, lin.blue * glow),
-                    perceptual_roughness: if matches!(p.mat, Mat::Iron) {
-                        0.5
-                    } else {
-                        0.95
-                    },
-                    ..default()
-                });
-                let mesh = meshes.add(Cuboid::new(p.size.x, p.size.y, p.size.z));
-                c.spawn((
-                    Mesh3d(mesh),
-                    MeshMaterial3d(mat),
-                    Transform::from_translation(p.at),
-                    NotShadowCaster,
-                ));
-            }
-        });
+    commands.spawn((GolemBody, station, tf, Visibility::default())).with_children(|c| {
+        for p in models::parts(StationKind::Golem, &|s| s == "golem_hands" && hands, 0) {
+            let (base, glow) = p.mat.look(color);
+            let lin = base.to_linear();
+            let mat = materials.add(StandardMaterial {
+                base_color: base,
+                emissive: LinearRgba::rgb(lin.red * glow, lin.green * glow, lin.blue * glow),
+                perceptual_roughness: if matches!(p.mat, Mat::Iron) { 0.5 } else { 0.95 },
+                ..default()
+            });
+            let mesh = meshes.add(Cuboid::new(p.size.x, p.size.y, p.size.z));
+            c.spawn((Mesh3d(mesh), MeshMaterial3d(mat), Transform::from_translation(p.at), NotShadowCaster));
+        }
+    });
 }
 
 /// Hands put on after it woke: rebuild its body.
-pub(super) fn golem_rebuild(
-    urns: Res<Urns>,
-    mut commands: Commands,
-    body: Query<Entity, With<GolemBody>>,
-    mut had: Local<bool>,
-) {
+pub(super) fn golem_rebuild(urns: Res<Urns>, mut commands: Commands, body: Query<Entity, With<GolemBody>>, mut had: Local<bool>) {
     let hands = urns.has("golem_hands");
     if hands != *had {
         *had = hands;

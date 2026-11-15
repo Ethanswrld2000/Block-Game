@@ -22,8 +22,7 @@ pub struct ClockPlugin;
 
 impl Plugin for ClockPlugin {
     fn build(&self, app: &mut App) {
-        let seasons = Seasons::from_ron(include_str!("../../../assets/data/seasons.ron"))
-            .unwrap_or_else(|e| panic!("{e}"));
+        let seasons = Seasons::from_ron(include_str!("../../../assets/data/seasons.ron")).unwrap_or_else(|e| panic!("{e}"));
         app.insert_resource(seasons)
             .insert_resource(SaveTimer(Timer::from_seconds(30.0, TimerMode::Repeating)))
             .add_systems(crate::menu::GamePreStartup, load_clock)
@@ -47,11 +46,7 @@ pub struct WorldClock {
 impl Default for WorldClock {
     fn default() -> Self {
         // A new world starts on a spring morning.
-        Self {
-            day: 0,
-            time: 0.3,
-            speed: 1.0,
-        }
+        Self { day: 0, time: 0.3, speed: 1.0 }
     }
 }
 
@@ -134,10 +129,7 @@ impl Seasons {
                 weather: s.weather,
             })
             .collect();
-        Ok(Self {
-            days: spec.days,
-            list,
-        })
+        Ok(Self { days: spec.days, list })
     }
 
     pub fn at(&self, clock: &WorldClock) -> SeasonPoint {
@@ -147,12 +139,7 @@ impl Seasons {
         let into = day_in_season as f32 + clock.time;
         let fade = 2.0f32.min(self.days as f32);
         let blend = ((into - (self.days as f32 - fade)) / fade).clamp(0.0, 1.0);
-        SeasonPoint {
-            current: current as usize,
-            next: ((current + 1) % n) as usize,
-            day_in_season,
-            blend,
-        }
+        SeasonPoint { current: current as usize, next: ((current + 1) % n) as usize, day_in_season, blend }
     }
 
     /// A season value blended towards the next season.
@@ -187,21 +174,12 @@ fn load_clock(mut commands: Commands, dir: Res<SaveDir>) {
     commands.insert_resource(clock);
 }
 
-fn advance(
-    time: Res<Time>,
-    keys: Res<ButtonInput<KeyCode>>,
-    mut clock: ResMut<WorldClock>,
-    mut frozen: Local<Option<bool>>,
-) {
+fn advance(time: Res<Time>, keys: Res<ButtonInput<KeyCode>>, mut clock: ResMut<WorldClock>, mut frozen: Local<Option<bool>>) {
     // Test screenshots hold the clock so the picture shows the time asked for.
     if *frozen.get_or_insert_with(|| std::env::var_os("BLOCKGAME_SCREENSHOT").is_some()) {
         return;
     }
-    clock.speed = if keys.pressed(KeyCode::KeyT) {
-        FAST_FORWARD
-    } else {
-        1.0
-    };
+    clock.speed = if keys.pressed(KeyCode::KeyT) { FAST_FORWARD } else { 1.0 };
     clock.time += time.delta_secs() * clock.speed / DAY_SECONDS;
     while clock.time >= 1.0 {
         clock.time -= 1.0;
@@ -216,12 +194,7 @@ fn store(clock: &WorldClock, dir: &SaveDir) {
     }
 }
 
-fn save_clock(
-    time: Res<Time>,
-    mut timer: ResMut<SaveTimer>,
-    clock: Res<WorldClock>,
-    dir: Res<SaveDir>,
-) {
+fn save_clock(time: Res<Time>, mut timer: ResMut<SaveTimer>, clock: Res<WorldClock>, dir: Res<SaveDir>) {
     if timer.0.tick(time.delta()).just_finished() {
         store(&clock, &dir);
     }
@@ -251,13 +224,7 @@ mod tests {
     #[test]
     fn season_turns_every_ten_days_and_wraps() {
         let s = seasons();
-        let at = |day| {
-            s.at(&WorldClock {
-                day,
-                time: 0.5,
-                speed: 1.0,
-            })
-        };
+        let at = |day| s.at(&WorldClock { day, time: 0.5, speed: 1.0 });
         assert_eq!(at(0).current, 0);
         assert_eq!(at(9).current, 0);
         assert_eq!(at(10).current, 1);

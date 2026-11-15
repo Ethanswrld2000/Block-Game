@@ -12,18 +12,18 @@ use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 use voxel::BlockPos;
 
 use super::crafting::{Recipes, Station};
-use super::grid::{Grid, Stack, dims};
+use super::grid::{dims, Grid, Stack};
 use super::world_items::Spill;
 use super::{Chests, Inventory};
+use crate::item_art::ItemArt;
 use crate::camera::{FlyCamera, Menus};
 use crate::interact::{Hotbar, OpenChest};
-use crate::item_art::ItemArt;
 use crate::items::{ItemKind, Items, WearSlot};
 use crate::player::Player;
-use crate::survival::Survival;
 use crate::survival::camp::{Camp, Sleep};
 use crate::survival::health::Layer;
-use crate::theme::{self, Theme, colors, sizes};
+use crate::survival::Survival;
+use crate::theme::{self, colors, sizes, Theme};
 
 /// One grid cell: item sprites are 20 px per cell, drawn at 2x.
 const CELL: f32 = 40.0;
@@ -36,20 +36,7 @@ impl Plugin for InventoryUiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<InvUi>()
             .add_systems(crate::menu::GamePostStartup, open_for_screenshot)
-            .add_systems(
-                crate::menu::GameUpdate,
-                (
-                    open_close,
-                    hover,
-                    scroll,
-                    click,
-                    keys,
-                    rebuild,
-                    follow_cursor,
-                )
-                    .chain()
-                    .after(crate::interact::InteractSet),
-            );
+            .add_systems(crate::menu::GameUpdate, (open_close, hover, scroll, click, keys, rebuild, follow_cursor).chain().after(crate::interact::InteractSet));
     }
 }
 
@@ -146,11 +133,7 @@ fn open_for_screenshot(mut ui: ResMut<InvUi>, mut menus: ResMut<Menus>) {
     }
 }
 
-fn grid_mut<'a>(
-    inv: &'a mut Inventory,
-    chests: &'a mut Chests,
-    g: GridRef,
-) -> Option<&'a mut Grid> {
+fn grid_mut<'a>(inv: &'a mut Inventory, chests: &'a mut Chests, g: GridRef) -> Option<&'a mut Grid> {
     match g {
         GridRef::Pockets => Some(&mut inv.pockets),
         GridRef::Chest(p) => Some(chests.grid(p)),
@@ -180,9 +163,7 @@ fn open_close(
     let mut want = ui.open;
     // Another screen (the pause menu, a bench) has the mouse: Tab and I wait.
     let free = ui.open || !menus.open;
-    if (free && keys.just_pressed(KeyCode::Tab))
-        || (ui.open && (keys.just_pressed(KeyCode::Escape) || keys.just_pressed(KeyCode::KeyI)))
-    {
+    if (free && keys.just_pressed(KeyCode::Tab)) || (ui.open && (keys.just_pressed(KeyCode::Escape) || keys.just_pressed(KeyCode::KeyI))) {
         want = !ui.open;
     } else if free && keys.just_pressed(KeyCode::KeyI) {
         want = true;
@@ -196,22 +177,11 @@ fn open_close(
         {
             // A chest found in the world: fill it the first time it's opened.
             let p = m.0;
-            let in_barrow = generator
-                .0
-                .barrows_in(p.x - 1, p.z - 1, p.x + 1, p.z + 1)
-                .iter()
-                .any(|b| b.contains(p.x, p.y, p.z));
-            *seed = seed.wrapping_add(0x9E37_79B9_7F4A_7C15)
-                ^ (p.x as u64).wrapping_mul(31)
-                ^ (p.z as u64).wrapping_mul(1_000_003);
+            let in_barrow = generator.0.barrows_in(p.x - 1, p.z - 1, p.x + 1, p.z + 1).iter().any(|b| b.contains(p.x, p.y, p.z));
+            *seed = seed.wrapping_add(0x9E37_79B9_7F4A_7C15) ^ (p.x as u64).wrapping_mul(31) ^ (p.z as u64).wrapping_mul(1_000_003);
             let mut rng = crate::creatures::brain::Rng(*seed | 1);
             let grid = chests.grid(p);
-            loot.fill(
-                if in_barrow { "barrow" } else { "village" },
-                &items,
-                grid,
-                || rng.unit(),
-            );
+            loot.fill(if in_barrow { "barrow" } else { "village" }, &items, grid, || rng.unit());
         }
         chests.grid(m.0);
         ui.dirty = true;
@@ -220,10 +190,7 @@ fn open_close(
     // (Personal storage, the fridge and the golem's pack aren't in the world: they stay open until you close them.)
     if let Some(c) = ui.chest
         && !super::virtual_chest(c)
-        && (Vec3::new(c.x as f32 + 0.5, c.y as f32 + 0.5, c.z as f32 + 0.5)
-            .distance(player.pos + Vec3::Y)
-            > 6.0
-            || !chests.map.contains_key(&c))
+        && (Vec3::new(c.x as f32 + 0.5, c.y as f32 + 0.5, c.z as f32 + 0.5).distance(player.pos + Vec3::Y) > 6.0 || !chests.map.contains_key(&c))
     {
         ui.chest = None;
         ui.dirty = true;
@@ -285,9 +252,7 @@ fn hover(
                 continue;
             }
             Zone::Grid(g, w, h) => {
-                let Some(n) = node.normalize_point(*tf, p) else {
-                    continue;
-                };
+                let Some(n) = node.normalize_point(*tf, p) else { continue };
                 let x = (((n.x + 0.5) * w as f32).floor() as i32).clamp(0, w as i32 - 1) as u8;
                 let y = (((n.y + 0.5) * h as f32).floor() as i32).clamp(0, h as i32 - 1) as u8;
                 Hover::Cell(g, x, y)
@@ -308,13 +273,7 @@ fn hover(
 
 /// Put a held stack into a grid at a cell: onto a matching stack, into free
 /// space, or swapping with the one item in the way.
-fn drop_into(
-    grid: &mut Grid,
-    items: &Items,
-    held: Held,
-    at: (u8, u8),
-    g: GridRef,
-) -> Result<Option<Held>, &'static str> {
+fn drop_into(grid: &mut Grid, items: &Items, held: Held, at: (u8, u8), g: GridRef) -> Result<Option<Held>, &'static str> {
     if let Some(i) = grid.at(items, at.0, at.1) {
         let p = grid.items[i];
         let max = items.get(p.stack.item).stack;
@@ -322,10 +281,7 @@ fn drop_into(
             let n = (max - p.stack.count).min(held.stack.count);
             grid.items[i].stack.count += n;
             let left = held.stack.count - n;
-            return Ok((left > 0).then_some(Held {
-                stack: Stack::new(held.stack.item, left),
-                ..held
-            }));
+            return Ok((left > 0).then_some(Held { stack: Stack::new(held.stack.item, left), ..held }));
         }
     }
     if grid.place(items, held.stack, at.0, at.1, held.rotated) {
@@ -343,23 +299,10 @@ fn drop_into(
             }
         }
     }
-    if in_way.len() == 1
-        && grid.fits(
-            items,
-            held.stack.item,
-            at.0,
-            at.1,
-            held.rotated,
-            Some(in_way[0]),
-        )
-    {
+    if in_way.len() == 1 && grid.fits(items, held.stack.item, at.0, at.1, held.rotated, Some(in_way[0])) {
         let p = grid.items.remove(in_way[0]);
         grid.place(items, held.stack, at.0, at.1, held.rotated);
-        return Ok(Some(Held {
-            stack: p.stack,
-            rotated: p.rotated,
-            from: Origin::Grid(g, p.x, p.y, p.rotated),
-        }));
+        return Ok(Some(Held { stack: p.stack, rotated: p.rotated, from: Origin::Grid(g, p.x, p.y, p.rotated) }));
     }
     Err("No room there")
 }
@@ -376,10 +319,7 @@ fn click(
     mut inv: ResMut<Inventory>,
     mut chests: ResMut<Chests>,
     mut spill: MessageWriter<Spill>,
-    (mut gain, prog): (
-        MessageWriter<crate::progress::GainXp>,
-        Option<Res<crate::progress::xp::Progression>>,
-    ),
+    (mut gain, prog): (MessageWriter<crate::progress::GainXp>, Option<Res<crate::progress::xp::Progression>>),
 ) {
     if !ui.open {
         return;
@@ -397,9 +337,7 @@ fn click(
         Hover::Tab(t) => ui.side = t,
         Hover::Cell(g, x, y) if left => {
             let held = ui.held;
-            let Some(grid) = grid_mut(&mut inv, &mut chests, g) else {
-                return;
-            };
+            let Some(grid) = grid_mut(&mut inv, &mut chests, g) else { return };
             match held {
                 Some(h) => match drop_into(grid, &items, h, (x, y), g) {
                     Ok(rest) => ui.held = rest,
@@ -411,18 +349,10 @@ fn click(
                         if shift && p.stack.count > 1 {
                             let half = p.stack.count / 2;
                             grid.items[i].stack.count -= half;
-                            ui.held = Some(Held {
-                                stack: Stack::new(p.stack.item, half),
-                                rotated: p.rotated,
-                                from: Origin::Grid(g, p.x, p.y, p.rotated),
-                            });
+                            ui.held = Some(Held { stack: Stack::new(p.stack.item, half), rotated: p.rotated, from: Origin::Grid(g, p.x, p.y, p.rotated) });
                         } else {
                             grid.items.remove(i);
-                            ui.held = Some(Held {
-                                stack: p.stack,
-                                rotated: p.rotated,
-                                from: Origin::Grid(g, p.x, p.y, p.rotated),
-                            });
+                            ui.held = Some(Held { stack: p.stack, rotated: p.rotated, from: Origin::Grid(g, p.x, p.y, p.rotated) });
                         }
                     }
                 }
@@ -434,12 +364,8 @@ fn click(
                 return;
             }
             let chest = ui.chest;
-            let Some(grid) = grid_mut(&mut inv, &mut chests, g) else {
-                return;
-            };
-            let Some(i) = grid.at(&items, x, y) else {
-                return;
-            };
+            let Some(grid) = grid_mut(&mut inv, &mut chests, g) else { return };
+            let Some(i) = grid.at(&items, x, y) else { return };
             let p = grid.items.remove(i);
             let def = items.get(p.stack.item);
             let result = match (g, chest) {
@@ -460,10 +386,7 @@ fn click(
                 if !grid.place(&items, rest, p.x, p.y, p.rotated)
                     && let Some(r) = grid.add(&items, rest)
                 {
-                    spill.write(Spill {
-                        stack: r,
-                        at: player.pos + Vec3::Y,
-                    });
+                    spill.write(Spill { stack: r, at: player.pos + Vec3::Y });
                 }
                 if ui.message.is_empty() && rest == p.stack {
                     ui.message = "No room".into();
@@ -481,25 +404,13 @@ fn click(
                     return;
                 }
                 match inv.wear(&items, h.stack.item) {
-                    Ok(old) => {
-                        ui.held = old.map(|o| Held {
-                            stack: Stack::new(o, 1),
-                            rotated: false,
-                            from: Origin::Worn,
-                        })
-                    }
+                    Ok(old) => ui.held = old.map(|o| Held { stack: Stack::new(o, 1), rotated: false, from: Origin::Worn }),
                     Err(e) => ui.message = e.into(),
                 }
             }
             Some(_) => {}
             None => match inv.take_off(slot) {
-                Ok(item) if left => {
-                    ui.held = Some(Held {
-                        stack: Stack::new(item, 1),
-                        rotated: false,
-                        from: Origin::Worn,
-                    })
-                }
+                Ok(item) if left => ui.held = Some(Held { stack: Stack::new(item, 1), rotated: false, from: Origin::Worn }),
                 Ok(item) => {
                     if let Some(rest) = inv.add(&items, Stack::new(item, 1)) {
                         // No room: keep it on.
@@ -515,9 +426,7 @@ fn click(
             },
         },
         Hover::Recipe(i) => {
-            let Some(r) = recipes.as_ref().and_then(|r| r.list.get(i)) else {
-                return;
-            };
+            let Some(r) = recipes.as_ref().and_then(|r| r.list.get(i)) else { return };
             if r.at == Station::Camp && !camp.near(player.pos) {
                 ui.message = "Make this at your camp (by the bedroll)".into();
                 return;
@@ -530,10 +439,7 @@ fn click(
                     Some(left) => {
                         made += 1;
                         if let Some(l) = left {
-                            spill.write(Spill {
-                                stack: l,
-                                at: player.pos + Vec3::Y,
-                            });
+                            spill.write(Spill { stack: l, at: player.pos + Vec3::Y });
                         }
                     }
                 }
@@ -541,19 +447,12 @@ fn click(
             if made > 0
                 && let Some(prog) = &prog
             {
-                gain.write(crate::progress::GainXp {
-                    xp: prog.xp.craft * made as f32,
-                    why: String::new(),
-                });
+                gain.write(crate::progress::GainXp { xp: prog.xp.craft * made as f32, why: String::new() });
             }
             ui.message = if made == 0 {
                 "Missing parts".into()
             } else {
-                format!(
-                    "Made {} {}",
-                    r.makes.count as u32 * made,
-                    items.get(r.makes.item).title
-                )
+                format!("Made {} {}", r.makes.count as u32 * made, items.get(r.makes.item).title)
             };
         }
     }
@@ -583,31 +482,20 @@ fn keys(
     if keys.just_pressed(KeyCode::KeyQ)
         && let Some(h) = ui.held.take()
     {
-        let at = cam
-            .single()
-            .map(|t| t.translation + t.forward().as_vec3() * 1.2)
-            .unwrap_or(player.pos + Vec3::Y);
+        let at = cam.single().map(|t| t.translation + t.forward().as_vec3() * 1.2).unwrap_or(player.pos + Vec3::Y);
         spill.write(Spill { stack: h.stack, at });
         ui.dirty = true;
     }
     const DIGITS: [KeyCode; 9] = [
-        KeyCode::Digit1,
-        KeyCode::Digit2,
-        KeyCode::Digit3,
-        KeyCode::Digit4,
-        KeyCode::Digit5,
-        KeyCode::Digit6,
-        KeyCode::Digit7,
-        KeyCode::Digit8,
-        KeyCode::Digit9,
+        KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4, KeyCode::Digit5,
+        KeyCode::Digit6, KeyCode::Digit7, KeyCode::Digit8, KeyCode::Digit9,
     ];
     for (k, key) in DIGITS.iter().enumerate() {
         if !keys.just_pressed(*key) {
             continue;
         }
         let item = match ui.hover {
-            Some(Hover::Cell(g, x, y)) => grid_mut(&mut inv, &mut chests, g)
-                .and_then(|grid| grid.at(&items, x, y).map(|i| grid.items[i].stack.item)),
+            Some(Hover::Cell(g, x, y)) => grid_mut(&mut inv, &mut chests, g).and_then(|grid| grid.at(&items, x, y).map(|i| grid.items[i].stack.item)),
             _ => None,
         }
         .or(ui.held.map(|h| h.stack.item));
@@ -630,11 +518,7 @@ fn text(s: impl Into<String>, size: f32, color: Color) -> impl Bundle {
 
 /// The tint of an item's tile: plain, so the picture stands out.
 fn item_bg(hovered: bool) -> Color {
-    if hovered {
-        Color::srgb(0.62, 0.58, 0.5)
-    } else {
-        Color::srgb(0.42, 0.4, 0.36)
-    }
+    if hovered { Color::srgb(0.62, 0.58, 0.5) } else { Color::srgb(0.42, 0.4, 0.36) }
 }
 
 /// Height of a crafting row, and the gap between rows.
@@ -645,15 +529,7 @@ const RECIPE_VIEW: f32 = 430.0;
 
 /// An item's picture: its block texture, or its name on a tile of its colour,
 /// with the count in the corner.
-pub(crate) fn icon(
-    c: &mut ChildSpawnerCommands,
-    items: &Items,
-    art: &ItemArt,
-    stack: Stack,
-    w: f32,
-    h: f32,
-    rotated: bool,
-) {
+pub(crate) fn icon(c: &mut ChildSpawnerCommands, items: &Items, art: &ItemArt, stack: Stack, w: f32, h: f32, rotated: bool) {
     match (art.image(stack.item), art.size(stack.item)) {
         (Some(img), Some(size)) => {
             // At 2x, or smaller if that doesn't fit (a tall item on the
@@ -674,64 +550,30 @@ pub(crate) fn icon(
                 },
             ));
             if rotated {
-                e.insert(UiTransform {
-                    rotation: Rot2::degrees(90.0),
-                    ..default()
-                });
+                e.insert(UiTransform { rotation: Rot2::degrees(90.0), ..default() });
             }
         }
         _ => {
             // No sprite yet: the name.
-            let size = if w.min(h) < 100.0 {
-                sizes::TINY
-            } else {
-                sizes::SMALL
-            };
+            let size = if w.min(h) < 100.0 { sizes::TINY } else { sizes::SMALL };
             c.spawn((
                 text(items.get(stack.item).title.clone(), size, colors::TEXT),
                 TextLayout::justify(Justify::Center),
-                Node {
-                    margin: UiRect::all(Val::Auto),
-                    max_width: Val::Px(w - 8.0),
-                    ..default()
-                },
+                Node { margin: UiRect::all(Val::Auto), max_width: Val::Px(w - 8.0), ..default() },
             ));
         }
     }
     if stack.count > 1 {
         c.spawn((
             text(format!("{}", stack.count), sizes::BODY, colors::TEXT),
-            Node {
-                position_type: PositionType::Absolute,
-                right: Val::Px(5.0),
-                bottom: Val::Px(2.0),
-                ..default()
-            },
+            Node { position_type: PositionType::Absolute, right: Val::Px(5.0), bottom: Val::Px(2.0), ..default() },
         ));
     }
 }
 
 #[allow(clippy::too_many_arguments)]
-fn grid_node(
-    p: &mut ChildSpawnerCommands,
-    theme: &Theme,
-    title: String,
-    grid: &Grid,
-    g: GridRef,
-    items: &Items,
-    art: &ItemArt,
-    hover: Option<Hover>,
-    held: Option<Held>,
-) {
-    p.spawn((
-        theme.bold(sizes::LABEL),
-        Text::new(title),
-        TextColor(colors::HEADING),
-        Node {
-            margin: UiRect::bottom(Val::Px(2.0)),
-            ..default()
-        },
-    ));
+fn grid_node(p: &mut ChildSpawnerCommands, theme: &Theme, title: String, grid: &Grid, g: GridRef, items: &Items, art: &ItemArt, hover: Option<Hover>, held: Option<Held>) {
+    p.spawn((theme.bold(sizes::LABEL), Text::new(title), TextColor(colors::HEADING), Node { margin: UiRect::bottom(Val::Px(2.0)), ..default() }));
     p.spawn((Node { padding: UiRect::all(Val::Px(4.0)), margin: UiRect::bottom(Val::Px(10.0)), ..default() }, theme.skin("inset"))).with_children(|frame| {
         frame
             .spawn((Zone::Grid(g, grid.w, grid.h), Node { width: Val::Px(grid.w as f32 * CELL), height: Val::Px(grid.h as f32 * CELL), ..default() }))
@@ -799,11 +641,7 @@ fn describe(items: &Items, id: crate::items::ItemId) -> (String, String) {
         s.push_str(&format!(", stacks to {}", it.stack));
     }
     match &it.kind {
-        ItemKind::Wear {
-            slot,
-            insulation,
-            protection,
-        } => {
+        ItemKind::Wear { slot, insulation, protection } => {
             s.push_str(&format!("\nWorn on: {}", slot.title()));
             if *insulation > 0.0 {
                 s.push_str(&format!("\nWarmth +{insulation:.0}°C"));
@@ -814,22 +652,13 @@ fn describe(items: &Items, id: crate::items::ItemId) -> (String, String) {
                 }
             }
         }
-        ItemKind::Bag { grid } => {
-            s.push_str(&format!("\nWorn on your back; holds {}x{}", grid.0, grid.1))
-        }
-        ItemKind::Food { tier, satiety } => s.push_str(&format!(
-            "\nFood, tier {tier}, +{satiety:.0} food\nHold right click to eat"
-        )),
+        ItemKind::Bag { grid } => s.push_str(&format!("\nWorn on your back; holds {}x{}", grid.0, grid.1)),
+        ItemKind::Food { tier, satiety } => s.push_str(&format!("\nFood, tier {tier}, +{satiety:.0} food\nHold right click to eat")),
         ItemKind::Tool { speeds } => {
             let mut v: Vec<_> = speeds.iter().collect();
             v.sort_by(|a, b| a.0.cmp(b.0));
             s.push_str("\nTool: ");
-            s.push_str(
-                &v.iter()
-                    .map(|(m, x)| format!("{m} x{x}"))
-                    .collect::<Vec<_>>()
-                    .join(", "),
-            );
+            s.push_str(&v.iter().map(|(m, x)| format!("{m} x{x}")).collect::<Vec<_>>().join(", "));
         }
         ItemKind::Block(_) => s.push_str("\nRight click to place"),
         ItemKind::Torch => s.push_str("\nGives light; right click to place"),
@@ -843,19 +672,8 @@ fn describe(items: &Items, id: crate::items::ItemId) -> (String, String) {
 
 /// A heading for a column.
 /// A line with an icon in front.
-fn icon_line(
-    p: &mut ChildSpawnerCommands,
-    theme: &Theme,
-    icon_name: &str,
-    s: String,
-    color: Color,
-) {
-    p.spawn(Node {
-        column_gap: Val::Px(8.0),
-        align_items: AlignItems::Center,
-        ..default()
-    })
-    .with_children(|r| {
+fn icon_line(p: &mut ChildSpawnerCommands, theme: &Theme, icon_name: &str, s: String, color: Color) {
+    p.spawn(Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, ..default() }).with_children(|r| {
         r.spawn(theme.icon(icon_name));
         r.spawn(text(s, sizes::BODY, color));
     });
@@ -881,9 +699,7 @@ fn rebuild(
     for e in &roots {
         commands.entity(e).despawn();
     }
-    let (Some(art), true) = (art, ui.open) else {
-        return;
-    };
+    let (Some(art), true) = (art, ui.open) else { return };
     let (hover, held) = (ui.hover, ui.held);
     let at_camp = camp.near(player.pos);
     let theme = &*theme;
@@ -1122,11 +938,7 @@ fn rebuild(
 }
 
 /// The mouse wheel scrolls the crafting list.
-fn scroll(
-    mut wheel: MessageReader<bevy::input::mouse::MouseWheel>,
-    mut ui: ResMut<InvUi>,
-    mut lists: Query<&mut ScrollPosition, With<Zone>>,
-) {
+fn scroll(mut wheel: MessageReader<bevy::input::mouse::MouseWheel>, mut ui: ResMut<InvUi>, mut lists: Query<&mut ScrollPosition, With<Zone>>) {
     let mut dy = 0.0;
     for w in wheel.read() {
         dy -= match w.unit {
@@ -1146,14 +958,8 @@ fn scroll(
 }
 
 #[allow(clippy::type_complexity)]
-fn follow_cursor(
-    window: Single<&Window, With<PrimaryWindow>>,
-    mut held: Query<&mut Node, (With<HeldIcon>, Without<Tooltip>)>,
-    mut tips: Query<(&mut Node, &ComputedNode), With<Tooltip>>,
-) {
-    let Some(p) = window.cursor_position() else {
-        return;
-    };
+fn follow_cursor(window: Single<&Window, With<PrimaryWindow>>, mut held: Query<&mut Node, (With<HeldIcon>, Without<Tooltip>)>, mut tips: Query<(&mut Node, &ComputedNode), With<Tooltip>>) {
+    let Some(p) = window.cursor_position() else { return };
     for mut n in &mut held {
         // The cursor holds the item by its top-left cell.
         n.left = Val::Px(p.x - CELL * 0.5);
@@ -1163,11 +969,7 @@ fn follow_cursor(
     for (mut n, c) in &mut tips {
         let size = c.size() * c.inverse_scale_factor();
         // Beside the cursor, kept on screen.
-        let x = if p.x + 22.0 + size.x > ww {
-            p.x - 14.0 - size.x
-        } else {
-            p.x + 22.0
-        };
+        let x = if p.x + 22.0 + size.x > ww { p.x - 14.0 - size.x } else { p.x + 22.0 };
         let y = (p.y + 10.0).min(wh - size.y - 8.0).max(8.0);
         n.left = Val::Px(x);
         n.top = Val::Px(y);
@@ -1186,54 +988,16 @@ mod tests {
         let mut g = Grid::new(4, 3);
         g.place(&items, Stack::new(id("dirt"), 30), 0, 0, false);
         g.place(&items, Stack::new(id("stone_axe"), 1), 3, 0, false);
-        let held = |s: Stack| Held {
-            stack: s,
-            rotated: false,
-            from: Origin::Worn,
-        };
+        let held = |s: Stack| Held { stack: s, rotated: false, from: Origin::Worn };
         // Onto a matching stack: tops it up to 32, the rest stays in hand.
-        let rest = drop_into(
-            &mut g,
-            &items,
-            held(Stack::new(id("dirt"), 5)),
-            (0, 0),
-            GridRef::Pockets,
-        )
-        .unwrap();
+        let rest = drop_into(&mut g, &items, held(Stack::new(id("dirt"), 5)), (0, 0), GridRef::Pockets).unwrap();
         assert_eq!(rest.unwrap().stack.count, 3);
         // Into free space.
-        assert!(
-            drop_into(
-                &mut g,
-                &items,
-                held(Stack::new(id("torch"), 4)),
-                (1, 0),
-                GridRef::Pockets
-            )
-            .unwrap()
-            .is_none()
-        );
+        assert!(drop_into(&mut g, &items, held(Stack::new(id("torch"), 4)), (1, 0), GridRef::Pockets).unwrap().is_none());
         // A shovel onto the axe swaps them.
-        let swapped = drop_into(
-            &mut g,
-            &items,
-            held(Stack::new(id("stone_shovel"), 1)),
-            (3, 0),
-            GridRef::Pockets,
-        )
-        .unwrap()
-        .unwrap();
+        let swapped = drop_into(&mut g, &items, held(Stack::new(id("stone_shovel"), 1)), (3, 0), GridRef::Pockets).unwrap().unwrap();
         assert_eq!(swapped.stack.item, id("stone_axe"));
         // No room for a 2x3 pickaxe in the middle.
-        assert!(
-            drop_into(
-                &mut g,
-                &items,
-                held(Stack::new(id("stone_pickaxe"), 1)),
-                (1, 1),
-                GridRef::Pockets
-            )
-            .is_err()
-        );
+        assert!(drop_into(&mut g, &items, held(Stack::new(id("stone_pickaxe"), 1)), (1, 1), GridRef::Pockets).is_err());
     }
 }

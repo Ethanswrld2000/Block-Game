@@ -71,10 +71,7 @@ impl Plugin for BlocksPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<VoxelMaterial>::default())
             .add_systems(crate::menu::GamePreStartup, load_blocks)
-            .add_systems(
-                crate::menu::GameUpdate,
-                build_material.run_if(|b: Res<Blocks>| b.material.is_none()),
-            );
+            .add_systems(crate::menu::GameUpdate, build_material.run_if(|b: Res<Blocks>| b.material.is_none()));
     }
 }
 
@@ -100,14 +97,8 @@ fn build_material(
     mut images: ResMut<Assets<Image>>,
     mut materials: ResMut<Assets<VoxelMaterial>>,
 ) {
-    let Some(sheet) = images.get(&blocks.sheet) else {
-        return;
-    };
-    let rgba = sheet
-        .clone()
-        .try_into_dynamic()
-        .expect("blocks.png must be an image")
-        .to_rgba8();
+    let Some(sheet) = images.get(&blocks.sheet) else { return };
+    let rgba = sheet.clone().try_into_dynamic().expect("blocks.png must be an image").to_rgba8();
     let t = blocks.tiles.tile_size;
     let cols = rgba.width() / t;
     let rows = rgba.height() / t;
@@ -132,11 +123,7 @@ fn build_material(
     }
     blocks.tile_colors = Some(Arc::new(averages));
     let mut array = Image::new(
-        Extent3d {
-            width: t,
-            height: t,
-            depth_or_array_layers: layers,
-        },
+        Extent3d { width: t, height: t, depth_or_array_layers: layers },
         TextureDimension::D2,
         data,
         TextureFormat::Rgba8UnormSrgb,
@@ -153,13 +140,7 @@ fn build_material(
             fog_enabled: false,
             ..default()
         },
-        extension: VoxelExtension {
-            textures: textures.clone(),
-            season: Vec4::ZERO,
-            wind: Vec4::ZERO,
-            atmos: default(),
-            shake: Vec4::ZERO,
-        },
+        extension: VoxelExtension { textures: textures.clone(), season: Vec4::ZERO, wind: Vec4::ZERO, atmos: default(), shake: Vec4::ZERO },
     }));
     blocks.translucent_material = Some(materials.add(VoxelMaterial {
         base: StandardMaterial {
@@ -171,12 +152,6 @@ fn build_material(
             fog_enabled: false,
             ..default()
         },
-        extension: VoxelExtension {
-            textures,
-            season: Vec4::ZERO,
-            wind: Vec4::ZERO,
-            atmos: default(),
-            shake: Vec4::ZERO,
-        },
+        extension: VoxelExtension { textures, season: Vec4::ZERO, wind: Vec4::ZERO, atmos: default(), shake: Vec4::ZERO },
     }));
 }

@@ -106,38 +106,9 @@ fn spawn_card(mut commands: Commands, theme: Res<crate::theme::Theme>) {
                 theme.skin("banner"),
             ))
             .with_children(|c| {
-                c.spawn((
-                    CardTitle,
-                    Text::new(""),
-                    theme.bold(crate::theme::sizes::HUGE),
-                    TextColor(Color::NONE),
-                    TextShadow {
-                        offset: Vec2::splat(3.0),
-                        color: Color::NONE,
-                    },
-                ));
-                c.spawn((
-                    CardRule,
-                    Node {
-                        width: Val::Px(240.0),
-                        height: Val::Px(8.0),
-                        ..default()
-                    },
-                    theme.skin("divider"),
-                ));
-                c.spawn((
-                    CardSub,
-                    Text::new(""),
-                    TextFont {
-                        font_size: bevy::text::FontSize::Px(crate::theme::sizes::LABEL),
-                        ..default()
-                    },
-                    TextColor(Color::NONE),
-                    TextShadow {
-                        offset: Vec2::splat(2.0),
-                        color: Color::NONE,
-                    },
-                ));
+                c.spawn((CardTitle, Text::new(""), theme.bold(crate::theme::sizes::HUGE), TextColor(Color::NONE), TextShadow { offset: Vec2::splat(3.0), color: Color::NONE }));
+                c.spawn((CardRule, Node { width: Val::Px(240.0), height: Val::Px(8.0), ..default() }, theme.skin("divider")));
+                c.spawn((CardSub, Text::new(""), TextFont { font_size: bevy::text::FontSize::Px(crate::theme::sizes::LABEL), ..default() }, TextColor(Color::NONE), TextShadow { offset: Vec2::splat(2.0), color: Color::NONE }));
             });
         });
 }
@@ -164,11 +135,7 @@ fn notice(
     seasons: Res<Seasons>,
     mut here: ResMut<Here>,
     mut cards: MessageWriter<ShowCard>,
-    (mut progress, prog, mut gain): (
-        ResMut<crate::progress::Progress>,
-        Res<crate::progress::xp::Progression>,
-        MessageWriter<crate::progress::GainXp>,
-    ),
+    (mut progress, prog, mut gain): (ResMut<crate::progress::Progress>, Res<crate::progress::xp::Progression>, MessageWriter<crate::progress::GainXp>),
 ) {
     let Some(generator) = generator else { return };
     let wg = &generator.0;
@@ -181,32 +148,15 @@ fn notice(
     let p = player.pos.floor().as_ivec3();
     let (x, y, z) = (p.x, p.y, p.z);
     let biome = wg.biome_at(x, y, z);
-    let barrow = wg
-        .barrows_in(x, z, x, z)
-        .into_iter()
-        .find(|b| b.contains(x, y, z));
+    let barrow = wg.barrows_in(x, z, x, z).into_iter().find(|b| b.contains(x, y, z));
     let village = wg.villages_in(x, z, x, z).into_iter().find(|v| {
         let (dx, dz) = (x - v.center[0], z - v.center[2]);
         dx * dx + dz * dz <= v.radius * v.radius && (y - v.center[1]).abs() < 24
     });
     let (place, card) = if let Some(b) = barrow {
-        (
-            Place::Barrow(b.id),
-            Some((
-                format!("barrow:{}", b.id),
-                b.name.clone(),
-                "A barrow of the old dead".to_string(),
-            )),
-        )
+        (Place::Barrow(b.id), Some((format!("barrow:{}", b.id), b.name.clone(), "A barrow of the old dead".to_string())))
     } else if let Some(v) = village {
-        (
-            Place::Village(v.id),
-            Some((
-                format!("village:{}", v.id),
-                v.name.clone(),
-                format!("A village of {}", lower_the(&biome.title)),
-            )),
-        )
+        (Place::Village(v.id), Some((format!("village:{}", v.id), v.name.clone(), format!("A village of {}", lower_the(&biome.title)))))
     } else {
         (Place::Wild, None)
     };
@@ -216,15 +166,8 @@ fn notice(
             && here.shown.get(&key).is_none_or(|t| now - t > AGAIN)
         {
             if progress.found.insert(key.clone()) {
-                let xp = if key.starts_with("barrow") {
-                    prog.xp.barrow
-                } else {
-                    prog.xp.village
-                };
-                gain.write(crate::progress::GainXp {
-                    xp,
-                    why: format!("Found {title}"),
-                });
+                let xp = if key.starts_with("barrow") { prog.xp.barrow } else { prog.xp.village };
+                gain.write(crate::progress::GainXp { xp, why: format!("Found {title}") });
             }
             here.shown.insert(key, now);
             cards.write(ShowCard { title, subtitle });
@@ -248,18 +191,12 @@ fn notice(
         if here.shown.get(&key).is_none_or(|t| now - t > AGAIN) {
             if progress.found.insert(key.clone()) && progress.found.len() > 1 {
                 // (The region you start in isn't a find.)
-                gain.write(crate::progress::GainXp {
-                    xp: prog.xp.region,
-                    why: format!("Reached {}", biome.title),
-                });
+                gain.write(crate::progress::GainXp { xp: prog.xp.region, why: format!("Reached {}", biome.title) });
             }
             here.shown.insert(key, now);
             let sp = seasons.at(&clock);
             let season = &seasons.list[sp.current].title;
-            cards.write(ShowCard {
-                title: biome.title.clone(),
-                subtitle: format!("{season}, day {}", sp.day_in_season + 1),
-            });
+            cards.write(ShowCard { title: biome.title.clone(), subtitle: format!("{season}, day {}", sp.day_in_season + 1) });
         }
     }
 }
@@ -292,19 +229,14 @@ fn fade(
     mut root: Query<&mut Visibility, With<CardRoot>>,
     // Only the card's own words: without the filter this faded every
     // piece of text with a shadow, i.e. all the UI.
-    mut texts: Query<
-        (&mut TextColor, &mut TextShadow, Has<CardTitle>),
-        Or<(With<CardTitle>, With<CardSub>)>,
-    >,
+    mut texts: Query<(&mut TextColor, &mut TextShadow, Has<CardTitle>), Or<(With<CardTitle>, With<CardSub>)>>,
     mut images: Query<&mut ImageNode, Or<(With<CardRule>, With<CardBanner>)>>,
 ) {
     let Some(age) = card.age.as_mut() else { return };
     *age += time.delta_secs();
     // Screenshot runs keep the card up so it can be seen.
     // (`BLOCKGAME_CARD_FADES=1` lets it fade, to check the rest of the UI after it.)
-    if std::env::var_os("BLOCKGAME_SCREENSHOT").is_some()
-        && std::env::var_os("BLOCKGAME_CARD_FADES").is_none()
-    {
+    if std::env::var_os("BLOCKGAME_SCREENSHOT").is_some() && std::env::var_os("BLOCKGAME_CARD_FADES").is_none() {
         *age = age.min(FADE_IN + HOLD * 0.5);
     }
     let a = *age;
@@ -323,11 +255,7 @@ fn fade(
         return;
     }
     for (mut color, mut shadow, is_title) in &mut texts {
-        color.0 = if is_title {
-            Color::srgba(0.98, 0.94, 0.82, alpha)
-        } else {
-            Color::srgba(0.85, 0.85, 0.8, alpha * 0.9)
-        };
+        color.0 = if is_title { Color::srgba(0.98, 0.94, 0.82, alpha) } else { Color::srgba(0.85, 0.85, 0.8, alpha * 0.9) };
         shadow.color = Color::srgba(0.0, 0.0, 0.0, 0.8 * alpha);
     }
     for mut img in &mut images {

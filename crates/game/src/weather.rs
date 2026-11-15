@@ -33,11 +33,8 @@ pub struct WeatherPlugin;
 
 impl Plugin for WeatherPlugin {
     fn build(&self, app: &mut App) {
-        let kinds = WeatherKinds::from_ron(include_str!("../../../assets/data/weather.ron"))
-            .unwrap_or_else(|e| panic!("{e}"));
-        let start = std::env::var("BLOCKGAME_WEATHER")
-            .ok()
-            .and_then(|n| kinds.find(&n));
+        let kinds = WeatherKinds::from_ron(include_str!("../../../assets/data/weather.ron")).unwrap_or_else(|e| panic!("{e}"));
+        let start = std::env::var("BLOCKGAME_WEATHER").ok().and_then(|n| kinds.find(&n));
         if let Ok(n) = std::env::var("BLOCKGAME_WEATHER")
             && start.is_none()
         {
@@ -49,12 +46,7 @@ impl Plugin for WeatherPlugin {
             .insert_resource(WeatherState::new(first, start.is_some()))
             .insert_resource(conditions)
             .init_resource::<LocalClimate>()
-            .add_systems(
-                crate::menu::GameUpdate,
-                (sample_climate, change_weather, blend_conditions, lightning)
-                    .chain()
-                    .in_set(WeatherSet),
-            );
+            .add_systems(crate::menu::GameUpdate, (sample_climate, change_weather, blend_conditions, lightning).chain().in_set(WeatherSet));
     }
 }
 
@@ -93,8 +85,7 @@ pub struct WeatherKinds {
 
 impl WeatherKinds {
     pub fn from_ron(text: &str) -> Result<Self, String> {
-        let list: Vec<WeatherKind> =
-            ron::from_str(text).map_err(|e| format!("weather.ron: {e}"))?;
+        let list: Vec<WeatherKind> = ron::from_str(text).map_err(|e| format!("weather.ron: {e}"))?;
         if list.is_empty() {
             return Err("weather.ron needs at least one weather".into());
         }
@@ -102,9 +93,7 @@ impl WeatherKinds {
     }
 
     pub fn find(&self, name: &str) -> Option<usize> {
-        self.list
-            .iter()
-            .position(|k| k.name.eq_ignore_ascii_case(name))
+        self.list.iter().position(|k| k.name.eq_ignore_ascii_case(name))
     }
 }
 
@@ -130,29 +119,17 @@ pub struct WeatherState {
 
 impl WeatherState {
     fn new(first: usize, forced: bool) -> Self {
-        Self {
-            current: first,
-            previous: first,
-            blend: 1.0,
-            next: None,
-            since: 0.0,
-            until: None,
-            cloud_previous: first,
-            cloud_blend: 1.0,
-            forced,
-        }
+        Self { current: first, previous: first, blend: 1.0, next: None, since: 0.0, until: None, cloud_previous: first, cloud_blend: 1.0, forced }
     }
 
     /// Real seconds (at normal clock speed) until the weather changes.
     pub fn seconds_left(&self, now: f64) -> Option<f32> {
-        self.until
-            .map(|u| ((u - now) * DAY_SECONDS as f64).max(0.0) as f32)
+        self.until.map(|u| ((u - now) * DAY_SECONDS as f64).max(0.0) as f32)
     }
 
     /// Real seconds (at normal clock speed) this weather lasts in all.
     pub fn seconds_total(&self) -> Option<f32> {
-        self.until
-            .map(|u| ((u - self.since) * DAY_SECONDS as f64) as f32)
+        self.until.map(|u| ((u - self.since) * DAY_SECONDS as f64) as f32)
     }
 
     /// How far the clouds have turned towards the next weather's, 0..1.
@@ -229,17 +206,7 @@ pub struct LocalClimate {
 impl Default for LocalClimate {
     fn default() -> Self {
         let fog = Vec3::new(0.46, 0.53, 0.47);
-        Self {
-            fog,
-            haze: 0.4,
-            temperature: 0.4,
-            biome: 0.4,
-            season: 0.0,
-            altitude: 0.0,
-            biome_title: String::new(),
-            target: (fog, 0.4, [0.4, 0.0, 0.0]),
-            timer: 0.0,
-        }
+        Self { fog, haze: 0.4, temperature: 0.4, biome: 0.4, season: 0.0, altitude: 0.0, biome_title: String::new(), target: (fog, 0.4, [0.4, 0.0, 0.0]), timer: 0.0 }
     }
 }
 
@@ -263,15 +230,7 @@ fn sample_climate(
         let season = seasons.blended(seasons.at(&clock), |s| s.temperature);
         // Colder with height above the ground too (sky islands, mountain air).
         let altitude = ((p.y - col.height.max(0)) as f32 / 400.0).max(0.0);
-        climate.target = (
-            Vec3::from(biome.fog),
-            biome.haze,
-            [
-                biome.temperature.min(col.climate.temperature),
-                season,
-                -altitude,
-            ],
-        );
+        climate.target = (Vec3::from(biome.fog), biome.haze, [biome.temperature.min(col.climate.temperature), season, -altitude]);
         if climate.biome_title != biome.title {
             climate.biome_title = biome.title.clone();
         }
@@ -298,25 +257,9 @@ fn hash(a: u64, b: u64) -> f32 {
 /// Pick the weather that follows `current` at `when` (total days) by the
 /// season's chances. A different weather if the season allows one. Depends
 /// only on the seed and the hour, so a world's weather repeats.
-pub fn pick_weather(
-    kinds: &WeatherKinds,
-    season: &crate::clock::Season,
-    seed: u64,
-    when: f64,
-    current: usize,
-) -> usize {
-    let weights: Vec<f32> = kinds
-        .list
-        .iter()
-        .enumerate()
-        .map(|(i, k)| {
-            if i == current {
-                0.0
-            } else {
-                season.weather.get(&k.name).copied().unwrap_or(0.0)
-            }
-        })
-        .collect();
+pub fn pick_weather(kinds: &WeatherKinds, season: &crate::clock::Season, seed: u64, when: f64, current: usize) -> usize {
+    let weights: Vec<f32> =
+        kinds.list.iter().enumerate().map(|(i, k)| if i == current { 0.0 } else { season.weather.get(&k.name).copied().unwrap_or(0.0) }).collect();
     let total: f32 = weights.iter().sum();
     if total <= 0.0 {
         return current;
@@ -333,8 +276,7 @@ pub fn pick_weather(
 
 /// How long a weather starting at `when` lasts, in days.
 pub fn weather_days(kind: &WeatherKind, seed: u64, when: f64) -> f64 {
-    let hours =
-        kind.hours.0 + (kind.hours.1 - kind.hours.0) * hash(seed ^ 0xAB, (when * 24.0) as u64);
+    let hours = kind.hours.0 + (kind.hours.1 - kind.hours.0) * hash(seed ^ 0xAB, (when * 24.0) as u64);
     hours as f64 / 24.0
 }
 
@@ -356,10 +298,7 @@ fn change_weather(
     // Start `n` now, and pick what follows it and when.
     let begin = |state: &mut WeatherState, n: usize, clouds_at_once: bool| {
         if n != state.current {
-            info!(
-                "weather: {} -> {}",
-                kinds.list[state.current].name, kinds.list[n].name
-            );
+            info!("weather: {} -> {}", kinds.list[state.current].name, kinds.list[n].name);
             state.previous = state.current;
             state.blend = 0.0;
             if clouds_at_once {
@@ -372,11 +311,7 @@ fn change_weather(
             state.current = n;
         }
         let until = now + weather_days(&kinds.list[n], seed, now);
-        let later = WorldClock {
-            day: until as u32,
-            time: until.fract() as f32,
-            speed: 1.0,
-        };
+        let later = WorldClock { day: until as u32, time: until.fract() as f32, speed: 1.0 };
         let season = &seasons.list[seasons.at(&later).current];
         state.since = now;
         state.until = Some(until);
@@ -433,18 +368,12 @@ fn blend_conditions(
     // Clouds: steady while a weather lasts, turning to the next one's just before it comes.
     let from = &kinds.list[state.cloud_previous];
     let ct = smooth(state.cloud_blend);
-    let here = (
-        from.clouds + (b.clouds - from.clouds) * ct,
-        from.cloud_shade + (b.cloud_shade - from.cloud_shade) * ct,
-    );
+    let here = (from.clouds + (b.clouds - from.clouds) * ct, from.cloud_shade + (b.cloud_shade - from.cloud_shade) * ct);
     let (clouds, shade) = match state.next {
         Some(n) => {
             let l = state.cloud_lead(clock.total_days());
             let to = &kinds.list[n];
-            (
-                here.0 + (to.clouds - here.0) * l,
-                here.1 + (to.cloud_shade - here.1) * l,
-            )
+            (here.0 + (to.clouds - here.0) * l, here.1 + (to.cloud_shade - here.1) * l)
         }
         None => here,
     };
@@ -466,11 +395,7 @@ fn lightning(time: Res<Time>, mut c: ResMut<Conditions>, mut next: Local<f32>, m
     if *t >= *next {
         c.flash = 1.0;
         // Often a second flicker a moment later.
-        *next = if hash(t.to_bits() as u64, 3) < 0.5 {
-            *t + 0.18
-        } else {
-            0.0
-        };
+        *next = if hash(t.to_bits() as u64, 3) < 0.5 { *t + 0.18 } else { 0.0 };
     }
 }
 
@@ -480,16 +405,11 @@ mod tests {
 
     #[test]
     fn weather_file_parses_and_seasons_name_real_weather() {
-        let kinds =
-            WeatherKinds::from_ron(include_str!("../../../assets/data/weather.ron")).unwrap();
+        let kinds = WeatherKinds::from_ron(include_str!("../../../assets/data/weather.ron")).unwrap();
         let seasons = Seasons::from_ron(include_str!("../../../assets/data/seasons.ron")).unwrap();
         for s in &seasons.list {
             for name in s.weather.keys() {
-                assert!(
-                    kinds.find(name).is_some(),
-                    "season {} names unknown weather {name}",
-                    s.name
-                );
+                assert!(kinds.find(name).is_some(), "season {} names unknown weather {name}", s.name);
             }
         }
         for k in &kinds.list {
@@ -500,19 +420,13 @@ mod tests {
     #[test]
     fn a_month_of_weather_follows_the_seasons() {
         // Forty days (one of each season), weather rolled the way the game does.
-        let kinds =
-            WeatherKinds::from_ron(include_str!("../../../assets/data/weather.ron")).unwrap();
+        let kinds = WeatherKinds::from_ron(include_str!("../../../assets/data/weather.ron")).unwrap();
         let seasons = Seasons::from_ron(include_str!("../../../assets/data/seasons.ron")).unwrap();
-        let mut seen: Vec<std::collections::BTreeSet<String>> =
-            vec![Default::default(); seasons.list.len()];
+        let mut seen: Vec<std::collections::BTreeSet<String>> = vec![Default::default(); seasons.list.len()];
         let mut now = 0.0f64;
         let mut current = 0;
         while now < 40.0 {
-            let clock = WorldClock {
-                day: now as u32,
-                time: now.fract() as f32,
-                speed: 1.0,
-            };
+            let clock = WorldClock { day: now as u32, time: now.fract() as f32, speed: 1.0 };
             let s = seasons.at(&clock).current;
             let next = pick_weather(&kinds, &seasons.list[s], 7, now, current);
             assert_ne!(next, current, "the weather changes when it changes");
@@ -524,11 +438,7 @@ mod tests {
             assert!(s.len() >= 3, "{}: {:?}", seasons.list[i].name, s);
         }
         let season = |n: &str| &seen[seasons.list.iter().position(|s| s.name == n).unwrap()];
-        assert!(
-            season("winter").contains("cold_snap"),
-            "{:?}",
-            season("winter")
-        );
+        assert!(season("winter").contains("cold_snap"), "{:?}", season("winter"));
         assert!(!season("winter").contains("storm"));
         assert!(!season("summer").contains("cold_snap") && !season("spring").contains("cold_snap"));
         assert!(!season("summer").contains("gale") && !season("winter").contains("gale"));
@@ -546,16 +456,11 @@ mod tests {
 
     #[test]
     fn weathers_last_long_enough_for_the_clouds_to_turn() {
-        let kinds =
-            WeatherKinds::from_ron(include_str!("../../../assets/data/weather.ron")).unwrap();
+        let kinds = WeatherKinds::from_ron(include_str!("../../../assets/data/weather.ron")).unwrap();
         for k in &kinds.list {
             let shortest = k.hours.0 / 24.0 * DAY_SECONDS;
             // Room for the clouds to turn before it and for it to blend in after the last change.
-            assert!(
-                shortest >= CLOUD_LEAD_SECONDS + BLEND_SECONDS,
-                "{} can last only {shortest} s",
-                k.name
-            );
+            assert!(shortest >= CLOUD_LEAD_SECONDS + BLEND_SECONDS, "{} can last only {shortest} s", k.name);
         }
     }
 

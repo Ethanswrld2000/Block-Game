@@ -16,19 +16,12 @@ impl Plugin for FlyCameraPlugin {
         app.init_resource::<Menus>()
             .add_systems(crate::menu::GameStartup, spawn_camera)
             .add_systems(
-                crate::menu::GameUpdate,
-                (
-                    look,
-                    fly.run_if(resource_equals(crate::player::MoveMode::Fly)),
-                )
-                    .chain(),
-            )
-            // After clicks are handled, so the click that captures the mouse
-            // doesn't also break a block.
-            .add_systems(
-                crate::menu::GameUpdate,
-                grab_cursor.after(crate::interact::InteractSet),
-            );
+            crate::menu::GameUpdate,
+            (look, fly.run_if(resource_equals(crate::player::MoveMode::Fly))).chain(),
+        )
+        // After clicks are handled, so the click that captures the mouse
+        // doesn't also break a block.
+        .add_systems(crate::menu::GameUpdate, grab_cursor.after(crate::interact::InteractSet));
     }
 }
 
@@ -51,13 +44,7 @@ pub struct FlyCamera {
 
 impl Default for FlyCamera {
     fn default() -> Self {
-        Self {
-            speed: 12.0,
-            fast_multiplier: 5.0,
-            sensitivity: 0.002,
-            yaw: -0.6,
-            pitch: -0.45,
-        }
+        Self { speed: 12.0, fast_multiplier: 5.0, sensitivity: 0.002, yaw: -0.6, pitch: -0.45 }
     }
 }
 
@@ -65,21 +52,10 @@ fn spawn_camera(mut commands: Commands) {
     let cam = FlyCamera::default();
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0.0, 40.0, 0.0).with_rotation(Quat::from_euler(
-            EulerRot::YXZ,
-            cam.yaw,
-            cam.pitch,
-            0.0,
-        )),
-        Projection::Perspective(PerspectiveProjection {
-            near: 0.05,
-            far: crate::sky::SKY_RADIUS * 1.2,
-            ..default()
-        }),
-        DistanceFog {
-            color: Color::srgb(0.46, 0.53, 0.47),
-            ..default()
-        },
+        Transform::from_xyz(0.0, 40.0, 0.0)
+            .with_rotation(Quat::from_euler(EulerRot::YXZ, cam.yaw, cam.pitch, 0.0)),
+        Projection::Perspective(PerspectiveProjection { near: 0.05, far: crate::sky::SKY_RADIUS * 1.2, ..default() }),
+        DistanceFog { color: Color::srgb(0.46, 0.53, 0.47), ..default() },
         // HDR so bright things (sun, torches, fireflies) can bloom; grading
         // and bloom are set by `atmosphere`.
         bevy::camera::Hdr,
@@ -161,24 +137,12 @@ pub fn fly(
         let forward = tf.forward().as_vec3();
         let right = tf.right().as_vec3();
         let mut dir = Vec3::ZERO;
-        if keys.pressed(KeyCode::KeyW) {
-            dir += forward;
-        }
-        if keys.pressed(KeyCode::KeyS) {
-            dir -= forward;
-        }
-        if keys.pressed(KeyCode::KeyD) {
-            dir += right;
-        }
-        if keys.pressed(KeyCode::KeyA) {
-            dir -= right;
-        }
-        if keys.pressed(KeyCode::Space) {
-            dir += Vec3::Y;
-        }
-        if keys.pressed(KeyCode::ShiftLeft) {
-            dir -= Vec3::Y;
-        }
+        if keys.pressed(KeyCode::KeyW) { dir += forward; }
+        if keys.pressed(KeyCode::KeyS) { dir -= forward; }
+        if keys.pressed(KeyCode::KeyD) { dir += right; }
+        if keys.pressed(KeyCode::KeyA) { dir -= right; }
+        if keys.pressed(KeyCode::Space) { dir += Vec3::Y; }
+        if keys.pressed(KeyCode::ShiftLeft) { dir -= Vec3::Y; }
         let mut speed = cam.speed;
         if keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::SuperLeft) {
             speed *= cam.fast_multiplier;

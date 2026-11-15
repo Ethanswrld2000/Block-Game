@@ -72,8 +72,7 @@ mod tests {
 
     #[test]
     fn levels_get_longer() {
-        let p =
-            Progression::from_ron(include_str!("../../../../assets/data/progression.ron")).unwrap();
+        let p = Progression::from_ron(include_str!("../../../../assets/data/progression.ron")).unwrap();
         let mut l = Level::default();
         assert_eq!(l.add(&p, p.need(1) - 1.0), 0);
         assert_eq!(l.add(&p, 1.0), 1);

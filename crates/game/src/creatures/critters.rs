@@ -32,13 +32,7 @@ pub struct CrittersPlugin;
 
 impl Plugin for CrittersPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            crate::menu::GameUpdate,
-            (spawn_critters, move_critters, animate, calls)
-                .chain()
-                .in_set(CreatureSet)
-                .after(super::walk),
-        );
+        app.add_systems(crate::menu::GameUpdate, (spawn_critters, move_critters, animate, calls).chain().in_set(CreatureSet).after(super::walk));
     }
 }
 
@@ -90,65 +84,30 @@ pub struct Critter {
 
 impl Critter {
     fn new(state: State, home: Vec3, seed: f32) -> Self {
-        Self {
-            state,
-            timer: 0.0,
-            call: 0.0,
-            home,
-            radius: 0.0,
-            angle: 0.0,
-            turn: 1.0,
-            alt: 0.0,
-            drift: Vec3::ZERO,
-            floor: home.y,
-            goal: home,
-            look: 0.0,
-            seed,
-        }
+        Self { state, timer: 0.0, call: 0.0, home, radius: 0.0, angle: 0.0, turn: 1.0, alt: 0.0, drift: Vec3::ZERO, floor: home.y, goal: home, look: 0.0, seed }
     }
 }
 
 /// Is a critter at home in these conditions? (Pure, for tests.)
-pub fn welcome(
-    spec: &CritterSpec,
-    spawn: &Spawn,
-    night: bool,
-    temperature: f32,
-    precipitation: f32,
-) -> bool {
-    data::time_ok(spawn.when, night)
-        && spec.min_temp.is_none_or(|m| temperature >= m)
-        && !(spec.fair_weather && precipitation > WET)
+pub fn welcome(spec: &CritterSpec, spawn: &Spawn, night: bool, temperature: f32, precipitation: f32) -> bool {
+    data::time_ok(spawn.when, night) && spec.min_temp.is_none_or(|m| temperature >= m) && !(spec.fair_weather && precipitation > WET)
 }
 
 /// Where a bird's circle puts it: `home.y` is the ground, `alt` the height above it.
 pub fn orbit_point(home: Vec3, radius: f32, angle: f32, alt: f32) -> Vec3 {
-    Vec3::new(
-        home.x + angle.cos() * radius,
-        home.y + alt,
-        home.z + angle.sin() * radius,
-    )
+    Vec3::new(home.x + angle.cos() * radius, home.y + alt, home.z + angle.sin() * radius)
 }
 
 /// The top of a column: the open block above the highest solid or water block between
 /// `from` and `to`, and whether that block is water. Unloaded stretches are skipped;
 /// `None` if nothing is found or the top isn't loaded.
-pub fn surface(
-    world: &World,
-    blocks: &Blocks,
-    x: i32,
-    z: i32,
-    from: i32,
-    to: i32,
-) -> Option<(i32, bool)> {
+pub fn surface(world: &World, blocks: &Blocks, x: i32, z: i32, from: i32, to: i32) -> Option<(i32, bool)> {
     let water = blocks.registry.id("water");
     let mut open_above = false;
     for y in (to..=from).rev() {
         match world.block(BlockPos::new(x, y, z)) {
             None => open_above = false,
-            Some(b) if blocks.registry.get(b).solid || Some(b) == water => {
-                return open_above.then_some((y + 1, Some(b) == water));
-            }
+            Some(b) if blocks.registry.get(b).solid || Some(b) == water => return open_above.then_some((y + 1, Some(b) == water)),
             Some(_) => open_above = true,
         }
     }
@@ -157,17 +116,11 @@ pub fn surface(
 
 /// Is there water at the surface within a few blocks of (x, z)?
 fn water_near(world: &World, blocks: &Blocks, x: i32, z: i32, y: i32) -> bool {
-    (-1..=1)
-        .flat_map(|dx| (-1..=1).map(move |dz| (dx * 3, dz * 3)))
-        .any(|(dx, dz)| {
-            surface(world, blocks, x + dx, z + dz, y + 3, y - 4).is_some_and(|(_, w)| w)
-        })
+    (-1..=1).flat_map(|dx| (-1..=1).map(move |dz| (dx * 3, dz * 3))).any(|(dx, dz)| surface(world, blocks, x + dx, z + dz, y + 3, y - 4).is_some_and(|(_, w)| w))
 }
 
 fn solid(world: &World, blocks: &Blocks, p: Vec3) -> bool {
-    world
-        .block(BlockPos::from_world(p.to_array()))
-        .is_some_and(|b| blocks.registry.get(b).solid)
+    world.block(BlockPos::from_world(p.to_array())).is_some_and(|b| blocks.registry.get(b).solid)
 }
 
 /// Steer towards `target` at `speed`, turning at `agility` (1/s). Returns the new position.
@@ -202,9 +155,7 @@ fn spawn_critters(
     mut dice: ResMut<Dice>,
     mut timer: Local<f32>,
 ) {
-    let (Some(kinds), Some(assets), Some(generator)) = (kinds, assets, generator) else {
-        return;
-    };
+    let (Some(kinds), Some(assets), Some(generator)) = (kinds, assets, generator) else { return };
     *timer -= time.delta_secs();
     if *timer > 0.0 || !(player.ready || *mode == MoveMode::Fly) {
         return;
@@ -218,30 +169,15 @@ fn spawn_critters(
     let rng = &mut dice.0;
     let py = player.pos.y.floor() as i32;
     for (kind, k) in kinds.list.iter().enumerate() {
-        let (Some(spec), Some(sp)) = (&k.critter, &k.spawn) else {
-            continue;
-        };
-        if counts[kind] >= spec.count
-            || !welcome(
-                spec,
-                sp,
-                night,
-                climate.temperature,
-                conditions.precipitation,
-            )
-        {
+        let (Some(spec), Some(sp)) = (&k.critter, &k.spawn) else { continue };
+        if counts[kind] >= spec.count || !welcome(spec, sp, night, climate.temperature, conditions.precipitation) {
             continue;
         }
         // One try per kind per tick; misses (wrong biome, no water nearby) just wait for the next.
         let a = rng.range(0.0, std::f32::consts::TAU);
         let d = rng_in(rng, spec.ring);
-        let (x, z) = (
-            (player.pos.x + a.cos() * d).floor() as i32,
-            (player.pos.z + a.sin() * d).floor() as i32,
-        );
-        let Some((y, wet)) = surface(&world, &blocks, x, z, py + 40, py - 40) else {
-            continue;
-        };
+        let (x, z) = ((player.pos.x + a.cos() * d).floor() as i32, (player.pos.z + a.sin() * d).floor() as i32);
+        let Some((y, wet)) = surface(&world, &blocks, x, z, py + 40, py - 40) else { continue };
         if !sp.lives_in(&generator.0.biome_at(x, y, z).name) {
             continue;
         }
@@ -255,18 +191,11 @@ fn spawn_critters(
             continue;
         }
         let (lo, hi) = sp.group;
-        let n = (lo + (rng.next() % (hi.saturating_sub(lo) as u64 + 1)) as u8)
-            .min((spec.count - counts[kind]) as u8);
+        let n = (lo + (rng.next() % (hi.saturating_sub(lo) as u64 + 1)) as u8).min((spec.count - counts[kind]) as u8);
         let ground = Vec3::new(x as f32 + 0.5, y as f32, z as f32 + 0.5);
         // A flock shares one circle, spaced out along it.
-        let (radius, turn, angle, alt) = (
-            rng.range(10.0, 26.0),
-            if rng.unit() < 0.5 { 1.0 } else { -1.0 },
-            rng.range(0.0, std::f32::consts::TAU),
-            rng_in(rng, spec.height),
-        );
-        let drift = Vec3::new(rng.range(-1.0, 1.0), 0.0, rng.range(-1.0, 1.0)).normalize_or_zero()
-            * rng.range(0.3, 1.2);
+        let (radius, turn, angle, alt) = (rng.range(10.0, 26.0), if rng.unit() < 0.5 { 1.0 } else { -1.0 }, rng.range(0.0, std::f32::consts::TAU), rng_in(rng, spec.height));
+        let drift = Vec3::new(rng.range(-1.0, 1.0), 0.0, rng.range(-1.0, 1.0)).normalize_or_zero() * rng.range(0.3, 1.2);
         for i in 0..n {
             let (pos, critter) = match spec.motion {
                 Motion::Bird => {
@@ -280,17 +209,8 @@ fn spawn_critters(
                     (orbit_point(c.home, c.radius, c.angle, c.alt), c)
                 }
                 Motion::Hopper | Motion::Drifter => {
-                    let (gx, gz) = if i == 0 {
-                        (x, z)
-                    } else {
-                        (
-                            x + rng.range(-3.0, 3.0) as i32,
-                            z + rng.range(-3.0, 3.0) as i32,
-                        )
-                    };
-                    let Some((gy, w)) = surface(&world, &blocks, gx, gz, y + 3, y - 3) else {
-                        continue;
-                    };
+                    let (gx, gz) = if i == 0 { (x, z) } else { (x + rng.range(-3.0, 3.0) as i32, z + rng.range(-3.0, 3.0) as i32) };
+                    let Some((gy, w)) = surface(&world, &blocks, gx, gz, y + 3, y - 3) else { continue };
                     if spec.motion == Motion::Hopper && w && !spec.near_water {
                         continue;
                     }
@@ -311,19 +231,9 @@ fn spawn_critters(
             let e = spawn_creature(&mut commands, &kinds, &assets, kind, pos, yaw);
             let mut c = Creature::new(kind, k.health, yaw);
             // Birds come in already flying (far off); the small ones grow in.
-            c.fade = if spec.motion == Motion::Bird {
-                1.0
-            } else {
-                0.0
-            };
+            c.fade = if spec.motion == Motion::Bird { 1.0 } else { 0.0 };
             let scale = c.fade.max(0.01);
-            commands.entity(e).insert((
-                c,
-                critter,
-                Transform::from_translation(pos)
-                    .with_rotation(Quat::from_rotation_y(yaw))
-                    .with_scale(Vec3::splat(scale)),
-            ));
+            commands.entity(e).insert((c, critter, Transform::from_translation(pos).with_rotation(Quat::from_rotation_y(yaw)).with_scale(Vec3::splat(scale))));
             counts[kind] += 1;
         }
     }
@@ -350,12 +260,7 @@ fn move_critters(
     (world, blocks): (Res<World>, Res<Blocks>),
     (clock, climate, conditions): (Res<WorldClock>, Res<LocalClimate>, Res<Conditions>),
     player: Res<Player>,
-    (torches, wielded, items, spells): (
-        Res<Torches>,
-        Res<Wielded>,
-        Res<Items>,
-        Res<crate::progress::Spells>,
-    ),
+    (torches, wielded, items, spells): (Res<Torches>, Res<Wielded>, Res<Items>, Res<crate::progress::Spells>),
     mut sounds: MessageWriter<PlaySound>,
     mut q: Query<(Entity, &mut Transform, &mut Creature, &mut Critter)>,
     mut dice: ResMut<Dice>,
@@ -374,22 +279,12 @@ fn move_critters(
     let rng = &mut dice.0;
     for (e, mut tf, mut c, mut cr) in &mut q {
         let k = kinds.get(c.kind);
-        let (Some(spec), Some(sp)) = (&k.critter, &k.spawn) else {
-            continue;
-        };
+        let (Some(spec), Some(sp)) = (&k.critter, &k.spawn) else { continue };
         if flat(tf.translation - around.player).length() > spec.ring.1 * 1.6 {
             commands.entity(e).despawn();
             continue;
         }
-        if !c.leaving
-            && !welcome(
-                spec,
-                sp,
-                around.night,
-                around.temperature,
-                around.precipitation,
-            )
-        {
+        if !c.leaving && !welcome(spec, sp, around.night, around.temperature, around.precipitation) {
             c.leaving = true;
             if spec.motion == Motion::Bird {
                 cr.state = State::Leave;
@@ -401,28 +296,12 @@ fn move_critters(
         let startled = shy > 0.0 && tf.translation.distance(around.player) < shy;
         let pos = tf.translation;
         let next = match spec.motion {
-            Motion::Bird => bird(
-                &mut c,
-                &mut cr,
-                k,
-                spec,
-                pos,
-                startled,
-                &around,
-                &world,
-                &blocks,
-                rng,
-                &mut sounds,
-            ),
+            Motion::Bird => bird(&mut c, &mut cr, k, spec, pos, startled, &around, &world, &blocks, rng, &mut sounds),
             Motion::Hopper => {
-                hopper(
-                    &mut c, &mut cr, spec, pos, startled, &around, &world, &blocks, rng,
-                );
+                hopper(&mut c, &mut cr, spec, pos, startled, &around, &world, &blocks, rng);
                 pos // `walk` moves it
             }
-            Motion::Drifter => drifter(
-                &mut c, &mut cr, k, spec, pos, startled, &around, &world, &blocks, rng,
-            ),
+            Motion::Drifter => drifter(&mut c, &mut cr, k, spec, pos, startled, &around, &world, &blocks, rng),
         };
         // Birds leave by flying off; the small ones fade, but only out of your way, so
         // none vanish in front of you.
@@ -439,9 +318,7 @@ fn move_critters(
         tf.translation = next;
         tf.scale = Vec3::splat(c.fade.max(0.01));
         if spec.motion != Motion::Hopper {
-            tf.rotation = tf
-                .rotation
-                .slerp(Quat::from_rotation_y(c.yaw), (around.dt * 6.0).min(1.0));
+            tf.rotation = tf.rotation.slerp(Quat::from_rotation_y(c.yaw), (around.dt * 6.0).min(1.0));
         }
     }
 }
@@ -462,10 +339,7 @@ fn bird(
 ) -> Vec3 {
     let dt = around.dt;
     cr.timer -= dt;
-    let take_off = |c: &mut Creature,
-                    cr: &mut Critter,
-                    rng: &mut Rng,
-                    sounds: &mut MessageWriter<PlaySound>| {
+    let take_off = |c: &mut Creature, cr: &mut Critter, rng: &mut Rng, sounds: &mut MessageWriter<PlaySound>| {
         cr.state = State::Fly;
         cr.timer = rng.range(12.0, 35.0);
         let away = flat(pos - around.player).normalize_or(Vec3::X);
@@ -487,14 +361,7 @@ fn bird(
                 if let Some((y, _)) = surface(world, blocks, hx, hz, py + 64, py - 64) {
                     cr.home.y = y as f32;
                 }
-                if let Some((y, _)) = surface(
-                    world,
-                    blocks,
-                    pos.x.floor() as i32,
-                    pos.z.floor() as i32,
-                    py + 64,
-                    py - 64,
-                ) {
+                if let Some((y, _)) = surface(world, blocks, pos.x.floor() as i32, pos.z.floor() as i32, py + 64, py - 64) {
                     cr.floor = y as f32;
                 }
                 // Wander the land, but don't stray beyond where you are.
@@ -502,19 +369,12 @@ fn bird(
                 if back.length() > spec.ring.1 * 0.9 {
                     cr.drift = back.normalize() * 1.5;
                 } else if rng.unit() < 0.05 {
-                    cr.drift = Vec3::new(rng.range(-1.0, 1.0), 0.0, rng.range(-1.0, 1.0))
-                        .normalize_or_zero()
-                        * rng.range(0.3, 1.2);
+                    cr.drift = Vec3::new(rng.range(-1.0, 1.0), 0.0, rng.range(-1.0, 1.0)).normalize_or_zero() * rng.range(0.3, 1.2);
                 }
             }
             cr.home += cr.drift * dt;
             cr.angle += cr.turn * k.speed / cr.radius.max(4.0) * dt;
-            let mut target = orbit_point(
-                cr.home,
-                cr.radius,
-                cr.angle + cr.turn * 0.5,
-                cr.alt + (around.t * 0.4 + cr.seed * 6.0).sin() * 1.5,
-            );
+            let mut target = orbit_point(cr.home, cr.radius, cr.angle + cr.turn * 0.5, cr.alt + (around.t * 0.4 + cr.seed * 6.0).sin() * 1.5);
             target.y = target.y.max(cr.floor + 5.0);
             let next = steer(c, pos, target, k.speed, 1.8, dt);
             face_along(c, c.vel);
@@ -523,10 +383,7 @@ fn bird(
                 cr.timer = rng.range(8.0, 22.0);
                 let a = rng.range(0.0, std::f32::consts::TAU);
                 let r = rng.range(0.0, cr.radius);
-                let (x, z) = (
-                    (cr.home.x + a.cos() * r).floor() as i32,
-                    (cr.home.z + a.sin() * r).floor() as i32,
-                );
+                let (x, z) = ((cr.home.x + a.cos() * r).floor() as i32, (cr.home.z + a.sin() * r).floor() as i32);
                 let py = around.player.y as i32;
                 if rng.unit() < 0.6
                     && let Some((y, false)) = surface(world, blocks, x, z, py + 64, py - 64)
@@ -581,14 +438,7 @@ fn bird(
             next
         }
         State::Leave | State::Hop => {
-            let next = steer(
-                c,
-                pos,
-                pos + cr.drift * 10.0 + Vec3::Y * 4.0,
-                k.run,
-                1.5,
-                dt,
-            );
+            let next = steer(c, pos, pos + cr.drift * 10.0 + Vec3::Y * 4.0, k.run, 1.5, dt);
             face_along(c, c.vel);
             next
         }
@@ -596,22 +446,11 @@ fn bird(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn hopper(
-    c: &mut Creature,
-    cr: &mut Critter,
-    spec: &CritterSpec,
-    pos: Vec3,
-    startled: bool,
-    around: &Around,
-    world: &World,
-    blocks: &Blocks,
-    rng: &mut Rng,
-) {
+fn hopper(c: &mut Creature, cr: &mut Critter, spec: &CritterSpec, pos: Vec3, startled: bool, around: &Around, world: &World, blocks: &Blocks, rng: &mut Rng) {
     let dt = around.dt;
     cr.timer -= dt;
     let water = blocks.registry.id("water");
-    let swimming = water.is_some()
-        && world.block(BlockPos::from_world((pos + Vec3::Y * 0.1).to_array())) == water;
+    let swimming = water.is_some() && world.block(BlockPos::from_world((pos + Vec3::Y * 0.1).to_array())) == water;
     match cr.state {
         State::Hop => {
             // Landed: sit still.
@@ -660,40 +499,19 @@ fn drifter(
     let dt = around.dt;
     cr.timer -= dt;
     // Moths make for the nearest light close by.
-    let light = spec
-        .to_light
-        .then(|| {
-            around
-                .lights
-                .iter()
-                .copied()
-                .filter(|l| l.distance(pos) < 16.0)
-                .min_by(|a, b| a.distance(pos).total_cmp(&b.distance(pos)))
-        })
-        .flatten();
+    let light = spec.to_light.then(|| around.lights.iter().copied().filter(|l| l.distance(pos) < 16.0).min_by(|a, b| a.distance(pos).total_cmp(&b.distance(pos)))).flatten();
     let pick = |cr: &mut Critter, rng: &mut Rng| {
         cr.goal = if let Some(l) = light {
             let a = rng.range(0.0, std::f32::consts::TAU);
             // Keep out of your face when the light is the torch in your hand.
             let held = l.distance(around.player + Vec3::Y) < 0.5;
-            let r = if held {
-                rng.range(1.8, 3.0)
-            } else {
-                rng.range(0.4, 1.3)
-            };
+            let r = if held { rng.range(1.8, 3.0) } else { rng.range(0.4, 1.3) };
             l + Vec3::new(a.cos(), 0.0, a.sin()) * r + Vec3::Y * rng.range(-0.5, 0.7)
         } else {
             let a = rng.range(0.0, std::f32::consts::TAU);
             let p = cr.home + Vec3::new(a.cos(), 0.0, a.sin()) * rng.range(0.5, 5.0);
             let y0 = cr.home.y as i32;
-            match surface(
-                world,
-                blocks,
-                p.x.floor() as i32,
-                p.z.floor() as i32,
-                y0 + 4,
-                y0 - 8,
-            ) {
+            match surface(world, blocks, p.x.floor() as i32, p.z.floor() as i32, y0 + 4, y0 - 8) {
                 Some((y, _)) => Vec3::new(p.x, y as f32 + rng_in(rng, spec.height), p.z),
                 None => pos,
             }
@@ -718,12 +536,7 @@ fn drifter(
         State::Rest => {
             // Hover: hang in the air with a little jitter.
             c.vel *= (1.0 - 6.0 * dt).max(0.0);
-            c.vel += Vec3::new(
-                rng.range(-1.0, 1.0),
-                rng.range(-1.0, 1.0),
-                rng.range(-1.0, 1.0),
-            ) * dt
-                * 2.0;
+            c.vel += Vec3::new(rng.range(-1.0, 1.0), rng.range(-1.0, 1.0), rng.range(-1.0, 1.0)) * dt * 2.0;
             if cr.timer <= 0.0 {
                 pick(cr, rng);
             }
@@ -740,37 +553,21 @@ fn drifter(
                 }
             }
             // A wavering path rather than a straight line.
-            let wobble = Vec3::new(
-                (around.t * 2.3 + cr.seed * 9.0).sin(),
-                (around.t * 3.1 + cr.seed * 5.0).sin() * 0.6,
-                (around.t * 1.9 + cr.seed * 7.0).cos(),
-            ) * speed
-                * 0.35;
+            let wobble = Vec3::new((around.t * 2.3 + cr.seed * 9.0).sin(), (around.t * 3.1 + cr.seed * 5.0).sin() * 0.6, (around.t * 1.9 + cr.seed * 7.0).cos()) * speed * 0.35;
             let next = steer(c, pos, cr.goal + wobble * 0.3, speed, agility, dt) + wobble * dt;
             face_along(c, c.vel);
-            if solid(world, blocks, next) {
-                pos
-            } else {
-                next
-            }
+            if solid(world, blocks, next) { pos } else { next }
         }
     }
 }
 
 /// Wings flap (named `wing_*` boxes swing up and down at their inner edge) and
 /// glowing boxes blink.
-fn animate(
-    time: Res<Time>,
-    kinds: Option<Res<Kinds>>,
-    critters: Query<(&Creature, &Critter)>,
-    mut parts: Query<(&ChildOf, &Part, &mut Transform, &mut Visibility)>,
-) {
+fn animate(time: Res<Time>, kinds: Option<Res<Kinds>>, critters: Query<(&Creature, &Critter)>, mut parts: Query<(&ChildOf, &Part, &mut Transform, &mut Visibility)>) {
     let Some(kinds) = kinds else { return };
     let t = time.elapsed_secs();
     for (parent, part, mut tf, mut vis) in &mut parts {
-        let Ok((c, cr)) = critters.get(parent.parent()) else {
-            continue;
-        };
+        let Ok((c, cr)) = critters.get(parent.parent()) else { continue };
         let k = kinds.get(c.kind);
         let Some(spec) = &k.critter else { continue };
         let b = &k.model[part.index];
@@ -783,11 +580,7 @@ fn animate(
                 // Flap, with stretches of gliding.
                 (Motion::Bird, _) => {
                     let gliding = (phase * 0.45).sin() > 0.35 && cr.state == State::Fly;
-                    if gliding {
-                        0.08
-                    } else {
-                        (phase * 15.0).sin() * 0.85
-                    }
+                    if gliding { 0.08 } else { (phase * 15.0).sin() * 0.85 }
                 }
                 (_, State::Rest) if spec.motion == Motion::Hopper => 0.0,
                 _ => (phase * 38.0).sin() * 0.7,
@@ -801,11 +594,7 @@ fn animate(
         if b.glow {
             // Slow pulses, each firefly on its own beat.
             let beat = (t * (1.2 + cr.seed * 1.4) + cr.seed * 20.0).sin();
-            let want = if beat > 0.35 {
-                Visibility::Inherited
-            } else {
-                Visibility::Hidden
-            };
+            let want = if beat > 0.35 { Visibility::Inherited } else { Visibility::Hidden };
             if *vis != want {
                 *vis = want;
             }
@@ -831,9 +620,7 @@ fn calls(
     let rng = &mut dice.0;
     let ear = cam.translation;
     for (tf, c, mut cr) in &mut q {
-        let Some(spec) = &kinds.get(c.kind).critter else {
-            continue;
-        };
+        let Some(spec) = &kinds.get(c.kind).critter else { continue };
         cr.call -= dt;
         if cr.call > 0.0 {
             continue;
@@ -849,9 +636,7 @@ fn calls(
         if !in_mood || c.leaving || c.fade < 0.5 || d > spec.hearing || *budget < 1.0 {
             continue;
         }
-        let Some(name) = rng.pick(&spec.calls) else {
-            continue;
-        };
+        let Some(name) = rng.pick(&spec.calls) else { continue };
         let gain = (1.0 - d / spec.hearing).powf(1.5);
         if gain > 0.02 {
             *budget -= 1.0;
@@ -870,51 +655,22 @@ mod tests {
         let get = |n: &str| k.get(k.id(n).unwrap());
         let ok = |n: &str, night: bool, temp: f32, rain: f32| {
             let c = get(n);
-            welcome(
-                c.critter.as_ref().unwrap(),
-                c.spawn.as_ref().unwrap(),
-                night,
-                temp,
-                rain,
-            )
+            welcome(c.critter.as_ref().unwrap(), c.spawn.as_ref().unwrap(), night, temp, rain)
         };
         assert!(ok("marsh_finch", false, 0.4, 0.0) && !ok("marsh_finch", true, 0.4, 0.0));
-        assert!(
-            !ok("marsh_finch", false, 0.4, 0.8),
-            "birds leave in the rain"
-        );
+        assert!(!ok("marsh_finch", false, 0.4, 0.8), "birds leave in the rain");
         assert!(ok("firefly", true, 0.4, 0.0) && !ok("firefly", false, 0.4, 0.0));
         assert!(!ok("firefly", true, -0.2, 0.0), "no fireflies in the cold");
-        assert!(
-            ok("dusk_cricket", true, 0.4, 0.0)
-                && ok("dusk_cricket", false, 0.4, 0.0)
-                && !ok("dusk_cricket", true, 0.4, 0.8),
-            "crickets day and night, not in rain"
-        );
-        assert!(
-            ok("reed_frog", true, 0.4, 0.8) && ok("reed_frog", false, 0.4, 0.0),
-            "frogs any time, rain or not"
-        );
+        assert!(ok("dusk_cricket", true, 0.4, 0.0) && ok("dusk_cricket", false, 0.4, 0.0) && !ok("dusk_cricket", true, 0.4, 0.8), "crickets day and night, not in rain");
+        assert!(ok("reed_frog", true, 0.4, 0.8) && ok("reed_frog", false, 0.4, 0.0), "frogs any time, rain or not");
     }
 
     #[test]
     fn critters_live_in_every_biome_for_now() {
         let k = super::super::data::tests::load();
         for c in k.list.iter().filter(|c| c.critter.is_some()) {
-            for biome in [
-                "great_swamp",
-                "meadow",
-                "pine_hills",
-                "dunes",
-                "highlands",
-                "frost_peaks",
-                "skyreach",
-            ] {
-                assert!(
-                    c.spawn.as_ref().unwrap().lives_in(biome),
-                    "{} doesn't live in {biome}",
-                    c.name
-                );
+            for biome in ["great_swamp", "meadow", "pine_hills", "dunes", "highlands", "frost_peaks", "skyreach"] {
+                assert!(c.spawn.as_ref().unwrap().lives_in(biome), "{} doesn't live in {biome}", c.name);
             }
         }
     }
@@ -933,12 +689,7 @@ mod tests {
         let k = super::super::data::tests::load();
         for kind in k.list.iter().filter(|k| k.critter.is_some()) {
             for b in kind.model.iter().filter(|b| b.name.starts_with("wing")) {
-                assert!(
-                    b.offset.0 != 0.0,
-                    "{}: {} sits on the middle line, so it can't swing to a side",
-                    kind.name,
-                    b.name
-                );
+                assert!(b.offset.0 != 0.0, "{}: {} sits on the middle line, so it can't swing to a side", kind.name, b.name);
             }
         }
     }

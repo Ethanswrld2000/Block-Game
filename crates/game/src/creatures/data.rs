@@ -198,11 +198,7 @@ impl Kinds {
             let drops = s
                 .drops
                 .iter()
-                .map(|(i, n, p)| {
-                    items.id(i).map(|id| (id, *n, *p)).ok_or_else(|| {
-                        format!("creatures.ron: '{}' drops unknown item '{i}'", s.name)
-                    })
-                })
+                .map(|(i, n, p)| items.id(i).map(|id| (id, *n, *p)).ok_or_else(|| format!("creatures.ron: '{}' drops unknown item '{i}'", s.name)))
                 .collect::<Result<Vec<_>, String>>()?;
             if s.model.is_empty() {
                 return Err(format!("creatures.ron: '{}' has no model", s.name));
@@ -210,10 +206,7 @@ impl Kinds {
             let mut skins: Vec<String> = s.skin.into_iter().collect();
             skins.extend(s.skins);
             if (s.temper == Temper::Critter) != s.critter.is_some() {
-                return Err(format!(
-                    "creatures.ron: '{}' needs both `temper: Critter` and `critter: (...)`, or neither",
-                    s.name
-                ));
+                return Err(format!("creatures.ron: '{}' needs both `temper: Critter` and `critter: (...)`, or neither", s.name));
             }
             let layout = Layout::new(&s.model);
             list.push(Kind {
@@ -253,12 +246,8 @@ impl Kinds {
             .iter()
             .enumerate()
             .filter_map(|(i, k)| {
-                let s = k
-                    .spawn
-                    .as_ref()
-                    .filter(|s| s.weight > 0.0 && k.critter.is_none())?;
-                (time_ok(s.when, night) && s.at == At::Surface && s.lives_in(biome))
-                    .then_some((i, s.weight))
+                let s = k.spawn.as_ref().filter(|s| s.weight > 0.0 && k.critter.is_none())?;
+                (time_ok(s.when, night) && s.at == At::Surface && s.lives_in(biome)).then_some((i, s.weight))
             })
             .collect()
     }
@@ -301,24 +290,13 @@ pub mod tests {
 
     pub fn load() -> Kinds {
         let (_, items) = crate::items::tests::load();
-        Kinds::from_ron(
-            include_str!("../../../../assets/data/creatures.ron"),
-            &items,
-        )
-        .unwrap()
+        Kinds::from_ron(include_str!("../../../../assets/data/creatures.ron"), &items).unwrap()
     }
 
     #[test]
     fn creatures_load_and_drop_real_items() {
         let k = load();
-        for name in [
-            "marsh_boar",
-            "fen_stag",
-            "bog_lurker",
-            "ancestral_spirit",
-            "barrow_wight",
-            "villager",
-        ] {
+        for name in ["marsh_boar", "fen_stag", "bog_lurker", "ancestral_spirit", "barrow_wight", "villager"] {
             assert!(k.id(name).is_some(), "{name}");
         }
         let stag = k.get(k.id("fen_stag").unwrap());
@@ -340,66 +318,33 @@ pub mod tests {
         // Spirits are turned off for now (weight 0) but still walk only at night.
         let spirit = k.get(k.id("ancestral_spirit").unwrap());
         assert_eq!(spirit.spawn.as_ref().unwrap().when, When::Night);
-        assert!(
-            !night
-                .iter()
-                .chain(&day)
-                .any(|(i, _)| k.get(*i).name == "ancestral_spirit")
-        );
+        assert!(!night.iter().chain(&day).any(|(i, _)| k.get(*i).name == "ancestral_spirit"));
         // Critters never come from the creature ring.
-        assert!(
-            night
-                .iter()
-                .chain(&day)
-                .all(|(i, _)| k.get(*i).critter.is_none())
-        );
+        assert!(night.iter().chain(&day).all(|(i, _)| k.get(*i).critter.is_none()));
     }
 
     #[test]
     fn critters_are_listed_and_sound_real() {
         let k = load();
         let sounds = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/sounds");
-        for name in [
-            "marsh_finch",
-            "reed_frog",
-            "dusk_cricket",
-            "firefly",
-            "lamp_moth",
-            "bog_darter",
-        ] {
+        for name in ["marsh_finch", "reed_frog", "dusk_cricket", "firefly", "lamp_moth", "bog_darter"] {
             let c = k.get(k.id(name).unwrap_or_else(|| panic!("{name}")));
             let spec = c.critter.as_ref().unwrap();
-            assert!(
-                c.temper == Temper::Critter
-                    && c.spawn.is_some()
-                    && spec.count > 0
-                    && spec.ring.0 < spec.ring.1,
-                "{name}"
-            );
+            assert!(c.temper == Temper::Critter && c.spawn.is_some() && spec.count > 0 && spec.ring.0 < spec.ring.1, "{name}");
             for s in &spec.calls {
-                assert!(
-                    sounds.join(format!("{s}.ogg")).exists(),
-                    "{name} calls {s}.ogg, which doesn't exist"
-                );
+                assert!(sounds.join(format!("{s}.ogg")).exists(), "{name} calls {s}.ogg, which doesn't exist");
             }
         }
     }
 
     #[test]
     fn every_listed_skin_exists_and_fits_its_layout() {
-        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../assets/textures/creatures");
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/textures/creatures");
         for k in &load().list {
             for s in &k.skins {
-                let (w, h) = image::image_dimensions(dir.join(format!("{s}.png")))
-                    .unwrap_or_else(|e| panic!("{s}.png: {e}"));
+                let (w, h) = image::image_dimensions(dir.join(format!("{s}.png"))).unwrap_or_else(|e| panic!("{s}.png: {e}"));
                 // Painted at a higher resolution is fine, as long as it's the same shape.
-                assert!(
-                    w % k.layout.width == 0 && w * k.layout.height == h * k.layout.width,
-                    "{s}.png is {w}x{h}, layout is {}x{}",
-                    k.layout.width,
-                    k.layout.height
-                );
+                assert!(w % k.layout.width == 0 && w * k.layout.height == h * k.layout.width, "{s}.png is {w}x{h}, layout is {}x{}", k.layout.width, k.layout.height);
             }
         }
     }

@@ -256,12 +256,12 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   to lift it, it follows the cursor; click to swing it down (hammerstones, anvil hammer, knife, fan; one go when it
   lands, `board::swing_pose`), hold the button and stir round the pot (ladle, paddle: a full turn = one stir, the pot
   swirls with it) or saw back and forth (`board::Gesture`, `SAW_STROKE`). The sharpening wheel and the lens's
-  focusing dial (now on a stand beside the plate) turn in place when clicked. Benches can have several views (`Layout.views`:
-  pot and fire, cauldron and fire, rack and fire): W / S or the buttons under the title. The cooking pot and
-  cauldron are open with see-through broth/brew (`Mat::alpha`, `models::liquid`) and bubble (`station::bubbles`,
-  more in the cauldron). The telescope view is a round eyepiece with cross hairs (`telescope::lens_image`) and
-  hides the HUD. Screenshots: `BLOCKGAME_BOARDVIEW=1` (second view), `BLOCKGAME_BOARDTOOL=lift|down|0.3`,
-  `BLOCKGAME_SCOPE=1`.
+  focusing dial (now on a stand beside the plate) turn in place when clicked. Benches can have several views
+  (`Layout.views`: pot and fire, cauldron and fire, rack and fire): W / S or the buttons under the title. The cooking
+  pot and cauldron are open with see-through broth/brew (`Mat::alpha`, `models::liquid`) and bubble
+  (`station::bubbles`, more in the cauldron). The telescope view is a round eyepiece with cross hairs
+  (`telescope::lens_image`) and hides the HUD. Screenshots: `BLOCKGAME_BOARDVIEW=1` (second view),
+  `BLOCKGAME_BOARDTOOL=lift|down|0.3`, `BLOCKGAME_SCOPE=1`.
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen

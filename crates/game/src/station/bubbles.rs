@@ -45,23 +45,9 @@ pub(super) struct BubbleLook {
     cauldron: Handle<StandardMaterial>,
 }
 
-pub(super) fn setup_bubbles(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    let mesh = meshes.add(
-        Sphere::new(1.0)
-            .mesh()
-            .ico(1)
-            .unwrap_or_else(|_| Sphere::new(1.0).mesh().uv(8, 6)),
-    );
-    let pot = materials.add(StandardMaterial {
-        base_color: Color::srgba(0.92, 0.82, 0.62, 0.55),
-        perceptual_roughness: 0.1,
-        alpha_mode: AlphaMode::Blend,
-        ..default()
-    });
+pub(super) fn setup_bubbles(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<StandardMaterial>>) {
+    let mesh = meshes.add(Sphere::new(1.0).mesh().ico(1).unwrap_or_else(|_| Sphere::new(1.0).mesh().uv(8, 6)));
+    let pot = materials.add(StandardMaterial { base_color: Color::srgba(0.92, 0.82, 0.62, 0.55), perceptual_roughness: 0.1, alpha_mode: AlphaMode::Blend, ..default() });
     let cauldron = materials.add(StandardMaterial {
         base_color: Color::srgba(0.6, 1.0, 0.7, 0.6),
         emissive: LinearRgba::rgb(0.3, 1.4, 0.5),
@@ -69,11 +55,7 @@ pub(super) fn setup_bubbles(
         alpha_mode: AlphaMode::Blend,
         ..default()
     });
-    commands.insert_resource(BubbleLook {
-        mesh,
-        pot,
-        cauldron,
-    });
+    commands.insert_resource(BubbleLook { mesh, pot, cauldron });
 }
 
 /// A small fast random number in 0..1.
@@ -124,36 +106,14 @@ pub(super) fn spawn_bubbles(
             }
             n -= 1.0;
             room -= 1;
-            let off = Vec3::new(
-                (rnd(&mut seed) * 2.0 - 1.0) * half * 0.85,
-                -0.04 - rnd(&mut seed) * 0.1,
-                (rnd(&mut seed) * 2.0 - 1.0) * half * 0.85,
-            );
-            let rot = if st.turned {
-                Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)
-            } else {
-                Quat::IDENTITY
-            };
+            let off = Vec3::new((rnd(&mut seed) * 2.0 - 1.0) * half * 0.85, -0.04 - rnd(&mut seed) * 0.1, (rnd(&mut seed) * 2.0 - 1.0) * half * 0.85);
+            let rot = if st.turned { Quat::from_rotation_y(std::f32::consts::FRAC_PI_2) } else { Quat::IDENTITY };
             let at = st.pos + rot * (mid + off);
-            let drops = if cauldron {
-                2 + (rnd(&mut seed) * 2.0) as u32
-            } else {
-                (rnd(&mut seed) * 2.5) as u32
-            };
+            let drops = if cauldron { 2 + (rnd(&mut seed) * 2.0) as u32 } else { (rnd(&mut seed) * 2.5) as u32 };
             commands.spawn((
-                Bubble {
-                    surface: st.pos.y + mid.y,
-                    age: 0.0,
-                    up: false,
-                    drops,
-                    cauldron,
-                },
+                Bubble { surface: st.pos.y + mid.y, age: 0.0, up: false, drops, cauldron },
                 Mesh3d(look.mesh.clone()),
-                MeshMaterial3d(if cauldron {
-                    look.cauldron.clone()
-                } else {
-                    look.pot.clone()
-                }),
+                MeshMaterial3d(if cauldron { look.cauldron.clone() } else { look.pot.clone() }),
                 Transform::from_translation(at).with_scale(Vec3::splat(0.008)),
                 NotShadowCaster,
             ));
@@ -202,19 +162,10 @@ pub(super) fn move_bubbles(
                 let out = 0.1 + rnd(&mut seed) * 0.25;
                 let vel = Vec3::new(a.cos() * out, 0.7 + rnd(&mut seed) * 0.6, a.sin() * out);
                 commands.spawn((
-                    Splash {
-                        vel,
-                        surface: b.surface,
-                        age: 0.0,
-                    },
+                    Splash { vel, surface: b.surface, age: 0.0 },
                     Mesh3d(look.mesh.clone()),
-                    MeshMaterial3d(if b.cauldron {
-                        look.cauldron.clone()
-                    } else {
-                        look.pot.clone()
-                    }),
-                    Transform::from_translation(tf.translation + Vec3::Y * 0.01)
-                        .with_scale(Vec3::splat(0.007)),
+                    MeshMaterial3d(if b.cauldron { look.cauldron.clone() } else { look.pot.clone() }),
+                    Transform::from_translation(tf.translation + Vec3::Y * 0.01).with_scale(Vec3::splat(0.007)),
                     NotShadowCaster,
                 ));
             }

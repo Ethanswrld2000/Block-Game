@@ -9,8 +9,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use bevy::prelude::*;
-use bevy::tasks::{AsyncComputeTaskPool, Task, futures::check_ready};
-use voxel::{BlockId, BlockPos, BlockRegistry, CHUNK_SIZE, Chunk, ChunkPos, Face, PaddedChunk};
+use bevy::tasks::{futures::check_ready, AsyncComputeTaskPool, Task};
+use voxel::{BlockId, BlockPos, BlockRegistry, Chunk, ChunkPos, Face, PaddedChunk, CHUNK_SIZE};
 use worldgen::WorldGen;
 
 use crate::blocks::{Blocks, VoxelMaterial};
@@ -22,26 +22,23 @@ pub struct WorldPlugin;
 
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(ViewDistance {
-            chunks: 12,
-            vertical: 5,
-        })
-        .init_resource::<World>()
-        .init_resource::<WorldStats>()
-        .add_systems(crate::menu::GamePostStartup, setup_generator)
-        .add_systems(
-            crate::menu::GameUpdate,
-            (
-                change_view_distance,
-                schedule_generation,
-                collect_generated,
-                schedule_meshing,
-                collect_meshes,
-                unload_far,
-            )
-                .chain()
-                .run_if(|b: Res<Blocks>| b.material.is_some()),
-        );
+        app.insert_resource(ViewDistance { chunks: 12, vertical: 5 })
+            .init_resource::<World>()
+            .init_resource::<WorldStats>()
+            .add_systems(crate::menu::GamePostStartup, setup_generator)
+            .add_systems(
+                crate::menu::GameUpdate,
+                (
+                    change_view_distance,
+                    schedule_generation,
+                    collect_generated,
+                    schedule_meshing,
+                    collect_meshes,
+                    unload_far,
+                )
+                    .chain()
+                    .run_if(|b: Res<Blocks>| b.material.is_some()),
+            );
     }
 }
 
@@ -133,9 +130,7 @@ impl World {
     pub fn set_block(&mut self, p: BlockPos, block: BlockId) -> bool {
         let cp = p.chunk();
         let [x, y, z] = p.local();
-        let Some(c) = self.chunks.get_mut(&cp) else {
-            return false;
-        };
+        let Some(c) = self.chunks.get_mut(&cp) else { return false };
         let old = c.data.get(x, y, z);
         if old == block {
             return false;
@@ -146,9 +141,7 @@ impl World {
         if self.shaped.get(block.0 as usize).copied().unwrap_or(false) {
             self.shape_events.push(ShapeEvent::Added(p, block));
         }
-        let Some(c) = self.chunks.get_mut(&cp) else {
-            return false;
-        };
+        let Some(c) = self.chunks.get_mut(&cp) else { return false };
         Arc::make_mut(&mut c.data).set(x, y, z, block);
         c.version += 1;
         c.modified = true;
@@ -181,22 +174,13 @@ impl World {
         if let Some(input) = self.mesh_input(pos) {
             let version = self.chunks[&pos].version;
             self.mesh_tasks.remove(&pos);
-            self.finished_meshes.insert(
-                0,
-                (
-                    pos,
-                    version,
-                    chunk_mesh::build(&input.pad(), registry, opaque),
-                ),
-            );
+            self.finished_meshes.insert(0, (pos, version, chunk_mesh::build(&input.pad(), registry, opaque)));
         }
     }
 
     /// True if a loaded chunk's mesh is out of date.
     pub fn needs_mesh(&self, pos: ChunkPos) -> bool {
-        self.chunks
-            .get(&pos)
-            .is_some_and(|c| c.meshed_version != Some(c.version))
+        self.chunks.get(&pos).is_some_and(|c| c.meshed_version != Some(c.version))
     }
 
     /// Chunks edited since they were last saved, and mark them saved.
@@ -246,16 +230,10 @@ impl MeshInput {
             }
         }
         for face in Face::ALL {
-            let Some(nb) = &self.neighbours[face as usize] else {
-                continue;
-            };
+            let Some(nb) = &self.neighbours[face as usize] else { continue };
             let axis = face.axis();
             // Padded slice to fill, and the neighbour's layer that touches us.
-            let (pad_d, src_d) = if face.is_positive() {
-                (n + 1, 0)
-            } else {
-                (0, n - 1)
-            };
+            let (pad_d, src_d) = if face.is_positive() { (n + 1, 0) } else { (0, n - 1) };
             let (ua, va) = face.plane_axes();
             for u in 0..n {
                 for v in 0..n {
@@ -278,11 +256,10 @@ impl MeshInput {
     fn trivially_empty(&self, opaque: &[bool]) -> bool {
         match self.center.is_uniform() {
             Some(b) if b.is_air() => true,
-            Some(b) if opaque[b.0 as usize] => self.neighbours.iter().all(|n| {
-                n.as_ref()
-                    .and_then(|c| c.is_uniform())
-                    .is_some_and(|nb| opaque[nb.0 as usize])
-            }),
+            Some(b) if opaque[b.0 as usize] => self
+                .neighbours
+                .iter()
+                .all(|n| n.as_ref().and_then(|c| c.is_uniform()).is_some_and(|nb| opaque[nb.0 as usize])),
             _ => false,
         }
     }
@@ -296,29 +273,14 @@ pub fn setup_generator(
     mut player: ResMut<crate::player::Player>,
     mut cam: Query<&mut Transform, With<FlyCamera>>,
 ) {
-    let wg = WorldGen::new(
-        seed.0,
-        &blocks.registry,
-        include_str!("../../../assets/data/biomes.ron"),
-    )
-    .unwrap_or_else(|e| panic!("{e}"));
+    let wg = WorldGen::new(seed.0, &blocks.registry, include_str!("../../../assets/data/biomes.ron"))
+        .unwrap_or_else(|e| panic!("{e}"));
     let [x, y, z] = wg.find_spawn();
     info!("spawn at {x} {y} {z} in {}", wg.biome_at(x, y, z).title);
     if let Some(v) = wg.home_village() {
-        info!(
-            "home village {} at {:?} with {} huts",
-            v.name,
-            v.center,
-            v.huts.len()
-        );
+        info!("home village {} at {:?} with {} huts", v.name, v.center, v.huts.len());
     }
-    world.shaped = Arc::new(
-        blocks
-            .registry
-            .iter()
-            .map(|(_, d)| d.shape == voxel::Shape::Torch)
-            .collect(),
-    );
+    world.shaped = Arc::new(blocks.registry.iter().map(|(_, d)| d.shape == voxel::Shape::Torch).collect());
     player.pos = Vec3::new(x as f32 + 0.5, y as f32, z as f32 + 0.5);
     for mut tf in &mut cam {
         tf.translation = player.pos + Vec3::Y * crate::player::EYE;
@@ -400,18 +362,13 @@ fn schedule_generation(
 
     let pool = AsyncComputeTaskPool::get();
     while world.gen_tasks.len() < MAX_GEN_TASKS {
-        let Some(p) = world.gen_queue.pop() else {
-            break;
-        };
+        let Some(p) = world.gen_queue.pop() else { break };
         if world.chunks.contains_key(&p) || world.gen_tasks.contains_key(&p) {
             continue;
         }
         let (g, reg, dir) = (generator.0.clone(), blocks.registry.clone(), save.clone());
         // A saved chunk (one the player changed) wins over a freshly generated one.
-        world.gen_tasks.insert(
-            p,
-            pool.spawn(async move { dir.load(p, &reg).unwrap_or_else(|| g.generate(p)) }),
-        );
+        world.gen_tasks.insert(p, pool.spawn(async move { dir.load(p, &reg).unwrap_or_else(|| g.generate(p)) }));
     }
 }
 
@@ -426,20 +383,13 @@ fn collect_generated(mut world: ResMut<World>) {
     for (p, chunk) in done {
         world.gen_tasks.remove(&p);
         // Find any torches (or other shaped blocks) so they get drawn.
-        let shaped: Vec<BlockId> = (0..world.shaped.len())
-            .filter(|&i| world.shaped[i])
-            .map(|i| BlockId(i as u16))
-            .collect();
+        let shaped: Vec<BlockId> = (0..world.shaped.len()).filter(|&i| world.shaped[i]).map(|i| BlockId(i as u16)).collect();
         if shaped.iter().any(|b| chunk.may_contain(*b)) {
             let o = p.origin();
             let dense = chunk.to_dense();
             for (i, b) in dense.iter().enumerate() {
                 if shaped.contains(b) {
-                    let (x, z, y) = (
-                        i % CHUNK_SIZE,
-                        (i / CHUNK_SIZE) % CHUNK_SIZE,
-                        i / (CHUNK_SIZE * CHUNK_SIZE),
-                    );
+                    let (x, z, y) = (i % CHUNK_SIZE, (i / CHUNK_SIZE) % CHUNK_SIZE, i / (CHUNK_SIZE * CHUNK_SIZE));
                     let bp = BlockPos::new(o.x + x as i32, o.y + y as i32, o.z + z as i32);
                     world.shape_events.push(ShapeEvent::Added(bp, *b));
                 }
@@ -447,23 +397,13 @@ fn collect_generated(mut world: ResMut<World>) {
         }
         world.chunks.insert(
             p,
-            LoadedChunk {
-                data: Arc::new(chunk),
-                entities: Vec::new(),
-                version: 0,
-                meshed_version: None,
-                drawn: false,
-                modified: false,
-            },
+            LoadedChunk { data: Arc::new(chunk), entities: Vec::new(), version: 0, meshed_version: None, drawn: false, modified: false },
         );
         // A neighbour meshed while this chunk was outside the vertical band
         // treated it as air; remesh it now that the real blocks are here.
         for face in Face::ALL {
             let n = face.normal();
-            if let Some(nb) =
-                world
-                    .chunks
-                    .get_mut(&ChunkPos::new(p.x + n[0], p.y + n[1], p.z + n[2]))
+            if let Some(nb) = world.chunks.get_mut(&ChunkPos::new(p.x + n[0], p.y + n[1], p.z + n[2]))
                 && nb.meshed_version.is_some()
             {
                 nb.version += 1;
@@ -472,11 +412,7 @@ fn collect_generated(mut world: ResMut<World>) {
     }
 }
 
-fn schedule_meshing(
-    mut world: ResMut<World>,
-    blocks: Res<Blocks>,
-    cam: Single<&Transform, With<FlyCamera>>,
-) {
+fn schedule_meshing(mut world: ResMut<World>, blocks: Res<Blocks>, cam: Single<&Transform, With<FlyCamera>>) {
     if world.mesh_tasks.len() >= MAX_MESH_TASKS {
         return;
     }
@@ -485,11 +421,7 @@ fn schedule_meshing(
     let mut wanted: Vec<ChunkPos> = world
         .chunks
         .iter()
-        .filter(|(p, c)| {
-            c.meshed_version != Some(c.version)
-                && !world.mesh_tasks.contains_key(p)
-                && !waiting.contains(p)
-        })
+        .filter(|(p, c)| c.meshed_version != Some(c.version) && !world.mesh_tasks.contains_key(p) && !waiting.contains(p))
         .map(|(p, _)| *p)
         .collect();
     let dist = |p: &ChunkPos| {
@@ -503,14 +435,10 @@ fn schedule_meshing(
         if world.mesh_tasks.len() >= MAX_MESH_TASKS {
             break;
         }
-        let Some(input) = world.mesh_input(p) else {
-            continue;
-        };
+        let Some(input) = world.mesh_input(p) else { continue };
         let version = world.chunks[&p].version;
         if input.trivially_empty(&blocks.opaque) {
-            world
-                .finished_meshes
-                .push((p, version, ChunkMeshes::default()));
+            world.finished_meshes.push((p, version, ChunkMeshes::default()));
             continue;
         }
         let (registry, opaque) = (blocks.registry.clone(), blocks.opaque.clone());
@@ -538,9 +466,7 @@ fn collect_meshes(
     }
     world.finished_meshes.extend(ready);
 
-    let (Some(opaque_mat), Some(water_mat)) =
-        (blocks.material.clone(), blocks.translucent_material.clone())
-    else {
+    let (Some(opaque_mat), Some(water_mat)) = (blocks.material.clone(), blocks.translucent_material.clone()) else {
         return;
     };
     // Edits (put at the front by mesh_now) go first. Empty results cost nothing;
@@ -552,9 +478,7 @@ fn collect_meshes(
             later.push((p, version, m));
             continue;
         }
-        let Some(chunk) = world.chunks.get_mut(&p) else {
-            continue;
-        };
+        let Some(chunk) = world.chunks.get_mut(&p) else { continue };
         if version != chunk.version {
             continue; // changed while meshing; a newer mesh is coming
         }
@@ -569,13 +493,7 @@ fn collect_meshes(
             if let Some(mesh) = mesh {
                 uploads += 1;
                 chunk.entities.push(
-                    commands
-                        .spawn((
-                            Mesh3d(meshes.add(mesh)),
-                            MeshMaterial3d::<VoxelMaterial>(mat.clone()),
-                            tf,
-                        ))
-                        .id(),
+                    commands.spawn((Mesh3d(meshes.add(mesh)), MeshMaterial3d::<VoxelMaterial>(mat.clone()), tf)).id(),
                 );
             }
         }
@@ -583,34 +501,18 @@ fn collect_meshes(
         if let Some(mesh) = m.plants {
             uploads += 1;
             chunk.entities.push(
-                commands
-                    .spawn((
-                        Mesh3d(meshes.add(mesh)),
-                        MeshMaterial3d::<VoxelMaterial>(opaque_mat.clone()),
-                        tf,
-                        bevy::light::NotShadowCaster,
-                    ))
-                    .id(),
+                commands.spawn((Mesh3d(meshes.add(mesh)), MeshMaterial3d::<VoxelMaterial>(opaque_mat.clone()), tf, bevy::light::NotShadowCaster)).id(),
             );
         }
     }
     world.finished_meshes = later;
 
     stats.loaded = world.chunks.len();
-    stats.meshed = world
-        .chunks
-        .values()
-        .filter(|c| !c.entities.is_empty())
-        .count();
+    stats.meshed = world.chunks.values().filter(|c| !c.entities.is_empty()).count();
     stats.gen_in_flight = world.gen_tasks.len();
     stats.mesh_in_flight = world.mesh_tasks.len();
     stats.queued = world.gen_queue.len();
-    stats.chunk_kib = world
-        .chunks
-        .values()
-        .map(|c| c.data.heap_bytes())
-        .sum::<usize>()
-        / 1024;
+    stats.chunk_kib = world.chunks.values().map(|c| c.data.heap_bytes()).sum::<usize>() / 1024;
     stats.unsaved = world.chunks.values().filter(|c| c.modified).count();
 }
 

@@ -7,8 +7,8 @@ use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use voxel::BlockPos;
 
-use super::Inventory;
 use super::grid::Stack;
+use super::Inventory;
 use crate::blocks::Blocks;
 use crate::item_art::ItemArt;
 use crate::items::{ItemKind, Items};
@@ -22,10 +22,7 @@ pub struct WorldItemsPlugin;
 
 impl Plugin for WorldItemsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<Spill>().add_systems(
-            crate::menu::GameUpdate,
-            (spawn_spills, fall_and_spin, pick_up).chain(),
-        );
+        app.add_message::<Spill>().add_systems(crate::menu::GameUpdate, (spawn_spills, fall_and_spin, pick_up).chain());
     }
 }
 
@@ -58,50 +55,23 @@ fn spawn_spills(
 ) {
     for s in spills.read() {
         let item = items.get(s.stack.item);
-        let mut e = commands.spawn((
-            WorldItem {
-                stack: s.stack,
-                vel: 0.0,
-                age: 0.0,
-            },
-            Transform::from_translation(s.at),
-            NotShadowCaster,
-        ));
+        let mut e = commands.spawn((WorldItem { stack: s.stack, vel: 0.0, age: 0.0 }, Transform::from_translation(s.at), NotShadowCaster));
         match (&item.kind, &blocks.material) {
             // A block looks like a small copy of itself, every face textured.
             (ItemKind::Block(b), Some(voxel_mat)) => {
-                let mesh = block_cubes
-                    .entry(*b)
-                    .or_insert_with(|| {
-                        meshes.add(crate::hands::block_mesh(blocks.registry.get(*b), DROP_SIZE))
-                    })
-                    .clone();
+                let mesh = block_cubes.entry(*b).or_insert_with(|| meshes.add(crate::hands::block_mesh(blocks.registry.get(*b), DROP_SIZE))).clone();
                 e.insert((Mesh3d(mesh), MeshMaterial3d(voxel_mat.clone())));
             }
             // Anything else is its sprite, made solid, standing up.
-            _ => match (
-                art.as_ref().and_then(|a| a.model(s.stack.item)),
-                art.as_ref().and_then(|a| a.size(s.stack.item)),
-            ) {
+            _ => match (art.as_ref().and_then(|a| a.model(s.stack.item)), art.as_ref().and_then(|a| a.size(s.stack.item))) {
                 (Some((mesh, mat)), Some(size)) => {
                     let k = (DROP_SIZE * 1.6 / size.max_element() as f32).min(0.016);
-                    e.with_child((
-                        Mesh3d(mesh),
-                        MeshMaterial3d(mat),
-                        Transform::from_scale(Vec3::splat(k)),
-                        NotShadowCaster,
-                    ));
+                    e.with_child((Mesh3d(mesh), MeshMaterial3d(mat), Transform::from_scale(Vec3::splat(k)), NotShadowCaster));
                     e.insert(Visibility::default());
                 }
                 _ => {
-                    let mesh = cube
-                        .get_or_insert_with(|| {
-                            meshes.add(Cuboid::new(DROP_SIZE, DROP_SIZE, DROP_SIZE))
-                        })
-                        .clone();
-                    let mat = grey
-                        .get_or_insert_with(|| materials.add(Color::srgb(0.5, 0.45, 0.38)))
-                        .clone();
+                    let mesh = cube.get_or_insert_with(|| meshes.add(Cuboid::new(DROP_SIZE, DROP_SIZE, DROP_SIZE))).clone();
+                    let mat = grey.get_or_insert_with(|| materials.add(Color::srgb(0.5, 0.45, 0.38))).clone();
                     e.insert((Mesh3d(mesh), MeshMaterial3d(mat)));
                 }
             },
@@ -129,9 +99,7 @@ fn fall_and_spin(
         tf.rotate_y(dt * 1.2);
         // Rest on the block below; unloaded ground counts as solid.
         let below = BlockPos::from_world((tf.translation - Vec3::Y * 0.15).to_array());
-        let solid = world
-            .block(below)
-            .is_none_or(|b| blocks.registry.get(b).solid);
+        let solid = world.block(below).is_none_or(|b| blocks.registry.get(b).solid);
         if solid {
             wi.vel = 0.0;
             tf.translation.y = tf.translation.y.max(below.y as f32 + 1.15);

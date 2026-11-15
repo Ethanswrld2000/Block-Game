@@ -5,32 +5,32 @@ mod autoshot;
 mod bench;
 mod blocks;
 mod camera;
-mod chop;
 mod chunk_mesh;
 mod clock;
 mod clouds;
 mod creatures;
-mod debug;
-mod hands;
-mod hud;
-mod interact;
-mod inventory;
-mod item_art;
-mod items;
 mod lod;
 mod menu;
 mod places;
 mod player;
 mod precipitation;
 mod progress;
+mod debug;
+mod hands;
+mod hud;
+mod chop;
+mod interact;
+mod inventory;
+mod item_art;
+mod items;
 mod save;
 mod settings;
 mod sky;
 mod sound;
 mod station;
+mod theme;
 mod survival;
 mod swing;
-mod theme;
 mod torches;
 mod weather;
 mod weather_hud;
@@ -85,14 +85,6 @@ fn main() {
             survival::SurvivalPlugin,
             inventory::InventoryPlugin,
         ))
-        .add_plugins((
-            creatures::CreaturesPlugin,
-            places::PlacesPlugin,
-            progress::ProgressPlugin,
-            station::StationPlugin,
-            settings::SettingsPlugin,
-            sound::SoundPlugin,
-            bench::BenchPlugin,
-        ))
+        .add_plugins((creatures::CreaturesPlugin, places::PlacesPlugin, progress::ProgressPlugin, station::StationPlugin, settings::SettingsPlugin, sound::SoundPlugin, bench::BenchPlugin))
         .run();
 }

@@ -35,13 +35,7 @@ pub struct CampPlugin;
 impl Plugin for CampPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Sleep>()
-            .add_systems(
-                crate::menu::GameUpdate,
-                (bedroll_key, sleep_key, sleep)
-                    .chain()
-                    .before(SurvivalSet)
-                    .after(crate::player::PlayerSet),
-            )
+            .add_systems(crate::menu::GameUpdate, (bedroll_key, sleep_key, sleep).chain().before(SurvivalSet).after(crate::player::PlayerSet))
             .add_systems(crate::menu::GameUpdate, show_bedroll);
     }
 }
@@ -78,8 +72,7 @@ impl Camp {
     }
 
     pub fn near(&self, p: Vec3) -> bool {
-        self.bedroll
-            .is_some_and(|b| b.center().distance(p) <= CAMP_REACH)
+        self.bedroll.is_some_and(|b| b.center().distance(p) <= CAMP_REACH)
     }
 }
 
@@ -134,16 +127,8 @@ fn clear_patch(world: &World, blocks: &Blocks, c: BlockPos) -> bool {
     (0..2).all(|dx| {
         (0..2).all(|dz| {
             let p = BlockPos::new(c.x + dx, c.y, c.z + dz);
-            let open = |q: BlockPos| {
-                world.block(q).is_some_and(|b| {
-                    Some(b) != water
-                        && !blocks.registry.get(b).solid
-                        && blocks.registry.get(b).shape != voxel::Shape::Torch
-                })
-            };
-            open(p)
-                && open(BlockPos::new(p.x, p.y + 1, p.z))
-                && solid(BlockPos::new(p.x, p.y - 1, p.z)) == Some(true)
+            let open = |q: BlockPos| world.block(q).is_some_and(|b| Some(b) != water && !blocks.registry.get(b).solid && blocks.registry.get(b).shape != voxel::Shape::Torch);
+            open(p) && open(BlockPos::new(p.x, p.y + 1, p.z)) && solid(BlockPos::new(p.x, p.y - 1, p.z)) == Some(true)
         })
     })
 }
@@ -161,11 +146,7 @@ fn bedroll_key(
     mut camp: ResMut<Camp>,
     mut toast: MessageWriter<Toast>,
 ) {
-    if !keys.just_pressed(KeyCode::KeyB)
-        || *mode != MoveMode::Walk
-        || sleep.active()
-        || s.vitals.health.is_dead()
-    {
+    if !keys.just_pressed(KeyCode::KeyB) || *mode != MoveMode::Walk || sleep.active() || s.vitals.health.is_dead() {
         return;
     }
     if let Some(b) = camp.bedroll {
@@ -174,10 +155,7 @@ fn bedroll_key(
             toast.write(Toast("Rolled up the bedroll".into()));
         } else {
             let c = b.center();
-            toast.write(Toast(format!(
-                "Your bedroll is at {:.0}, {:.0}: go back to roll it up",
-                c.x, c.z
-            )));
+            toast.write(Toast(format!("Your bedroll is at {:.0}, {:.0}: go back to roll it up", c.x, c.z)));
         }
         return;
     }
@@ -197,17 +175,12 @@ fn bedroll_key(
     for dy in [0, 1, -1] {
         let corner = BlockPos::new(cx - 1, y + dy, cz - 1);
         if clear_patch(&world, &blocks, corner) {
-            camp.bedroll = Some(Bedroll {
-                pos: (cx as f32, (y + dy) as f32, cz as f32),
-                along_x,
-            });
+            camp.bedroll = Some(Bedroll { pos: (cx as f32, (y + dy) as f32, cz as f32), along_x });
             toast.write(Toast("Camp made: you'll wake here".into()));
             return;
         }
     }
-    toast.write(Toast(
-        "Needs a clear, flat 2x2 patch in front of you".into(),
-    ));
+    toast.write(Toast("Needs a clear, flat 2x2 patch in front of you".into()));
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -221,11 +194,7 @@ fn sleep_key(
     mut sleep: ResMut<Sleep>,
     mut toast: MessageWriter<Toast>,
 ) {
-    if !keys.just_pressed(KeyCode::KeyZ)
-        || *mode != MoveMode::Walk
-        || sleep.active()
-        || s.vitals.health.is_dead()
-    {
+    if !keys.just_pressed(KeyCode::KeyZ) || *mode != MoveMode::Walk || sleep.active() || s.vitals.health.is_dead() {
         return;
     }
     if camp.bedroll.is_none() {
@@ -233,14 +202,9 @@ fn sleep_key(
     } else if !camp.near(player.pos) {
         toast.write(Toast("Too far from your bedroll".into()));
     } else if !(is_night(clock.hour()) || s.vitals.health.get(Layer::Fatigue) < EXHAUSTED) {
-        toast.write(Toast(
-            "You can only sleep at night, or when worn out".into(),
-        ));
+        toast.write(Toast("You can only sleep at night, or when worn out".into()));
     } else {
-        *sleep = Sleep {
-            t: Some(0.0),
-            slept: false,
-        };
+        *sleep = Sleep { t: Some(0.0), slept: false };
     }
 }
 
@@ -291,11 +255,7 @@ fn sleep(
             player.pos = p;
             player.vel = Vec3::ZERO;
         }
-        let note = if s.vitals.health.mortal().is_some() {
-            " Your wounds still need treating."
-        } else {
-            ""
-        };
+        let note = if s.vitals.health.mortal().is_some() { " Your wounds still need treating." } else { "" };
         let bed = match (camp.bed.frame, camp.bed.double) {
             (_, true) => " Warm under the furs of the double bed.",
             (true, false) => " The bedframe kept you off the wet ground.",
@@ -308,12 +268,7 @@ fn sleep(
     }
 }
 
-type BedrollAssets = (
-    Handle<Mesh>,
-    Handle<Mesh>,
-    Handle<StandardMaterial>,
-    Handle<StandardMaterial>,
-);
+type BedrollAssets = (Handle<Mesh>, Handle<Mesh>, Handle<StandardMaterial>, Handle<StandardMaterial>);
 
 /// Keep a bedroll model where the camp is.
 fn show_bedroll(
@@ -335,42 +290,17 @@ fn show_bedroll(
             (
                 meshes.add(Cuboid::new(0.9, 0.12, 1.9)),
                 meshes.add(Cuboid::new(0.72, 0.14, 0.36)),
-                materials.add(StandardMaterial {
-                    base_color: Color::srgb(0.33, 0.4, 0.22),
-                    perceptual_roughness: 1.0,
-                    ..default()
-                }),
-                materials.add(StandardMaterial {
-                    base_color: Color::srgb(0.78, 0.72, 0.58),
-                    perceptual_roughness: 1.0,
-                    ..default()
-                }),
+                materials.add(StandardMaterial { base_color: Color::srgb(0.33, 0.4, 0.22), perceptual_roughness: 1.0, ..default() }),
+                materials.add(StandardMaterial { base_color: Color::srgb(0.78, 0.72, 0.58), perceptual_roughness: 1.0, ..default() }),
             )
         })
         .clone();
-    let rot = if b.along_x {
-        Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)
-    } else {
-        Quat::IDENTITY
-    };
+    let rot = if b.along_x { Quat::from_rotation_y(std::f32::consts::FRAC_PI_2) } else { Quat::IDENTITY };
     let e = commands
-        .spawn((
-            Transform::from_translation(b.center()).with_rotation(rot),
-            Visibility::default(),
-        ))
+        .spawn((Transform::from_translation(b.center()).with_rotation(rot), Visibility::default()))
         .with_children(|c| {
-            c.spawn((
-                Mesh3d(roll),
-                MeshMaterial3d(cloth),
-                Transform::from_xyz(0.0, 0.06, 0.0),
-                NotShadowCaster,
-            ));
-            c.spawn((
-                Mesh3d(pillow),
-                MeshMaterial3d(linen),
-                Transform::from_xyz(0.0, 0.14, -0.72),
-                NotShadowCaster,
-            ));
+            c.spawn((Mesh3d(roll), MeshMaterial3d(cloth), Transform::from_xyz(0.0, 0.06, 0.0), NotShadowCaster));
+            c.spawn((Mesh3d(pillow), MeshMaterial3d(linen), Transform::from_xyz(0.0, 0.14, -0.72), NotShadowCaster));
         })
         .id();
     camp.entity = Some((e, b));
@@ -383,16 +313,8 @@ mod tests {
     #[test]
     fn better_beds_rest_you_more() {
         let none = Bed::default().rest();
-        let frame = Bed {
-            frame: true,
-            double: false,
-        }
-        .rest();
-        let double = Bed {
-            frame: true,
-            double: true,
-        }
-        .rest();
+        let frame = Bed { frame: true, double: false }.rest();
+        let double = Bed { frame: true, double: true }.rest();
         assert!(none.0 < frame.0 && frame.0 < double.0);
         assert!(none.2.is_none() && frame.2 < double.2);
     }

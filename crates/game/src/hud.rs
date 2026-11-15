@@ -4,14 +4,14 @@
 
 use bevy::prelude::*;
 
-use crate::interact::{Hands, Hotbar, SLOTS, Wielded};
-use crate::inventory::Inventory;
+use crate::interact::{Hands, Hotbar, Wielded, SLOTS};
 use crate::inventory::grid::Stack;
 use crate::inventory::ui::icon;
 use crate::item_art::ItemArt;
+use crate::inventory::Inventory;
 use crate::items::Items;
 use crate::player::Damage;
-use crate::theme::{self, Theme, colors, sizes};
+use crate::theme::{self, colors, sizes, Theme};
 
 pub struct HudPlugin;
 
@@ -35,8 +35,7 @@ impl Plugin for HudPlugin {
             ))
             .id();
         app.insert_resource(TopRight(top_right));
-        app.add_systems(crate::menu::GamePostStartup, spawn_hud)
-            .add_systems(crate::menu::GameUpdate, (update_hotbar, hurt_flash));
+        app.add_systems(crate::menu::GamePostStartup, spawn_hud).add_systems(crate::menu::GameUpdate, (update_hotbar, hurt_flash));
     }
 }
 
@@ -67,12 +66,7 @@ fn spawn_hud(mut commands: Commands, hotbar: Option<Res<Hotbar>>, theme: Res<The
     }
     commands.spawn((
         HurtFlash,
-        Node {
-            position_type: PositionType::Absolute,
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            ..default()
-        },
+        Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
         BackgroundColor(Color::srgba(0.7, 0.0, 0.0, 0.0)),
         Pickable::IGNORE,
     ));
@@ -87,51 +81,15 @@ fn spawn_hud(mut commands: Commands, hotbar: Option<Res<Hotbar>>, theme: Res<The
             ..default()
         })
         .with_children(|root| {
-            root.spawn((
-                HandsLine,
-                theme::text("", sizes::LABEL, colors::TEXT),
-                Node {
-                    margin: UiRect::bottom(Val::Px(20.0)),
-                    ..default()
-                },
-            ));
-            root.spawn((
-                Node {
-                    column_gap: Val::Px(2.0),
-                    padding: UiRect::all(Val::Px(6.0)),
-                    ..default()
-                },
-                theme.skin("panel_light"),
-            ))
-            .with_children(|row| {
+            root.spawn((HandsLine, theme::text("", sizes::LABEL, colors::TEXT), Node { margin: UiRect::bottom(Val::Px(20.0)), ..default() }));
+            root.spawn((Node { column_gap: Val::Px(2.0), padding: UiRect::all(Val::Px(6.0)), ..default() }, theme.skin("panel_light"))).with_children(|row| {
                 for i in 0..SLOTS {
-                    row.spawn((
-                        Slot(i),
-                        Node {
-                            width: Val::Px(SLOT),
-                            height: Val::Px(SLOT),
-                            ..default()
-                        },
-                        theme.skin("slot"),
-                    ))
-                    .with_children(|s| {
+                    row.spawn((Slot(i), Node { width: Val::Px(SLOT), height: Val::Px(SLOT), ..default() }, theme.skin("slot"))).with_children(|s| {
                         // The picture, with the slot number over its top-left corner.
-                        s.spawn((
-                            SlotContent(i),
-                            Node {
-                                width: Val::Percent(100.0),
-                                height: Val::Percent(100.0),
-                                ..default()
-                            },
-                        ));
+                        s.spawn((SlotContent(i), Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() }));
                         s.spawn((
                             theme::text(format!("{}", i + 1), sizes::SMALL, colors::MUTED),
-                            Node {
-                                position_type: PositionType::Absolute,
-                                left: Val::Px(5.0),
-                                top: Val::Px(2.0),
-                                ..default()
-                            },
+                            Node { position_type: PositionType::Absolute, left: Val::Px(5.0), top: Val::Px(2.0), ..default() },
                             GlobalZIndex(1),
                         ));
                     });
@@ -144,13 +102,7 @@ fn spawn_hud(mut commands: Commands, hotbar: Option<Res<Hotbar>>, theme: Res<The
 fn update_hotbar(
     mut commands: Commands,
     theme: Res<Theme>,
-    (hands, hotbar, items, inv, wielded): (
-        Res<Hands>,
-        Res<Hotbar>,
-        Res<Items>,
-        Res<Inventory>,
-        Res<Wielded>,
-    ),
+    (hands, hotbar, items, inv, wielded): (Res<Hands>, Res<Hotbar>, Res<Items>, Res<Inventory>, Res<Wielded>),
     art: Option<Res<ItemArt>>,
     mut slots: Query<(&Slot, &mut ImageNode)>,
     contents: Query<(Entity, &SlotContent)>,
@@ -158,55 +110,26 @@ fn update_hotbar(
     mut ready: Local<bool>,
 ) {
     let Some(art) = art else { return };
-    if *ready
-        && !(hands.is_changed() || hotbar.is_changed() || inv.is_changed() || wielded.is_changed())
-    {
+    if *ready && !(hands.is_changed() || hotbar.is_changed() || inv.is_changed() || wielded.is_changed()) {
         return;
     }
     *ready = true;
     for (e, c) in &contents {
         commands.entity(e).despawn_related::<Children>();
-        let Some(id) = hotbar.slots.get(c.0).copied().flatten() else {
-            continue;
-        };
+        let Some(id) = hotbar.slots.get(c.0).copied().flatten() else { continue };
         let n = inv.count(id);
         commands.entity(e).with_children(|p| {
             // Dim the picture when you have none left.
-            p.spawn(Node {
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                ..default()
-            })
-            .with_children(|q| {
-                icon(
-                    q,
-                    &items,
-                    &art,
-                    Stack::new(id, n.clamp(1, u16::MAX as u32) as u16),
-                    SLOT,
-                    SLOT,
-                    false,
-                );
+            p.spawn(Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() }).with_children(|q| {
+                icon(q, &items, &art, Stack::new(id, n.clamp(1, u16::MAX as u32) as u16), SLOT, SLOT, false);
             });
             if n == 0 {
-                p.spawn((
-                    Node {
-                        position_type: PositionType::Absolute,
-                        width: Val::Percent(100.0),
-                        height: Val::Percent(100.0),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6)),
-                ));
+                p.spawn((Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() }, BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.6))));
             }
         });
     }
     for (s, mut img) in &mut slots {
-        *img = theme.image(if hands.right == Some(s.0) {
-            "slot_selected"
-        } else {
-            "slot"
-        });
+        *img = theme.image(if hands.right == Some(s.0) { "slot_selected" } else { "slot" });
     }
     if let Ok(mut l) = line.single_mut() {
         l.0 = match wielded.0 {
@@ -216,14 +139,8 @@ fn update_hotbar(
     }
 }
 
-fn hurt_flash(
-    time: Res<Time>,
-    mut hits: MessageReader<Damage>,
-    mut flash: Query<&mut BackgroundColor, With<HurtFlash>>,
-) {
-    let Ok(mut bg) = flash.single_mut() else {
-        return;
-    };
+fn hurt_flash(time: Res<Time>, mut hits: MessageReader<Damage>, mut flash: Query<&mut BackgroundColor, With<HurtFlash>>) {
+    let Ok(mut bg) = flash.single_mut() else { return };
     let mut a = bg.0.alpha();
     for d in hits.read() {
         a = (a + 0.25 + d.amount * 0.03).min(0.6);
