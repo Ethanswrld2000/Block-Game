@@ -20,7 +20,8 @@ use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
-use super::bench::{slots_of, BenchData, Board, SlotDef, SlotKind, Special, Work};
+use super::bench::{BenchData, Board, SlotDef, SlotKind, Special, Work, slots_of};
+use super::models::{self, ToolUse};
 use super::{Edges, Station, StationKind, Urns};
 use crate::camera::{FlyCamera, Menus};
 use crate::interact::ray_box;
@@ -31,7 +32,7 @@ use crate::items::{ItemId, Items};
 use crate::player::{MoveMode, Player};
 use crate::sound::PlaySound;
 use crate::survival::Toast;
-use crate::theme::{colors, sizes, Theme};
+use crate::theme::{Theme, colors, sizes};
 
 /// Benches with a board, and their names in urns.ron / benches.ron.
 pub(super) fn board_name(kind: StationKind) -> Option<&'static str> {
@@ -79,6 +80,83 @@ pub struct AtBench {
     spin_to: f32,
     /// What the magical lens showed last, until the board changes.
     study: Option<String>,
+    /// Which of the bench's views you look from.
+    view_i: usize,
+    /// The bench's tool in your hand, or turning in place.
+    pub tool: ToolHand,
+}
+
+/// The bench's tool: lifted off the bench (it follows the cursor), how far
+/// a swing has got, how far a wheel or knob has turned, and goes done.
+#[derive(Default)]
+pub struct ToolHand {
+    pub held: bool,
+    /// Where its working end is, in the bench's frame.
+    pos: Option<Vec3>,
+    /// A swing under way (0..1).
+    swing: Option<f32>,
+    /// A wheel or knob: how far it has turned, and where it's going.
+    turn: f32,
+    turn_to: f32,
+    /// Stirring or sawing with the button held.
+    gesture: Gesture,
+    /// The button has been let go since the tool was picked up.
+    armed: bool,
+    /// Goes worked this frame, for `board_click` to count.
+    go: u32,
+    /// Screenshots: hold the swing at this point, or press the tool down.
+    freeze: Option<f32>,
+    down: bool,
+}
+
+/// A stir is a full turn round the pot (either way, but not back and
+/// forth); a stroke of the saw is `SAW_STROKE` of travel.
+#[derive(Default, Clone, Copy, Debug)]
+pub(super) struct Gesture {
+    last: Option<f32>,
+    sum: f32,
+}
+
+/// How far the saw travels for one stroke (bench lengths).
+pub(super) const SAW_STROKE: f32 = 0.3;
+
+impl Gesture {
+    /// The tool's angle round the pot's middle; returns stirs done and how far it moved.
+    pub(super) fn stir(&mut self, angle: f32) -> (u32, f32) {
+        let mut d = 0.0;
+        if let Some(l) = self.last {
+            d = (angle - l + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
+                - std::f32::consts::PI;
+            self.sum += d;
+        }
+        self.last = Some(angle);
+        let n = (self.sum.abs() / std::f32::consts::TAU) as u32;
+        self.sum -= self.sum.signum() * std::f32::consts::TAU * n as f32;
+        (n, d)
+    }
+
+    /// The saw's place along the bench; returns strokes done.
+    pub(super) fn saw(&mut self, x: f32) -> u32 {
+        if let Some(l) = self.last {
+            self.sum += (x - l).abs();
+        }
+        self.last = Some(x);
+        let n = (self.sum / SAW_STROKE) as u32;
+        self.sum -= n as f32 * SAW_STROKE;
+        n
+    }
+
+    /// The button went up: the next press starts afresh (what was done so far stays).
+    pub(super) fn lift(&mut self) {
+        self.last = None;
+    }
+}
+
+/// A bench's tool model (child of the station's models): where it rests and how it's worked.
+#[derive(Component)]
+pub struct BenchTool {
+    pub rest: Vec3,
+    pub how: ToolUse,
 }
 
 impl AtBench {
@@ -90,7 +168,9 @@ impl AtBench {
     pub fn enter(&mut self, st: Station, eye: Vec3) {
         let local = rotation(&st).inverse() * (eye - st.pos);
         self.side = if local.z < 0.0 { -1.0 } else { 1.0 };
-        self.view = Some(board_view(&st, self.side));
+        self.view_i = 0;
+        self.view = Some(board_view(&st, self.side, 0));
+        self.tool = ToolHand::default();
         self.station = Some(st);
         self.dirty = true;
         self.note = None;
@@ -107,10 +187,12 @@ pub(super) struct Layout {
     tool: (Vec3, Vec3),
     /// Where a finished thing lies: centre, half size, height.
     made: (Vec2, Vec2, f32),
-    /// The view: how high above the top and how far out to the side.
-    view: (f32, f32),
-    /// "Knock the strike stone", and what one go is called ("knock").
+    /// Where you can look from: the first is where you start; W / S switch.
+    views: &'static [View],
+    /// "Strike with the hammerstone", and what one go is called ("blow").
     work: (&'static str, &'static str),
+    /// What the bench's tool is called ("hammerstone").
+    tool_name: &'static str,
     /// The sound of one go.
     sound: &'static str,
     /// How big things look lying here (1 = as on the tool bench).
@@ -121,13 +203,30 @@ pub(super) struct Layout {
 
 const TOOL_BENCH: Layout = Layout {
     slots: &[
-        ("handle", Vec2::new(-0.15, -0.12), Vec2::new(0.34, 0.11), 0.833, "in the groove"),
-        ("material", Vec2::new(0.32, 0.12), Vec2::new(0.17, 0.17), 0.833, "in the hollow"),
+        (
+            "handle",
+            Vec2::new(-0.15, -0.12),
+            Vec2::new(0.34, 0.11),
+            0.833,
+            "in the groove",
+        ),
+        (
+            "material",
+            Vec2::new(0.32, 0.12),
+            Vec2::new(0.17, 0.17),
+            0.833,
+            "in the hollow",
+        ),
     ],
     tool: (Vec3::new(0.31, 0.82, -0.33), Vec3::new(0.53, 0.96, -0.15)),
     made: (Vec2::new(-0.2, 0.17), Vec2::new(0.28, 0.13), 0.833),
-    view: (0.95, 0.62),
-    work: ("Knock the strike stone", "knock"),
+    views: &[view(
+        "the bench",
+        Vec3::new(0.0, 0.833, 0.04),
+        Vec3::new(0.0, 0.95, 0.62),
+    )],
+    work: ("Strike with the hammerstone", "blow"),
+    tool_name: "hammerstone",
     sound: "dig_hard",
     scale: 1.0,
     pot: Vec2::ZERO,
@@ -135,13 +234,30 @@ const TOOL_BENCH: Layout = Layout {
 
 const CARPENTRY_BENCH: Layout = Layout {
     slots: &[
-        ("bed", Vec2::new(-0.25, 0.0), Vec2::new(0.42, 0.18), 0.846, "on the bed"),
-        ("vise", Vec2::new(0.72, 0.0), Vec2::new(0.12, 0.17), 1.04, "in the vise"),
+        (
+            "bed",
+            Vec2::new(-0.25, 0.0),
+            Vec2::new(0.42, 0.18),
+            0.846,
+            "on the bed",
+        ),
+        (
+            "vise",
+            Vec2::new(0.72, 0.0),
+            Vec2::new(0.12, 0.17),
+            1.04,
+            "in the vise",
+        ),
     ],
     tool: (Vec3::new(-0.25, 0.83, -0.38), Vec3::new(0.42, 0.93, -0.22)),
     made: (Vec2::new(0.2, 0.3), Vec2::new(0.25, 0.1), 0.846),
-    view: (1.25, 0.8),
+    views: &[view(
+        "the bench",
+        Vec3::new(0.0, 0.846, 0.04),
+        Vec3::new(0.0, 1.25, 0.8),
+    )],
     work: ("Saw", "stroke of the saw"),
+    tool_name: "saw",
     sound: "dig_wood",
     scale: 1.0,
     pot: Vec2::ZERO,
@@ -151,13 +267,30 @@ const CARPENTRY_BENCH: Layout = Layout {
 /// the flat knapping stone is what you knock.
 const CAMP_MAT: Layout = Layout {
     slots: &[
-        ("base", Vec2::new(-0.22, 0.05), Vec2::new(0.28, 0.24), 0.035, "on the mat"),
-        ("tie", Vec2::new(0.22, -0.2), Vec2::new(0.16, 0.13), 0.035, "by the cord"),
+        (
+            "base",
+            Vec2::new(-0.22, 0.05),
+            Vec2::new(0.28, 0.24),
+            0.035,
+            "on the mat",
+        ),
+        (
+            "tie",
+            Vec2::new(0.22, -0.2),
+            Vec2::new(0.16, 0.13),
+            0.035,
+            "by the cord",
+        ),
     ],
-    tool: (Vec3::new(0.21, 0.0, 0.1), Vec3::new(0.49, 0.16, 0.36)),
+    tool: (Vec3::new(0.21, 0.0, 0.1), Vec3::new(0.49, 0.22, 0.36)),
     made: (Vec2::new(-0.22, -0.33), Vec2::new(0.26, 0.08), 0.035),
-    view: (1.05, 0.6),
-    work: ("Knock the knapping stone", "knock"),
+    views: &[view(
+        "the mat",
+        Vec3::new(0.0, 0.035, 0.04),
+        Vec3::new(0.0, 1.05, 0.6),
+    )],
+    work: ("Strike with the hammerstone", "blow"),
+    tool_name: "hammerstone",
     sound: "dig_hard",
     scale: 1.0,
     pot: Vec2::ZERO,
@@ -166,23 +299,65 @@ const CAMP_MAT: Layout = Layout {
 /// Where the cooking pot's mouth is, in its own frame (see `models`).
 const POT: Vec2 = Vec2::new(0.06, 0.0);
 /// The broth's surface, where things float.
-const BROTH: f32 = 0.614;
+const BROTH: f32 = 0.48;
 
 /// The cooking pot: four quarters of the pot's mouth (one kind of thing in
 /// each; clicking anywhere on the pot fills them in turn), the fire's mouth
 /// beside it, and the ladle on its stone.
 const COOKING_POT: Layout = Layout {
     slots: &[
-        ("pot_1", Vec2::new(POT.x - 0.11, -0.11), Vec2::new(0.11, 0.11), BROTH, "in the pot"),
-        ("pot_2", Vec2::new(POT.x + 0.11, -0.11), Vec2::new(0.11, 0.11), BROTH, "in the pot"),
-        ("pot_3", Vec2::new(POT.x - 0.11, 0.11), Vec2::new(0.11, 0.11), BROTH, "in the pot"),
-        ("pot_4", Vec2::new(POT.x + 0.11, 0.11), Vec2::new(0.11, 0.11), BROTH, "in the pot"),
-        ("fire", Vec2::new(-0.47, 0.0), Vec2::new(0.17, 0.16), 0.035, "in the fire"),
+        (
+            "pot_1",
+            Vec2::new(POT.x - 0.11, -0.11),
+            Vec2::new(0.11, 0.11),
+            BROTH,
+            "in the pot",
+        ),
+        (
+            "pot_2",
+            Vec2::new(POT.x + 0.11, -0.11),
+            Vec2::new(0.11, 0.11),
+            BROTH,
+            "in the pot",
+        ),
+        (
+            "pot_3",
+            Vec2::new(POT.x - 0.11, 0.11),
+            Vec2::new(0.11, 0.11),
+            BROTH,
+            "in the pot",
+        ),
+        (
+            "pot_4",
+            Vec2::new(POT.x + 0.11, 0.11),
+            Vec2::new(0.11, 0.11),
+            BROTH,
+            "in the pot",
+        ),
+        (
+            "fire",
+            Vec2::new(-0.47, 0.0),
+            Vec2::new(0.17, 0.16),
+            0.035,
+            "in the fire",
+        ),
     ],
     tool: (Vec3::new(0.49, 0.0, -0.2), Vec3::new(0.71, 0.16, 0.22)),
     made: (POT, Vec2::new(0.21, 0.21), BROTH),
-    view: (0.85, 0.6),
+    views: &[
+        view(
+            "the pot",
+            Vec3::new(POT.x, BROTH, 0.04),
+            Vec3::new(0.05, 0.8, 0.42),
+        ),
+        view(
+            "the fire",
+            Vec3::new(-0.42, 0.035, 0.0),
+            Vec3::new(0.1, 0.85, 0.42),
+        ),
+    ],
     work: ("Stir with the ladle", "stir"),
+    tool_name: "ladle",
     sound: "stir",
     scale: 0.75,
     pot: POT,
@@ -191,11 +366,22 @@ const COOKING_POT: Layout = Layout {
 /// The cutting board: what you cut lies on the board, the knife along the
 /// back, and the cut pieces go into the dish.
 const CUTTING_BOARD: Layout = Layout {
-    slots: &[("board", Vec2::new(-0.14, -0.02), Vec2::new(0.24, 0.2), 0.48, "on the board")],
+    slots: &[(
+        "board",
+        Vec2::new(-0.14, -0.02),
+        Vec2::new(0.24, 0.2),
+        0.48,
+        "on the board",
+    )],
     tool: (Vec3::new(0.02, 0.46, 0.15), Vec3::new(0.42, 0.53, 0.24)),
     made: (Vec2::new(0.26, -0.08), Vec2::new(0.13, 0.13), 0.512),
-    view: (0.8, 0.55),
+    views: &[view(
+        "the board",
+        Vec3::new(0.0, 0.512, 0.04),
+        Vec3::new(0.0, 0.8, 0.55),
+    )],
     work: ("Cut with the knife", "cut"),
+    tool_name: "knife",
     sound: "knife",
     scale: 0.85,
     pot: Vec2::ZERO,
@@ -205,13 +391,37 @@ const CUTTING_BOARD: Layout = Layout {
 /// at the end, and the reed fan on the ground works the smoke.
 const SMOKING_RACK: Layout = Layout {
     slots: &[
-        ("rack", Vec2::new(-0.05, 0.0), Vec2::new(0.42, 0.17), 1.02, "on the rack"),
-        ("fire", Vec2::new(0.65, 0.0), Vec2::new(0.15, 0.15), 0.035, "in the fire"),
+        (
+            "rack",
+            Vec2::new(-0.05, 0.0),
+            Vec2::new(0.42, 0.17),
+            1.02,
+            "on the rack",
+        ),
+        (
+            "fire",
+            Vec2::new(0.65, 0.0),
+            Vec2::new(0.15, 0.15),
+            0.035,
+            "in the fire",
+        ),
     ],
-    tool: (Vec3::new(-0.89, 0.0, -0.12), Vec3::new(-0.61, 0.08, 0.28)),
+    tool: (Vec3::new(0.38, 0.0, 0.3), Vec3::new(0.8, 0.08, 0.54)),
     made: (Vec2::new(-0.05, 0.0), Vec2::new(0.42, 0.17), 1.02),
-    view: (0.8, 0.7),
+    views: &[
+        view(
+            "the rack",
+            Vec3::new(0.0, 1.02, 0.04),
+            Vec3::new(0.0, 0.8, 0.7),
+        ),
+        view(
+            "the fire",
+            Vec3::new(0.62, 0.035, 0.15),
+            Vec3::new(0.0, 0.85, 0.45),
+        ),
+    ],
     work: ("Fan the smoke", "wave of the fan"),
+    tool_name: "fan",
     sound: "swing",
     scale: 1.0,
     pot: Vec2::ZERO,
@@ -221,14 +431,37 @@ const SMOKING_RACK: Layout = Layout {
 /// on the bench beside it, and the hammer on the bench.
 const IRON_ANVIL: Layout = Layout {
     slots: &[
-        ("anvil", Vec2::new(0.1, 0.0), Vec2::new(0.27, 0.14), 0.78, "on the anvil"),
-        ("flux", Vec2::new(-0.6, 0.16), Vec2::new(0.16, 0.08), 0.545, "in the flux tray"),
-        ("handle", Vec2::new(-0.6, -0.02), Vec2::new(0.22, 0.09), 0.525, "on the bench"),
+        (
+            "anvil",
+            Vec2::new(0.1, 0.0),
+            Vec2::new(0.27, 0.14),
+            0.78,
+            "on the anvil",
+        ),
+        (
+            "flux",
+            Vec2::new(-0.6, 0.16),
+            Vec2::new(0.16, 0.08),
+            0.545,
+            "in the flux tray",
+        ),
+        (
+            "handle",
+            Vec2::new(-0.6, -0.02),
+            Vec2::new(0.22, 0.09),
+            0.525,
+            "on the bench",
+        ),
     ],
     tool: (Vec3::new(-0.8, 0.5, -0.25), Vec3::new(-0.45, 0.62, -0.13)),
     made: (Vec2::new(0.1, 0.0), Vec2::new(0.27, 0.14), 0.78),
-    view: (1.0, 0.65),
+    views: &[view(
+        "the anvil",
+        Vec3::new(0.0, 0.78, 0.04),
+        Vec3::new(0.0, 1.0, 0.65),
+    )],
     work: ("Strike with the hammer", "blow of the hammer"),
+    tool_name: "hammer",
     sound: "dig_hard",
     scale: 1.0,
     pot: Vec2::ZERO,
@@ -237,24 +470,46 @@ const IRON_ANVIL: Layout = Layout {
 /// The sharpening stone: a tool on the rest in front of the wheel; you turn
 /// the wheel, and it comes back sharp where it lay.
 const SHARPENING_STONE: Layout = Layout {
-    slots: &[("edge", Vec2::new(0.2, 0.13), Vec2::new(0.19, 0.11), 0.53, "on the rest")],
+    slots: &[(
+        "edge",
+        Vec2::new(0.2, 0.13),
+        Vec2::new(0.19, 0.11),
+        0.53,
+        "on the rest",
+    )],
     tool: (Vec3::new(-0.13, 0.52, -0.29), Vec3::new(0.03, 1.04, 0.25)),
     made: (Vec2::new(0.2, 0.13), Vec2::new(0.19, 0.11), 0.53),
-    view: (0.8, 0.62),
+    views: &[view(
+        "the wheel",
+        Vec3::new(0.0, 0.53, 0.04),
+        Vec3::new(0.0, 0.8, 0.62),
+    )],
     work: ("Turn the wheel", "turn of the wheel"),
+    tool_name: "wheel",
     sound: "dig_hard",
     scale: 0.8,
     pot: Vec2::ZERO,
 };
 
 /// The magical lens: something on the plate under the crystal ring, and the
-/// focusing knob on top of the post.
+/// focusing dial beside the plate.
 const MAGICAL_LENS: Layout = Layout {
-    slots: &[("plate", Vec2::new(0.0, 0.0), Vec2::new(0.2, 0.2), 0.095, "on the plate")],
-    tool: (Vec3::new(-0.36, 0.74, -0.24), Vec3::new(-0.24, 0.86, -0.12)),
+    slots: &[(
+        "plate",
+        Vec2::new(0.0, 0.0),
+        Vec2::new(0.2, 0.2),
+        0.095,
+        "on the plate",
+    )],
+    tool: (Vec3::new(-0.37, 0.08, -0.07), Vec3::new(-0.23, 0.26, 0.07)),
     made: (Vec2::new(0.0, 0.0), Vec2::new(0.2, 0.2), 0.095),
-    view: (0.95, 0.55),
-    work: ("Turn the focusing knob", "turn of the knob"),
+    views: &[view(
+        "the plate",
+        Vec3::new(0.0, 0.095, 0.04),
+        Vec3::new(0.0, 0.95, 0.55),
+    )],
+    work: ("Turn the focusing dial", "turn of the dial"),
+    tool_name: "focusing dial",
     sound: "spell_off",
     scale: 1.0,
     pot: Vec2::ZERO,
@@ -262,21 +517,57 @@ const MAGICAL_LENS: Layout = Layout {
 
 /// Where the cauldron's mouth is, and the brew's surface.
 const CAULDRON_AT: Vec2 = Vec2::new(0.08, 0.0);
-const BREW: f32 = 0.64;
+const BREW: f32 = 0.56;
 
 /// The cauldron: three parts of the brew across its mouth (clicking anywhere
 /// on it fills them in turn), the fire's mouth at -x, and the paddle at +x.
 const CAULDRON: Layout = Layout {
     slots: &[
-        ("brew_1", Vec2::new(CAULDRON_AT.x - 0.17, 0.0), Vec2::new(0.085, 0.25), BREW, "in the cauldron"),
-        ("brew_2", Vec2::new(CAULDRON_AT.x, 0.0), Vec2::new(0.085, 0.25), BREW, "in the cauldron"),
-        ("brew_3", Vec2::new(CAULDRON_AT.x + 0.17, 0.0), Vec2::new(0.085, 0.25), BREW, "in the cauldron"),
-        ("fire", Vec2::new(-0.47, 0.0), Vec2::new(0.15, 0.15), 0.035, "in the fire"),
+        (
+            "brew_1",
+            Vec2::new(CAULDRON_AT.x - 0.17, 0.0),
+            Vec2::new(0.085, 0.25),
+            BREW,
+            "in the cauldron",
+        ),
+        (
+            "brew_2",
+            Vec2::new(CAULDRON_AT.x, 0.0),
+            Vec2::new(0.085, 0.25),
+            BREW,
+            "in the cauldron",
+        ),
+        (
+            "brew_3",
+            Vec2::new(CAULDRON_AT.x + 0.17, 0.0),
+            Vec2::new(0.085, 0.25),
+            BREW,
+            "in the cauldron",
+        ),
+        (
+            "fire",
+            Vec2::new(-0.47, 0.0),
+            Vec2::new(0.15, 0.15),
+            0.035,
+            "in the fire",
+        ),
     ],
     tool: (Vec3::new(0.51, 0.0, -0.2), Vec3::new(0.73, 0.16, 0.22)),
     made: (CAULDRON_AT, Vec2::new(0.25, 0.25), BREW),
-    view: (0.85, 0.6),
+    views: &[
+        view(
+            "the cauldron",
+            Vec3::new(CAULDRON_AT.x, BREW, 0.04),
+            Vec3::new(0.05, 0.85, 0.42),
+        ),
+        view(
+            "the fire",
+            Vec3::new(-0.42, 0.035, 0.0),
+            Vec3::new(0.1, 0.85, 0.42),
+        ),
+    ],
     work: ("Stir with the paddle", "stir"),
+    tool_name: "paddle",
     sound: "stir",
     scale: 0.75,
     pot: CAULDRON_AT,
@@ -299,7 +590,12 @@ pub(super) fn layout(kind: StationKind) -> &'static Layout {
 
 impl Layout {
     fn slot(&self, name: &str) -> (Vec2, Vec2, f32, &'static str) {
-        self.slots.iter().find(|s| s.0 == name).map_or((Vec2::ZERO, Vec2::ZERO, self.made.2, "on the bench"), |s| (s.1, s.2, s.3, s.4))
+        self.slots
+            .iter()
+            .find(|s| s.0 == name)
+            .map_or((Vec2::ZERO, Vec2::ZERO, self.made.2, "on the bench"), |s| {
+                (s.1, s.2, s.3, s.4)
+            })
     }
 
     /// The main working height.
@@ -319,20 +615,47 @@ impl Layout {
     }
 }
 
+/// One way of looking at a bench: the point looked at and where the eye is
+/// from it, in the bench's frame (z is turned to the side you stand on).
+pub(super) struct View {
+    name: &'static str,
+    at: Vec3,
+    eye: Vec3,
+}
+
+const fn view(name: &'static str, at: Vec3, eye: Vec3) -> View {
+    View { name, at, eye }
+}
+
 fn rotation(st: &Station) -> Quat {
-    if st.turned { Quat::from_rotation_y(std::f32::consts::FRAC_PI_2) } else { Quat::IDENTITY }
+    if st.turned {
+        Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)
+    } else {
+        Quat::IDENTITY
+    }
 }
 
 fn to_world(st: &Station, local: Vec3) -> Vec3 {
     st.pos + rotation(st) * local
 }
 
-/// Looking down at the bench top from the side you stand on.
-fn board_view(st: &Station, side: f32) -> Transform {
+/// Looking down at the bench from the side you stand on, from one of its views.
+fn board_view(st: &Station, side: f32, i: usize) -> Transform {
     let l = layout(st.kind);
-    let eye = to_world(st, Vec3::new(0.0, l.top() + l.view.0, side * l.view.1));
-    let at = to_world(st, Vec3::new(0.0, l.top(), side * 0.04));
-    Transform::from_translation(eye).looking_at(at, Vec3::Y)
+    let v = &l.views[i.min(l.views.len() - 1)];
+    let flip = Vec3::new(1.0, 1.0, side);
+    let at = v.at * flip;
+    let eye = to_world(st, at + v.eye * flip);
+    Transform::from_translation(eye).looking_at(to_world(st, at), Vec3::Y)
+}
+
+impl AtBench {
+    /// The point the current view looks at, in the bench's frame.
+    fn focus(&self) -> Option<Vec3> {
+        let st = self.station?;
+        let l = layout(st.kind);
+        Some(l.views[self.view_i.min(l.views.len() - 1)].at * Vec3::new(1.0, 1.0, self.side))
+    }
 }
 
 /// What the cursor is over on the bench.
@@ -345,7 +668,13 @@ enum Spot {
 }
 
 /// The ray in the bench's frame: what it meets first, and where it crosses the top.
-fn spot(st: &Station, name: &str, made: bool, origin: Vec3, dir: Vec3) -> (Option<Spot>, Option<Vec3>) {
+fn spot(
+    st: &Station,
+    name: &str,
+    made: bool,
+    origin: Vec3,
+    dir: Vec3,
+) -> (Option<Spot>, Option<Vec3>) {
     let l = layout(st.kind);
     let inv = rotation(st).inverse();
     let (o, d) = (inv * (origin - st.pos), inv * dir);
@@ -354,7 +683,9 @@ fn spot(st: &Station, name: &str, made: bool, origin: Vec3, dir: Vec3) -> (Optio
     if ray_box(o, d, l.tool.0, l.tool.1).is_some() {
         return (Some(Spot::Tool), top.map(|p| to_world(st, p)));
     }
-    let inside = |y: f32, c: Vec2, h: Vec2| cross(y).is_some_and(|p| (p.x - c.x).abs() <= h.x && (p.z - c.y).abs() <= h.y);
+    let inside = |y: f32, c: Vec2, h: Vec2| {
+        cross(y).is_some_and(|p| (p.x - c.x).abs() <= h.x && (p.z - c.y).abs() <= h.y)
+    };
     let hit = if made && inside(l.made.2, l.made.0, l.made.1) {
         Some(Spot::Made)
     } else {
@@ -402,6 +733,13 @@ pub(super) struct HintLine;
 #[derive(Component)]
 pub(super) struct RecipeLines;
 
+/// The row of view buttons ("the pot", "the fire").
+#[derive(Component)]
+pub(super) struct ViewRow;
+
+#[derive(Component)]
+pub(super) struct ViewButton(usize);
+
 pub(super) fn load_benches(mut commands: Commands, items: Res<Items>) {
     match BenchData::from_ron(include_str!("../../../../assets/data/benches.ron"), &items) {
         Ok(d) => commands.insert_resource(Benches(d)),
@@ -413,14 +751,26 @@ pub(super) fn load_benches(mut commands: Commands, items: Res<Items>) {
 }
 
 /// Put a stack back in the pockets, or at your feet if they're full.
-fn give_back(inv: &mut Inventory, items: &Items, spill: &mut MessageWriter<Spill>, at: Vec3, stack: Stack) {
+fn give_back(
+    inv: &mut Inventory,
+    items: &Items,
+    spill: &mut MessageWriter<Spill>,
+    at: Vec3,
+    stack: Stack,
+) {
     if let Some(rest) = inv.add(items, stack) {
         spill.write(Spill { stack: rest, at });
     }
 }
 
 /// Leave the bench: everything goes back into the pockets.
-fn leave(at: &mut AtBench, inv: &mut Inventory, items: &Items, spill: &mut MessageWriter<Spill>, feet: Vec3) {
+fn leave(
+    at: &mut AtBench,
+    inv: &mut Inventory,
+    items: &Items,
+    spill: &mut MessageWriter<Spill>,
+    feet: Vec3,
+) {
     for s in at.held.take().into_iter().chain(at.board.clear()) {
         give_back(inv, items, spill, feet, s);
     }
@@ -437,11 +787,24 @@ pub(super) fn board_camera(
 ) {
     let want = if at.open() { 1.0 } else { 0.0 };
     let dt = time.delta_secs().min(0.1);
-    let blend = if (at.blend - want).abs() < 1e-3 { want } else { at.blend + (want - at.blend) * (1.0 - (-dt * 7.0).exp()) };
+    let blend = if (at.blend - want).abs() < 1e-3 {
+        want
+    } else {
+        at.blend + (want - at.blend) * (1.0 - (-dt * 7.0).exp())
+    };
     at.blend = blend;
     if blend <= 0.0 {
         at.view = None;
         return;
+    }
+    // Glide to the chosen view.
+    if let Some(st) = at.station {
+        let want = board_view(&st, at.side, at.view_i);
+        let f = 1.0 - (-dt * 6.0).exp();
+        at.view = Some(at.view.map_or(want, |v| {
+            Transform::from_translation(v.translation.lerp(want.translation, f))
+                .with_rotation(v.rotation.slerp(want.rotation, f))
+        }));
     }
     let Some(view) = at.view else { return };
     let k = blend * blend * (3.0 - 2.0 * blend);
@@ -456,12 +819,30 @@ pub(super) fn board_camera(
 #[allow(clippy::type_complexity)]
 pub(super) fn board_hides(
     at: Res<AtBench>,
-    mut roots: Query<&mut Visibility, (With<Node>, Without<ChildOf>, Without<BoardUi>)>,
+    scope: Res<super::telescope::Scope>,
+    mut roots: Query<
+        &mut Visibility,
+        (
+            With<Node>,
+            Without<ChildOf>,
+            Without<BoardUi>,
+            Without<super::telescope::ScopeUi>,
+        ),
+    >,
     mut hands: Query<&mut Visibility, (With<crate::hands::HandRoot>, Without<Node>)>,
-    all: Query<Entity, (With<Node>, Without<ChildOf>, Without<BoardUi>)>,
+    all: Query<
+        Entity,
+        (
+            With<Node>,
+            Without<ChildOf>,
+            Without<BoardUi>,
+            Without<super::telescope::ScopeUi>,
+        ),
+    >,
     mut hidden: Local<Vec<(Entity, Visibility)>>,
 ) {
-    let away = at.blend > 0.02;
+    // Looking through the telescope puts the HUD away too.
+    let away = at.blend > 0.02 || scope.open;
     if away && hidden.is_empty() {
         for e in &all {
             if let Ok(mut v) = roots.get_mut(e)
@@ -480,7 +861,11 @@ pub(super) fn board_hides(
             }
         }
     }
-    let want = if away { Visibility::Hidden } else { Visibility::Inherited };
+    let want = if away {
+        Visibility::Hidden
+    } else {
+        Visibility::Inherited
+    };
     for mut v in &mut hands {
         if *v != want {
             *v = want;
@@ -502,7 +887,9 @@ pub(super) fn board_keys(
 ) {
     let Some(st) = at.station else { return };
     // The bench is gone (bedroll packed up), or you started flying.
-    let still_there = stations.iter().any(|s| s.kind == st.kind && s.pos.distance(st.pos) < 0.01);
+    let still_there = stations
+        .iter()
+        .any(|s| s.kind == st.kind && s.pos.distance(st.pos) < 0.01);
     let quit = keys.just_pressed(KeyCode::Escape) || !still_there || *mode == MoveMode::Fly;
     if quit {
         leave(&mut at, &mut inv, &items, &mut spill, player.pos + Vec3::Y);
@@ -512,10 +899,19 @@ pub(super) fn board_keys(
         cursor.visible = false;
         return;
     }
+    let n = layout(st.kind).views.len();
+    let look = keys.just_pressed(KeyCode::KeyS) as i32 - keys.just_pressed(KeyCode::KeyW) as i32;
+    if look != 0 && n > 1 {
+        at.view_i = (at.view_i as i32 + look).rem_euclid(n as i32) as usize;
+    }
     let step = keys.just_pressed(KeyCode::KeyD) as i32 - keys.just_pressed(KeyCode::KeyA) as i32;
     if step != 0 {
         // Benches in a line along the camp, ordered by where they stand.
-        let mut benches: Vec<Station> = stations.iter().filter(|s| board_name(s.kind).is_some()).copied().collect();
+        let mut benches: Vec<Station> = stations
+            .iter()
+            .filter(|s| board_name(s.kind).is_some())
+            .copied()
+            .collect();
         benches.sort_by(|a, b| (a.pos.x + a.pos.z).total_cmp(&(b.pos.x + b.pos.z)));
         if let Some(i) = benches.iter().position(|s| s.kind == st.kind) {
             let next = benches[(i as i32 + step).rem_euclid(benches.len() as i32) as usize];
@@ -536,20 +932,155 @@ pub(super) fn board_click(
     keys: Res<ButtonInput<KeyCode>>,
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &Transform), With<FlyCamera>>,
-    cells: Query<(&StripCell, &ComputedNode, &UiGlobalTransform, &InheritedVisibility)>,
+    cells: Query<(
+        &StripCell,
+        &ComputedNode,
+        &UiGlobalTransform,
+        &InheritedVisibility,
+    )>,
+    view_buttons: Query<(
+        &ViewButton,
+        &ComputedNode,
+        &UiGlobalTransform,
+        &InheritedVisibility,
+    )>,
     (items, benches, player): (Res<Items>, Res<Benches>, Res<Player>),
     mut at: ResMut<AtBench>,
     mut inv: ResMut<Inventory>,
-    (mut spill, mut sound, mut toast, mut gain): (MessageWriter<Spill>, MessageWriter<PlaySound>, MessageWriter<Toast>, MessageWriter<crate::progress::GainXp>),
+    (mut spill, mut sound, mut toast, mut gain): (
+        MessageWriter<Spill>,
+        MessageWriter<PlaySound>,
+        MessageWriter<Toast>,
+        MessageWriter<crate::progress::GainXp>,
+    ),
     prog: Option<Res<crate::progress::xp::Progression>>,
     (mut urns, mut edges): (ResMut<Urns>, ResMut<Edges>),
-    (recipes, drops, blocks): (Option<Res<crate::inventory::crafting::Recipes>>, Option<Res<crate::inventory::drops::Drops>>, Res<crate::blocks::Blocks>),
+    (recipes, drops, blocks): (
+        Option<Res<crate::inventory::crafting::Recipes>>,
+        Option<Res<crate::inventory::drops::Drops>>,
+        Res<crate::blocks::Blocks>,
+    ),
 ) {
     let Some(st) = at.station else { return };
-    let Some(name) = board_name(st.kind) else { return };
+    let Some(name) = board_name(st.kind) else {
+        return;
+    };
     let feet = player.pos + Vec3::Y;
+    let how = models::tool(st.kind).map_or(ToolUse::Strike, |t| t.how);
+    // The tool came down on the bench (or the wheel turned): one go.
+    for _ in 0..std::mem::take(&mut at.tool.go) {
+        let special = benches.0.matching(name, &at.board).map(|r| r.special);
+        let work = at.board.strike(&benches.0, name);
+        match (work, special) {
+            (Work::Made(s), Some(Special::Sharpen)) => {
+                sound.write(PlaySound::new("dig_hard").gain(0.9));
+                sound.write(PlaySound::new("spell_on").gain(0.4));
+                at.dirty = true;
+                if let Some(sh) = benches.0.sharpen {
+                    edges
+                        .left
+                        .insert(items.get(s.item).name.clone(), sh.seconds);
+                    edges.speed = sh.speed;
+                    let line = format!(
+                        "Your {} is sharp: {:.1}x as fast for {:.0} minutes",
+                        items.get(s.item).title,
+                        sh.speed,
+                        sh.seconds / 60.0
+                    );
+                    at.note = Some((line.clone(), 4.0));
+                    toast.write(Toast(line));
+                }
+            }
+            (Work::Made(s), Some(Special::Study)) => {
+                sound.write(PlaySound::new("spell_on").gain(0.6));
+                at.dirty = true;
+                let item_name = items.get(s.item).name.clone();
+                let new = urns.studied.insert(item_name.clone());
+                let brews: Vec<String> = benches
+                    .0
+                    .recipes
+                    .iter()
+                    .filter(|r| {
+                        r.taught_by(&format!("lens:{item_name}"))
+                            && r.unlock.as_deref().is_some_and(|u| !u.contains('+'))
+                    })
+                    .map(|r| items.get(r.makes.item).title.clone())
+                    .collect();
+                let mut line = format!("You studied the {}", items.get(s.item).title);
+                if new && !brews.is_empty() {
+                    line = format!("{line}: the cauldron can brew {} now", brews.join(", "));
+                    gain.write(crate::progress::GainXp {
+                        xp: 15.0,
+                        why: String::new(),
+                    });
+                }
+                at.note = Some((line.clone(), 4.0));
+                toast.write(Toast(line));
+                at.study = Some(study_text(
+                    s.item,
+                    &items,
+                    &benches.0,
+                    recipes.as_deref(),
+                    drops.as_deref(),
+                    &blocks,
+                ));
+            }
+            (Work::Nothing, _) => {
+                sound.write(PlaySound::new("hit").gain(0.35));
+                let line = if at.board.made.is_some() {
+                    "Take what you made first".to_string()
+                } else if let Some((r, have)) = benches.0.needs_heat(name, &at.board) {
+                    format!(
+                        "The fire is too low for {}: put more fuel in it ({have} of {} heat)",
+                        items.get(r.makes.item).title,
+                        r.heat
+                    )
+                } else {
+                    "That doesn't make anything here".to_string()
+                };
+                at.note = Some((line, 2.5));
+            }
+            (Work::Knock { .. }, _) => {
+                sound.write(PlaySound::new(layout(st.kind).sound).gain(0.9));
+                if !matches!(
+                    st.kind,
+                    StationKind::CookingPot
+                        | StationKind::Cauldron
+                        | StationKind::MagicalLens
+                        | StationKind::SmokingRack
+                ) {
+                    sound.write(PlaySound::new("hit").gain(0.5));
+                }
+                at.bump = 1.0;
+                if how != ToolUse::Stir {
+                    at.spin_to += 1.7;
+                }
+                at.dirty = true;
+            }
+            (Work::Made(s), _) => {
+                sound.write(PlaySound::new(layout(st.kind).sound).gain(0.9));
+                sound.write(PlaySound::new("place").gain(0.9));
+                at.bump = 1.0;
+                if how != ToolUse::Stir {
+                    at.spin_to += 1.7;
+                }
+                at.dirty = true;
+                at.note = Some((format!("You made a {}", items.get(s.item).title), 3.0));
+                toast.write(Toast(format!("Made a {}", items.get(s.item).title)));
+                if let Some(p) = &prog {
+                    gain.write(crate::progress::GainXp {
+                        xp: p.xp.craft,
+                        why: String::new(),
+                    });
+                }
+            }
+        }
+    }
     if mouse.just_pressed(MouseButton::Right) {
-        if let Some(h) = at.held.take() {
+        if at.tool.held {
+            at.tool.held = false;
+            sound.write(PlaySound::new("dig_wood").gain(0.35));
+        } else if let Some(h) = at.held.take() {
             give_back(&mut inv, &items, &mut spill, feet, h);
         }
         return;
@@ -558,10 +1089,24 @@ pub(super) fn board_click(
         return;
     }
     let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
-    // The strip of your things.
-    if let Some(phys) = window.physical_cursor_position()
-        && let Some((cell, ..)) = cells.iter().find(|(_, n, t, v)| v.get() && n.contains_point(**t, phys))
+    let phys = window.physical_cursor_position();
+    // The view buttons.
+    if let Some(phys) = phys
+        && let Some((b, ..)) = view_buttons
+            .iter()
+            .find(|(_, n, t, v)| v.get() && n.contains_point(**t, phys))
     {
+        at.view_i = b.0;
+        return;
+    }
+    // The strip of your things.
+    if let Some(phys) = phys
+        && let Some((cell, ..)) = cells
+            .iter()
+            .find(|(_, n, t, v)| v.get() && n.contains_point(**t, phys))
+    {
+        // The tool goes back on the bench first.
+        at.tool.held = false;
         let item = cell.0;
         if let Some(h) = at.held
             && h.item != item
@@ -571,88 +1116,59 @@ pub(super) fn board_click(
         }
         let have = at.held.map_or(0, |h| h.count);
         let room = items.get(item).stack.saturating_sub(have) as u32;
-        let n = if shift { inv.count(item).min(room) } else { 1.min(room) };
+        let n = if shift {
+            inv.count(item).min(room)
+        } else {
+            1.min(room)
+        };
         if n > 0 && inv.take(item, n) {
             at.held = Some(Stack::new(item, have + n as u16));
             sound.write(PlaySound::new("dig_plant").gain(0.4));
         }
         return;
     }
-    let Some(pos) = window.cursor_position() else { return };
+    let Some(pos) = window.cursor_position() else {
+        return;
+    };
     let (cam, tf) = *camera;
-    let Ok(ray) = cam.viewport_to_world(&GlobalTransform::from(*tf), pos) else { return };
-    let (hit, _) = spot(&st, name, at.board.made.is_some(), ray.origin, ray.direction.as_vec3());
+    let Ok(ray) = cam.viewport_to_world(&GlobalTransform::from(*tf), pos) else {
+        return;
+    };
+    let (hit, _) = spot(
+        &st,
+        name,
+        at.board.made.is_some(),
+        ray.origin,
+        ray.direction.as_vec3(),
+    );
+    // With the tool in hand, a click works it (or puts it back where it rests).
+    if at.tool.held {
+        if hit == Some(Spot::Tool) {
+            at.tool.held = false;
+            sound.write(PlaySound::new("dig_wood").gain(0.35));
+        } else if matches!(how, ToolUse::Strike | ToolUse::Cut | ToolUse::Fan)
+            && at.tool.swing.is_none()
+        {
+            at.tool.swing = Some(0.0);
+        }
+        return;
+    }
     match hit {
-        Some(Spot::Tool) => {
-            let special = benches.0.matching(name, &at.board).map(|r| r.special);
-            let work = at.board.strike(&benches.0, name);
-            match (work, special) {
-                (Work::Made(s), Some(Special::Sharpen)) => {
-                    sound.write(PlaySound::new("dig_hard").gain(0.9));
-                    sound.write(PlaySound::new("spell_on").gain(0.4));
-                    at.dirty = true;
-                    if let Some(sh) = benches.0.sharpen {
-                        edges.left.insert(items.get(s.item).name.clone(), sh.seconds);
-                        edges.speed = sh.speed;
-                        let line = format!("Your {} is sharp: {:.1}x as fast for {:.0} minutes", items.get(s.item).title, sh.speed, sh.seconds / 60.0);
-                        at.note = Some((line.clone(), 4.0));
-                        toast.write(Toast(line));
-                    }
-                }
-                (Work::Made(s), Some(Special::Study)) => {
-                    sound.write(PlaySound::new("spell_on").gain(0.6));
-                    at.dirty = true;
-                    let item_name = items.get(s.item).name.clone();
-                    let new = urns.studied.insert(item_name.clone());
-                    let brews: Vec<String> = benches
-                        .0
-                        .recipes
-                        .iter()
-                        .filter(|r| r.taught_by(&format!("lens:{item_name}")) && r.unlock.as_deref().is_some_and(|u| !u.contains('+')))
-                        .map(|r| items.get(r.makes.item).title.clone())
-                        .collect();
-                    let mut line = format!("You studied the {}", items.get(s.item).title);
-                    if new && !brews.is_empty() {
-                        line = format!("{line}: the cauldron can brew {} now", brews.join(", "));
-                        gain.write(crate::progress::GainXp { xp: 15.0, why: String::new() });
-                    }
-                    at.note = Some((line.clone(), 4.0));
-                    toast.write(Toast(line));
-                    at.study = Some(study_text(s.item, &items, &benches.0, recipes.as_deref(), drops.as_deref(), &blocks));
-                }
-                (Work::Nothing, _) => {
-                    sound.write(PlaySound::new("hit").gain(0.35));
-                    let line = if at.board.made.is_some() {
-                        "Take what you made first".to_string()
-                    } else if let Some((r, have)) = benches.0.needs_heat(name, &at.board) {
-                        format!("The fire is too low for {}: put more fuel in it ({have} of {} heat)", items.get(r.makes.item).title, r.heat)
-                    } else {
-                        "That doesn't make anything here".to_string()
-                    };
-                    at.note = Some((line, 2.5));
-                }
-                (Work::Knock { .. }, _) => {
-                    sound.write(PlaySound::new(layout(st.kind).sound).gain(0.9));
-                    if !matches!(st.kind, StationKind::CookingPot | StationKind::Cauldron | StationKind::MagicalLens | StationKind::SmokingRack) {
-                        sound.write(PlaySound::new("hit").gain(0.5));
-                    }
-                    at.bump = 1.0;
-                    at.spin_to += 1.7;
-                    at.dirty = true;
-                }
-                (Work::Made(s), _) => {
-                    sound.write(PlaySound::new(layout(st.kind).sound).gain(0.9));
-                    sound.write(PlaySound::new("place").gain(0.9));
-                    at.bump = 1.0;
-                    at.spin_to += 1.7;
-                    at.dirty = true;
-                    at.note = Some((format!("You made a {}", items.get(s.item).title), 3.0));
-                    toast.write(Toast(format!("Made a {}", items.get(s.item).title)));
-                    if let Some(p) = &prog {
-                        gain.write(crate::progress::GainXp { xp: p.xp.craft, why: String::new() });
-                    }
-                }
+        Some(Spot::Tool) if how.lifts() => {
+            // Pick the tool up; what you held goes back to your pockets.
+            if let Some(h) = at.held.take() {
+                give_back(&mut inv, &items, &mut spill, feet, h);
             }
+            at.tool.held = true;
+            at.tool.armed = false;
+            at.tool.swing = None;
+            at.tool.gesture = Gesture::default();
+            sound.write(PlaySound::new("dig_wood").gain(0.4));
+        }
+        Some(Spot::Tool) => {
+            // A wheel or knob turns where it is.
+            at.tool.turn_to += std::f32::consts::FRAC_PI_2;
+            at.tool.go += 1;
         }
         Some(Spot::Made) => {
             if let Some(s) = at.board.made.take() {
@@ -673,7 +1189,10 @@ pub(super) fn board_click(
                 (Some(h), SlotKind::Mix) => {
                     at.held = at.board.put_mix(defs, h);
                     if at.held == Some(h) {
-                        at.note = Some(("The pot holds four kinds of things at most: take one out first".into(), 2.5));
+                        at.note = Some((
+                            "The pot holds four kinds of things at most: take one out first".into(),
+                            2.5,
+                        ));
                         return;
                     }
                 }
@@ -697,7 +1216,11 @@ pub(super) fn board_click(
 /// How big a thing lies on the board: long things fill the groove, small ones the hollow.
 fn px_for(size: UVec2, scale: f32) -> f32 {
     let long = size.max_element() as f32;
-    if long > 24.0 { 0.56 / long * scale } else { 0.15 / long * scale }
+    if long > 24.0 {
+        0.56 / long * scale
+    } else {
+        0.15 / long * scale
+    }
 }
 
 /// Where the `i`th of `n` small things lies, around a slot's middle: two
@@ -706,12 +1229,16 @@ fn spread(i: usize, n: usize) -> Vec2 {
     let cols = n.min(4);
     let rows = n.div_ceil(4);
     let (cx, cy) = ((i % 4) as f32, (i / 4) as f32);
-    Vec2::new((cx - (cols as f32 - 1.0) / 2.0) * 0.12, (cy - (rows as f32 - 1.0) / 2.0) * 0.13 + if i.is_multiple_of(2) { -0.02 } else { 0.02 })
+    Vec2::new(
+        (cx - (cols as f32 - 1.0) / 2.0) * 0.12,
+        (cy - (rows as f32 - 1.0) / 2.0) * 0.13 + if i.is_multiple_of(2) { -0.02 } else { 0.02 },
+    )
 }
 
 /// Lying flat on the board, the sprite's top along the bench's length.
 fn flat() -> Quat {
-    Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2) * Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)
+    Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2)
+        * Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)
 }
 
 /// Models of what lies on the board, and of what you hold.
@@ -724,19 +1251,33 @@ pub(super) fn board_models(
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &Transform), With<FlyCamera>>,
     mut models: Query<(Entity, &mut Transform, &BoardModel, Option<&Swirl>), Without<FlyCamera>>,
-    mut held_model: Query<(Entity, &mut Transform), (With<HeldModel>, Without<BoardModel>, Without<FlyCamera>)>,
+    mut held_model: Query<
+        (Entity, &mut Transform),
+        (With<HeldModel>, Without<BoardModel>, Without<FlyCamera>),
+    >,
     mut showing: Local<Option<Stack>>,
 ) {
     let Some(art) = art else { return };
     let dt = time.delta_secs().min(0.1);
     at.bump = (at.bump - dt * 3.5).max(0.0);
     let swirling = (at.spin_to - at.spin).abs() > 1e-3;
-    at.spin = if swirling { at.spin + (at.spin_to - at.spin) * (1.0 - (-dt * 4.0).exp()) } else { at.spin_to };
+    at.spin = if swirling {
+        at.spin + (at.spin_to - at.spin) * (1.0 - (-dt * 4.0).exp())
+    } else {
+        at.spin_to
+    };
     let scale = at.station.map_or(1.0, |st| layout(st.kind).scale);
-    let spawn = |commands: &mut Commands, item: ItemId, at_world: Vec3, rot: Quat, marker: bool| -> Option<Entity> {
+    let spawn = |commands: &mut Commands,
+                 item: ItemId,
+                 at_world: Vec3,
+                 rot: Quat,
+                 marker: bool|
+     -> Option<Entity> {
         let (mesh, mat) = art.model(item)?;
         let px = px_for(art.size(item)?, scale);
-        let tf = Transform::from_translation(at_world + Vec3::Y * (px * 0.5 + 0.004)).with_rotation(rot).with_scale(Vec3::splat(px));
+        let tf = Transform::from_translation(at_world + Vec3::Y * (px * 0.5 + 0.004))
+            .with_rotation(rot)
+            .with_scale(Vec3::splat(px));
         let mut e = commands.spawn((Mesh3d(mesh), MeshMaterial3d(mat), tf, NotShadowCaster));
         if marker {
             e.insert(BoardModel(tf.translation.y));
@@ -759,7 +1300,9 @@ pub(super) fn board_models(
             for (slot, stack) in &at.board.slots {
                 let (c, _, y, _) = l.slot(slot);
                 // In the pot: closer to the middle, and turned by the stirring so far.
-                let in_pot = defs.iter().any(|d| d.name == slot && d.kind == SlotKind::Mix);
+                let in_pot = defs
+                    .iter()
+                    .any(|d| d.name == slot && d.kind == SlotKind::Mix);
                 let c = if in_pot { l.pot + (c - l.pot) * 0.7 } else { c };
                 // Several small things side by side, a little turned.
                 let n = stack.count.min(8) as usize;
@@ -769,7 +1312,10 @@ pub(super) fn board_models(
                     let (off, turn) = if n == 1 {
                         (Vec2::ZERO, Quat::IDENTITY)
                     } else if long {
-                        (Vec2::new(0.0, (i as f32 - (n as f32 - 1.0) / 2.0) * 0.07), Quat::IDENTITY)
+                        (
+                            Vec2::new(0.0, (i as f32 - (n as f32 - 1.0) / 2.0) * 0.07),
+                            Quat::IDENTITY,
+                        )
                     } else {
                         (spread(i, n), Quat::from_rotation_y(i as f32 * 1.3))
                     };
@@ -778,8 +1324,18 @@ pub(super) fn board_models(
                     if in_pot {
                         let centre = to_world(&st, Vec3::new(l.pot.x, y, l.pot.y));
                         let (o, rot) = (place - centre, turn * r);
-                        if let Some(e) = spawn(&mut commands, stack.item, centre + spin * o, spin * rot, true) {
-                            commands.entity(e).insert(Swirl { centre, off: o, rot });
+                        if let Some(e) = spawn(
+                            &mut commands,
+                            stack.item,
+                            centre + spin * o,
+                            spin * rot,
+                            true,
+                        ) {
+                            commands.entity(e).insert(Swirl {
+                                centre,
+                                off: o,
+                                rot,
+                            });
                         }
                     } else {
                         spawn(&mut commands, stack.item, place, turn * r, true);
@@ -788,7 +1344,13 @@ pub(super) fn board_models(
             }
             if let Some(m) = at.board.made {
                 let (c, _, y) = l.made;
-                spawn(&mut commands, m.item, to_world(&st, Vec3::new(c.x, y, c.y)), r, true);
+                spawn(
+                    &mut commands,
+                    m.item,
+                    to_world(&st, Vec3::new(c.x, y, c.y)),
+                    r,
+                    true,
+                );
             }
         }
     } else if at.bump > 0.0 || swirling {
@@ -822,17 +1384,22 @@ pub(super) fn board_models(
         .and_then(|p| cam.viewport_to_world(&GlobalTransform::from(*tf), p).ok())
         .and_then(|ray| {
             let (o, d) = (ray.origin, ray.direction.as_vec3());
-            let y = st.pos.y + layout(st.kind).top() + 0.1;
+            let y = st.pos.y + at.focus().map_or(layout(st.kind).top(), |f| f.y) + 0.1;
             (d.y < -1e-4).then(|| o + d * ((y - o.y) / d.y))
         })
     else {
         return;
     };
-    let hand = at.hand.map_or(target, |p| p.lerp(target, 1.0 - (-dt * 16.0).exp()));
+    let hand = at
+        .hand
+        .map_or(target, |p| p.lerp(target, 1.0 - (-dt * 16.0).exp()));
     at.hand = Some(hand);
     // Tilted the way it's being dragged.
     let lean = (target - hand) * 4.0;
-    let rot = Quat::from_rotation_z(-lean.x.clamp(-0.5, 0.5)) * Quat::from_rotation_x(lean.z.clamp(-0.5, 0.5)) * rotation(&st) * flat();
+    let rot = Quat::from_rotation_z(-lean.x.clamp(-0.5, 0.5))
+        * Quat::from_rotation_x(lean.z.clamp(-0.5, 0.5))
+        * rotation(&st)
+        * flat();
     if *showing != Some(h) {
         spawn(&mut commands, h.item, hand, rot, false);
         *showing = Some(h);
@@ -840,6 +1407,196 @@ pub(super) fn board_models(
         let px = t.scale.x;
         t.translation = hand + Vec3::Y * (px * 0.5);
         t.rotation = rot;
+    }
+}
+
+/// Where the cursor points, in the bench's frame, where it crosses height `y`.
+fn cursor_on(st: &Station, window: &Window, cam: &Camera, tf: &Transform, y: f32) -> Option<Vec3> {
+    let ray = cam
+        .viewport_to_world(&GlobalTransform::from(*tf), window.cursor_position()?)
+        .ok()?;
+    let inv = rotation(st).inverse();
+    let (o, d) = (inv * (ray.origin - st.pos), inv * ray.direction.as_vec3());
+    (d.y < -1e-4).then(|| o + d * ((y - o.y) / d.y))
+}
+
+/// How high over the view's middle the tool hangs while you hold it.
+fn lift_of(how: ToolUse) -> f32 {
+    match how {
+        ToolUse::Strike => 0.16,
+        ToolUse::Cut => 0.1,
+        ToolUse::Fan => 0.14,
+        ToolUse::Saw => 0.07,
+        ToolUse::Stir => 0.1,
+        ToolUse::Turn(_) => 0.0,
+    }
+}
+
+/// How the tool is held: hammers with the handle up, the ladle upright.
+fn held_turn(how: ToolUse) -> Quat {
+    match how {
+        ToolUse::Strike => Quat::from_rotation_z(0.5),
+        ToolUse::Cut => Quat::from_rotation_z(-0.25),
+        // Upright, the handle leaning off to the side so you see it.
+        ToolUse::Stir => {
+            Quat::from_rotation_y(std::f32::consts::FRAC_PI_2) * Quat::from_rotation_x(-1.15)
+        }
+        _ => Quat::IDENTITY,
+    }
+}
+
+/// Where a swing is at `t` (0..1): how far up from the hanging height
+/// (`lift` above the surface: -lift = touching it) and how far the tool is
+/// turned back. It meets the surface at `SWING_HIT`.
+pub(super) fn swing_pose(how: ToolUse, t: f32, lift: f32) -> (f32, f32) {
+    let ease = |x: f32| x * x * (3.0 - 2.0 * x);
+    match how {
+        ToolUse::Fan => (0.0, (t * std::f32::consts::TAU).sin() * 0.9),
+        _ => {
+            let up = if how == ToolUse::Cut { 0.07 } else { 0.12 };
+            if t < 0.35 {
+                let k = ease(t / 0.35);
+                (up * k, 0.6 * k)
+            } else if t < SWING_HIT {
+                let k = (t - 0.35) / (SWING_HIT - 0.35);
+                (up + (-lift - up) * k * k, 0.6 * (1.0 - k))
+            } else {
+                let k = ease((t - SWING_HIT) / (1.0 - SWING_HIT));
+                (-lift * (1.0 - k) + (1.0 - k) * k * 0.05, 0.0)
+            }
+        }
+    }
+}
+
+/// The point of a swing where the tool lands (one go).
+pub(super) const SWING_HIT: f32 = 0.5;
+/// Seconds a swing takes.
+const SWING_SECONDS: f32 = 0.42;
+
+/// The bench's tool: it rests on the bench, follows the cursor while you
+/// hold it, swings down when you click, stirs and saws while the button is
+/// held, and wheels and knobs turn in place.
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+pub(super) fn board_tool(
+    time: Res<Time>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    window: Single<&Window, With<PrimaryWindow>>,
+    camera: Single<(&Camera, &Transform), With<FlyCamera>>,
+    mut at: ResMut<AtBench>,
+    stations: Query<&Station>,
+    mut tools: Query<(&BenchTool, &ChildOf, &mut Transform), Without<FlyCamera>>,
+    mut sound: MessageWriter<PlaySound>,
+) {
+    let dt = time.delta_secs().min(0.1);
+    let f = |rate: f32| 1.0 - (-dt * rate).exp();
+    let here = at.station;
+    // Turning wheels and knobs ease round.
+    let t = &mut at.tool;
+    t.turn += (t.turn_to - t.turn) * f(8.0);
+    for (tool, parent, mut tf) in &mut tools {
+        let Ok(st) = stations.get(parent.parent()) else {
+            continue;
+        };
+        let mine = here.is_some_and(|h| h.kind == st.kind && h.pos.distance(st.pos) < 0.01);
+        let (pos, rot) = match tool.how {
+            ToolUse::Turn(axis) if mine => (tool.rest, Quat::from_axis_angle(axis, at.tool.turn)),
+            _ if !mine || !at.tool.held => {
+                // Back where it rests.
+                let p = tf.translation.lerp(tool.rest, f(14.0));
+                (p, tf.rotation.slerp(Quat::IDENTITY, f(14.0)))
+            }
+            how => {
+                let Some(focus) = at.focus() else { continue };
+                let lift = lift_of(how);
+                let (cam, ctf) = *camera;
+                let pressed = (mouse.pressed(MouseButton::Left) && at.tool.armed && at.blend > 0.6)
+                    || at.tool.down;
+                if !mouse.pressed(MouseButton::Left) {
+                    at.tool.armed = true;
+                }
+                // Stirring and sawing press the tool down into the work.
+                let low = match how {
+                    ToolUse::Stir if pressed => focus.y - 0.07,
+                    ToolUse::Saw if pressed => focus.y + 0.015,
+                    _ => focus.y + lift,
+                };
+                let mut target =
+                    cursor_on(st, &window, cam, ctf, low).unwrap_or(focus + Vec3::Y * lift);
+                target.y = low;
+                // The ladle stays inside the pot while it stirs.
+                let pot = layout(st.kind).pot;
+                if how == ToolUse::Stir && pressed {
+                    let r = models::liquid(st.kind, &|_| false).map_or(0.18, |(_, w)| w - 0.06);
+                    let off = Vec2::new(target.x - pot.x, target.z - pot.y);
+                    let off = if off.length() > r {
+                        off.normalize() * r
+                    } else {
+                        off
+                    };
+                    target = Vec3::new(pot.x + off.x, low, pot.y + off.y);
+                }
+                let prev = at.tool.pos.unwrap_or(tf.translation);
+                let mut p = prev.lerp(target, f(18.0));
+                let mut turn = held_turn(how);
+                // The swing: up, down onto the bench (one go), and back.
+                if let Some(s) = at.tool.freeze.or(at.tool.swing) {
+                    // Down until its underside meets the work.
+                    let under = if how == ToolUse::Strike { 0.05 } else { 0.01 };
+                    let (dy, back) = swing_pose(how, s, lift - under);
+                    p.y += dy;
+                    turn = match how {
+                        ToolUse::Fan => Quat::from_rotation_x(back) * turn,
+                        ToolUse::Cut => Quat::from_rotation_z(-back) * turn,
+                        _ => Quat::from_rotation_z(back) * turn,
+                    };
+                    if at.tool.freeze.is_none() {
+                        let next = s + dt / SWING_SECONDS;
+                        if s < SWING_HIT && next >= SWING_HIT {
+                            at.tool.go += 1;
+                            if how == ToolUse::Fan {
+                                sound.write(PlaySound::new("swing").gain(0.5));
+                            }
+                        }
+                        at.tool.swing = (next < 1.0).then_some(next);
+                    }
+                }
+                // Stirring and sawing count while the button is held.
+                if pressed && at.tool.freeze.is_none() && !at.tool.down {
+                    match how {
+                        ToolUse::Stir => {
+                            let (n, d) = at.tool.gesture.stir((p.z - pot.y).atan2(p.x - pot.x));
+                            at.spin_to -= d;
+                            at.tool.go += n;
+                        }
+                        ToolUse::Saw => {
+                            let n = at.tool.gesture.saw(p.x);
+                            at.tool.go += n;
+                        }
+                        _ => {}
+                    }
+                } else {
+                    at.tool.gesture.lift();
+                }
+                // Leaning the way it's dragged.
+                let lean = (target - p) * 4.0;
+                if how != ToolUse::Stir || !pressed {
+                    turn = Quat::from_rotation_z(-lean.x.clamp(-0.4, 0.4))
+                        * Quat::from_rotation_x(lean.z.clamp(-0.4, 0.4))
+                        * turn;
+                }
+                if how == ToolUse::Stir && pressed {
+                    p = target.lerp(p, 0.3);
+                }
+                at.tool.pos = Some(p);
+                (p, turn)
+            }
+        };
+        tf.translation = pos;
+        tf.rotation = rot;
+    }
+    if !at.tool.held {
+        at.tool.pos = None;
+        at.tool.swing = None;
     }
 }
 
@@ -856,12 +1613,17 @@ pub(super) fn spawn_board_ui(mut commands: Commands, theme: Res<Theme>) {
                 .with_children(|c| {
                     c.spawn((HintTitle, theme.bold(sizes::HEADING), Text::new(""), TextColor(colors::HEADING)));
                     c.spawn((HintLine, crate::theme::text("", sizes::BODY, colors::TEXT), Node::default()));
+                    c.spawn((ViewRow, Node { column_gap: Val::Px(6.0), margin: UiRect::top(Val::Px(4.0)), align_items: AlignItems::Center, ..default() }));
                 });
             root.spawn(Node { flex_direction: FlexDirection::Column, align_items: AlignItems::Center, row_gap: Val::Px(6.0), ..default() }).with_children(|c| {
                 c.spawn((RecipeLines, crate::theme::text("", sizes::SMALL, colors::MUTED), Node::default()));
                 c.spawn((Strip, Node { column_gap: Val::Px(2.0), padding: UiRect::all(Val::Px(6.0)), ..default() }, theme.skin("panel_light")));
                 c.spawn((
-                    crate::theme::text("Click: pick up / set down   ·   Shift: whole stack   ·   Right click: put back   ·   A / D: next bench   ·   Esc: leave", sizes::SMALL, colors::FAINT),
+                    crate::theme::text(
+                        "Click: pick up / set down   ·   Click the tool to lift it   ·   Shift: whole stack   ·   Right click: put back   ·   A / D: next bench   ·   Esc: leave",
+                        sizes::SMALL,
+                        colors::FAINT,
+                    ),
                     Node::default(),
                 ));
             });
@@ -882,18 +1644,95 @@ pub(super) fn board_ui(
     window: Single<&Window, With<PrimaryWindow>>,
     mut root: Query<&mut Visibility, With<BoardUi>>,
     strip: Query<(Entity, Option<&Children>), With<Strip>>,
-    mut cells: Query<(&StripCell, &ComputedNode, &UiGlobalTransform, &mut ImageNode)>,
-    mut texts: ParamSet<(Query<&mut Text, With<HintTitle>>, Query<&mut Text, With<HintLine>>, Query<&mut Text, With<RecipeLines>>)>,
+    mut cells: Query<
+        (
+            &StripCell,
+            &ComputedNode,
+            &UiGlobalTransform,
+            &mut ImageNode,
+        ),
+        Without<ViewButton>,
+    >,
+    (view_row, mut view_buttons): (
+        Query<(Entity, Option<&Children>), With<ViewRow>>,
+        Query<(
+            &ViewButton,
+            &ComputedNode,
+            &UiGlobalTransform,
+            &mut ImageNode,
+        )>,
+    ),
+    mut views_built: Local<Option<StationKind>>,
+    mut texts: ParamSet<(
+        Query<&mut Text, With<HintTitle>>,
+        Query<&mut Text, With<HintLine>>,
+        Query<&mut Text, With<RecipeLines>>,
+    )>,
     mut built: Local<Option<Vec<(ItemId, u32)>>>,
 ) {
-    let Ok(mut vis) = root.single_mut() else { return };
+    let Ok(mut vis) = root.single_mut() else {
+        return;
+    };
     let Some(st) = at.station else {
         if *vis != Visibility::Hidden {
             *vis = Visibility::Hidden;
         }
         *built = None;
+        *views_built = None;
         return;
     };
+    // The view buttons, for benches with more than one view.
+    if *views_built != Some(st.kind)
+        && let Ok((row, kids)) = view_row.single()
+    {
+        for k in kids.into_iter().flatten() {
+            commands.entity(*k).despawn();
+        }
+        let views = layout(st.kind).views;
+        if views.len() > 1 {
+            commands.entity(row).with_children(|r| {
+                r.spawn((
+                    crate::theme::text("Look at", sizes::SMALL, colors::MUTED),
+                    Node::default(),
+                ));
+                for (i, v) in views.iter().enumerate() {
+                    r.spawn((
+                        ViewButton(i),
+                        Node {
+                            padding: UiRect::axes(Val::Px(10.0), Val::Px(2.0)),
+                            ..default()
+                        },
+                        theme.skin("button"),
+                    ))
+                    .with_children(|b| {
+                        b.spawn((
+                            crate::theme::text(v.name, sizes::SMALL, colors::TEXT),
+                            Node::default(),
+                        ));
+                    });
+                }
+                r.spawn((
+                    crate::theme::text("(W / S)", sizes::SMALL, colors::FAINT),
+                    Node::default(),
+                ));
+            });
+        }
+        *views_built = Some(st.kind);
+    }
+    let phys = window.physical_cursor_position();
+    for (b, node, tf, mut img) in &mut view_buttons {
+        let want = if b.0 == at.view_i {
+            "button_down"
+        } else if phys.is_some_and(|p| node.contains_point(*tf, p)) {
+            "button_hover"
+        } else {
+            "button"
+        };
+        let skin = theme.image(want);
+        if img.rect != skin.rect {
+            *img = skin;
+        }
+    }
     if *vis != Visibility::Inherited {
         *vis = Visibility::Inherited;
     }
@@ -914,15 +1753,43 @@ pub(super) fn board_ui(
         }
         commands.entity(strip).with_children(|row| {
             if list.is_empty() {
-                row.spawn((crate::theme::text("Your pockets are empty", sizes::SMALL, colors::MUTED), Node { margin: UiRect::all(Val::Px(8.0)), ..default() }));
+                row.spawn((
+                    crate::theme::text("Your pockets are empty", sizes::SMALL, colors::MUTED),
+                    Node {
+                        margin: UiRect::all(Val::Px(8.0)),
+                        ..default()
+                    },
+                ));
             }
             for (item, n) in &list {
-                row.spawn((StripCell(*item), Node { width: Val::Px(CELL), height: Val::Px(CELL), ..default() }, theme.skin("slot"))).with_children(|c| {
-                    crate::inventory::ui::icon(c, &items, &art, Stack::new(*item, (*n).min(u16::MAX as u32) as u16), CELL, CELL, false);
+                row.spawn((
+                    StripCell(*item),
+                    Node {
+                        width: Val::Px(CELL),
+                        height: Val::Px(CELL),
+                        ..default()
+                    },
+                    theme.skin("slot"),
+                ))
+                .with_children(|c| {
+                    crate::inventory::ui::icon(
+                        c,
+                        &items,
+                        &art,
+                        Stack::new(*item, (*n).min(u16::MAX as u32) as u16),
+                        CELL,
+                        CELL,
+                        false,
+                    );
                     if *n > 1 {
                         c.spawn((
                             crate::theme::text(format!("{n}"), sizes::SMALL, colors::TEXT),
-                            Node { position_type: PositionType::Absolute, right: Val::Px(4.0), bottom: Val::Px(0.0), ..default() },
+                            Node {
+                                position_type: PositionType::Absolute,
+                                right: Val::Px(4.0),
+                                bottom: Val::Px(0.0),
+                                ..default()
+                            },
                             GlobalZIndex(1),
                         ));
                     }
@@ -934,7 +1801,11 @@ pub(super) fn board_ui(
     // Hover.
     let phys = window.physical_cursor_position();
     for (_, node, tf, mut img) in &mut cells {
-        let want = if phys.is_some_and(|p| node.contains_point(*tf, p)) { "slot_hover" } else { "slot" };
+        let want = if phys.is_some_and(|p| node.contains_point(*tf, p)) {
+            "slot_hover"
+        } else {
+            "slot"
+        };
         let skin = theme.image(want);
         if img.rect != skin.rect {
             *img = skin;
@@ -958,12 +1829,50 @@ pub(super) fn board_ui(
             Special::Study => format!("study the {}", items.get(r.makes.item).title),
             Special::None => format!("make {}", a_or_some(&items, r.makes)),
         };
-        format!("{} to {what}  ({} / {})", layout(st.kind).work.0, at.board.work, r.work)
+        let l = layout(st.kind);
+        let how = models::tool(st.kind).map_or(ToolUse::Strike, |t| t.how);
+        let count = format!("({} / {})", at.board.work, r.work);
+        match how {
+            _ if at.tool.held => {
+                let doing = match how {
+                    ToolUse::Stir => "Hold the button and stir round and round",
+                    ToolUse::Saw => "Hold the button and saw back and forth",
+                    ToolUse::Fan => "Click to fan the smoke",
+                    ToolUse::Cut => "Click to cut",
+                    _ => "Click to bring it down",
+                };
+                format!("{doing} to {what}  {count}")
+            }
+            ToolUse::Turn(_) => format!("{}: click it to {what}  {count}", l.work.0),
+            _ => format!(
+                "{} to {what}: click the {} to pick it up  {count}",
+                l.work.0, l.tool_name
+            ),
+        }
     } else if let Some((r, have)) = benches.0.needs_heat(name, &at.board) {
-        format!("Put fuel in the fire to make {}  ({have} of {} heat)", a_or_some(&items, r.makes), r.heat)
+        format!(
+            "Put fuel in the fire to make {}  ({have} of {} heat)",
+            a_or_some(&items, r.makes),
+            r.heat
+        )
+    } else if at.tool.held {
+        format!(
+            "You hold the {}: put things {} first (right click puts it back)",
+            layout(st.kind).tool_name,
+            layout(st.kind).places()
+        )
     } else if let Some(h) = at.held {
-        if matches!(st.kind, StationKind::CookingPot | StationKind::Cauldron) && !benches.0.is_fuel(h.item) {
-            format!("Put it {}", layout(st.kind).slots[0].4)
+        let l = layout(st.kind);
+        let fire = l.views.iter().position(|v| v.name == "the fire");
+        if matches!(st.kind, StationKind::CookingPot | StationKind::Cauldron)
+            && !benches.0.is_fuel(h.item)
+        {
+            format!("Put it {}", l.slots[0].4)
+        } else if benches.0.is_fuel(h.item)
+            && let Some(i) = fire
+            && i != at.view_i
+        {
+            "It burns: look at the fire (W / S) and put it in".to_string()
         } else {
             format!("Set it down {}", layout(st.kind).places())
         }
@@ -983,15 +1892,31 @@ pub(super) fn board_ui(
                 })
                 .collect();
             if !r.mix.is_empty() {
-                let things: Vec<String> = r.mix.iter().map(|s| a_or_some(&items, *s).to_lowercase()).collect();
-                parts.push(format!("{} {}", and_list(&things), layout(st.kind).slots[0].4));
+                let things: Vec<String> = r
+                    .mix
+                    .iter()
+                    .map(|s| a_or_some(&items, *s).to_lowercase())
+                    .collect();
+                parts.push(format!(
+                    "{} {}",
+                    and_list(&things),
+                    layout(st.kind).slots[0].4
+                ));
             }
             if r.heat > 0 {
                 parts.push(format!("fuel worth {} heat in the fire", r.heat));
             }
             let (_, go) = layout(st.kind).work;
-            let gos = if r.work == 1 { format!("1 {go}") } else { format!("{} {}", r.work, plural(go)) };
-            let made = if r.makes.count > 1 { format!("{} x{}", items.get(r.makes.item).title, r.makes.count) } else { items.get(r.makes.item).title.clone() };
+            let gos = if r.work == 1 {
+                format!("1 {go}")
+            } else {
+                format!("{} {}", r.work, plural(go))
+            };
+            let made = if r.makes.count > 1 {
+                format!("{} x{}", items.get(r.makes.item).title, r.makes.count)
+            } else {
+                items.get(r.makes.item).title.clone()
+            };
             format!("{made}: {}, then {gos}", and_list(&parts))
         })
         .collect();
@@ -1016,13 +1941,26 @@ pub(super) fn board_ui(
         StationKind::Cauldron if recipes.is_empty() => recipes.push("The cauldron knows no draughts yet: study their parts under the magical lens".into()),
         _ => {}
     }
-    if matches!(st.kind, StationKind::CookingPot | StationKind::SmokingRack | StationKind::Cauldron) && !benches.0.fuel.is_empty() {
-        let mut fuel: Vec<(u32, &str)> = benches.0.fuel.iter().map(|(i, h)| (*h, items.get(*i).title.as_str())).collect();
+    if matches!(
+        st.kind,
+        StationKind::CookingPot | StationKind::SmokingRack | StationKind::Cauldron
+    ) && !benches.0.fuel.is_empty()
+    {
+        let mut fuel: Vec<(u32, &str)> = benches
+            .0
+            .fuel
+            .iter()
+            .map(|(i, h)| (*h, items.get(*i).title.as_str()))
+            .collect();
         fuel.sort();
         let fuel: Vec<String> = fuel.iter().map(|(h, t)| format!("{t} {h}")).collect();
         recipes.push(format!("Heat from each fuel: {}", fuel.join(" · ")));
     }
-    for (q, s) in [(0, st.kind.title().to_string()), (1, line), (2, recipes.join("\n"))] {
+    for (q, s) in [
+        (0, st.kind.title().to_string()),
+        (1, line),
+        (2, recipes.join("\n")),
+    ] {
         let set = |t: &mut Text| {
             if t.0 != s {
                 t.0 = s.clone();
@@ -1047,38 +1985,72 @@ fn study_text(
     blocks: &crate::blocks::Blocks,
 ) -> String {
     let title = |i: ItemId| items.get(i).title.clone();
-    let station = |s: &str| StationKind::from_name(s).map_or(s.to_string(), |k| k.title().to_string());
+    let station =
+        |s: &str| StationKind::from_name(s).map_or(s.to_string(), |k| k.title().to_string());
     let mut lines = vec![format!("The flux of the {}", title(item))];
     let mut made: Vec<String> = Vec::new();
-    for r in benches.recipes.iter().filter(|r| r.special == Special::None && r.makes.item == item) {
-        let parts: Vec<String> = r.slots.values().chain(&r.mix).map(|s| a_or_some(items, *s).to_lowercase()).collect();
+    for r in benches
+        .recipes
+        .iter()
+        .filter(|r| r.special == Special::None && r.makes.item == item)
+    {
+        let parts: Vec<String> = r
+            .slots
+            .values()
+            .chain(&r.mix)
+            .map(|s| a_or_some(items, *s).to_lowercase())
+            .collect();
         let line = format!("{}: {}", station(&r.station), and_list(&parts));
         if !made.contains(&line) {
             made.push(line);
         }
     }
-    for r in recipes.map(|r| r.list.as_slice()).unwrap_or_default().iter().filter(|r| r.makes.item == item) {
-        let parts: Vec<String> = r.needs.iter().map(|s| a_or_some(items, *s).to_lowercase()).collect();
+    for r in recipes
+        .map(|r| r.list.as_slice())
+        .unwrap_or_default()
+        .iter()
+        .filter(|r| r.makes.item == item)
+    {
+        let parts: Vec<String> = r
+            .needs
+            .iter()
+            .map(|s| a_or_some(items, *s).to_lowercase())
+            .collect();
         made.push(format!("By hand: {}", and_list(&parts)));
     }
     if !made.is_empty() {
         lines.push(format!("Made from: {}", made.join(" · ")));
     }
-    let mut found: Vec<String> = drops.map(|d| d.sources(item)).unwrap_or_default().iter().map(|b| blocks.registry.get(*b).name.replace('_', " ")).collect();
+    let mut found: Vec<String> = drops
+        .map(|d| d.sources(item))
+        .unwrap_or_default()
+        .iter()
+        .map(|b| blocks.registry.get(*b).name.replace('_', " "))
+        .collect();
     if let crate::items::ItemKind::Block(b) = items.get(item).kind {
-        found.push(format!("{} blocks", blocks.registry.get(b).name.replace('_', " ")));
+        found.push(format!(
+            "{} blocks",
+            blocks.registry.get(b).name.replace('_', " ")
+        ));
     }
     if !found.is_empty() {
         lines.push(format!("Found in: {}", found.join(", ")));
     }
     let mut into: Vec<String> = Vec::new();
-    for r in benches.recipes.iter().filter(|r| r.special == Special::None && r.slots.values().chain(&r.mix).any(|s| s.item == item)) {
+    for r in benches.recipes.iter().filter(|r| {
+        r.special == Special::None && r.slots.values().chain(&r.mix).any(|s| s.item == item)
+    }) {
         let t = title(r.makes.item);
         if !into.contains(&t) {
             into.push(t);
         }
     }
-    for r in recipes.map(|r| r.list.as_slice()).unwrap_or_default().iter().filter(|r| r.needs.iter().any(|s| s.item == item)) {
+    for r in recipes
+        .map(|r| r.list.as_slice())
+        .unwrap_or_default()
+        .iter()
+        .filter(|r| r.needs.iter().any(|s| s.item == item))
+    {
         let t = title(r.makes.item);
         if !into.contains(&t) {
             into.push(t);
@@ -1105,7 +2077,11 @@ fn and_list(parts: &[String]) -> String {
 /// "a Stick", "2 Small Rocks".
 fn a_or_some(items: &Items, s: Stack) -> String {
     let title = &items.get(s.item).title;
-    if s.count == 1 { format!("a {title}") } else { format!("{} {}", s.count, plural(title)) }
+    if s.count == 1 {
+        format!("a {title}")
+    } else {
+        format!("{} {}", s.count, plural(title))
+    }
 }
 
 fn plural(s: &str) -> String {
@@ -1148,17 +2124,41 @@ pub(super) fn board_for_screenshot(
         Some(("pot", rest)) => (StationKind::CookingPot, rest.to_string()),
         Some(("cut", rest)) => (StationKind::CuttingBoard, rest.to_string()),
         // Any other bench by its urns.ron name: `smoking_rack:raw_meat*2,peat`.
-        Some((k, rest)) if StationKind::from_name(k).and_then(board_name).is_some() => (StationKind::from_name(k).unwrap_or(StationKind::ToolBench), rest.to_string()),
+        Some((k, rest)) if StationKind::from_name(k).and_then(board_name).is_some() => (
+            StationKind::from_name(k).unwrap_or(StationKind::ToolBench),
+            rest.to_string(),
+        ),
         _ => (StationKind::ToolBench, v.clone()),
     };
-    let Some(st) = stations.iter().find(|s| s.kind == kind) else { return };
+    let Some(st) = stations.iter().find(|s| s.kind == kind) else {
+        return;
+    };
     *done = true;
     at.enter(*st, player.pos + Vec3::Y * player.eye);
     menus.open = true;
     menus.still = true;
+    // `BLOCKGAME_BOARDVIEW=1` looks from the second view (the fire);
+    // `BLOCKGAME_BOARDTOOL=lift` holds the tool, `=down` presses it into the
+    // work (stirring, sawing), a number freezes a swing that far through.
+    at.view_i = std::env::var("BLOCKGAME_BOARDVIEW")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    if let Ok(t) = std::env::var("BLOCKGAME_BOARDTOOL") {
+        at.tool.held = true;
+        at.tool.down = t == "down";
+        at.tool.freeze = t.parse().ok();
+    }
     let defs = slots_of(board_name(kind).unwrap_or_default());
-    for (i, part) in v.split(',').map(str::trim).filter(|s| !s.is_empty()).enumerate() {
-        let (name, n) = part.split_once('*').map_or((part, 1), |(a, b)| (a, b.parse().unwrap_or(1)));
+    for (i, part) in v
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .enumerate()
+    {
+        let (name, n) = part
+            .split_once('*')
+            .map_or((part, 1), |(a, b)| (a, b.parse().unwrap_or(1)));
         // "-" leaves a slot empty.
         let Some(id) = items.id(name) else { continue };
         if let Some(def) = defs.get(i) {
@@ -1176,22 +2176,37 @@ mod tests {
     #[test]
     fn the_view_looks_down_at_the_board_from_your_side() {
         for turned in [false, true] {
-            let st = Station { kind: StationKind::ToolBench, pos: Vec3::new(10.0, 5.0, -3.0), turned, urn: 0 };
+            let st = Station {
+                kind: StationKind::ToolBench,
+                pos: Vec3::new(10.0, 5.0, -3.0),
+                turned,
+                urn: 0,
+            };
             for side in [-1.0, 1.0] {
-                let v = board_view(&st, side);
+                let v = board_view(&st, side, 0);
                 let f = v.forward().as_vec3();
                 assert!(f.y < -0.6, "looks down: {f}");
                 // Looking through the middle of the view lands on the board.
                 let (_, top) = spot(&st, "tool_bench", false, v.translation, f);
                 let top = top.unwrap();
-                assert!((top - to_world(&st, Vec3::new(0.0, layout(st.kind).top(), side * 0.04))).length() < 0.05, "{top}");
+                assert!(
+                    (top - to_world(&st, Vec3::new(0.0, layout(st.kind).top(), side * 0.04)))
+                        .length()
+                        < 0.05,
+                    "{top}"
+                );
             }
         }
     }
 
     #[test]
     fn clicks_find_slots_and_the_stone() {
-        let st = Station { kind: StationKind::ToolBench, pos: Vec3::new(0.0, 0.0, 0.0), turned: true, urn: 0 };
+        let st = Station {
+            kind: StationKind::ToolBench,
+            pos: Vec3::new(0.0, 0.0, 0.0),
+            turned: true,
+            urn: 0,
+        };
         let down = Vec3::NEG_Y;
         let from = |x: f32, z: f32| to_world(&st, Vec3::new(x, 2.0, z));
         let name = |s: Option<Spot>| match s {
@@ -1200,40 +2215,115 @@ mod tests {
             Some(Spot::Made) => "made",
             None => "none",
         };
-        assert_eq!(name(spot(&st, "tool_bench", false, from(-0.3, -0.12), down).0), "handle");
-        assert_eq!(name(spot(&st, "tool_bench", false, from(0.32, 0.15), down).0), "material");
-        assert_eq!(name(spot(&st, "tool_bench", false, from(0.42, -0.24), down).0), "stone");
-        assert_eq!(name(spot(&st, "tool_bench", true, from(-0.3, 0.2), down).0), "made");
-        assert_eq!(name(spot(&st, "tool_bench", false, from(-0.3, 0.2), down).0), "none");
-        let st = Station { kind: StationKind::CarpentryBench, ..st };
-        assert_eq!(name(spot(&st, "carpentry_bench", false, from(-0.4, 0.05), down).0), "bed");
-        assert_eq!(name(spot(&st, "carpentry_bench", false, from(0.72, 0.1), down).0), "vise");
-        assert_eq!(name(spot(&st, "carpentry_bench", false, from(0.1, -0.3), down).0), "stone");
-        assert_eq!(name(spot(&st, "carpentry_bench", true, from(0.2, 0.32), down).0), "made");
-        let st = Station { kind: StationKind::CampMat, ..st };
-        assert_eq!(name(spot(&st, "camp_mat", false, from(-0.3, 0.1), down).0), "base");
-        assert_eq!(name(spot(&st, "camp_mat", false, from(0.25, -0.2), down).0), "tie");
-        assert_eq!(name(spot(&st, "camp_mat", false, from(0.35, 0.23), down).0), "stone");
-        assert_eq!(name(spot(&st, "camp_mat", true, from(-0.2, -0.33), down).0), "made");
-        let st = Station { kind: StationKind::CookingPot, ..st };
+        assert_eq!(
+            name(spot(&st, "tool_bench", false, from(-0.3, -0.12), down).0),
+            "handle"
+        );
+        assert_eq!(
+            name(spot(&st, "tool_bench", false, from(0.32, 0.15), down).0),
+            "material"
+        );
+        assert_eq!(
+            name(spot(&st, "tool_bench", false, from(0.42, -0.24), down).0),
+            "stone"
+        );
+        assert_eq!(
+            name(spot(&st, "tool_bench", true, from(-0.3, 0.2), down).0),
+            "made"
+        );
+        assert_eq!(
+            name(spot(&st, "tool_bench", false, from(-0.3, 0.2), down).0),
+            "none"
+        );
+        let st = Station {
+            kind: StationKind::CarpentryBench,
+            ..st
+        };
+        assert_eq!(
+            name(spot(&st, "carpentry_bench", false, from(-0.4, 0.05), down).0),
+            "bed"
+        );
+        assert_eq!(
+            name(spot(&st, "carpentry_bench", false, from(0.72, 0.1), down).0),
+            "vise"
+        );
+        assert_eq!(
+            name(spot(&st, "carpentry_bench", false, from(0.1, -0.3), down).0),
+            "stone"
+        );
+        assert_eq!(
+            name(spot(&st, "carpentry_bench", true, from(0.2, 0.32), down).0),
+            "made"
+        );
+        let st = Station {
+            kind: StationKind::CampMat,
+            ..st
+        };
+        assert_eq!(
+            name(spot(&st, "camp_mat", false, from(-0.3, 0.1), down).0),
+            "base"
+        );
+        assert_eq!(
+            name(spot(&st, "camp_mat", false, from(0.25, -0.2), down).0),
+            "tie"
+        );
+        assert_eq!(
+            name(spot(&st, "camp_mat", false, from(0.35, 0.23), down).0),
+            "stone"
+        );
+        assert_eq!(
+            name(spot(&st, "camp_mat", true, from(-0.2, -0.33), down).0),
+            "made"
+        );
+        let st = Station {
+            kind: StationKind::CookingPot,
+            ..st
+        };
         for (x, z) in [(0.0, -0.1), (0.15, -0.1), (0.0, 0.15), (0.2, 0.15)] {
-            assert!(name(spot(&st, "cooking_pot", false, from(x, z), down).0).starts_with("pot_"), "{x} {z}");
+            assert!(
+                name(spot(&st, "cooking_pot", false, from(x, z), down).0).starts_with("pot_"),
+                "{x} {z}"
+            );
         }
-        assert_eq!(name(spot(&st, "cooking_pot", false, from(-0.5, 0.05), down).0), "fire");
-        assert_eq!(name(spot(&st, "cooking_pot", false, from(0.6, -0.1), down).0), "stone");
-        assert_eq!(name(spot(&st, "cooking_pot", true, from(0.1, 0.1), down).0), "made");
-        let st = Station { kind: StationKind::CuttingBoard, ..st };
-        assert_eq!(name(spot(&st, "cutting_board", false, from(-0.2, 0.0), down).0), "board");
-        assert_eq!(name(spot(&st, "cutting_board", false, from(0.3, 0.19), down).0), "stone");
-        assert_eq!(name(spot(&st, "cutting_board", true, from(0.26, -0.1), down).0), "made");
-        assert_eq!(name(spot(&st, "cutting_board", false, from(0.26, -0.1), down).0), "none");
+        assert_eq!(
+            name(spot(&st, "cooking_pot", false, from(-0.5, 0.05), down).0),
+            "fire"
+        );
+        assert_eq!(
+            name(spot(&st, "cooking_pot", false, from(0.6, -0.1), down).0),
+            "stone"
+        );
+        assert_eq!(
+            name(spot(&st, "cooking_pot", true, from(0.1, 0.1), down).0),
+            "made"
+        );
+        let st = Station {
+            kind: StationKind::CuttingBoard,
+            ..st
+        };
+        assert_eq!(
+            name(spot(&st, "cutting_board", false, from(-0.2, 0.0), down).0),
+            "board"
+        );
+        assert_eq!(
+            name(spot(&st, "cutting_board", false, from(0.3, 0.19), down).0),
+            "stone"
+        );
+        assert_eq!(
+            name(spot(&st, "cutting_board", true, from(0.26, -0.1), down).0),
+            "made"
+        );
+        assert_eq!(
+            name(spot(&st, "cutting_board", false, from(0.26, -0.1), down).0),
+            "none"
+        );
         let at = |kind, x: f32, z: f32, made: bool| {
             let st = Station { kind, ..st };
             name(spot(&st, board_name(kind).unwrap(), made, from(x, z), down).0)
         };
         assert_eq!(at(StationKind::SmokingRack, -0.2, 0.05, false), "rack");
         assert_eq!(at(StationKind::SmokingRack, 0.65, 0.0, false), "fire");
-        assert_eq!(at(StationKind::SmokingRack, -0.75, 0.0, false), "stone");
+        assert_eq!(at(StationKind::SmokingRack, 0.66, 0.42, false), "stone");
         assert_eq!(at(StationKind::IronAnvil, 0.1, 0.0, false), "anvil");
         assert_eq!(at(StationKind::IronAnvil, -0.55, 0.17, false), "flux");
         assert_eq!(at(StationKind::IronAnvil, -0.5, -0.03, false), "handle");
@@ -1241,11 +2331,84 @@ mod tests {
         assert_eq!(at(StationKind::SharpeningStone, 0.22, 0.14, false), "edge");
         assert_eq!(at(StationKind::SharpeningStone, -0.05, 0.0, false), "stone");
         assert_eq!(at(StationKind::MagicalLens, 0.05, 0.05, false), "plate");
-        assert_eq!(at(StationKind::MagicalLens, -0.3, -0.18, false), "stone");
+        assert_eq!(at(StationKind::MagicalLens, -0.3, 0.0, false), "stone");
         assert!(at(StationKind::Cauldron, 0.1, 0.1, false).starts_with("brew_"));
         assert_eq!(at(StationKind::Cauldron, -0.47, 0.0, false), "fire");
         assert_eq!(at(StationKind::Cauldron, 0.62, 0.0, false), "stone");
         assert_eq!(at(StationKind::Cauldron, 0.1, 0.1, true), "made");
+    }
+
+    #[test]
+    fn a_full_turn_round_the_pot_is_one_stir() {
+        let mut g = Gesture::default();
+        let mut stirs = 0;
+        for i in 0..=40 {
+            stirs += g.stir(i as f32 / 40.0 * std::f32::consts::TAU).0;
+        }
+        assert_eq!(stirs, 1);
+        // Back and forth doesn't stir.
+        let mut g = Gesture::default();
+        let wobble: u32 = (0..200).map(|i| g.stir(((i as f32) * 0.5).sin()).0).sum();
+        assert_eq!(wobble, 0);
+        // The other way round counts too.
+        let mut g = Gesture::default();
+        let back: u32 = (0..=80)
+            .map(|i| g.stir(-(i as f32) / 40.0 * std::f32::consts::TAU).0)
+            .sum();
+        assert_eq!(back, 2);
+    }
+
+    #[test]
+    fn sawing_counts_strokes_while_the_button_is_held() {
+        let mut g = Gesture::default();
+        let mut n = 0;
+        for i in 0..=20 {
+            n += g.saw(i as f32 * 0.031);
+        }
+        assert_eq!(n, 2, "0.6 of travel");
+        // Letting go and pressing again elsewhere isn't a stroke.
+        g.lift();
+        assert_eq!(g.saw(-5.0), 0);
+    }
+
+    #[test]
+    fn a_swing_goes_up_lands_on_the_work_and_comes_back() {
+        for how in [ToolUse::Strike, ToolUse::Cut] {
+            let lift = 0.12;
+            assert!(swing_pose(how, 0.3, lift).0 > 0.05, "{how:?} up");
+            assert!(
+                (swing_pose(how, SWING_HIT, lift).0 + lift).abs() < 1e-4,
+                "{how:?} lands"
+            );
+            assert!(swing_pose(how, 1.0, lift).0.abs() < 1e-4, "{how:?} back");
+        }
+    }
+
+    #[test]
+    fn every_bench_has_its_tool_and_a_view() {
+        for kind in [
+            StationKind::CampMat,
+            StationKind::ToolBench,
+            StationKind::CarpentryBench,
+            StationKind::CookingPot,
+            StationKind::CuttingBoard,
+            StationKind::SmokingRack,
+            StationKind::IronAnvil,
+            StationKind::SharpeningStone,
+            StationKind::MagicalLens,
+            StationKind::Cauldron,
+        ] {
+            let t = models::tool(kind).unwrap();
+            let l = layout(kind);
+            assert!(!l.views.is_empty());
+            // The tool lies where a click picks it up.
+            let (lo, hi) = l.tool;
+            assert!(
+                t.rest.cmpge(lo - 0.02).all() && t.rest.cmple(hi + 0.02).all(),
+                "{kind:?}: {} not in {lo} {hi}",
+                t.rest
+            );
+        }
     }
 
     #[test]
@@ -1263,7 +2426,11 @@ mod tests {
             StationKind::Cauldron,
         ] {
             for s in slots_of(board_name(kind).unwrap()) {
-                assert!(layout(kind).slots.iter().any(|l| l.0 == s.name), "{kind:?} {}", s.name);
+                assert!(
+                    layout(kind).slots.iter().any(|l| l.0 == s.name),
+                    "{kind:?} {}",
+                    s.name
+                );
             }
         }
     }

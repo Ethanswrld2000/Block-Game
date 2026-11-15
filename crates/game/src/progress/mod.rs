@@ -25,20 +25,34 @@ pub struct ProgressPlugin;
 
 impl Plugin for ProgressPlugin {
     fn build(&self, app: &mut App) {
-        let tree = Tree::from_ron(include_str!("../../../../assets/data/skills.ron")).unwrap_or_else(|e| panic!("{e}"));
-        let prog = Progression::from_ron(include_str!("../../../../assets/data/progression.ron")).unwrap_or_else(|e| panic!("{e}"));
+        let tree = Tree::from_ron(include_str!("../../../../assets/data/skills.ron"))
+            .unwrap_or_else(|e| panic!("{e}"));
+        let prog = Progression::from_ron(include_str!("../../../../assets/data/progression.ron"))
+            .unwrap_or_else(|e| panic!("{e}"));
         let progress = Progress::new(&prog);
         app.insert_resource(tree)
             .insert_resource(prog)
             .insert_resource(progress)
             .init_resource::<Perks>()
             .init_resource::<Spells>()
-            .insert_resource(Potions::from_ron(include_str!("../../../../assets/data/potions.ron")).unwrap_or_else(|e| panic!("{e}")))
+            .insert_resource(
+                Potions::from_ron(include_str!("../../../../assets/data/potions.ron"))
+                    .unwrap_or_else(|e| panic!("{e}")),
+            )
             .add_message::<GainXp>()
             .add_systems(crate::menu::GamePostStartup, load_progress)
             .add_systems(
                 crate::menu::GameUpdate,
-                (xp_from_mining, xp_from_sky, gain_xp, update_perks, drink, cast, apply_to_body, follow_light)
+                (
+                    xp_from_mining,
+                    xp_from_sky,
+                    gain_xp,
+                    update_perks,
+                    drink,
+                    cast,
+                    apply_to_body,
+                    follow_light,
+                )
                     .chain()
                     .after(SurvivalSet)
                     .after(crate::interact::InteractSet),
@@ -71,7 +85,16 @@ pub struct Progress {
 
 impl Progress {
     fn new(p: &Progression) -> Self {
-        Self { level: Level::default(), learned: Learned { points: p.start_points, ..default() }, focus: BASE_FOCUS, sky: false, found: Default::default() }
+        Self {
+            level: Level::default(),
+            learned: Learned {
+                points: p.start_points,
+                ..default()
+            },
+            focus: BASE_FOCUS,
+            sky: false,
+            found: Default::default(),
+        }
     }
 }
 
@@ -134,7 +157,9 @@ pub struct Potions(pub std::collections::BTreeMap<String, Potion>);
 
 impl Potions {
     pub fn from_ron(text: &str) -> Result<Self, String> {
-        ron::from_str(text).map(Self).map_err(|e| format!("potions.ron: {e}"))
+        ron::from_str(text)
+            .map(Self)
+            .map_err(|e| format!("potions.ron: {e}"))
     }
 }
 
@@ -149,13 +174,19 @@ fn drink(
     mut toast: MessageWriter<Toast>,
 ) {
     for crate::survival::Ate(id) in ate.read() {
-        let Some(p) = potions.0.get(&items.get(*id).name) else { continue };
+        let Some(p) = potions.0.get(&items.get(*id).name) else {
+            continue;
+        };
         if let Some(spell) = p.spell {
             let i = SPELLS.iter().position(|s| *s == spell).unwrap_or(0);
             spells.brewed[i] = spells.brewed[i].max(p.seconds);
             *spells.on(spell) = true;
             spells.feather = false;
-            toast.write(Toast(format!("{} for {:.0} seconds, without focus", spell.title(), p.seconds)));
+            toast.write(Toast(format!(
+                "{} for {:.0} seconds, without focus",
+                spell.title(),
+                p.seconds
+            )));
         }
         if p.focus > 0.0 {
             progress.focus = (progress.focus + p.focus).min(perks.max_focus());
@@ -173,14 +204,22 @@ fn screenshot_run() -> bool {
     std::env::var_os("BLOCKGAME_SCREENSHOT").is_some()
 }
 
-fn xp_from_mining(mut mined: MessageReader<Mined>, blocks: Res<crate::blocks::Blocks>, prog: Res<Progression>, mut gain: MessageWriter<GainXp>) {
+fn xp_from_mining(
+    mut mined: MessageReader<Mined>,
+    blocks: Res<crate::blocks::Blocks>,
+    prog: Res<Progression>,
+    mut gain: MessageWriter<GainXp>,
+) {
     let mut total = 0.0;
     for m in mined.read() {
         let h = blocks.registry.get(m.block).hardness.max(0.0);
         total += (h * prog.xp.mine).min(prog.xp.mine_cap);
     }
     if total > 0.0 {
-        gain.write(GainXp { xp: total, why: String::new() });
+        gain.write(GainXp {
+            xp: total,
+            why: String::new(),
+        });
     }
 }
 
@@ -200,11 +239,20 @@ fn xp_from_sky(
     let (x, z) = (player.pos.x.floor() as i32, player.pos.z.floor() as i32);
     if generator.0.island_span(x, z).is_some() {
         progress.sky = true;
-        gain.write(GainXp { xp: prog.xp.sky_island, why: "First steps on a sky island".into() });
+        gain.write(GainXp {
+            xp: prog.xp.sky_island,
+            why: "First steps on a sky island".into(),
+        });
     }
 }
 
-fn gain_xp(mut gains: MessageReader<GainXp>, prog: Res<Progression>, mut progress: ResMut<Progress>, mut toast: MessageWriter<Toast>, s: Res<Survival>) {
+fn gain_xp(
+    mut gains: MessageReader<GainXp>,
+    prog: Res<Progression>,
+    mut progress: ResMut<Progress>,
+    mut toast: MessageWriter<Toast>,
+    s: Res<Survival>,
+) {
     for g in gains.read() {
         if s.dead_for.is_some() {
             continue;
@@ -216,7 +264,12 @@ fn gain_xp(mut gains: MessageReader<GainXp>, prog: Res<Progression>, mut progres
         let up = p.level.add(&prog, g.xp);
         if up > 0 {
             p.learned.points += up * prog.points;
-            toast.write(Toast(format!("Level {}! {} skill point{} to spend (K)", p.level.level, p.learned.points, if p.learned.points == 1 { "" } else { "s" })));
+            toast.write(Toast(format!(
+                "Level {}! {} skill point{} to spend (K)",
+                p.level.level,
+                p.learned.points,
+                if p.learned.points == 1 { "" } else { "s" }
+            )));
         }
     }
 }
@@ -247,12 +300,19 @@ fn cast(
     let dt = time.delta_secs();
     let dead = s.dead_for.is_some();
     if !menus.open && !dead && *mode == MoveMode::Walk {
-        for (key, spell) in [(KeyCode::KeyG, Spell::Levitation), (KeyCode::KeyX, Spell::Light), (KeyCode::KeyV, Spell::Warmth)] {
+        for (key, spell) in [
+            (KeyCode::KeyG, Spell::Levitation),
+            (KeyCode::KeyX, Spell::Light),
+            (KeyCode::KeyV, Spell::Warmth),
+        ] {
             if !keys.just_pressed(key) {
                 continue;
             }
             if !perks.spells.contains(&spell) {
-                toast.write(Toast(format!("You haven't learned {} (K for skills)", spell.title())));
+                toast.write(Toast(format!(
+                    "You haven't learned {} (K for skills)",
+                    spell.title()
+                )));
                 continue;
             }
             let on = match spell {
@@ -289,9 +349,19 @@ fn cast(
     }
     let max = perks.max_focus();
     let costs = |s: Spell| !spells.free(s);
-    let drain = if spells.levitate && costs(Spell::Levitation) { LEVITATE_DRAIN * (1.0 - perks.levitate_cost.min(0.8)) } else { 0.0 }
-        + if spells.light && costs(Spell::Light) { LIGHT_DRAIN } else { 0.0 }
-        + if spells.warmth && costs(Spell::Warmth) { WARMTH_DRAIN } else { 0.0 };
+    let drain = if spells.levitate && costs(Spell::Levitation) {
+        LEVITATE_DRAIN * (1.0 - perks.levitate_cost.min(0.8))
+    } else {
+        0.0
+    } + if spells.light && costs(Spell::Light) {
+        LIGHT_DRAIN
+    } else {
+        0.0
+    } + if spells.warmth && costs(Spell::Warmth) {
+        WARMTH_DRAIN
+    } else {
+        0.0
+    };
     let p = progress.bypass_change_detection();
     // Like the clock, focus stands still during a screenshot run.
     let drain = if screenshot_run() { 0.0 } else { drain };
@@ -342,12 +412,20 @@ fn follow_light(
         (true, Ok((_, mut tf))) => {
             let t = time.elapsed_secs();
             let bob = Vec3::Y * (t * 2.0).sin() * 0.08;
-            tf.translation = tf.translation.lerp(want + bob, (time.delta_secs() * 6.0).min(1.0));
+            tf.translation = tf
+                .translation
+                .lerp(want + bob, (time.delta_secs() * 6.0).min(1.0));
         }
         (true, Err(_)) => {
             commands.spawn((
                 SpellLight,
-                PointLight { color: Color::srgb(0.75, 0.88, 1.0), intensity: 90_000.0, range: 16.0, shadow_maps_enabled: false, ..default() },
+                PointLight {
+                    color: Color::srgb(0.75, 0.88, 1.0),
+                    intensity: 90_000.0,
+                    range: 16.0,
+                    shadow_maps_enabled: false,
+                    ..default()
+                },
                 Transform::from_translation(want),
             ));
         }
@@ -356,7 +434,13 @@ fn follow_light(
     }
 }
 
-fn load_progress(dir: Res<SaveDir>, tree: Res<Tree>, mut progress: ResMut<Progress>, mut perks: ResMut<Perks>, mut spells: ResMut<Spells>) {
+fn load_progress(
+    dir: Res<SaveDir>,
+    tree: Res<Tree>,
+    mut progress: ResMut<Progress>,
+    mut perks: ResMut<Perks>,
+    mut spells: ResMut<Spells>,
+) {
     if !screenshot_run()
         && let Ok(text) = std::fs::read_to_string(dir.file("progress.ron"))
     {
@@ -417,10 +501,13 @@ mod tests {
     #[test]
     fn levitation_reaches_the_sky_islands() {
         let tree = Tree::from_ron(include_str!("../../../../assets/data/skills.ron")).unwrap();
-        let prog = Progression::from_ron(include_str!("../../../../assets/data/progression.ron")).unwrap();
+        let prog =
+            Progression::from_ron(include_str!("../../../../assets/data/progression.ron")).unwrap();
         let mut p = Progress::new(&prog);
         p.learned.points += prog.points; // level 2
-        p.learned.take(&tree, skills::Node::Major(tree.root)).unwrap();
+        p.learned
+            .take(&tree, skills::Node::Major(tree.root))
+            .unwrap();
         let mystic = tree.majors.iter().position(|m| m.name == "mystic").unwrap();
         p.learned.take(&tree, skills::Node::Major(mystic)).unwrap();
         let perks = p.learned.perks(&tree);
@@ -428,6 +515,9 @@ mod tests {
         let seconds = perks.max_focus() / (LEVITATE_DRAIN * (1.0 - perks.levitate_cost));
         let climb = seconds * LEVITATE_UP;
         let lowest_island_top = (worldgen::SKY_MIN + 40) as f32;
-        assert!(climb > lowest_island_top - worldgen::SEA_LEVEL as f32, "climbs {climb:.0} blocks");
+        assert!(
+            climb > lowest_island_top - worldgen::SEA_LEVEL as f32,
+            "climbs {climb:.0} blocks"
+        );
     }
 }

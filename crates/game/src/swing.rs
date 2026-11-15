@@ -116,12 +116,23 @@ impl Swing {
     pub fn pose(self, t: f32) -> (Vec3, Quat) {
         let keys = self.keys();
         let t = t.clamp(0.0, 1.0);
-        let i = keys.iter().position(|k| k.t >= t).unwrap_or(keys.len() - 1).max(1);
+        let i = keys
+            .iter()
+            .position(|k| k.t >= t)
+            .unwrap_or(keys.len() - 1)
+            .max(1);
         let (a, b) = (keys[i - 1], keys[i]);
-        let x = if b.t > a.t { b.ease.apply((t - a.t) / (b.t - a.t)) } else { 1.0 };
+        let x = if b.t > a.t {
+            b.ease.apply((t - a.t) / (b.t - a.t))
+        } else {
+            1.0
+        };
         let lerp = |p: [f32; 3], q: [f32; 3]| Vec3::from(p).lerp(Vec3::from(q), x);
         let rot = lerp(a.rot, b.rot);
-        (lerp(a.pos, b.pos), Quat::from_euler(EulerRot::XYZ, rot.x, rot.y, rot.z))
+        (
+            lerp(a.pos, b.pos),
+            Quat::from_euler(EulerRot::XYZ, rot.x, rot.y, rot.z),
+        )
     }
 }
 
@@ -136,7 +147,11 @@ pub fn lands(swing: Swing, before: f32, after: f32) -> bool {
 /// each swing does one blow's share of it. Total time comes out close to the
 /// old continuous mining: the first blow lands at the contact moment.
 pub fn blow_share(swing: Swing, seconds: f32) -> f32 {
-    if seconds <= 0.0 { 1.0 } else { swing.period() / seconds }
+    if seconds <= 0.0 {
+        1.0
+    } else {
+        swing.period() / seconds
+    }
 }
 
 #[cfg(test)]
@@ -154,7 +169,10 @@ mod tests {
         for s in ALL {
             for t in [0.0, 1.0] {
                 let (p, q) = s.pose(t);
-                assert!(p.length() < 1e-5 && q.angle_between(Quat::IDENTITY) < 1e-5, "{s:?} at {t}");
+                assert!(
+                    p.length() < 1e-5 && q.angle_between(Quat::IDENTITY) < 1e-5,
+                    "{s:?} at {t}"
+                );
             }
         }
     }
@@ -173,8 +191,15 @@ mod tests {
         // The tool is furthest forward and down exactly at contact: the
         // moment the hit is counted is the moment it looks like it hits.
         for s in ALL {
-            let deepest = (0..=1000).map(|i| i as f32 / 1000.0).min_by(|a, b| pitch(s.pose(*a).1).total_cmp(&pitch(s.pose(*b).1))).unwrap();
-            assert!((deepest - s.contact()).abs() < 0.002, "{s:?}: deepest at {deepest}, blow at {}", s.contact());
+            let deepest = (0..=1000)
+                .map(|i| i as f32 / 1000.0)
+                .min_by(|a, b| pitch(s.pose(*a).1).total_cmp(&pitch(s.pose(*b).1)))
+                .unwrap();
+            assert!(
+                (deepest - s.contact()).abs() < 0.002,
+                "{s:?}: deepest at {deepest}, blow at {}",
+                s.contact()
+            );
         }
     }
 
@@ -183,7 +208,10 @@ mod tests {
         for s in ALL {
             let c = s.contact();
             let speed = |t: f32| (pitch(s.pose(t).1) - pitch(s.pose(t - 0.01).1)).abs();
-            assert!(speed(c) > speed(c - 0.08), "{s:?} should hit hardest at contact");
+            assert!(
+                speed(c) > speed(c - 0.08),
+                "{s:?} should hit hardest at contact"
+            );
         }
     }
 
@@ -196,7 +224,10 @@ mod tests {
         assert!(yaw(Swing::Chop, 0.55) - yaw(Swing::Chop, 0.38) > 0.8);
         // Both are raised above rest before they come down.
         for s in [Swing::Chop, Swing::Overhead] {
-            assert!(s.pose(0.38).0.y > 0.05 && s.pose(s.contact()).0.y < s.pose(0.38).0.y - 0.05, "{s:?}");
+            assert!(
+                s.pose(0.38).0.y > 0.05 && s.pose(s.contact()).0.y < s.pose(0.38).0.y - 0.05,
+                "{s:?}"
+            );
         }
     }
 

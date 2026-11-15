@@ -75,7 +75,14 @@ pub struct Grade {
 
 impl Default for Grade {
     fn default() -> Self {
-        Self { exposure: 0.0, contrast: 1.0, saturation: 1.0, warmth: 0.0, mist: 0.0, sunset: None }
+        Self {
+            exposure: 0.0,
+            contrast: 1.0,
+            saturation: 1.0,
+            warmth: 0.0,
+            mist: 0.0,
+            sunset: None,
+        }
     }
 }
 
@@ -97,7 +104,13 @@ impl Grade {
         let l = |a: f32, b: f32| a + (b - a) * t;
         let sunset = match (self.sunset, o.sunset) {
             (Some(a), Some(b)) => Some((l(a.0, b.0), l(a.1, b.1), l(a.2, b.2))),
-            (a, b) => if t < 0.5 { a } else { b },
+            (a, b) => {
+                if t < 0.5 {
+                    a
+                } else {
+                    b
+                }
+            }
         };
         Grade {
             exposure: l(self.exposure, o.exposure),
@@ -147,7 +160,8 @@ pub struct AtmospherePlugin;
 
 impl Plugin for AtmospherePlugin {
     fn build(&self, app: &mut App) {
-        let looks = Looks::from_ron(include_str!("../../../assets/data/atmosphere.ron")).unwrap_or_else(|e| panic!("{e}"));
+        let looks = Looks::from_ron(include_str!("../../../assets/data/atmosphere.ron"))
+            .unwrap_or_else(|e| panic!("{e}"));
         app.insert_resource(looks)
             .init_resource::<Atmos>()
             .init_resource::<LocalLook>()
@@ -162,7 +176,12 @@ impl Plugin for AtmospherePlugin {
 }
 
 /// The season's sunset colour, for the sky.
-fn season_sunset(clock: Res<WorldClock>, seasons: Res<Seasons>, looks: Res<Looks>, mut atmos: ResMut<Atmos>) {
+fn season_sunset(
+    clock: Res<WorldClock>,
+    seasons: Res<Seasons>,
+    looks: Res<Looks>,
+    mut atmos: ResMut<Atmos>,
+) {
     let p = seasons.at(&clock);
     let a = looks.season(&seasons.list[p.current].name);
     let b = looks.season(&seasons.list[p.next].name);
@@ -196,18 +215,31 @@ fn sample_biome(
 /// lightning) glow, so the pixel art stays crisp. `BLOCKGAME_NO_BLOOM=1` turns
 /// it off for comparisons.
 pub fn bloom() -> Bloom {
-    let intensity = if std::env::var("BLOCKGAME_NO_BLOOM").is_ok() { 0.0 } else { 0.12 };
+    let intensity = if std::env::var("BLOCKGAME_NO_BLOOM").is_ok() {
+        0.0
+    } else {
+        0.12
+    };
     Bloom {
         intensity,
         low_frequency_boost: 0.4,
-        prefilter: BloomPrefilter { threshold: 1.1, threshold_softness: 0.5 },
+        prefilter: BloomPrefilter {
+            threshold: 1.1,
+            threshold_softness: 0.5,
+        },
         composite_mode: BloomCompositeMode::Additive,
         ..Bloom::NATURAL
     }
 }
 
 /// Combine every grade into the one in effect now.
-pub fn current_grade(looks: &Looks, season: Grade, weather: Grade, biome: Grade, night: f32) -> Grade {
+pub fn current_grade(
+    looks: &Looks,
+    season: Grade,
+    weather: Grade,
+    biome: Grade,
+    night: f32,
+) -> Grade {
     let day = looks.base.and(season).and(weather).and(biome);
     // Night replaces some of the day's look rather than adding to it: colour
     // drains away whatever the season.
@@ -233,12 +265,18 @@ fn apply(
     mut last: Local<AtmosParams>,
 ) {
     let p = seasons.at(&clock);
-    let season = looks.season(&seasons.list[p.current].name).lerp(looks.season(&seasons.list[p.next].name), p.blend);
+    let season = looks
+        .season(&seasons.list[p.current].name)
+        .lerp(looks.season(&seasons.list[p.next].name), p.blend);
     let t = state.blend * state.blend * (3.0 - 2.0 * state.blend);
-    let weather = looks.weather(&kinds.list[state.previous].name).lerp(looks.weather(&kinds.list[state.current].name), t);
+    let weather = looks
+        .weather(&kinds.list[state.previous].name)
+        .lerp(looks.weather(&kinds.list[state.current].name), t);
     let grade = current_grade(&looks, season, weather, look.biome, atmos.night);
 
-    let Ok((tf, mut grading)) = cam.single_mut() else { return };
+    let Ok((tf, mut grading)) = cam.single_mut() else {
+        return;
+    };
     // Mist: weather, biome and morning, and none deep underground.
     let amount = (grade.mist + looks.dawn_mist * atmos.dawn).max(0.0);
     let underground = 1.0 - ((tf.translation.y - (MIST_BASE - 30.0)) / 22.0).clamp(0.0, 1.0);
@@ -258,7 +296,10 @@ fn apply(
         return;
     }
     let mut sent = false;
-    for h in [&blocks.material, &blocks.translucent_material].into_iter().flatten() {
+    for h in [&blocks.material, &blocks.translucent_material]
+        .into_iter()
+        .flatten()
+    {
         if let Some(mut m) = voxel_materials.get_mut(h) {
             m.extension.atmos = params;
             sent = true;
@@ -314,25 +355,49 @@ mod tests {
     #[test]
     fn data_names_exist() {
         let l = looks();
-        let seasons = crate::clock::Seasons::from_ron(include_str!("../../../assets/data/seasons.ron")).unwrap();
+        let seasons =
+            crate::clock::Seasons::from_ron(include_str!("../../../assets/data/seasons.ron"))
+                .unwrap();
         for name in l.seasons.keys() {
-            assert!(seasons.list.iter().any(|s| &s.name == name), "atmosphere.ron: no season {name}");
+            assert!(
+                seasons.list.iter().any(|s| &s.name == name),
+                "atmosphere.ron: no season {name}"
+            );
         }
-        let kinds = WeatherKinds::from_ron(include_str!("../../../assets/data/weather.ron")).unwrap();
+        let kinds =
+            WeatherKinds::from_ron(include_str!("../../../assets/data/weather.ron")).unwrap();
         for name in l.weather.keys() {
-            assert!(kinds.find(name).is_some(), "atmosphere.ron: no weather {name}");
+            assert!(
+                kinds.find(name).is_some(),
+                "atmosphere.ron: no weather {name}"
+            );
         }
         let biomes = include_str!("../../../assets/data/biomes.ron");
         for name in l.biomes.keys() {
-            assert!(biomes.contains(&format!("name: \"{name}\"")), "atmosphere.ron: no biome {name}");
+            assert!(
+                biomes.contains(&format!("name: \"{name}\"")),
+                "atmosphere.ron: no biome {name}"
+            );
         }
     }
 
     #[test]
     fn night_drains_colour() {
         let l = looks();
-        let day = current_grade(&l, Grade::default(), Grade::default(), Grade::default(), 0.0);
-        let night = current_grade(&l, Grade::default(), Grade::default(), Grade::default(), 1.0);
+        let day = current_grade(
+            &l,
+            Grade::default(),
+            Grade::default(),
+            Grade::default(),
+            0.0,
+        );
+        let night = current_grade(
+            &l,
+            Grade::default(),
+            Grade::default(),
+            Grade::default(),
+            1.0,
+        );
         assert!(night.saturation < day.saturation);
         assert!(night.warmth < day.warmth);
     }
@@ -348,8 +413,16 @@ mod tests {
 
     #[test]
     fn grades_combine() {
-        let a = Grade { contrast: 1.1, mist: 0.2, ..default() };
-        let b = Grade { contrast: 0.5, mist: 0.3, ..default() };
+        let a = Grade {
+            contrast: 1.1,
+            mist: 0.2,
+            ..default()
+        };
+        let b = Grade {
+            contrast: 0.5,
+            mist: 0.3,
+            ..default()
+        };
         let c = a.and(b);
         assert!((c.contrast - 0.55).abs() < 1e-6 && (c.mist - 0.5).abs() < 1e-6);
         assert_eq!(a.lerp(b, 0.0), a);

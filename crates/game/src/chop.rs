@@ -11,7 +11,14 @@ pub struct ChopPlugin;
 
 impl Plugin for ChopPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<Chop>().init_resource::<TreeShake>().add_systems(crate::menu::GameUpdate, (start_shake, push_to_material).chain().after(crate::interact::InteractSet));
+        app.add_message::<Chop>()
+            .init_resource::<TreeShake>()
+            .add_systems(
+                crate::menu::GameUpdate,
+                (start_shake, push_to_material)
+                    .chain()
+                    .after(crate::interact::InteractSet),
+            );
     }
 }
 
@@ -47,12 +54,20 @@ fn start_shake(time: Res<Time>, mut chops: MessageReader<Chop>, mut shake: ResMu
     }
 }
 
-fn push_to_material(shake: Res<TreeShake>, blocks: Res<Blocks>, mut materials: ResMut<Assets<VoxelMaterial>>, mut last: Local<Vec4>) {
+fn push_to_material(
+    shake: Res<TreeShake>,
+    blocks: Res<Blocks>,
+    mut materials: ResMut<Assets<VoxelMaterial>>,
+    mut last: Local<Vec4>,
+) {
     let want = shake.at.extend(shake.amount);
     if want == *last {
         return;
     }
-    for h in [&blocks.material, &blocks.translucent_material].into_iter().flatten() {
+    for h in [&blocks.material, &blocks.translucent_material]
+        .into_iter()
+        .flatten()
+    {
         if let Some(mut m) = materials.get_mut(h) {
             m.extension.shake = want;
         }

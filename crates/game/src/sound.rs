@@ -23,13 +23,16 @@ pub struct SoundPlugin;
 
 impl Plugin for SoundPlugin {
     fn build(&self, app: &mut App) {
-        let spec: SoundSpec = ron::from_str(include_str!("../../../assets/data/sounds.ron")).unwrap_or_else(|e| panic!("sounds.ron: {e}"));
+        let spec: SoundSpec = ron::from_str(include_str!("../../../assets/data/sounds.ron"))
+            .unwrap_or_else(|e| panic!("sounds.ron: {e}"));
         app.insert_resource(spec)
             .add_message::<PlaySound>()
             .add_systems(crate::menu::GameStartup, (load_bank, start_loops).chain())
             .add_systems(
                 crate::menu::GameUpdate,
-                (footsteps, mining, fights, spells, level_up, thunder, spirits, play, loops)
+                (
+                    footsteps, mining, fights, spells, level_up, thunder, spirits, play, loops,
+                )
                     .chain()
                     .after(crate::creatures::CreatureSet)
                     .after(crate::survival::SurvivalSet),
@@ -58,7 +61,11 @@ impl SoundSpec {
     /// Volume for a sound: by its name, or the part before the first `_`
     /// (`step_hard_1` -> `step`).
     fn volume(&self, name: &str) -> f32 {
-        self.volumes.get(name).or_else(|| name.split('_').next().and_then(|p| self.volumes.get(p))).copied().unwrap_or(0.5)
+        self.volumes
+            .get(name)
+            .or_else(|| name.split('_').next().and_then(|p| self.volumes.get(p)))
+            .copied()
+            .unwrap_or(0.5)
     }
 }
 
@@ -76,7 +83,12 @@ pub struct PlaySound {
 
 impl PlaySound {
     pub fn new(name: impl Into<String>) -> Self {
-        Self { name: name.into(), gain: 1.0, at: None, ambient: false }
+        Self {
+            name: name.into(),
+            gain: 1.0,
+            at: None,
+            ambient: false,
+        }
     }
 
     pub fn gain(mut self, gain: f32) -> Self {
@@ -86,7 +98,12 @@ impl PlaySound {
 
     /// An ambient sound from a place in the world.
     pub fn ambient_at(name: impl Into<String>, at: Vec3, gain: f32) -> Self {
-        Self { name: name.into(), gain, at: Some(at), ambient: true }
+        Self {
+            name: name.into(),
+            gain,
+            at: Some(at),
+            ambient: true,
+        }
     }
 }
 
@@ -97,8 +114,24 @@ struct Bank {
 
 fn load_bank(mut commands: Commands, assets: Res<AssetServer>) {
     let mut names: Vec<String> = [
-        "break", "place", "swing", "hit", "hurt", "creature_hurt", "spirit", "spell_on", "spell_off", "level_up", "thunder",
-        "wind_loop", "rain_loop", "levitate_loop", "dig_soft", "dig_hard", "dig_wood", "dig_plant",
+        "break",
+        "place",
+        "swing",
+        "hit",
+        "hurt",
+        "creature_hurt",
+        "spirit",
+        "spell_on",
+        "spell_off",
+        "level_up",
+        "thunder",
+        "wind_loop",
+        "rain_loop",
+        "levitate_loop",
+        "dig_soft",
+        "dig_hard",
+        "dig_wood",
+        "dig_plant",
         "bird_flap",
     ]
     .iter()
@@ -110,7 +143,10 @@ fn load_bank(mut commands: Commands, assets: Res<AssetServer>) {
         }
     }
     // Critter calls named in creatures.ron load the first time they're played.
-    let handles = names.into_iter().map(|n| (n.clone(), assets.load(format!("sounds/{n}.ogg")))).collect();
+    let handles = names
+        .into_iter()
+        .map(|n| (n.clone(), assets.load(format!("sounds/{n}.ogg"))))
+        .collect();
     commands.insert_resource(Bank { handles });
 }
 
@@ -135,7 +171,11 @@ impl Loop {
 fn start_loops(mut commands: Commands, bank: Res<Bank>) {
     for l in [Loop::Wind, Loop::Rain, Loop::Levitate] {
         if let Some(h) = bank.handles.get(l.file()) {
-            commands.spawn((l, AudioPlayer(h.clone()), PlaybackSettings::LOOP.with_volume(Volume::Linear(0.0))));
+            commands.spawn((
+                l,
+                AudioPlayer(h.clone()),
+                PlaybackSettings::LOOP.with_volume(Volume::Linear(0.0)),
+            ));
         }
     }
 }
@@ -174,18 +214,31 @@ fn play(
         if v <= 0.001 {
             continue;
         }
-        let h = bank.handles.entry(m.name.clone()).or_insert_with(|| server.load(format!("sounds/{}.ogg", m.name))).clone();
+        let h = bank
+            .handles
+            .entry(m.name.clone())
+            .or_insert_with(|| server.load(format!("sounds/{}.ogg", m.name)))
+            .clone();
         let speed = jitter(&mut seed);
-        let playback = PlaybackSettings::DESPAWN.with_volume(Volume::Linear(v)).with_speed(speed);
+        let playback = PlaybackSettings::DESPAWN
+            .with_volume(Volume::Linear(v))
+            .with_speed(speed);
         match m.at {
-            Some(at) => commands.spawn((AudioPlayer(h), playback.with_spatial(true).with_spatial_scale(PAN_ONLY), Transform::from_translation(at))),
+            Some(at) => commands.spawn((
+                AudioPlayer(h),
+                playback.with_spatial(true).with_spatial_scale(PAN_ONLY),
+                Transform::from_translation(at),
+            )),
             None => commands.spawn((AudioPlayer(h), playback)),
         };
     }
 }
 
 fn material_at(world: &World, blocks: &Blocks, p: BlockPos) -> Option<String> {
-    world.block(p).filter(|b| !b.is_air()).map(|b| blocks.registry.get(b).material.clone())
+    world
+        .block(p)
+        .filter(|b| !b.is_air())
+        .map(|b| blocks.registry.get(b).material.clone())
 }
 
 /// A footstep every time the head-bob passes a footfall.
@@ -207,9 +260,17 @@ fn footsteps(
         return;
     }
     let under = BlockPos::from_world((player.pos - Vec3::Y * 0.2).to_array());
-    let Some(material) = material_at(&world, &blocks, under) else { return };
+    let Some(material) = material_at(&world, &blocks, under) else {
+        return;
+    };
     *which = (*which + 1 + (step as usize % 2)) % 3;
-    let gain = if player.crouching { 0.4 } else if player.sprinting { 1.3 } else { 1.0 };
+    let gain = if player.crouching {
+        0.4
+    } else if player.sprinting {
+        1.3
+    } else {
+        1.0
+    };
     out.write(PlaySound::new(format!("{}_{}", spec.of(&material).step, *which)).gain(gain));
 }
 
@@ -226,7 +287,10 @@ fn mining(
         let material = &blocks.registry.get(b.block).material;
         // From the block, so a blow off to one side sounds from that side.
         let at = Vec3::new(b.pos.x as f32, b.pos.y as f32, b.pos.z as f32) + Vec3::splat(0.5);
-        out.write(PlaySound { at: Some(at), ..PlaySound::new(spec.of(material).dig.clone()) });
+        out.write(PlaySound {
+            at: Some(at),
+            ..PlaySound::new(spec.of(material).dig.clone())
+        });
     }
     for _ in mined.read() {
         out.write(PlaySound::new("break"));
@@ -236,7 +300,11 @@ fn mining(
     }
 }
 
-fn fights(mut strikes: MessageReader<Strike>, mut hurts: MessageReader<Damage>, mut out: MessageWriter<PlaySound>) {
+fn fights(
+    mut strikes: MessageReader<Strike>,
+    mut hurts: MessageReader<Damage>,
+    mut out: MessageWriter<PlaySound>,
+) {
     for _ in strikes.read() {
         out.write(PlaySound::new("hit"));
         out.write(PlaySound::new("creature_hurt"));
@@ -248,7 +316,11 @@ fn fights(mut strikes: MessageReader<Strike>, mut hurts: MessageReader<Damage>, 
     }
 }
 
-fn spells(spells: Res<Spells>, mut out: MessageWriter<PlaySound>, mut was: Local<(bool, bool, bool)>) {
+fn spells(
+    spells: Res<Spells>,
+    mut out: MessageWriter<PlaySound>,
+    mut was: Local<(bool, bool, bool)>,
+) {
     let now = (spells.levitate, spells.light, spells.warmth);
     for (a, b) in [(was.0, now.0), (was.1, now.1), (was.2, now.2)] {
         if !a && b {
@@ -260,7 +332,11 @@ fn spells(spells: Res<Spells>, mut out: MessageWriter<PlaySound>, mut was: Local
     *was = now;
 }
 
-fn level_up(progress: Res<Progress>, mut out: MessageWriter<PlaySound>, mut last: Local<Option<u32>>) {
+fn level_up(
+    progress: Res<Progress>,
+    mut out: MessageWriter<PlaySound>,
+    mut last: Local<Option<u32>>,
+) {
     let l = progress.level.level;
     if last.is_some_and(|x| l > x) {
         out.write(PlaySound::new("level_up"));
@@ -293,7 +369,9 @@ fn spirits(
     *timer = 5.0;
     let nearest = q
         .iter()
-        .filter(|(_, c)| kinds.get(c.kind).temper == crate::creatures::data::Temper::Spirit && c.fade > 0.5)
+        .filter(|(_, c)| {
+            kinds.get(c.kind).temper == crate::creatures::data::Temper::Spirit && c.fade > 0.5
+        })
         .map(|(tf, _)| tf.translation.distance(player.pos))
         .fold(f32::MAX, f32::min);
     if nearest < 24.0 {
@@ -314,7 +392,11 @@ fn loops(
 ) {
     let dt = time.delta_secs();
     let high = ((player.pos.y - 80.0) / 200.0).clamp(0.0, 1.0);
-    let rain = if conditions.snowing { 0.0 } else { conditions.precipitation.clamp(0.0, 1.0) };
+    let rain = if conditions.snowing {
+        0.0
+    } else {
+        conditions.precipitation.clamp(0.0, 1.0)
+    };
     for (l, mut sink) in &mut q {
         let level = match l {
             Loop::Wind => ((conditions.wind / 20.0).clamp(0.0, 1.0) * 0.8 + high * 0.6).min(1.0),
@@ -327,7 +409,11 @@ fn loops(
                 }
             }
         };
-        let master = if *l == Loop::Levitate { settings.volume } else { settings.volume * settings.ambience };
+        let master = if *l == Loop::Levitate {
+            settings.volume
+        } else {
+            settings.volume * settings.ambience
+        };
         let target = level * spec.volume(l.file()) * master;
         let now = sink.volume().to_linear();
         let next = now + (target - now) * (dt * 1.5).min(1.0);

@@ -50,10 +50,15 @@ fn one_by_one() -> (u8, u8) {
 
 #[derive(Deserialize)]
 enum KindSpec {
-    Tool { speeds: HashMap<String, f32> },
+    Tool {
+        speeds: HashMap<String, f32>,
+    },
     Block(String),
     Torch,
-    Food { tier: u8, satiety: f32 },
+    Food {
+        tier: u8,
+        satiety: f32,
+    },
     Wear {
         slot: WearSlot,
         #[serde(default)]
@@ -61,7 +66,9 @@ enum KindSpec {
         #[serde(default)]
         protection: HashMap<Layer, f32>,
     },
-    Bag { grid: (u8, u8) },
+    Bag {
+        grid: (u8, u8),
+    },
     Material,
 }
 
@@ -79,8 +86,15 @@ pub enum WearSlot {
 }
 
 impl WearSlot {
-    pub const ALL: [WearSlot; 7] =
-        [WearSlot::Head, WearSlot::HeadArmor, WearSlot::Body, WearSlot::BodyArmor, WearSlot::Legs, WearSlot::Feet, WearSlot::Back];
+    pub const ALL: [WearSlot; 7] = [
+        WearSlot::Head,
+        WearSlot::HeadArmor,
+        WearSlot::Body,
+        WearSlot::BodyArmor,
+        WearSlot::Legs,
+        WearSlot::Feet,
+        WearSlot::Back,
+    ];
 
     pub fn title(self) -> &'static str {
         match self {
@@ -97,15 +111,26 @@ impl WearSlot {
 
 #[derive(Debug, Clone)]
 pub enum ItemKind {
-    Tool { speeds: HashMap<String, f32> },
+    Tool {
+        speeds: HashMap<String, f32>,
+    },
     Block(BlockId),
     Torch,
     /// Eaten by holding right click. `tier` is a tier in food_tiers.ron.
-    Food { tier: u8, satiety: f32 },
+    Food {
+        tier: u8,
+        satiety: f32,
+    },
     /// Clothes and armor: warmth in °C, and the share of a blow kept off each health bar.
-    Wear { slot: WearSlot, insulation: f32, protection: HashMap<Layer, f32> },
+    Wear {
+        slot: WearSlot,
+        insulation: f32,
+        protection: HashMap<Layer, f32>,
+    },
     /// Worn on the back; holds a grid of this size.
-    Bag { grid: (u8, u8) },
+    Bag {
+        grid: (u8, u8),
+    },
     /// Crafting materials.
     Material,
 }
@@ -157,15 +182,28 @@ impl Items {
             let kind = match s.kind {
                 KindSpec::Tool { speeds } => ItemKind::Tool { speeds },
                 KindSpec::Block(b) => ItemKind::Block(
-                    blocks.id(&b).ok_or_else(|| format!("item '{}' places unknown block '{b}'", s.name))?,
+                    blocks
+                        .id(&b)
+                        .ok_or_else(|| format!("item '{}' places unknown block '{b}'", s.name))?,
                 ),
                 KindSpec::Torch => ItemKind::Torch,
                 KindSpec::Food { tier, satiety } => ItemKind::Food { tier, satiety },
-                KindSpec::Wear { slot, insulation, protection } => {
+                KindSpec::Wear {
+                    slot,
+                    insulation,
+                    protection,
+                } => {
                     if slot == WearSlot::Back {
-                        return Err(format!("item '{}': things worn on the back are Bag items", s.name));
+                        return Err(format!(
+                            "item '{}': things worn on the back are Bag items",
+                            s.name
+                        ));
                     }
-                    ItemKind::Wear { slot, insulation, protection }
+                    ItemKind::Wear {
+                        slot,
+                        insulation,
+                        protection,
+                    }
                 }
                 KindSpec::Bag { grid } => ItemKind::Bag { grid },
                 KindSpec::Material => ItemKind::Material,
@@ -187,9 +225,21 @@ impl Items {
                 ItemKind::Tool { .. } => 4.0,
                 _ => FIST_DAMAGE,
             });
-            list.push(Item { name: s.name, title: s.title, kind, mass: s.mass, size: s.size, stack: stack.max(1), damage, swing: s.swing });
+            list.push(Item {
+                name: s.name,
+                title: s.title,
+                kind,
+                mass: s.mass,
+                size: s.size,
+                stack: stack.max(1),
+                damage,
+                swing: s.swing,
+            });
         }
-        Ok(Self { hand: spec.hand, list })
+        Ok(Self {
+            hand: spec.hand,
+            list,
+        })
     }
 
     pub fn get(&self, id: ItemId) -> &Item {
@@ -197,7 +247,10 @@ impl Items {
     }
 
     pub fn id(&self, name: &str) -> Option<ItemId> {
-        self.list.iter().position(|i| i.name == name).map(|i| ItemId(i as u16))
+        self.list
+            .iter()
+            .position(|i| i.name == name)
+            .map(|i| ItemId(i as u16))
     }
 
     pub fn ids(&self) -> impl Iterator<Item = ItemId> {
@@ -206,7 +259,10 @@ impl Items {
 
     /// The item that places this block, if any.
     pub fn for_block(&self, block: BlockId) -> Option<ItemId> {
-        self.list.iter().position(|i| matches!(i.kind, ItemKind::Block(b) if b == block)).map(|i| ItemId(i as u16))
+        self.list
+            .iter()
+            .position(|i| matches!(i.kind, ItemKind::Block(b) if b == block))
+            .map(|i| ItemId(i as u16))
     }
 
     /// Mining speed of what is in the hand (nothing, a tool, or anything
@@ -214,7 +270,9 @@ impl Items {
     pub fn speed(&self, held: Option<ItemId>, material: &str) -> f32 {
         let hand = self.hand.get(material).copied().unwrap_or(1.0);
         match held.map(|i| &self.get(i).kind) {
-            Some(ItemKind::Tool { speeds }) => speeds.get(material).copied().unwrap_or(hand).max(hand),
+            Some(ItemKind::Tool { speeds }) => {
+                speeds.get(material).copied().unwrap_or(hand).max(hand)
+            }
             _ => hand,
         }
     }
@@ -234,12 +292,19 @@ pub struct ItemsPlugin;
 
 impl Plugin for ItemsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(crate::menu::GamePreStartup, load_items.after(crate::blocks::load_blocks));
+        app.add_systems(
+            crate::menu::GamePreStartup,
+            load_items.after(crate::blocks::load_blocks),
+        );
     }
 }
 
 fn load_items(mut commands: Commands, blocks: Res<crate::blocks::Blocks>) {
-    let items = Items::from_ron(include_str!("../../../assets/data/items.ron"), &blocks.registry).unwrap_or_else(|e| panic!("{e}"));
+    let items = Items::from_ron(
+        include_str!("../../../assets/data/items.ron"),
+        &blocks.registry,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
     commands.insert_resource(items);
 }
 
@@ -249,9 +314,13 @@ pub mod tests {
     use voxel::TileSheet;
 
     pub fn load() -> (BlockRegistry, Items) {
-        let tiles = TileSheet::from_ron(include_str!("../../../assets/textures/blocks.ron")).unwrap();
-        let blocks = BlockRegistry::from_ron(include_str!("../../../assets/data/blocks.ron"), &tiles).unwrap();
-        let items = Items::from_ron(include_str!("../../../assets/data/items.ron"), &blocks).unwrap();
+        let tiles =
+            TileSheet::from_ron(include_str!("../../../assets/textures/blocks.ron")).unwrap();
+        let blocks =
+            BlockRegistry::from_ron(include_str!("../../../assets/data/blocks.ron"), &tiles)
+                .unwrap();
+        let items =
+            Items::from_ron(include_str!("../../../assets/data/items.ron"), &blocks).unwrap();
         (blocks, items)
     }
 
@@ -276,8 +345,14 @@ pub mod tests {
     #[test]
     fn water_cannot_be_broken_and_torches_break_instantly() {
         let (blocks, items) = load();
-        assert_eq!(items.break_time(None, blocks.get(blocks.expect("water"))), None);
-        assert_eq!(items.break_time(None, blocks.get(blocks.expect("torch"))), Some(0.0));
+        assert_eq!(
+            items.break_time(None, blocks.get(blocks.expect("water"))),
+            None
+        );
+        assert_eq!(
+            items.break_time(None, blocks.get(blocks.expect("torch"))),
+            Some(0.0)
+        );
     }
 
     #[test]
@@ -286,6 +361,8 @@ pub mod tests {
         let satchel = items.get(items.id("reed_satchel").unwrap());
         assert_eq!(satchel.wear_slot(), Some(WearSlot::Back));
         let coat = items.get(items.id("fur_coat").unwrap());
-        assert!(matches!(coat.kind, ItemKind::Wear { slot: WearSlot::Body, insulation, .. } if insulation > 8.0));
+        assert!(
+            matches!(coat.kind, ItemKind::Wear { slot: WearSlot::Body, insulation, .. } if insulation > 8.0)
+        );
     }
 }

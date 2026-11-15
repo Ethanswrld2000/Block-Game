@@ -15,22 +15,27 @@ use serde::{Deserialize, Serialize};
 use voxel::{BlockRegistry, Chunk, ChunkPos};
 
 use crate::blocks::Blocks;
-use crate::world::{World, SEED};
+use crate::world::{SEED, World};
 
 pub struct SavePlugin;
 
 impl Plugin for SavePlugin {
     fn build(&self, app: &mut App) {
         // `SaveDir` is inserted by the title screen when a world is opened.
-        app.insert_resource(AutosaveTimer(Timer::from_seconds(30.0, TimerMode::Repeating)))
-            .add_systems(crate::menu::GameUpdate, autosave)
-            .add_systems(Last, save_on_exit.run_if(crate::menu::in_game));
+        app.insert_resource(AutosaveTimer(Timer::from_seconds(
+            30.0,
+            TimerMode::Repeating,
+        )))
+        .add_systems(crate::menu::GameUpdate, autosave)
+        .add_systems(Last, save_on_exit.run_if(crate::menu::in_game));
     }
 }
 
 /// The folder holding every world (`saves`, or `BLOCKGAME_SAVES`).
 pub fn saves_root() -> PathBuf {
-    std::env::var("BLOCKGAME_SAVES").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from("saves"))
+    std::env::var("BLOCKGAME_SAVES")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("saves"))
 }
 
 /// `world.ron`: what the title screen shows about a world.
@@ -49,7 +54,13 @@ pub struct WorldMeta {
 impl Default for WorldMeta {
     fn default() -> Self {
         // The fixed seed every world had before the title screen.
-        Self { name: String::new(), seed: SEED, version: 1, created: 0, last_played: 0 }
+        Self {
+            name: String::new(),
+            seed: SEED,
+            version: 1,
+            created: 0,
+            last_played: 0,
+        }
     }
 }
 
@@ -62,12 +73,18 @@ pub struct SavedWorld {
 
 impl SavedWorld {
     pub fn name(&self) -> &str {
-        if self.meta.name.is_empty() { &self.folder } else { &self.meta.name }
+        if self.meta.name.is_empty() {
+            &self.folder
+        } else {
+            &self.meta.name
+        }
     }
 }
 
 pub fn now_secs() -> u64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs())
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
 }
 
 fn read_meta(dir: &Path) -> Option<WorldMeta> {
@@ -82,8 +99,11 @@ fn read_meta(dir: &Path) -> Option<WorldMeta> {
 }
 
 fn write_meta(dir: &Path, meta: &WorldMeta) {
-    let text = ron::ser::to_string_pretty(meta, ron::ser::PrettyConfig::default()).unwrap_or_default();
-    if let Err(e) = std::fs::create_dir_all(dir).and_then(|_| std::fs::write(dir.join("world.ron"), text)) {
+    let text =
+        ron::ser::to_string_pretty(meta, ron::ser::PrettyConfig::default()).unwrap_or_default();
+    if let Err(e) =
+        std::fs::create_dir_all(dir).and_then(|_| std::fs::write(dir.join("world.ron"), text))
+    {
         warn!("saving {}: {e}", dir.join("world.ron").display());
     }
 }
@@ -101,7 +121,12 @@ pub fn list_worlds(root: &Path) -> Vec<SavedWorld> {
             Some(SavedWorld { folder, meta })
         })
         .collect();
-    worlds.sort_by(|a, b| b.meta.last_played.cmp(&a.meta.last_played).then_with(|| a.folder.cmp(&b.folder)));
+    worlds.sort_by(|a, b| {
+        b.meta
+            .last_played
+            .cmp(&a.meta.last_played)
+            .then_with(|| a.folder.cmp(&b.folder))
+    });
     worlds
 }
 
@@ -117,11 +142,18 @@ pub fn folder_name(name: &str, taken: impl Fn(&str) -> bool) -> String {
         }
     }
     let base = base.trim_end_matches('-');
-    let base: String = if base.is_empty() { "world".into() } else { base.chars().take(40).collect() };
+    let base: String = if base.is_empty() {
+        "world".into()
+    } else {
+        base.chars().take(40).collect()
+    };
     if !taken(&base) {
         return base;
     }
-    (2..).map(|n| format!("{base}-{n}")).find(|f| !taken(f)).unwrap_or(base)
+    (2..)
+        .map(|n| format!("{base}-{n}"))
+        .find(|f| !taken(f))
+        .unwrap_or(base)
 }
 
 /// The seed typed on the new world screen: a number is used as it is (a minus
@@ -138,12 +170,16 @@ pub fn seed_from_text(text: &str) -> Option<u64> {
         return Some(n as u64);
     }
     // FNV-1a: the same words always give the same world.
-    Some(t.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3)))
+    Some(t.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| {
+        (h ^ b as u64).wrapping_mul(0x0100_0000_01b3)
+    }))
 }
 
 /// A seed from the clock, for a blank seed field.
 pub fn random_seed() -> u64 {
-    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(1, |d| d.as_nanos() as u64);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(1, |d| d.as_nanos() as u64);
     // splitmix64, so seeds made a moment apart look nothing alike.
     let mut z = nanos.wrapping_add(0x9E37_79B9_7F4A_7C15);
     z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
@@ -155,7 +191,16 @@ pub fn random_seed() -> u64 {
 pub fn create_world(root: &Path, name: &str, seed: u64) -> String {
     let folder = folder_name(name, |f| root.join(f).exists());
     let now = now_secs();
-    write_meta(&root.join(&folder), &WorldMeta { name: name.trim().to_string(), seed, version: 1, created: now, last_played: now });
+    write_meta(
+        &root.join(&folder),
+        &WorldMeta {
+            name: name.trim().to_string(),
+            seed,
+            version: 1,
+            created: now,
+            last_played: now,
+        },
+    );
     folder
 }
 
@@ -206,12 +251,20 @@ impl SaveDir {
         if std::env::var_os("BLOCKGAME_SCREENSHOT").is_none() || !dir.join("world.ron").exists() {
             write_meta(&dir, &meta);
         }
-        (Self { root: Arc::new(dir), chunks: Arc::new(chunks) }, meta)
+        (
+            Self {
+                root: Arc::new(dir),
+                chunks: Arc::new(chunks),
+            },
+            meta,
+        )
     }
 
     /// A file shared by all worlds, next to the world folders (`settings.ron`).
     pub fn shared_file(&self, name: &str) -> PathBuf {
-        self.root.parent().map_or_else(|| PathBuf::from(name), |p| p.join(name))
+        self.root
+            .parent()
+            .map_or_else(|| PathBuf::from(name), |p| p.join(name))
     }
 
     /// A file in the world's folder, such as `time.ron`.
@@ -253,7 +306,13 @@ fn save_all(world: &mut World, dir: &SaveDir, blocks: &Blocks) -> usize {
     n
 }
 
-fn autosave(time: Res<Time>, mut timer: ResMut<AutosaveTimer>, mut world: ResMut<World>, dir: Res<SaveDir>, blocks: Res<Blocks>) {
+fn autosave(
+    time: Res<Time>,
+    mut timer: ResMut<AutosaveTimer>,
+    mut world: ResMut<World>,
+    dir: Res<SaveDir>,
+    blocks: Res<Blocks>,
+) {
     if timer.0.tick(time.delta()).just_finished() {
         let n = save_all(&mut world, &dir, &blocks);
         if n > 0 {
@@ -262,7 +321,12 @@ fn autosave(time: Res<Time>, mut timer: ResMut<AutosaveTimer>, mut world: ResMut
     }
 }
 
-fn save_on_exit(mut exit: MessageReader<AppExit>, mut world: ResMut<World>, dir: Res<SaveDir>, blocks: Res<Blocks>) {
+fn save_on_exit(
+    mut exit: MessageReader<AppExit>,
+    mut world: ResMut<World>,
+    dir: Res<SaveDir>,
+    blocks: Res<Blocks>,
+) {
     if exit.read().next().is_some() {
         let n = save_all(&mut world, &dir, &blocks);
         info!("saved {n} chunks on exit");
@@ -301,9 +365,20 @@ mod tests {
         let a = create_world(&root, "Alpha", 1);
         let b = create_world(&root, "Alpha", 2);
         assert_eq!((a.as_str(), b.as_str()), ("alpha", "alpha-2"));
-        write_meta(&root.join(&a), &WorldMeta { name: "Alpha".into(), seed: 1, last_played: now_secs() + 10, ..default() });
+        write_meta(
+            &root.join(&a),
+            &WorldMeta {
+                name: "Alpha".into(),
+                seed: 1,
+                last_played: now_secs() + 10,
+                ..default()
+            },
+        );
         let list = list_worlds(&root);
-        assert_eq!(list.iter().map(|w| w.folder.as_str()).collect::<Vec<_>>(), ["alpha", "alpha-2"]);
+        assert_eq!(
+            list.iter().map(|w| w.folder.as_str()).collect::<Vec<_>>(),
+            ["alpha", "alpha-2"]
+        );
         assert_eq!(list[1].meta.seed, 2);
         let _ = std::fs::remove_dir_all(&root);
     }

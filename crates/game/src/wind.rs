@@ -33,7 +33,10 @@ pub struct WindPlugin;
 
 impl Plugin for WindPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Wind>().add_systems(crate::menu::GameUpdate, (blow, push_to_material).chain().after(WeatherSet));
+        app.init_resource::<Wind>().add_systems(
+            crate::menu::GameUpdate,
+            (blow, push_to_material).chain().after(WeatherSet),
+        );
     }
 }
 
@@ -59,7 +62,16 @@ pub struct Wind {
 
 impl Default for Wind {
     fn default() -> Self {
-        Self { angle: 0.33, speed: 0.0, gust: 0.0, time: 0.0, base: 0.33, veer: 0.0, weather: None, started: false }
+        Self {
+            angle: 0.33,
+            speed: 0.0,
+            gust: 0.0,
+            time: 0.0,
+            base: 0.33,
+            veer: 0.0,
+            weather: None,
+            started: false,
+        }
     }
 }
 
@@ -123,7 +135,13 @@ fn hash(a: u64, b: u64) -> f32 {
     (x >> 40) as f32 / (1u64 << 24) as f32
 }
 
-fn blow(time: Res<Time>, conditions: Res<Conditions>, state: Res<WeatherState>, generator: Option<Res<Generator>>, mut wind: ResMut<Wind>) {
+fn blow(
+    time: Res<Time>,
+    conditions: Res<Conditions>,
+    state: Res<WeatherState>,
+    generator: Option<Res<Generator>>,
+    mut wind: ResMut<Wind>,
+) {
     let dt = time.delta_secs().min(0.25);
     let seed = generator.map(|g| g.0.seed()).unwrap_or(1);
     if !wind.started {
@@ -146,14 +164,22 @@ fn blow(time: Res<Time>, conditions: Res<Conditions>, state: Res<WeatherState>, 
 }
 
 /// Hand the terrain shader the wind: (x, z) direction, sway strength.
-fn push_to_material(wind: Res<Wind>, blocks: Res<Blocks>, mut materials: ResMut<Assets<VoxelMaterial>>, mut last: Local<Vec4>) {
+fn push_to_material(
+    wind: Res<Wind>,
+    blocks: Res<Blocks>,
+    mut materials: ResMut<Assets<VoxelMaterial>>,
+    mut last: Local<Vec4>,
+) {
     let d = wind.dir();
     let want = Vec4::new(d.x, d.y, wind.sway(), 0.0);
     if (want - *last).abs().max_element() < 0.01 {
         return;
     }
     let mut done = false;
-    for h in [&blocks.material, &blocks.translucent_material].into_iter().flatten() {
+    for h in [&blocks.material, &blocks.translucent_material]
+        .into_iter()
+        .flatten()
+    {
         if let Some(mut m) = materials.get_mut(h) {
             m.extension.wind = want;
             done = true;
@@ -174,7 +200,11 @@ mod tests {
         let mut t = 0.0;
         while t < 3600.0 {
             let rate = (wander(t + 1.0) - wander(t)).abs();
-            assert!(rate < 0.65f32.to_radians(), "turns {}° in a second at {t}", rate.to_degrees());
+            assert!(
+                rate < 0.65f32.to_radians(),
+                "turns {}° in a second at {t}",
+                rate.to_degrees()
+            );
             t += 1.0;
         }
         // A new weather's veer comes in over minutes, not seconds.

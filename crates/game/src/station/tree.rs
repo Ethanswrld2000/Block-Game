@@ -9,12 +9,12 @@ use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 use super::urns::{State, Step};
 use super::{StepDone, UrnBook, Urns};
 use crate::camera::Menus;
-use crate::inventory::grid::Stack;
 use crate::inventory::Inventory;
+use crate::inventory::grid::Stack;
 use crate::item_art::ItemArt;
 use crate::items::Items;
 use crate::survival::Toast;
-use crate::theme::{colors, sizes, text, Theme};
+use crate::theme::{Theme, colors, sizes, text};
 
 /// Which urn's tree is open (index into urns.ron).
 #[derive(Resource, Default)]
@@ -52,7 +52,13 @@ pub(super) fn spawn_tree_ui(mut commands: Commands) {
             Visibility::Hidden,
         ))
         .with_children(|c| {
-            c.spawn((TreePanel, Node { flex_direction: FlexDirection::Column, ..default() }));
+            c.spawn((
+                TreePanel,
+                Node {
+                    flex_direction: FlexDirection::Column,
+                    ..default()
+                },
+            ));
         });
 }
 
@@ -105,7 +111,13 @@ pub(super) fn tree_click(
     mouse: Res<ButtonInput<MouseButton>>,
     window: Single<&Window, With<PrimaryWindow>>,
     theme: Res<Theme>,
-    mut buttons: Query<(&PutIn, &ComputedNode, &UiGlobalTransform, &InheritedVisibility, &mut ImageNode)>,
+    mut buttons: Query<(
+        &PutIn,
+        &ComputedNode,
+        &UiGlobalTransform,
+        &InheritedVisibility,
+        &mut ImageNode,
+    )>,
     (book, items): (Option<Res<UrnBook>>, Res<Items>),
     tree: Res<TreeUi>,
     mut inv: ResMut<Inventory>,
@@ -113,7 +125,9 @@ pub(super) fn tree_click(
     mut done: MessageWriter<StepDone>,
     mut toast: MessageWriter<Toast>,
 ) {
-    let (Some(i), Some(book)) = (tree.open, book) else { return };
+    let (Some(i), Some(book)) = (tree.open, book) else {
+        return;
+    };
     let def = &book.0.urns[i];
     let p = window.physical_cursor_position();
     let mut clicked = None;
@@ -154,7 +168,10 @@ pub(super) fn tree_click(
         }
     }
     if put == 0 {
-        toast.write(Toast(format!("You carry nothing the {} needs yet", s.title)));
+        toast.write(Toast(format!(
+            "You carry nothing the {} needs yet",
+            s.title
+        )));
     }
 }
 
@@ -172,10 +189,16 @@ pub(super) fn tree_build(
     if !tree.dirty {
         return;
     }
-    let (Some(book), Some(art)) = (book, art) else { return };
+    let (Some(book), Some(art)) = (book, art) else {
+        return;
+    };
     tree.dirty = false;
-    let Ok(mut vis) = root.single_mut() else { return };
-    let Ok((panel, kids)) = panel.single() else { return };
+    let Ok(mut vis) = root.single_mut() else {
+        return;
+    };
+    let Ok((panel, kids)) = panel.single() else {
+        return;
+    };
     for k in kids.into_iter().flatten() {
         commands.entity(*k).despawn();
     }
@@ -234,55 +257,135 @@ pub(super) fn tree_build(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn card(c: &mut ChildSpawnerCommands, theme: &Theme, items: &Items, art: &ItemArt, inv: &Inventory, def: &super::urns::UrnDef, p: &super::urns::Progress, s: &Step) {
+fn card(
+    c: &mut ChildSpawnerCommands,
+    theme: &Theme,
+    items: &Items,
+    art: &ItemArt,
+    inv: &Inventory,
+    def: &super::urns::UrnDef,
+    p: &super::urns::Progress,
+    s: &Step,
+) {
     let state = p.state(s);
     let (title_color, note) = match state {
         State::Done => (colors::GOOD, "Done".to_string()),
         State::Open => (colors::HEADING, String::new()),
         State::Locked => {
-            let wait: Vec<String> = s.after.iter().filter(|a| !p.is_done(a)).filter_map(|a| def.step(a)).map(|x| x.title.clone()).collect();
+            let wait: Vec<String> = s
+                .after
+                .iter()
+                .filter(|a| !p.is_done(a))
+                .filter_map(|a| def.step(a))
+                .map(|x| x.title.clone())
+                .collect();
             (colors::FAINT, format!("After {}", wait.join(" and ")))
         }
     };
-    c.spawn((Node { flex_direction: FlexDirection::Column, padding: UiRect::axes(Val::Px(10.0), Val::Px(6.0)), row_gap: Val::Px(2.0), ..default() }, theme.skin("panel_light")))
-        .with_children(|c| {
-            c.spawn(Node { justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center, column_gap: Val::Px(8.0), ..default() }).with_children(|r| {
-                r.spawn(Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, ..default() }).with_children(|r| {
-                    r.spawn((theme.bold(sizes::BODY), Text::new(s.title.clone()), TextColor(title_color)));
-                    let tag = if s.later { format!("{} · coming", s.gives.label()) } else { s.gives.label().to_string() };
-                    r.spawn(text(tag.to_uppercase(), sizes::TINY, colors::MUTED));
-                });
-                if state == State::Open {
-                    r.spawn((
-                        PutIn(s.name.clone()),
-                        Node { padding: UiRect::axes(Val::Px(10.0), Val::Px(2.0)), justify_content: JustifyContent::Center, ..default() },
-                        theme.skin("button"),
-                        children![text("Put in", sizes::SMALL, colors::TEXT)],
-                    ));
-                } else if !note.is_empty() {
-                    r.spawn(text(note.clone(), sizes::SMALL, title_color));
-                }
+    c.spawn((
+        Node {
+            flex_direction: FlexDirection::Column,
+            padding: UiRect::axes(Val::Px(10.0), Val::Px(6.0)),
+            row_gap: Val::Px(2.0),
+            ..default()
+        },
+        theme.skin("panel_light"),
+    ))
+    .with_children(|c| {
+        c.spawn(Node {
+            justify_content: JustifyContent::SpaceBetween,
+            align_items: AlignItems::Center,
+            column_gap: Val::Px(8.0),
+            ..default()
+        })
+        .with_children(|r| {
+            r.spawn(Node {
+                column_gap: Val::Px(8.0),
+                align_items: AlignItems::Center,
+                ..default()
+            })
+            .with_children(|r| {
+                r.spawn((
+                    theme.bold(sizes::BODY),
+                    Text::new(s.title.clone()),
+                    TextColor(title_color),
+                ));
+                let tag = if s.later {
+                    format!("{} · coming", s.gives.label())
+                } else {
+                    s.gives.label().to_string()
+                };
+                r.spawn(text(tag.to_uppercase(), sizes::TINY, colors::MUTED));
             });
-            if state != State::Done {
-                c.spawn((text(s.desc.clone(), sizes::SMALL, colors::MUTED), Node::default()));
-                // What it needs: picture, put in / needed, and what you carry.
-                c.spawn(Node { column_gap: Val::Px(10.0), flex_wrap: FlexWrap::Wrap, ..default() }).with_children(|r| {
-                    for (name, need) in &s.needs {
-                        let Some(id) = items.id(name) else { continue };
-                        let have = p.given(&s.name, name).min(*need);
-                        let carry = inv.count(id);
-                        r.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(2.0), ..default() }).with_children(|r| {
-                            r.spawn(Node { width: Val::Px(30.0), height: Val::Px(30.0), ..default() }).with_children(|i| {
-                                crate::inventory::ui::icon(i, items, art, Stack::new(id, 1), 30.0, 30.0, false);
-                            });
-                            let full = have >= *need;
-                            r.spawn(text(format!("{have}/{need}"), sizes::SMALL, if full { colors::GOOD } else { colors::TEXT }));
-                            if !full && carry > 0 && state == State::Open {
-                                r.spawn(text(format!("+{}", carry.min(need - have)), sizes::SMALL, colors::GOOD));
-                            }
-                        });
-                    }
-                });
+            if state == State::Open {
+                r.spawn((
+                    PutIn(s.name.clone()),
+                    Node {
+                        padding: UiRect::axes(Val::Px(10.0), Val::Px(2.0)),
+                        justify_content: JustifyContent::Center,
+                        ..default()
+                    },
+                    theme.skin("button"),
+                    children![text("Put in", sizes::SMALL, colors::TEXT)],
+                ));
+            } else if !note.is_empty() {
+                r.spawn(text(note.clone(), sizes::SMALL, title_color));
             }
         });
+        if state != State::Done {
+            c.spawn((
+                text(s.desc.clone(), sizes::SMALL, colors::MUTED),
+                Node::default(),
+            ));
+            // What it needs: picture, put in / needed, and what you carry.
+            c.spawn(Node {
+                column_gap: Val::Px(10.0),
+                flex_wrap: FlexWrap::Wrap,
+                ..default()
+            })
+            .with_children(|r| {
+                for (name, need) in &s.needs {
+                    let Some(id) = items.id(name) else { continue };
+                    let have = p.given(&s.name, name).min(*need);
+                    let carry = inv.count(id);
+                    r.spawn(Node {
+                        align_items: AlignItems::Center,
+                        column_gap: Val::Px(2.0),
+                        ..default()
+                    })
+                    .with_children(|r| {
+                        r.spawn(Node {
+                            width: Val::Px(30.0),
+                            height: Val::Px(30.0),
+                            ..default()
+                        })
+                        .with_children(|i| {
+                            crate::inventory::ui::icon(
+                                i,
+                                items,
+                                art,
+                                Stack::new(id, 1),
+                                30.0,
+                                30.0,
+                                false,
+                            );
+                        });
+                        let full = have >= *need;
+                        r.spawn(text(
+                            format!("{have}/{need}"),
+                            sizes::SMALL,
+                            if full { colors::GOOD } else { colors::TEXT },
+                        ));
+                        if !full && carry > 0 && state == State::Open {
+                            r.spawn(text(
+                                format!("+{}", carry.min(need - have)),
+                                sizes::SMALL,
+                                colors::GOOD,
+                            ));
+                        }
+                    });
+                }
+            });
+        }
+    });
 }

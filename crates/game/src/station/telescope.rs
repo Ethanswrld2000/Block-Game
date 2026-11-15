@@ -47,10 +47,19 @@ pub struct Constellations(pub Vec<Constellation>);
 
 impl Constellations {
     pub fn from_ron(text: &str) -> Result<Self, String> {
-        let list: Vec<Constellation> = ron::from_str(text).map_err(|e| format!("constellations.ron: {e}"))?;
+        let list: Vec<Constellation> =
+            ron::from_str(text).map_err(|e| format!("constellations.ron: {e}"))?;
         for c in &list {
-            if c.stars.len() < 2 || c.lines.iter().any(|(a, b)| *a >= c.stars.len() || *b >= c.stars.len()) || !(1..=3).contains(&c.tier) {
-                return Err(format!("constellations.ron: '{}' needs 2+ stars, lines between them and a tier 1-3", c.name));
+            if c.stars.len() < 2
+                || c.lines
+                    .iter()
+                    .any(|(a, b)| *a >= c.stars.len() || *b >= c.stars.len())
+                || !(1..=3).contains(&c.tier)
+            {
+                return Err(format!(
+                    "constellations.ron: '{}' needs 2+ stars, lines between them and a tier 1-3",
+                    c.name
+                ));
             }
         }
         Ok(Self(list))
@@ -87,7 +96,10 @@ pub fn stars(c: &Constellation, time: f32) -> Vec<Vec3> {
     let mid = centre(c, time);
     let right = mid.cross(Vec3::Y).normalize_or(Vec3::X);
     let up = right.cross(mid).normalize();
-    c.stars.iter().map(|(x, y)| (mid + right * x.to_radians().tan() + up * y.to_radians().tan()).normalize()).collect()
+    c.stars
+        .iter()
+        .map(|(x, y)| (mid + right * x.to_radians().tan() + up * y.to_radians().tan()).normalize())
+        .collect()
 }
 
 /// The constellation you are holding in view: up, seen with this telescope, nearest the middle.
@@ -111,10 +123,61 @@ pub struct Scope {
     fov: Option<f32>,
     /// What's held in the middle, and for how long.
     holding: Option<(usize, f32)>,
+    /// 0 = just put your eye to it, 1 = looking through.
+    blend: f32,
 }
 
 #[derive(Component)]
 pub(super) struct ScopeUi;
+
+/// The line under the lens (what's charted).
+#[derive(Component)]
+pub(super) struct ScopeLine;
+
+/// The round eyepiece, the dark around it, and the blink as you put your eye to it.
+#[derive(Component)]
+pub(super) struct ScopeLens;
+
+#[derive(Component)]
+pub(super) struct ScopeDark;
+
+#[derive(Component)]
+pub(super) struct ScopeBlink;
+
+/// The eyepiece as an image: clear in the middle with faint cross hairs, a
+/// darker rim and a brass ring, black outside the circle.
+pub fn lens_image(size: u32) -> Vec<u8> {
+    let mut px = vec![0u8; (size * size * 4) as usize];
+    let c = size as f32 / 2.0;
+    for y in 0..size {
+        for x in 0..size {
+            let (dx, dy) = ((x as f32 + 0.5 - c) / c, (y as f32 + 0.5 - c) / c);
+            let r = (dx * dx + dy * dy).sqrt();
+            // Black outside, a soft edge, the lens darkening toward its rim.
+            let mut a = ((r - 0.9) / 0.06).clamp(0.0, 1.0);
+            a = a.max(((r - 0.55) / 0.35).clamp(0.0, 1.0).powf(2.0) * 0.45);
+            let mut rgb = [0.0f32, 0.0, 0.0];
+            // A thin brass ring just inside the edge.
+            let ring = 1.0 - ((r - 0.905).abs() / 0.012).min(1.0);
+            if ring > 0.0 {
+                rgb = [0.55 * ring, 0.42 * ring, 0.2 * ring];
+                a = a.max(ring * 0.9);
+            }
+            // Cross hairs, with a gap in the middle so the stars show.
+            let line = |d: f32, along: f32| d.abs() < 0.0035 && (0.06..0.42).contains(&along.abs());
+            if line(dx, dy) || line(dy, dx) {
+                rgb = [0.75, 0.7, 0.55];
+                a = a.max(0.35);
+            }
+            let i = ((y * size + x) * 4) as usize;
+            px[i] = (rgb[0] * 255.0) as u8;
+            px[i + 1] = (rgb[1] * 255.0) as u8;
+            px[i + 2] = (rgb[2] * 255.0) as u8;
+            px[i + 3] = (a * 255.0) as u8;
+        }
+    }
+    px
+}
 
 pub(super) fn load_constellations(mut commands: Commands) {
     match Constellations::from_ron(include_str!("../../../../assets/data/constellations.ron")) {
@@ -126,7 +189,29 @@ pub(super) fn load_constellations(mut commands: Commands) {
     }
 }
 
-pub(super) fn spawn_scope_ui(mut commands: Commands) {
+pub(super) fn spawn_scope_ui(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+    use bevy::asset::RenderAssetUsages;
+    use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+    const SIZE: u32 = 512;
+    let mut img = Image::new(
+        Extent3d {
+            width: SIZE,
+            height: SIZE,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        lens_image(SIZE),
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    );
+    img.sampler = bevy::image::ImageSampler::linear();
+    let lens = images.add(img);
+    let full = || Node {
+        position_type: PositionType::Absolute,
+        width: Val::Percent(100.0),
+        height: Val::Percent(100.0),
+        ..default()
+    };
     commands
         .spawn((
             ScopeUi,
@@ -135,20 +220,36 @@ pub(super) fn spawn_scope_ui(mut commands: Commands) {
             Pickable::IGNORE,
         ))
         .with_children(|c| {
-            c.spawn((crate::theme::text("", sizes::BODY, colors::TEXT), Node::default()));
+            // The eyepiece: a round lens the height of the screen, black either side.
+            c.spawn((Node { flex_direction: FlexDirection::Row, ..full() }, Pickable::IGNORE)).with_children(|row| {
+                row.spawn((ScopeDark, Node { flex_grow: 1.0, height: Val::Percent(100.0), ..default() }, BackgroundColor(Color::BLACK)));
+                row.spawn((ScopeLens, Node { height: Val::Percent(100.0), aspect_ratio: Some(1.0), ..default() }, ImageNode::new(lens)));
+                row.spawn((ScopeDark, Node { flex_grow: 1.0, height: Val::Percent(100.0), ..default() }, BackgroundColor(Color::BLACK)));
+            });
+            c.spawn((ScopeBlink, full(), BackgroundColor(Color::BLACK)));
+            c.spawn((ScopeLine, crate::theme::text("", sizes::BODY, colors::TEXT), Node::default()));
             c.spawn((crate::theme::text("Turn to look around · hold a constellation in the middle to chart it · Right click or move: step back", sizes::SMALL, colors::FAINT), Node::default()));
         });
 }
 
 /// Step up to the telescope (from `use_station`): only on a clear night.
-pub(super) fn look_through(scope: &mut Scope, menus: &mut Menus, hour: f32, clouds: f32, toast: &mut MessageWriter<Toast>) {
+pub(super) fn look_through(
+    scope: &mut Scope,
+    menus: &mut Menus,
+    hour: f32,
+    clouds: f32,
+    toast: &mut MessageWriter<Toast>,
+) {
     if !crate::survival::camp::is_night(hour) {
-        toast.write(Toast("The stars are out only at night: come back after dusk".into()));
+        toast.write(Toast(
+            "The stars are out only at night: come back after dusk".into(),
+        ));
     } else if clouds > MAX_CLOUDS {
         toast.write(Toast("Too cloudy to see the stars tonight".into()));
     } else {
         scope.open = true;
         scope.holding = None;
+        scope.blend = 0.0;
         menus.still = true;
     }
 }
@@ -165,32 +266,87 @@ pub(super) fn scope_view(
     mut menus: ResMut<Menus>,
     mut urns: ResMut<Urns>,
     mut cam: Single<(&Transform, &mut Projection), With<FlyCamera>>,
-    (mut toast, mut gain, mut sound): (MessageWriter<Toast>, MessageWriter<crate::progress::GainXp>, MessageWriter<PlaySound>),
-    mut ui: Query<(&mut Visibility, &Children), With<ScopeUi>>,
-    mut texts: Query<&mut Text>,
+    (mut toast, mut gain, mut sound): (
+        MessageWriter<Toast>,
+        MessageWriter<crate::progress::GainXp>,
+        MessageWriter<PlaySound>,
+    ),
+    mut ui: Query<&mut Visibility, With<ScopeUi>>,
+    mut line_text: Query<&mut Text, With<ScopeLine>>,
+    mut blink: Query<&mut BackgroundColor, (With<ScopeBlink>, Without<ScopeDark>)>,
     mut was_open: Local<bool>,
+    mut screenshot: Local<bool>,
 ) {
+    // `BLOCKGAME_SCOPE=1`: look through the telescope from the start, for screenshots.
+    if !*screenshot {
+        *screenshot = true;
+        if std::env::var("BLOCKGAME_SCOPE").is_ok() {
+            scope.open = true;
+            menus.still = true;
+        }
+    }
     let (tf, proj) = &mut *cam;
-    let moved = [KeyCode::KeyW, KeyCode::KeyA, KeyCode::KeyS, KeyCode::KeyD, KeyCode::Space, KeyCode::Escape].iter().any(|k| keys.just_pressed(*k));
-    if scope.open && (*was_open && mouse.just_pressed(MouseButton::Right) || moved || !crate::survival::camp::is_night(clock.hour()) || menus.open) {
+    let moved = [
+        KeyCode::KeyW,
+        KeyCode::KeyA,
+        KeyCode::KeyS,
+        KeyCode::KeyD,
+        KeyCode::Space,
+        KeyCode::Escape,
+    ]
+    .iter()
+    .any(|k| keys.just_pressed(*k));
+    if scope.open
+        && (*was_open && mouse.just_pressed(MouseButton::Right)
+            || moved
+            || !crate::survival::camp::is_night(clock.hour())
+            || menus.open)
+    {
         scope.open = false;
         menus.still = false;
     }
     *was_open = scope.open;
-    let Projection::Perspective(p) = &mut **proj else { return };
-    if let Ok((mut vis, kids)) = ui.single_mut() {
-        let want = if scope.open { Visibility::Inherited } else { Visibility::Hidden };
+    let Projection::Perspective(p) = &mut **proj else {
+        return;
+    };
+    // Putting your eye to it: the view goes dark for a blink, then the lens opens.
+    scope.blend = if scope.open {
+        (scope.blend + time.delta_secs() / 0.45).min(1.0)
+    } else {
+        0.0
+    };
+    let k = scope.blend * scope.blend * (3.0 - 2.0 * scope.blend);
+    for mut b in &mut blink {
+        b.0 = Color::srgba(0.0, 0.0, 0.0, 1.0 - k);
+    }
+    if let Ok(mut vis) = ui.single_mut() {
+        let want = if scope.open {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
         if *vis != want {
             *vis = want;
         }
         if scope.open {
             let line = match scope.holding {
-                Some((i, _)) if urns.charted.contains(&list.0[i].name) => format!("{} (charted)", list.0[i].title),
-                Some((_, t)) => format!("Charting a constellation... {:.0}%", (t / CHART_SECONDS * 100.0).min(100.0)),
-                None => format!("{} of {} constellations charted", list.0.iter().filter(|c| urns.charted.contains(&c.name)).count(), list.0.len()),
+                Some((i, _)) if urns.charted.contains(&list.0[i].name) => {
+                    format!("{} (charted)", list.0[i].title)
+                }
+                Some((_, t)) => format!(
+                    "Charting a constellation... {:.0}%",
+                    (t / CHART_SECONDS * 100.0).min(100.0)
+                ),
+                None => format!(
+                    "{} of {} constellations charted",
+                    list.0
+                        .iter()
+                        .filter(|c| urns.charted.contains(&c.name))
+                        .count(),
+                    list.0.len()
+                ),
             };
-            if let Some(e) = kids.first()
-                && let Ok(mut t) = texts.get_mut(*e)
+            if let Ok(mut t) = line_text.single_mut()
                 && t.0 != line
             {
                 t.0 = line;
@@ -204,7 +360,7 @@ pub(super) fn scope_view(
         return;
     }
     let base = *scope.fov.get_or_insert(p.fov);
-    p.fov = base / ZOOM;
+    p.fov = base / (1.0 + (ZOOM - 1.0) * k);
     let has = |s: &str| urns.has(s);
     let tier = tier_seen(&has);
     let look = tf.forward().as_vec3();
@@ -222,12 +378,22 @@ pub(super) fn scope_view(
         urns.charted.insert(c.name.clone());
         sound.write(PlaySound::new("spell_on").gain(0.6));
         toast.write(Toast(format!("Charted {}", c.title)));
-        gain.write(crate::progress::GainXp { xp: c.xp, why: format!("Charted {}", c.title) });
+        gain.write(crate::progress::GainXp {
+            xp: c.xp,
+            why: format!("Charted {}", c.title),
+        });
     }
 }
 
 /// The stars seen through the telescope, and the lines of the charted ones.
-pub(super) fn draw_constellations(scope: Res<Scope>, clock: Res<WorldClock>, list: Res<Constellations>, urns: Res<Urns>, cam: Single<&Transform, With<FlyCamera>>, mut gizmos: Gizmos) {
+pub(super) fn draw_constellations(
+    scope: Res<Scope>,
+    clock: Res<WorldClock>,
+    list: Res<Constellations>,
+    urns: Res<Urns>,
+    cam: Single<&Transform, With<FlyCamera>>,
+    mut gizmos: Gizmos,
+) {
     if !scope.open {
         return;
     }
@@ -242,7 +408,11 @@ pub(super) fn draw_constellations(scope: Res<Scope>, clock: Res<WorldClock>, lis
             continue;
         }
         let done = charted.contains(&c.name);
-        let star = if done { Color::srgb(1.0, 0.86, 0.5) } else { Color::srgb(0.85, 0.9, 1.0) };
+        let star = if done {
+            Color::srgb(1.0, 0.86, 0.5)
+        } else {
+            Color::srgb(0.85, 0.9, 1.0)
+        };
         for d in &dirs {
             let p = eye + *d * far;
             let r = d.cross(Vec3::Y).normalize_or(Vec3::X) * 0.35;
@@ -252,7 +422,11 @@ pub(super) fn draw_constellations(scope: Res<Scope>, clock: Res<WorldClock>, lis
         }
         if done {
             for (a, b) in &c.lines {
-                gizmos.line(eye + dirs[*a] * far, eye + dirs[*b] * far, Color::srgba(1.0, 0.8, 0.45, 0.6));
+                gizmos.line(
+                    eye + dirs[*a] * far,
+                    eye + dirs[*b] * far,
+                    Color::srgba(1.0, 0.8, 0.45, 0.6),
+                );
             }
         }
     }
@@ -263,7 +437,8 @@ mod tests {
     use super::*;
 
     fn list() -> Constellations {
-        Constellations::from_ron(include_str!("../../../../assets/data/constellations.ron")).unwrap()
+        Constellations::from_ron(include_str!("../../../../assets/data/constellations.ron"))
+            .unwrap()
     }
 
     #[test]
@@ -285,6 +460,16 @@ mod tests {
         assert_eq!(in_view(&l.0, 0.0, look, 1), None);
         assert_eq!(in_view(&l.0, 0.0, look, 3), Some(hidden));
         assert_eq!(tier_seen(&|s| s == "improved_telescope"), 2);
+    }
+
+    #[test]
+    fn the_lens_is_clear_in_the_middle_and_black_outside() {
+        let size = 64;
+        let px = lens_image(size);
+        let alpha = |x: u32, y: u32| px[((y * size + x) * 4 + 3) as usize];
+        assert!(alpha(28, 28) < 40, "near the middle");
+        assert_eq!(alpha(0, 0), 255, "the corner");
+        assert_eq!(alpha(32, 0), 255, "past the top edge");
     }
 
     #[test]

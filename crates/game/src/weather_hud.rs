@@ -5,14 +5,18 @@
 use bevy::prelude::*;
 
 use crate::clock::WorldClock;
-use crate::theme::{self, colors, sizes, Theme};
+use crate::theme::{self, Theme, colors, sizes};
 use crate::weather::{Conditions, WeatherKinds, WeatherState};
 
 pub struct WeatherHudPlugin;
 
 impl Plugin for WeatherHudPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(crate::menu::GameStartup, spawn).add_systems(crate::menu::GameUpdate, update.after(crate::weather::WeatherSet));
+        app.add_systems(crate::menu::GameStartup, spawn)
+            .add_systems(
+                crate::menu::GameUpdate,
+                update.after(crate::weather::WeatherSet),
+            );
     }
 }
 
@@ -43,19 +47,44 @@ fn spawn(mut commands: Commands, theme: Res<Theme>, top_right: Res<crate::hud::T
             theme.skin("panel_light"),
         ))
         .with_children(|col| {
-            col.spawn((Title, Text::new(""), theme.bold(sizes::LABEL), TextColor(colors::HEADING)));
+            col.spawn((
+                Title,
+                Text::new(""),
+                theme.bold(sizes::LABEL),
+                TextColor(colors::HEADING),
+            ));
             col.spawn((Next, theme::text("", sizes::SMALL, colors::MUTED)));
-            col.spawn((Node { width: Val::Px(BAR_W), height: Val::Px(BAR_H), padding: UiRect::all(Val::Px(3.0)), ..default() }, theme.skin("bar")))
-                .with_children(|b| {
-                    b.spawn((Left, Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() }, BackgroundColor(Color::srgb(0.55, 0.72, 0.9))));
-                });
+            col.spawn((
+                Node {
+                    width: Val::Px(BAR_W),
+                    height: Val::Px(BAR_H),
+                    padding: UiRect::all(Val::Px(3.0)),
+                    ..default()
+                },
+                theme.skin("bar"),
+            ))
+            .with_children(|b| {
+                b.spawn((
+                    Left,
+                    Node {
+                        width: Val::Percent(100.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.55, 0.72, 0.9)),
+                ));
+            });
         });
 }
 
 /// `m:ss`, or `h:mm:ss` past an hour.
 pub fn clock_text(seconds: f32) -> String {
     let s = seconds.max(0.0).ceil() as u32;
-    if s >= 3600 { format!("{}:{:02}:{:02}", s / 3600, s / 60 % 60, s % 60) } else { format!("{}:{:02}", s / 60, s % 60) }
+    if s >= 3600 {
+        format!("{}:{:02}:{:02}", s / 3600, s / 60 % 60, s % 60)
+    } else {
+        format!("{}:{:02}", s / 60, s % 60)
+    }
 }
 
 /// The weather's name, saying snow where rain falls below freezing.
@@ -84,7 +113,11 @@ fn update(
 ) {
     let now = clock.total_days();
     let k = &kinds.list[state.current];
-    let name = format!("{}  ({} wind)", title(&k.name, &k.title, c.snowing, k.precipitation), wind.compass());
+    let name = format!(
+        "{}  ({} wind)",
+        title(&k.name, &k.title, c.snowing, k.precipitation),
+        wind.compass()
+    );
     for mut t in &mut title_q {
         if t.0 != name {
             t.0 = name.clone();
@@ -95,9 +128,21 @@ fn update(
             let next = &kinds.list[n];
             let next_name = title(&next.name, &next.title, c.snowing, next.precipitation);
             if state.cloud_lead(now) > 0.0 || left <= crate::weather::CLOUD_LEAD_SECONDS {
-                (format!("{next_name} rolling in  {}", clock_text(left)), colors::GOLD, left / total.max(1.0))
+                (
+                    format!("{next_name} rolling in  {}", clock_text(left)),
+                    colors::GOLD,
+                    left / total.max(1.0),
+                )
             } else {
-                (format!("{next_name} in {}  (of {})", clock_text(left), clock_text(total)), colors::MUTED, left / total.max(1.0))
+                (
+                    format!(
+                        "{next_name} in {}  (of {})",
+                        clock_text(left),
+                        clock_text(total)
+                    ),
+                    colors::MUTED,
+                    left / total.max(1.0),
+                )
             }
         }
         _ => ("holding (F4 to change)".to_string(), colors::FAINT, 1.0),

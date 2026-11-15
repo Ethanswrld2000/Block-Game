@@ -42,7 +42,8 @@ pub struct CloudPlugin;
 
 impl Plugin for CloudPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(crate::menu::GameStartup, spawn_clouds).add_systems(crate::menu::GameUpdate, update_clouds);
+        app.add_systems(crate::menu::GameStartup, spawn_clouds)
+            .add_systems(crate::menu::GameUpdate, update_clouds);
     }
 }
 
@@ -74,9 +75,51 @@ pub struct Layer {
 }
 
 pub const LAYERS: [Layer; 3] = [
-    Layer { name: "low", y: 200.0, cell: 10.0, radius: 90, thin: 5.0, thick: 9.0, frequency: 0.06, seed: 0x10D0, from: 0.55, to: 0.95, speed: 0.8, shade: 0.82, alpha: 1.0 },
-    Layer { name: "middle", y: CLOUD_Y, cell: 12.0, radius: 80, thin: 4.0, thick: 8.0, frequency: 0.07, seed: 0x00C1_00D5, from: 0.08, to: 0.85, speed: 1.0, shade: 1.0, alpha: 1.0 },
-    Layer { name: "high", y: 300.0, cell: 20.0, radius: 60, thin: 1.0, thick: 2.0, frequency: 0.05, seed: 0x41A7, from: 0.05, to: 1.0, speed: 1.4, shade: 1.05, alpha: 0.8 },
+    Layer {
+        name: "low",
+        y: 200.0,
+        cell: 10.0,
+        radius: 90,
+        thin: 5.0,
+        thick: 9.0,
+        frequency: 0.06,
+        seed: 0x10D0,
+        from: 0.55,
+        to: 0.95,
+        speed: 0.8,
+        shade: 0.82,
+        alpha: 1.0,
+    },
+    Layer {
+        name: "middle",
+        y: CLOUD_Y,
+        cell: 12.0,
+        radius: 80,
+        thin: 4.0,
+        thick: 8.0,
+        frequency: 0.07,
+        seed: 0x00C1_00D5,
+        from: 0.08,
+        to: 0.85,
+        speed: 1.0,
+        shade: 1.0,
+        alpha: 1.0,
+    },
+    Layer {
+        name: "high",
+        y: 300.0,
+        cell: 20.0,
+        radius: 60,
+        thin: 1.0,
+        thick: 2.0,
+        frequency: 0.05,
+        seed: 0x41A7,
+        from: 0.05,
+        to: 1.0,
+        speed: 1.4,
+        shade: 1.05,
+        alpha: 0.8,
+    },
 ];
 
 impl Layer {
@@ -114,14 +157,26 @@ fn spawn_clouds(mut commands: Commands, mut materials: ResMut<Assets<StandardMat
         noise.set_fractal_octaves(Some(3));
         let material = materials.add(StandardMaterial {
             base_color: Color::srgba(1.0, 1.0, 1.0, layer.alpha),
-            alpha_mode: if layer.opaque() { AlphaMode::Opaque } else { AlphaMode::Blend },
+            alpha_mode: if layer.opaque() {
+                AlphaMode::Opaque
+            } else {
+                AlphaMode::Blend
+            },
             perceptual_roughness: 1.0,
             reflectance: 0.0,
             ..default()
         });
         commands.spawn((
             Name::new(format!("clouds ({})", layer.name)),
-            Clouds { layer, noise: Arc::new(noise), offset: Vec2::ZERO, built_center: None, built_cover: -1.0, task: None, material: material.clone() },
+            Clouds {
+                layer,
+                noise: Arc::new(noise),
+                offset: Vec2::ZERO,
+                built_center: None,
+                built_cover: -1.0,
+                task: None,
+                material: material.clone(),
+            },
             MeshMaterial3d(material),
             Transform::from_xyz(0.0, layer.y, 0.0),
             Visibility::Hidden,
@@ -168,7 +223,11 @@ fn update_clouds(
             }
         }
         let cover = (layer.cover(weather.clouds) * 50.0).round() / 50.0;
-        let want = if on && clouds.built_center.is_some() && clouds.built_cover > 0.0 { Visibility::Inherited } else { Visibility::Hidden };
+        let want = if on && clouds.built_center.is_some() && clouds.built_cover > 0.0 {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
         if *vis != want {
             *vis = want;
         }
@@ -177,11 +236,19 @@ fn update_clouds(
         }
 
         // Start a new build if needed.
-        let center = ((Vec2::new(cam.translation.x, cam.translation.z) - clouds.offset) / layer.cell).floor().as_ivec2();
-        let moved = clouds.built_center.is_none_or(|c| (c - center).abs().max_element() >= REBUILD_CELLS);
+        let center = ((Vec2::new(cam.translation.x, cam.translation.z) - clouds.offset)
+            / layer.cell)
+            .floor()
+            .as_ivec2();
+        let moved = clouds
+            .built_center
+            .is_none_or(|c| (c - center).abs().max_element() >= REBUILD_CELLS);
         if clouds.task.is_none() && (moved || (cover - clouds.built_cover).abs() > 0.01) {
             let noise = clouds.noise.clone();
-            clouds.task = Some(AsyncComputeTaskPool::get().spawn(async move { (build(&noise, &layer, center, cover), center, cover) }));
+            clouds.task = Some(
+                AsyncComputeTaskPool::get()
+                    .spawn(async move { (build(&noise, &layer, center, cover), center, cover) }),
+            );
         }
 
         // Shade: white in fair weather, grey before rain.
@@ -242,13 +309,24 @@ fn build(noise: &FastNoiseLite, layer: &Layer, center: IVec2, cover: f32) -> Mes
             let r2 = dx * dx + dz * dz;
             if r2 <= (radius + 1) * (radius + 1) {
                 // Opaque layers thin out over the outer part instead of fading.
-                let edge = if layer.opaque() { (((r2 as f32).sqrt() / radius as f32 - 0.55) / 0.45).clamp(0.0, 1.0) } else { 0.0 };
-                h[idx(dx, dz)] = thickness(noise, layer, center.x + dx, center.y + dz, cover * (1.0 - edge));
+                let edge = if layer.opaque() {
+                    (((r2 as f32).sqrt() / radius as f32 - 0.55) / 0.45).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
+                h[idx(dx, dz)] = thickness(
+                    noise,
+                    layer,
+                    center.x + dx,
+                    center.y + dz,
+                    cover * (1.0 - edge),
+                );
             }
         }
     }
 
-    let (mut pos, mut nor, mut col, mut ind) = (Vec::new(), Vec::new(), Vec::new(), Vec::<u32>::new());
+    let (mut pos, mut nor, mut col, mut ind) =
+        (Vec::new(), Vec::new(), Vec::new(), Vec::<u32>::new());
     let mut quad = |corners: [Vec3; 4], normal: Vec3, alpha: f32| {
         let s = pos.len() as u32;
         for c in corners {
@@ -273,14 +351,68 @@ fn build(noise: &FastNoiseLite, layer: &Layer, center: IVec2, cover: f32) -> Mes
             let alpha = 1.0 - ((d - 0.7) / 0.3).clamp(0.0, 1.0);
             let (x0, z0) = ((center.x + dx) as f32 * cell, (center.y + dz) as f32 * cell);
             let (x1, z1) = (x0 + cell, z0 + cell);
-            quad([Vec3::new(x0, t, z0), Vec3::new(x0, t, z1), Vec3::new(x1, t, z1), Vec3::new(x1, t, z0)], Vec3::Y, alpha);
-            quad([Vec3::new(x0, 0.0, z0), Vec3::new(x1, 0.0, z0), Vec3::new(x1, 0.0, z1), Vec3::new(x0, 0.0, z1)], Vec3::NEG_Y, alpha);
+            quad(
+                [
+                    Vec3::new(x0, t, z0),
+                    Vec3::new(x0, t, z1),
+                    Vec3::new(x1, t, z1),
+                    Vec3::new(x1, t, z0),
+                ],
+                Vec3::Y,
+                alpha,
+            );
+            quad(
+                [
+                    Vec3::new(x0, 0.0, z0),
+                    Vec3::new(x1, 0.0, z0),
+                    Vec3::new(x1, 0.0, z1),
+                    Vec3::new(x0, 0.0, z1),
+                ],
+                Vec3::NEG_Y,
+                alpha,
+            );
             // Walls where the neighbour is thinner.
             let sides = [
-                (h[idx(dx + 1, dz)], Vec3::X, [Vec3::new(x1, 0.0, z0), Vec3::new(x1, 1.0, z0), Vec3::new(x1, 1.0, z1), Vec3::new(x1, 0.0, z1)]),
-                (h[idx(dx - 1, dz)], Vec3::NEG_X, [Vec3::new(x0, 0.0, z1), Vec3::new(x0, 1.0, z1), Vec3::new(x0, 1.0, z0), Vec3::new(x0, 0.0, z0)]),
-                (h[idx(dx, dz + 1)], Vec3::Z, [Vec3::new(x1, 0.0, z1), Vec3::new(x1, 1.0, z1), Vec3::new(x0, 1.0, z1), Vec3::new(x0, 0.0, z1)]),
-                (h[idx(dx, dz - 1)], Vec3::NEG_Z, [Vec3::new(x0, 0.0, z0), Vec3::new(x0, 1.0, z0), Vec3::new(x1, 1.0, z0), Vec3::new(x1, 0.0, z0)]),
+                (
+                    h[idx(dx + 1, dz)],
+                    Vec3::X,
+                    [
+                        Vec3::new(x1, 0.0, z0),
+                        Vec3::new(x1, 1.0, z0),
+                        Vec3::new(x1, 1.0, z1),
+                        Vec3::new(x1, 0.0, z1),
+                    ],
+                ),
+                (
+                    h[idx(dx - 1, dz)],
+                    Vec3::NEG_X,
+                    [
+                        Vec3::new(x0, 0.0, z1),
+                        Vec3::new(x0, 1.0, z1),
+                        Vec3::new(x0, 1.0, z0),
+                        Vec3::new(x0, 0.0, z0),
+                    ],
+                ),
+                (
+                    h[idx(dx, dz + 1)],
+                    Vec3::Z,
+                    [
+                        Vec3::new(x1, 0.0, z1),
+                        Vec3::new(x1, 1.0, z1),
+                        Vec3::new(x0, 1.0, z1),
+                        Vec3::new(x0, 0.0, z1),
+                    ],
+                ),
+                (
+                    h[idx(dx, dz - 1)],
+                    Vec3::NEG_Z,
+                    [
+                        Vec3::new(x0, 0.0, z0),
+                        Vec3::new(x0, 1.0, z0),
+                        Vec3::new(x1, 1.0, z0),
+                        Vec3::new(x1, 0.0, z0),
+                    ],
+                ),
             ];
             for (other, normal, c) in sides {
                 if other < t {
@@ -290,11 +422,14 @@ fn build(noise: &FastNoiseLite, layer: &Layer, center: IVec2, cover: f32) -> Mes
             }
         }
     }
-    Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::RENDER_WORLD)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nor)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)
-        .with_inserted_indices(Indices::U32(ind))
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nor)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, col)
+    .with_inserted_indices(Indices::U32(ind))
 }
 
 #[cfg(test)]
@@ -311,9 +446,15 @@ mod tests {
         // Clear: no low deck, a few puffs and thin wisps.
         assert_eq!(low.cover(CLEAR), 0.0);
         let puffs = coverage(&mid, mid.cover(CLEAR));
-        assert!(puffs > 0.02 && puffs < 0.08, "clear-day puffs cover {puffs}");
+        assert!(
+            puffs > 0.02 && puffs < 0.08,
+            "clear-day puffs cover {puffs}"
+        );
         let wisps = coverage(&high, high.cover(CLEAR));
-        assert!(wisps > 0.03 && wisps < 0.15, "clear-day wisps cover {wisps}");
+        assert!(
+            wisps > 0.03 && wisps < 0.15,
+            "clear-day wisps cover {wisps}"
+        );
         // Rain: the low deck forms and the middle layer closes up.
         assert!(coverage(&low, low.cover(RAIN)) > 0.4);
         let lid = coverage(&mid, mid.cover(RAIN));

@@ -6,19 +6,31 @@
 use bevy::prelude::*;
 
 use super::camp::{Camp, Sleep};
-use super::health::{Layer, MAX, MORTAL_AT};
 use super::exposure::{Exposure, Scale};
+use super::health::{Layer, MAX, MORTAL_AT};
 use super::vitals::{self, CAPACITY, HEAVY_ABOVE, LIGHT_BELOW};
 use super::{Survival, Toast};
 use crate::player::Player;
-use crate::theme::{self, colors, sizes, Theme};
+use crate::theme::{self, Theme, colors, sizes};
 
 pub struct SurvivalHudPlugin;
 
 impl Plugin for SurvivalHudPlugin {
     fn build(&self, app: &mut App) {
         // PostStartup: after the weather panel, so this stacks below it top right.
-        app.add_systems(crate::menu::GamePostStartup, spawn).add_systems(crate::menu::GameUpdate, (update_bars, update_meters, shake, temperature_list, toasts, overlays).after(super::SurvivalSet));
+        app.add_systems(crate::menu::GamePostStartup, spawn)
+            .add_systems(
+                crate::menu::GameUpdate,
+                (
+                    update_bars,
+                    update_meters,
+                    shake,
+                    temperature_list,
+                    toasts,
+                    overlays,
+                )
+                    .after(super::SurvivalSet),
+            );
     }
 }
 
@@ -114,12 +126,24 @@ fn text(s: impl Into<String>, size: f32, color: Color) -> impl Bundle {
 
 /// The frame round a bar; what's inside sits within its 2-point edge.
 fn bar_back(theme: &Theme, w: f32) -> impl Bundle {
-    (Node { width: Val::Px(w), height: Val::Px(BAR_H), padding: UiRect::all(Val::Px(3.0)), ..default() }, theme.skin("bar"))
+    (
+        Node {
+            width: Val::Px(w),
+            height: Val::Px(BAR_H),
+            padding: UiRect::all(Val::Px(3.0)),
+            ..default()
+        },
+        theme.skin("bar"),
+    )
 }
 
 /// The bars' contents go in here, so zones and markers line up with the fill.
 fn bar_inner() -> Node {
-    Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() }
+    Node {
+        width: Val::Percent(100.0),
+        height: Val::Percent(100.0),
+        ..default()
+    }
 }
 
 fn hud_panel(theme: &Theme) -> impl Bundle {
@@ -131,12 +155,25 @@ fn hud_panel(theme: &Theme) -> impl Bundle {
 struct ToastBox;
 
 fn fill(color: Color) -> impl Bundle {
-    (Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() }, BackgroundColor(color))
+    (
+        Node {
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            ..default()
+        },
+        BackgroundColor(color),
+    )
 }
 
 fn tick(at: f32) -> impl Bundle {
     (
-        Node { position_type: PositionType::Absolute, left: Val::Percent(at * 100.0), width: Val::Px(1.0), height: Val::Percent(100.0), ..default() },
+        Node {
+            position_type: PositionType::Absolute,
+            left: Val::Percent(at * 100.0),
+            width: Val::Px(1.0),
+            height: Val::Percent(100.0),
+            ..default()
+        },
         BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.7)),
     )
 }
@@ -168,7 +205,14 @@ const COMFORT: Color = Color::srgba(0.4, 0.8, 0.4, 0.35);
 
 /// Bands for a scale's stages on a gauge from `lo` to `hi`: comfortable from
 /// the first stage to `edge`, then each stage out to the next.
-fn stage_zones(b: &mut ChildSpawnerCommands, rules: &Exposure, scale: Scale, lo: f32, hi: f32, edge: f32) {
+fn stage_zones(
+    b: &mut ChildSpawnerCommands,
+    rules: &Exposure,
+    scale: Scale,
+    lo: f32,
+    hi: f32,
+    edge: f32,
+) {
     let at = |v: f32| ((v - lo) / (hi - lo)).clamp(0.0, 1.0);
     let stages = rules.stages(scale);
     let low_side = scale != Scale::Heat;
@@ -177,8 +221,16 @@ fn stage_zones(b: &mut ChildSpawnerCommands, rules: &Exposure, scale: Scale, lo:
         b.spawn(zone(at(first), at(edge), COMFORT));
     }
     for (i, s) in stages.iter().enumerate() {
-        let end = if low_side { stages.get(i + 1).map_or(lo, |n| n.at) } else { stages.get(i + 1).map_or(hi, |n| n.at) };
-        let (a, z) = if low_side { (at(end), at(s.at)) } else { (at(s.at), at(end)) };
+        let end = if low_side {
+            stages.get(i + 1).map_or(lo, |n| n.at)
+        } else {
+            stages.get(i + 1).map_or(hi, |n| n.at)
+        };
+        let (a, z) = if low_side {
+            (at(end), at(s.at))
+        } else {
+            (at(s.at), at(end))
+        };
         b.spawn(zone(a, z, stage_color(scale, i)));
     }
 }
@@ -186,20 +238,37 @@ fn stage_zones(b: &mut ChildSpawnerCommands, rules: &Exposure, scale: Scale, lo:
 fn marker(g: Gauge) -> impl Bundle {
     (
         Marker(g),
-        Node { position_type: PositionType::Absolute, left: Val::Percent(50.0), width: Val::Px(3.0), top: Val::Px(-4.0), height: Val::Px(BAR_H + 2.0), ..default() },
+        Node {
+            position_type: PositionType::Absolute,
+            left: Val::Percent(50.0),
+            width: Val::Px(3.0),
+            top: Val::Px(-4.0),
+            height: Val::Px(BAR_H + 2.0),
+            ..default()
+        },
         BackgroundColor(Color::WHITE),
     )
 }
 
 fn full_screen(color: Color) -> impl Bundle {
     (
-        Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
+        Node {
+            position_type: PositionType::Absolute,
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            ..default()
+        },
         BackgroundColor(color),
         Pickable::IGNORE,
     )
 }
 
-fn spawn(mut commands: Commands, theme: Res<Theme>, rules: Res<Exposure>, top_right: Res<crate::hud::TopRight>) {
+fn spawn(
+    mut commands: Commands,
+    theme: Res<Theme>,
+    rules: Res<Exposure>,
+    top_right: Res<crate::hud::TopRight>,
+) {
     let theme = &*theme;
     let rules = &*rules;
     commands.spawn((Dizzy, full_screen(Color::srgba(0.02, 0.03, 0.08, 0.0))));
@@ -218,14 +287,25 @@ fn spawn(mut commands: Commands, theme: Res<Theme>, rules: Res<Exposure>, top_ri
         .insert(hud_panel(theme))
         .with_children(|col| {
             for l in Layer::ALL {
-                col.spawn(Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, ..default() }).with_children(|row| {
+                col.spawn(Node {
+                    column_gap: Val::Px(8.0),
+                    align_items: AlignItems::Center,
+                    ..default()
+                })
+                .with_children(|row| {
                     row.spawn(theme.icon(match l {
                         Layer::Damage => "icon_damage",
                         Layer::Fatigue => "icon_fatigue",
                         Layer::Blood => "icon_blood",
                         Layer::Injuries => "icon_injuries",
                     }));
-                    row.spawn((text(l.name(), sizes::SMALL, colors::TEXT), Node { width: Val::Px(70.0), ..default() }));
+                    row.spawn((
+                        text(l.name(), sizes::SMALL, colors::TEXT),
+                        Node {
+                            width: Val::Px(70.0),
+                            ..default()
+                        },
+                    ));
                     row.spawn(bar_back(theme, BAR_W)).with_children(|b| {
                         b.spawn(bar_inner()).with_children(|b| {
                             b.spawn((BarFill(l), fill(layer_color(l))));
@@ -253,21 +333,46 @@ fn spawn(mut commands: Commands, theme: Res<Theme>, rules: Res<Exposure>, top_ri
         })
         .insert(hud_panel(theme))
         .with_children(|col| {
-            col.spawn(Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, width: Val::Percent(100.0), ..default() }).with_children(|row| {
+            col.spawn(Node {
+                column_gap: Val::Px(8.0),
+                align_items: AlignItems::Center,
+                width: Val::Percent(100.0),
+                ..default()
+            })
+            .with_children(|row| {
                 row.spawn(theme.icon("icon_camp"));
                 row.spawn((CampText, text("", sizes::SMALL, colors::MUTED)));
             });
-            col.spawn(Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, ..default() }).with_children(|row| {
+            col.spawn(Node {
+                column_gap: Val::Px(8.0),
+                align_items: AlignItems::Center,
+                ..default()
+            })
+            .with_children(|row| {
                 row.spawn(theme.icon("icon_food"));
                 row.spawn(bar_back(theme, METER_W)).with_children(|b| {
                     b.spawn(bar_inner()).with_children(|b| {
                         b.spawn((FoodFill, fill(Color::srgb(0.9, 0.62, 0.3))));
                     });
                 });
-                row.spawn((text("Food", sizes::SMALL, colors::TEXT), Node { width: Val::Px(VALUE_W), ..default() }));
+                row.spawn((
+                    text("Food", sizes::SMALL, colors::TEXT),
+                    Node {
+                        width: Val::Px(VALUE_W),
+                        ..default()
+                    },
+                ));
             });
             // Air: how much oxygen the air here holds, with its stages.
-            col.spawn((Shake(Gauge::Air), Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, ..default() })).with_children(|row| {
+            col.spawn((
+                Shake(Gauge::Air),
+                Node {
+                    column_gap: Val::Px(8.0),
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+            ))
+            .with_children(|row| {
                 row.spawn(theme.icon("icon_air"));
                 row.spawn(bar_back(theme, METER_W)).with_children(|b| {
                     b.spawn(bar_inner()).with_children(|b| {
@@ -275,10 +380,25 @@ fn spawn(mut commands: Commands, theme: Res<Theme>, rules: Res<Exposure>, top_ri
                         b.spawn(marker(Gauge::Air));
                     });
                 });
-                row.spawn((GaugeText(Gauge::Air), text("", sizes::SMALL, colors::TEXT), Node { width: Val::Px(VALUE_W), ..default() }));
+                row.spawn((
+                    GaugeText(Gauge::Air),
+                    text("", sizes::SMALL, colors::TEXT),
+                    Node {
+                        width: Val::Px(VALUE_W),
+                        ..default()
+                    },
+                ));
             });
             // Felt temperature: cold stages, comfortable, heat stages.
-            col.spawn((Shake(Gauge::Temperature), Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, ..default() })).with_children(|row| {
+            col.spawn((
+                Shake(Gauge::Temperature),
+                Node {
+                    column_gap: Val::Px(8.0),
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+            ))
+            .with_children(|row| {
                 row.spawn(theme.icon("icon_warmth"));
                 row.spawn(bar_back(theme, METER_W)).with_children(|b| {
                     b.spawn(bar_inner()).with_children(|b| {
@@ -288,22 +408,53 @@ fn spawn(mut commands: Commands, theme: Res<Theme>, rules: Res<Exposure>, top_ri
                         b.spawn(marker(Gauge::Temperature));
                     });
                 });
-                row.spawn((GaugeText(Gauge::Temperature), text("", sizes::SMALL, colors::TEXT), Node { width: Val::Px(VALUE_W), ..default() }));
+                row.spawn((
+                    GaugeText(Gauge::Temperature),
+                    text("", sizes::SMALL, colors::TEXT),
+                    Node {
+                        width: Val::Px(VALUE_W),
+                        ..default()
+                    },
+                ));
             });
             // Load: light, the sweet spot, heavy.
-            col.spawn(Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, ..default() }).with_children(|row| {
+            col.spawn(Node {
+                column_gap: Val::Px(8.0),
+                align_items: AlignItems::Center,
+                ..default()
+            })
+            .with_children(|row| {
                 row.spawn(theme.icon("icon_load"));
                 row.spawn(bar_back(theme, METER_W)).with_children(|b| {
                     let mut b = b.spawn(bar_inner());
                     b.with_children(|b| {
-                    b.spawn(zone(0.0, LIGHT_BELOW / LOAD_SCALE, Color::srgba(0.5, 0.75, 1.0, 0.45)));
-                    b.spawn(zone(LIGHT_BELOW / LOAD_SCALE, HEAVY_ABOVE / LOAD_SCALE, Color::srgba(0.4, 0.85, 0.4, 0.55)));
-                    b.spawn(zone(HEAVY_ABOVE / LOAD_SCALE, 1.0, Color::srgba(1.0, 0.55, 0.2, 0.55)));
-                    b.spawn(tick(1.0 / LOAD_SCALE));
-                    b.spawn(marker(Gauge::Load));
+                        b.spawn(zone(
+                            0.0,
+                            LIGHT_BELOW / LOAD_SCALE,
+                            Color::srgba(0.5, 0.75, 1.0, 0.45),
+                        ));
+                        b.spawn(zone(
+                            LIGHT_BELOW / LOAD_SCALE,
+                            HEAVY_ABOVE / LOAD_SCALE,
+                            Color::srgba(0.4, 0.85, 0.4, 0.55),
+                        ));
+                        b.spawn(zone(
+                            HEAVY_ABOVE / LOAD_SCALE,
+                            1.0,
+                            Color::srgba(1.0, 0.55, 0.2, 0.55),
+                        ));
+                        b.spawn(tick(1.0 / LOAD_SCALE));
+                        b.spawn(marker(Gauge::Load));
                     });
                 });
-                row.spawn((GaugeText(Gauge::Load), text("", sizes::SMALL, colors::TEXT), Node { width: Val::Px(VALUE_W), ..default() }));
+                row.spawn((
+                    GaugeText(Gauge::Load),
+                    text("", sizes::SMALL, colors::TEXT),
+                    Node {
+                        width: Val::Px(VALUE_W),
+                        ..default()
+                    },
+                ));
             });
         });
 
@@ -324,7 +475,16 @@ fn spawn(mut commands: Commands, theme: Res<Theme>, rules: Res<Exposure>, top_ri
         .with_children(|col| {
             col.spawn((TempHeader, text("", sizes::SMALL, colors::TEXT)));
             for i in 0..TEMP_LINES {
-                col.spawn((TempLine(i), Node { justify_content: JustifyContent::SpaceBetween, column_gap: Val::Px(16.0), display: Display::None, ..default() })).with_children(|row| {
+                col.spawn((
+                    TempLine(i),
+                    Node {
+                        justify_content: JustifyContent::SpaceBetween,
+                        column_gap: Val::Px(16.0),
+                        display: Display::None,
+                        ..default()
+                    },
+                ))
+                .with_children(|row| {
                     row.spawn((TempLabel(i), text("", sizes::SMALL, colors::MUTED)));
                     row.spawn((TempValue(i), text("", sizes::SMALL, colors::TEXT)));
                 });
@@ -341,12 +501,25 @@ fn spawn(mut commands: Commands, theme: Res<Theme>, rules: Res<Exposure>, top_ri
             ..default()
         })
         .with_children(|c| {
-            c.spawn((ToastBox, Node { padding: UiRect::axes(Val::Px(16.0), Val::Px(8.0)), ..default() }, theme.skin("tooltip"), Visibility::Hidden)).with_children(|b| {
+            c.spawn((
+                ToastBox,
+                Node {
+                    padding: UiRect::axes(Val::Px(16.0), Val::Px(8.0)),
+                    ..default()
+                },
+                theme.skin("tooltip"),
+                Visibility::Hidden,
+            ))
+            .with_children(|b| {
                 b.spawn((ToastText, text("", sizes::LABEL, colors::TEXT)));
             });
         });
 
-    commands.spawn((SleepFade, full_screen(Color::srgba(0.0, 0.0, 0.0, 0.0)), GlobalZIndex(5)));
+    commands.spawn((
+        SleepFade,
+        full_screen(Color::srgba(0.0, 0.0, 0.0, 0.0)),
+        GlobalZIndex(5),
+    ));
     commands
         .spawn((
             DeathScreen,
@@ -365,12 +538,20 @@ fn spawn(mut commands: Commands, theme: Res<Theme>, rules: Res<Exposure>, top_ri
             GlobalZIndex(6),
         ))
         .with_children(|c| {
-            c.spawn((theme.bold(sizes::HUGE), Text::new("You perished"), TextColor(Color::srgb(1.0, 0.85, 0.8))));
+            c.spawn((
+                theme.bold(sizes::HUGE),
+                Text::new("You perished"),
+                TextColor(Color::srgb(1.0, 0.85, 0.8)),
+            ));
             c.spawn((DeathHint, text("", sizes::LABEL, colors::TEXT)));
         });
 }
 
-fn update_bars(s: Res<Survival>, mut fills: Query<(&BarFill, &mut Node)>, mut notes: Query<(&BarNote, &mut Text)>) {
+fn update_bars(
+    s: Res<Survival>,
+    mut fills: Query<(&BarFill, &mut Node)>,
+    mut notes: Query<(&BarNote, &mut Text)>,
+) {
     let h = &s.vitals.health;
     let mortal = h.mortal();
     for (f, mut node) in &mut fills {
@@ -415,23 +596,45 @@ fn update_meters(
     let load = vitals::load(s.env.carried);
     for (m, mut node, mut bg) in &mut markers {
         let (x, warn) = match m.0 {
-            Gauge::Temperature => ((v.feels - TEMP_LOW) / (TEMP_HIGH - TEMP_LOW), temp.is_some_and(|t| t.1.level > 0)),
+            Gauge::Temperature => (
+                (v.feels - TEMP_LOW) / (TEMP_HIGH - TEMP_LOW),
+                temp.is_some_and(|t| t.1.level > 0),
+            ),
             Gauge::Air => (v.air / 100.0, air.is_some_and(|a| a.level > 0)),
             Gauge::Load => (load / LOAD_SCALE, load > HEAVY_ABOVE),
         };
         node.left = Val::Percent(x.clamp(0.0, 1.0) * 100.0 - 0.9);
-        bg.0 = if warn { Color::srgb(1.0, 0.35, 0.3) } else { Color::WHITE };
+        bg.0 = if warn {
+            Color::srgb(1.0, 0.35, 0.3)
+        } else {
+            Color::WHITE
+        };
     }
     for (g, mut t, mut color) in &mut texts {
         let (s2, c) = match g.0 {
             Gauge::Temperature => match temp {
-                Some((_, a)) => (format!("{} {:.0}°C", a.stage.name, v.feels), if a.level > 0 { colors::BAD } else { colors::TEXT }),
+                Some((_, a)) => (
+                    format!("{} {:.0}°C", a.stage.name, v.feels),
+                    if a.level > 0 {
+                        colors::BAD
+                    } else {
+                        colors::TEXT
+                    },
+                ),
                 None => (format!("{:.0}°C", v.feels), colors::TEXT),
             },
             Gauge::Air => {
-                let c = if air.is_some_and(|a| a.level > 0) { colors::BAD } else { colors::TEXT };
+                let c = if air.is_some_and(|a| a.level > 0) {
+                    colors::BAD
+                } else {
+                    colors::TEXT
+                };
                 if s.env.underwater {
-                    if v.breath > 0.0 { (format!("Breath {:.0}s", v.breath.ceil()), colors::TEXT) } else { ("No air!".to_string(), colors::BAD) }
+                    if v.breath > 0.0 {
+                        (format!("Breath {:.0}s", v.breath.ceil()), colors::TEXT)
+                    } else {
+                        ("No air!".to_string(), colors::BAD)
+                    }
                 } else {
                     match air {
                         Some(a) => (format!("{} {:.0}%", a.stage.name, v.air), c),
@@ -475,13 +678,28 @@ fn update_meters(
 }
 
 /// Exposure meters shake: a little in the first stage, hard in the worst.
-fn shake(time: Res<Time>, s: Res<Survival>, rules: Res<Exposure>, mut rows: Query<(&Shake, &mut Node)>) {
+fn shake(
+    time: Res<Time>,
+    s: Res<Survival>,
+    rules: Res<Exposure>,
+    mut rows: Query<(&Shake, &mut Node)>,
+) {
     let v = &s.vitals;
     let t = time.elapsed_secs();
     for (sh, mut node) in &mut rows {
         let (strength, seed) = match sh.0 {
-            Gauge::Temperature => (rules.temperature(v.feels).map_or(0.0, |(_, a)| a.stage.shake), 0.0),
-            Gauge::Air => (rules.stage(Scale::Air, v.oxygen).map_or(0.0, |a| a.stage.shake), 7.3),
+            Gauge::Temperature => (
+                rules
+                    .temperature(v.feels)
+                    .map_or(0.0, |(_, a)| a.stage.shake),
+                0.0,
+            ),
+            Gauge::Air => (
+                rules
+                    .stage(Scale::Air, v.oxygen)
+                    .map_or(0.0, |a| a.stage.shake),
+                7.3,
+            ),
             Gauge::Load => (0.0, 0.0),
         };
         // Shivering: fast and jittery, quicker the stronger it is.
@@ -506,7 +724,10 @@ fn temperature_list(
     mut lines: Query<(&TempLine, &mut Node), Without<TempPanel>>,
     mut header: Query<&mut Text, (With<TempHeader>, Without<TempLabel>, Without<TempValue>)>,
     mut labels: Query<(&TempLabel, &mut Text), (Without<TempHeader>, Without<TempValue>)>,
-    mut values: Query<(&TempValue, &mut Text, &mut TextColor), (Without<TempHeader>, Without<TempLabel>)>,
+    mut values: Query<
+        (&TempValue, &mut Text, &mut TextColor),
+        (Without<TempHeader>, Without<TempLabel>),
+    >,
 ) {
     let on = shown.get_or_insert(true);
     if keys.just_pressed(KeyCode::F6) {
@@ -522,15 +743,28 @@ fn temperature_list(
         return;
     }
     // Hide what adds nothing, except the biome (always the first line).
-    let parts: Vec<&(String, f32)> = s.temperature.iter().enumerate().filter(|(i, p)| *i == 0 || p.1.abs() >= 0.05).map(|(_, p)| p).collect();
+    let parts: Vec<&(String, f32)> = s
+        .temperature
+        .iter()
+        .enumerate()
+        .filter(|(i, p)| *i == 0 || p.1.abs() >= 0.05)
+        .map(|(_, p)| p)
+        .collect();
     if let Ok(mut t) = header.single_mut() {
-        let h = format!("Surroundings {:.1}°C, you feel {:.1}°C", s.env.feels, s.vitals.feels);
+        let h = format!(
+            "Surroundings {:.1}°C, you feel {:.1}°C",
+            s.env.feels, s.vitals.feels
+        );
         if t.0 != h {
             t.0 = h;
         }
     }
     for (l, mut node) in &mut lines {
-        let d = if l.0 < parts.len() { Display::Flex } else { Display::None };
+        let d = if l.0 < parts.len() {
+            Display::Flex
+        } else {
+            Display::None
+        };
         if node.display != d {
             node.display = d;
         }
@@ -583,7 +817,11 @@ fn toasts(
     // Shown for 3 seconds, then gone.
     let show = *age < 3.5 && !t.0.is_empty();
     if let Ok((mut v, _)) = frame.single_mut() {
-        let want = if show { Visibility::Inherited } else { Visibility::Hidden };
+        let want = if show {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
         if *v != want {
             *v = want;
         }
@@ -609,11 +847,23 @@ fn overlays(
     }
     let dead = s.vitals.health.is_dead();
     if let Ok(mut v) = death.single_mut() {
-        *v = if dead { Visibility::Inherited } else { Visibility::Hidden };
+        *v = if dead {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
     }
     if dead && let Ok(mut t) = hint.single_mut() {
         let wait = s.dead_for.unwrap_or(0.0) < 2.0;
-        let place = if camp.bedroll.is_some() { "at your camp" } else { "at the edge of the swamp" };
-        t.0 = if wait { String::new() } else { format!("Press Space to wake {place}") };
+        let place = if camp.bedroll.is_some() {
+            "at your camp"
+        } else {
+            "at the edge of the swamp"
+        };
+        t.0 = if wait {
+            String::new()
+        } else {
+            format!("Press Space to wake {place}")
+        };
     }
 }

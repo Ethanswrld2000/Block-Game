@@ -15,13 +15,24 @@ pub struct Drops {
 
 impl Drops {
     pub fn from_ron(text: &str, blocks: &BlockRegistry, items: &Items) -> Result<Self, String> {
-        let spec: HashMap<String, Vec<(String, u16, f32)>> = ron::from_str(text).map_err(|e| format!("drops.ron: {e}"))?;
+        let spec: HashMap<String, Vec<(String, u16, f32)>> =
+            ron::from_str(text).map_err(|e| format!("drops.ron: {e}"))?;
         let mut map = HashMap::new();
         for (block, list) in spec {
-            let b = blocks.id(&block).ok_or_else(|| format!("drops.ron: no block '{block}'"))?;
+            let b = blocks
+                .id(&block)
+                .ok_or_else(|| format!("drops.ron: no block '{block}'"))?;
             let list = list
                 .into_iter()
-                .map(|(i, n, p)| Ok((items.id(&i).ok_or_else(|| format!("drops.ron: no item '{i}'"))?, n, p)))
+                .map(|(i, n, p)| {
+                    Ok((
+                        items
+                            .id(&i)
+                            .ok_or_else(|| format!("drops.ron: no item '{i}'"))?,
+                        n,
+                        p,
+                    ))
+                })
                 .collect::<Result<Vec<_>, String>>()?;
             map.insert(b, list);
         }
@@ -30,7 +41,12 @@ impl Drops {
 
     /// The blocks whose breaking can give this item.
     pub fn sources(&self, item: ItemId) -> Vec<BlockId> {
-        let mut out: Vec<BlockId> = self.map.iter().filter(|(_, l)| l.iter().any(|(i, ..)| *i == item)).map(|(b, _)| *b).collect();
+        let mut out: Vec<BlockId> = self
+            .map
+            .iter()
+            .filter(|(_, l)| l.iter().any(|(i, ..)| *i == item))
+            .map(|(b, _)| *b)
+            .collect();
         out.sort_by_key(|b| b.0);
         out
     }
@@ -38,7 +54,10 @@ impl Drops {
     /// What a broken block gives. `roll` varies the chances between breaks.
     pub fn roll(&self, items: &Items, block: BlockId, at: BlockPos, roll: u64) -> Vec<Stack> {
         match self.map.get(&block) {
-            None => items.for_block(block).map(|i| vec![Stack::new(i, 1)]).unwrap_or_default(),
+            None => items
+                .for_block(block)
+                .map(|i| vec![Stack::new(i, 1)])
+                .unwrap_or_default(),
             Some(list) => list
                 .iter()
                 .enumerate()
@@ -69,16 +88,31 @@ mod tests {
     #[test]
     fn blocks_drop_items() {
         let (blocks, items) = load();
-        let drops = Drops::from_ron(include_str!("../../../../assets/data/drops.ron"), &blocks, &items).unwrap();
+        let drops = Drops::from_ron(
+            include_str!("../../../../assets/data/drops.ron"),
+            &blocks,
+            &items,
+        )
+        .unwrap();
         let at = BlockPos::new(3, 4, 5);
         let stone = drops.roll(&items, blocks.expect("stone"), at, 0);
         assert_eq!(stone, vec![Stack::new(items.id("cobblestone").unwrap(), 1)]);
         // Unlisted blocks drop themselves.
-        assert_eq!(drops.roll(&items, blocks.expect("log"), at, 0), vec![Stack::new(items.id("log").unwrap(), 1)]);
+        assert_eq!(
+            drops.roll(&items, blocks.expect("log"), at, 0),
+            vec![Stack::new(items.id("log").unwrap(), 1)]
+        );
         assert!(drops.roll(&items, blocks.expect("water"), at, 0).is_empty());
         // Leaves give sticks about half the time.
         let stick = items.id("stick").unwrap();
-        let n = (0..1000).filter(|r| drops.roll(&items, blocks.expect("leaves"), at, *r).iter().any(|s| s.item == stick)).count();
+        let n = (0..1000)
+            .filter(|r| {
+                drops
+                    .roll(&items, blocks.expect("leaves"), at, *r)
+                    .iter()
+                    .any(|s| s.item == stick)
+            })
+            .count();
         assert!((400..600).contains(&n), "{n}");
     }
 }

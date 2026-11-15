@@ -39,10 +39,17 @@ impl Plugin for InteractPlugin {
             .init_resource::<Aimed>()
             // `BLOCKGAME_SLOT=n` starts with hotbar slot n in hand (for screenshots).
             .insert_resource(Hands {
-                right: Some(std::env::var("BLOCKGAME_SLOT").ok().and_then(|s| s.parse::<usize>().ok()).map_or(0, |n| n.clamp(1, SLOTS) - 1)),
+                right: Some(
+                    std::env::var("BLOCKGAME_SLOT")
+                        .ok()
+                        .and_then(|s| s.parse::<usize>().ok())
+                        .map_or(0, |n| n.clamp(1, SLOTS) - 1),
+                ),
                 left: None,
             })
-            .insert_resource(Hotbar { slots: vec![None; SLOTS] })
+            .insert_resource(Hotbar {
+                slots: vec![None; SLOTS],
+            })
             .add_message::<Mined>()
             .add_message::<Blow>()
             .add_message::<OpenChest>()
@@ -163,7 +170,8 @@ impl Hands {
     }
 
     pub fn item(&self, hand: Hand, hotbar: &Hotbar) -> Option<ItemId> {
-        self.slot(hand).and_then(|s| hotbar.slots.get(s).copied().flatten())
+        self.slot(hand)
+            .and_then(|s| hotbar.slots.get(s).copied().flatten())
     }
 }
 
@@ -195,7 +203,11 @@ impl Arm {
     /// Starts a swing unless one is under way.
     fn start(&mut self, style: Swing, mining: bool) {
         if self.t.is_none() {
-            *self = Arm { t: Some(0.0), style, mining };
+            *self = Arm {
+                t: Some(0.0),
+                style,
+                mining,
+            };
         }
     }
 
@@ -250,8 +262,15 @@ fn choose_items(
         return;
     }
     const DIGITS: [KeyCode; 9] = [
-        KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4, KeyCode::Digit5,
-        KeyCode::Digit6, KeyCode::Digit7, KeyCode::Digit8, KeyCode::Digit9,
+        KeyCode::Digit1,
+        KeyCode::Digit2,
+        KeyCode::Digit3,
+        KeyCode::Digit4,
+        KeyCode::Digit5,
+        KeyCode::Digit6,
+        KeyCode::Digit7,
+        KeyCode::Digit8,
+        KeyCode::Digit9,
     ];
     let n = SLOTS;
     for (i, k) in DIGITS.iter().enumerate() {
@@ -267,8 +286,17 @@ fn choose_items(
 }
 
 /// The selected hotbar item, if any is left in the inventory.
-fn wield(hands: Res<Hands>, hotbar: Res<Hotbar>, inv: Res<Inventory>, mut wielded: ResMut<Wielded>) {
-    let w = Wielded(hands.item(Hand::Right, &hotbar).filter(|i| inv.count(*i) > 0));
+fn wield(
+    hands: Res<Hands>,
+    hotbar: Res<Hotbar>,
+    inv: Res<Inventory>,
+    mut wielded: ResMut<Wielded>,
+) {
+    let w = Wielded(
+        hands
+            .item(Hand::Right, &hotbar)
+            .filter(|i| inv.count(*i) > 0),
+    );
     if *wielded != w {
         *wielded = w;
     }
@@ -283,7 +311,11 @@ fn find_target(
 ) {
     let origin = cam.translation.to_array();
     let dir = cam.forward().as_vec3().to_array();
-    let reach = if *mode == MoveMode::Fly { FLY_REACH } else { REACH };
+    let reach = if *mode == MoveMode::Fly {
+        FLY_REACH
+    } else {
+        REACH
+    };
     // Aim through air and water; stop at anything solid, or a torch.
     target.hit = raycast(origin, dir, reach, |p| {
         world.block(p).is_some_and(|b| {
@@ -296,8 +328,15 @@ fn find_target(
 /// Break the block at `p` (it drops as usual), then anything that was held up
 /// by it: plants and pebbles on top, twigs and vines on its sides, and vines
 /// hanging below those. Returns false if nothing was there to break.
-fn break_block(world: &mut World, blocks: &Blocks, mined: &mut MessageWriter<Mined>, p: BlockPos) -> bool {
-    let Some(b) = world.block(p).filter(|b| !b.is_air()) else { return false };
+fn break_block(
+    world: &mut World,
+    blocks: &Blocks,
+    mined: &mut MessageWriter<Mined>,
+    p: BlockPos,
+) -> bool {
+    let Some(b) = world.block(p).filter(|b| !b.is_air()) else {
+        return false;
+    };
     if !world.set_block(p, BlockId::AIR) {
         return false;
     }
@@ -311,7 +350,9 @@ fn break_block(world: &mut World, blocks: &Blocks, mined: &mut MessageWriter<Min
         if budget == 0 {
             break;
         }
-        let Some(qb) = world.block(q).filter(|b| !b.is_air()) else { continue };
+        let Some(qb) = world.block(q).filter(|b| !b.is_air()) else {
+            continue;
+        };
         let def = blocks.registry.get(qb);
         let supports = def.supports();
         if supports.is_empty() || supports.iter().any(|o| holds(world, blocks, def, q, *o)) {
@@ -327,14 +368,25 @@ fn break_block(world: &mut World, blocks: &Blocks, mined: &mut MessageWriter<Min
 }
 
 fn neighbours(p: BlockPos) -> impl Iterator<Item = BlockPos> {
-    [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]].into_iter().map(move |d| BlockPos::new(p.x + d[0], p.y + d[1], p.z + d[2]))
+    [
+        [1, 0, 0],
+        [-1, 0, 0],
+        [0, 1, 0],
+        [0, -1, 0],
+        [0, 0, 1],
+        [0, 0, -1],
+    ]
+    .into_iter()
+    .map(move |d| BlockPos::new(p.x + d[0], p.y + d[1], p.z + d[2]))
 }
 
 /// Does the block at offset `o` from `p` hold up `def`? The ground under a
 /// plant must be solid; a vine can also hang from the vine above; anything
 /// else clings to any block that isn't itself a small detail or a torch.
 fn holds(world: &World, blocks: &Blocks, def: &voxel::BlockDef, p: BlockPos, o: [i32; 3]) -> bool {
-    let Some(n) = world.block(BlockPos::new(p.x + o[0], p.y + o[1], p.z + o[2])) else { return true };
+    let Some(n) = world.block(BlockPos::new(p.x + o[0], p.y + o[1], p.z + o[2])) else {
+        return true;
+    };
     if n.is_air() {
         return false;
     }
@@ -349,7 +401,15 @@ fn holds(world: &World, blocks: &Blocks, def: &voxel::BlockDef, p: BlockPos, o: 
 /// Remesh the chunk holding `p` and any neighbour sharing a face, right away.
 fn remesh_around(world: &mut World, blocks: &Blocks, p: BlockPos) {
     let c = p.chunk();
-    for d in [[0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]] {
+    for d in [
+        [0, 0, 0],
+        [1, 0, 0],
+        [-1, 0, 0],
+        [0, 1, 0],
+        [0, -1, 0],
+        [0, 0, 1],
+        [0, 0, -1],
+    ] {
         let n = ChunkPos::new(c.x + d[0], c.y + d[1], c.z + d[2]);
         if world.needs_mesh(n) {
             world.mesh_now(n, &blocks.registry, &blocks.opaque);
@@ -408,7 +468,12 @@ fn use_hands(
     // A creature in front of the block you aim at takes the click.
     let block_dist = target.hit.and_then(|h| {
         let min = Vec3::new(h.block.x as f32, h.block.y as f32, h.block.z as f32);
-        ray_box(cam.translation, cam.forward().as_vec3(), min, min + Vec3::ONE)
+        ray_box(
+            cam.translation,
+            cam.forward().as_vec3(),
+            min,
+            min + Vec3::ONE,
+        )
     });
     if let Some(e) = aimed.entity
         && block_dist.is_none_or(|d| aimed.dist < d)
@@ -420,16 +485,23 @@ fn use_hands(
         if mouse.pressed(MouseButton::Left) && anim.strike_cooldown <= 0.0 {
             anim.start(hand, style);
             anim.strike_cooldown = STRIKE_COOLDOWN;
-            let damage = item.map_or(crate::items::FIST_DAMAGE, |i| items.get(i).damage) * (1.0 + perks.damage);
+            let damage = item.map_or(crate::items::FIST_DAMAGE, |i| items.get(i).damage)
+                * (1.0 + perks.damage);
             let mut dir = cam.forward().as_vec3();
             dir.y = 0.0;
-            strikes.write(Strike { entity: e, damage, dir: dir.normalize_or_zero() });
+            strikes.write(Strike {
+                entity: e,
+                damage,
+                dir: dir.normalize_or_zero(),
+            });
         }
         return;
     }
 
     // A station nearer than the block you aim at takes right clicks (`station`).
-    let at_station = station.0.is_some_and(|(_, d)| block_dist.is_none_or(|b| d < b));
+    let at_station = station
+        .0
+        .is_some_and(|(_, d)| block_dist.is_none_or(|b| d < b));
 
     // Right click on a chest opens it (whatever you hold).
     let chest = blocks.registry.id("chest");
@@ -447,7 +519,12 @@ fn use_hands(
     if mouse.just_pressed(MouseButton::Right)
         && !at_station
         && let Some(hit) = target.hit
-        && world.block(hit.block).is_some_and(|b| matches!(blocks.registry.get(b).shape, voxel::Shape::Twig | voxel::Shape::Pebble))
+        && world.block(hit.block).is_some_and(|b| {
+            matches!(
+                blocks.registry.get(b).shape,
+                voxel::Shape::Twig | voxel::Shape::Pebble
+            )
+        })
     {
         anim.start(hand, style);
         break_block(&mut world, &blocks, &mut mined, hit.block);
@@ -466,15 +543,33 @@ fn use_hands(
         && (mouse.just_pressed(MouseButton::Right) || anim.place_cooldown <= 0.0)
     {
         // Aiming at a plant puts the block in its place.
-        let is_plant = |p: BlockPos| world.block(p).is_some_and(|b| blocks.registry.get(b).shape.is_detail());
-        let into = if is_plant(hit.block) { hit.block } else { hit.before };
-        let free = world.block(into).is_some_and(|b| !blocks.registry.get(b).solid && blocks.registry.get(b).shape != voxel::Shape::Torch);
+        let is_plant = |p: BlockPos| {
+            world
+                .block(p)
+                .is_some_and(|b| blocks.registry.get(b).shape.is_detail())
+        };
+        let into = if is_plant(hit.block) {
+            hit.block
+        } else {
+            hit.before
+        };
+        let free = world.block(into).is_some_and(|b| {
+            !blocks.registry.get(b).solid && blocks.registry.get(b).shape != voxel::Shape::Torch
+        });
         // Never inside yourself (solid blocks only; a torch can go at your feet).
         let blocks_player = blocks.registry.get(place).solid && player.overlaps(into);
         // Nothing can be built at or above the world's ceiling.
         let under_ceiling = into.y < worldgen::WORLD_CEILING;
-        if free && !blocks_player && under_ceiling && item.is_some_and(|i| inv.take(i, 1)) && world.set_block(into, place) {
-            placed.write(Placed { pos: into, block: place });
+        if free
+            && !blocks_player
+            && under_ceiling
+            && item.is_some_and(|i| inv.take(i, 1))
+            && world.set_block(into, place)
+        {
+            placed.write(Placed {
+                pos: into,
+                block: place,
+            });
             remesh_around(&mut world, &blocks, into);
             anim.start(hand, style);
             anim.place_cooldown = PLACE_REPEAT;
@@ -488,7 +583,8 @@ fn use_hands(
         let b = world.block(hit.block)?;
         // A tool sharpened at the sharpening stone cuts faster for a while.
         let sharp = edges.as_ref().map_or(1.0, |e| e.speed(&items, item));
-        let seconds = items.break_time(item, blocks.registry.get(b))? / (1.0 + perks.mining) / sharp;
+        let seconds =
+            items.break_time(item, blocks.registry.get(b))? / (1.0 + perks.mining) / sharp;
         Some((hit.block, b, seconds))
     };
     let aim = breakable(&world);
@@ -498,7 +594,11 @@ fn use_hands(
     let mut broke = None;
     if landed && let Some((pos, b, seconds)) = aim {
         if mining.block != Some(pos) {
-            *mining = Mining { block: Some(pos), hand, progress: 0.0 };
+            *mining = Mining {
+                block: Some(pos),
+                hand,
+                progress: 0.0,
+            };
         }
         mining.progress += swing::blow_share(anim.arm(hand).style, seconds);
         blows.write(Blow { pos, block: b });
@@ -521,7 +621,11 @@ fn use_hands(
             }
             Some((pos, _, _)) => {
                 if mining.block != Some(pos) {
-                    *mining = Mining { block: Some(pos), hand, progress: 0.0 };
+                    *mining = Mining {
+                        block: Some(pos),
+                        hand,
+                        progress: 0.0,
+                    };
                 }
                 anim.arm_mut(hand).start(style, true);
             }
@@ -543,15 +647,26 @@ fn use_hands(
     }
 }
 
-fn draw_target(target: Res<Target>, mining: Res<Mining>, menus: Res<crate::camera::Menus>, mut gizmos: Gizmos) {
+fn draw_target(
+    target: Res<Target>,
+    mining: Res<Mining>,
+    menus: Res<crate::camera::Menus>,
+    mut gizmos: Gizmos,
+) {
     if let Some(hit) = target.hit.filter(|_| !menus.open) {
         let p = hit.block;
         let center = Vec3::new(p.x as f32 + 0.5, p.y as f32 + 0.5, p.z as f32 + 0.5);
-        gizmos.cube(Transform::from_translation(center).with_scale(Vec3::splat(1.003)), Color::srgba(0.05, 0.05, 0.05, 0.9));
+        gizmos.cube(
+            Transform::from_translation(center).with_scale(Vec3::splat(1.003)),
+            Color::srgba(0.05, 0.05, 0.05, 0.9),
+        );
         // Cracks close in as the block is mined: a shrinking inner box.
         if mining.block == Some(p) && mining.progress > 0.0 {
             let s = 1.0 - mining.progress.min(1.0) * 0.9;
-            gizmos.cube(Transform::from_translation(center).with_scale(Vec3::splat(s)), Color::srgba(0.9, 0.85, 0.7, 0.8));
+            gizmos.cube(
+                Transform::from_translation(center).with_scale(Vec3::splat(s)),
+                Color::srgba(0.9, 0.85, 0.7, 0.8),
+            );
         }
     }
 }

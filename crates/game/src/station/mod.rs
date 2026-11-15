@@ -20,6 +20,7 @@
 
 pub mod bench;
 pub mod board;
+mod bubbles;
 mod dev;
 pub mod golem;
 pub mod models;
@@ -37,16 +38,16 @@ use voxel::BlockPos;
 
 use crate::blocks::Blocks;
 use crate::camera::{FlyCamera, Menus};
-use crate::interact::{ray_box, Wielded, REACH};
+use crate::interact::{REACH, Wielded, ray_box};
 use crate::inventory::grid::{Grid, Stack};
 use crate::inventory::{Chests, Inventory, Spill};
 use crate::items::Items;
 use crate::save::SaveDir;
-use crate::survival::camp::Camp;
 use crate::survival::Toast;
-use crate::theme::{colors, sizes, Theme};
+use crate::survival::camp::Camp;
+use crate::theme::{Theme, colors, sizes};
 use crate::world::World;
-use models::{Mat, MARKS};
+use models::{MARKS, Mat};
 use urns::{Gives, Progress, UrnData};
 
 pub struct StationPlugin;
@@ -73,6 +74,7 @@ impl Plugin for StationPlugin {
                     tree::spawn_tree_ui,
                     telescope::spawn_scope_ui,
                     dev::spawn_dev_ui,
+                    bubbles::setup_bubbles,
                 )
                     .chain(),
             )
@@ -92,13 +94,17 @@ impl Plugin for StationPlugin {
                     dev::dev_keys,
                     dev::dev_click,
                     dev::dev_build,
-                    board::board_for_screenshot,
-                    board::board_keys,
-                    board::board_camera,
-                    board::board_hides,
-                    board::board_click,
-                    board::board_models,
-                    board::board_ui,
+                    (
+                        board::board_for_screenshot,
+                        board::board_keys,
+                        board::board_camera,
+                        board::board_hides,
+                        board::board_tool,
+                        board::board_click,
+                        board::board_models,
+                        board::board_ui,
+                    )
+                        .chain(),
                 )
                     .chain()
                     .before(crate::interact::InteractSet)
@@ -106,14 +112,36 @@ impl Plugin for StationPlugin {
             )
             .add_systems(
                 crate::menu::GameUpdate,
-                (sync_bed, dull_edges, golem::golem_rebuild, golem::golem_walk, telescope::scope_view, telescope::draw_constellations)
+                (
+                    sync_bed,
+                    dull_edges,
+                    golem::golem_rebuild,
+                    golem::golem_walk,
+                    telescope::scope_view,
+                    telescope::draw_constellations,
+                )
                     .chain()
                     .after(board::board_ui)
                     .before(crate::interact::InteractSet)
                     .after(crate::player::PlayerSet),
             )
-            .add_systems(crate::menu::GameUpdate, (save_urns, urns_for_screenshot))
-            .add_systems(Last, (save_urns_on_exit, save_edges_on_exit, golem::save_golem_on_exit).run_if(crate::menu::in_game));
+            .add_systems(
+                crate::menu::GameUpdate,
+                (
+                    save_urns,
+                    urns_for_screenshot,
+                    (bubbles::spawn_bubbles, bubbles::move_bubbles).chain(),
+                ),
+            )
+            .add_systems(
+                Last,
+                (
+                    save_urns_on_exit,
+                    save_edges_on_exit,
+                    golem::save_golem_on_exit,
+                )
+                    .run_if(crate::menu::in_game),
+            );
     }
 }
 
@@ -159,7 +187,8 @@ pub struct Edges {
 impl Edges {
     /// How much faster what's in hand works.
     pub fn speed(&self, items: &Items, held: Option<crate::items::ItemId>) -> f32 {
-        held.filter(|i| self.left.get(&items.get(*i).name).is_some_and(|s| *s > 0.0)).map_or(1.0, |_| self.speed.max(1.0))
+        held.filter(|i| self.left.get(&items.get(*i).name).is_some_and(|s| *s > 0.0))
+            .map_or(1.0, |_| self.speed.max(1.0))
     }
 
     /// Time passes: edges dull. Returns the tools that just went dull.
@@ -177,7 +206,13 @@ impl Edges {
 }
 
 fn load_edges(mut commands: Commands, dir: Res<SaveDir>) {
-    let e = if screenshot_run() { None } else { std::fs::read_to_string(dir.file("edges.ron")).ok().and_then(|t| ron::from_str::<Edges>(&t).ok()) };
+    let e = if screenshot_run() {
+        None
+    } else {
+        std::fs::read_to_string(dir.file("edges.ron"))
+            .ok()
+            .and_then(|t| ron::from_str::<Edges>(&t).ok())
+    };
     commands.insert_resource(e.unwrap_or_default());
 }
 
@@ -194,25 +229,40 @@ fn save_edges_on_exit(mut exit: MessageReader<AppExit>, dir: Res<SaveDir>, edges
     }
 }
 
-fn dull_edges(time: Res<Time>, items: Res<Items>, mut edges: ResMut<Edges>, mut toast: MessageWriter<Toast>) {
+fn dull_edges(
+    time: Res<Time>,
+    items: Res<Items>,
+    mut edges: ResMut<Edges>,
+    mut toast: MessageWriter<Toast>,
+) {
     if edges.left.is_empty() {
         return;
     }
     for name in edges.wear(time.delta_secs()) {
-        let title = items.id(&name).map_or(name.clone(), |i| items.get(i).title.clone());
-        toast.write(Toast(format!("Your {title} has gone dull: sharpen it again at the sharpening stone")));
+        let title = items
+            .id(&name)
+            .map_or(name.clone(), |i| items.get(i).title.clone());
+        toast.write(Toast(format!(
+            "Your {title} has gone dull: sharpen it again at the sharpening stone"
+        )));
     }
 }
 
 /// The camp sleeps in whatever bed the sleeping station has built.
 fn sync_bed(urns: Res<Urns>, mut camp: ResMut<Camp>) {
-    let bed = crate::survival::camp::Bed { frame: urns.has("bedframe"), double: urns.has("double_bed") };
+    let bed = crate::survival::camp::Bed {
+        frame: urns.has("bedframe"),
+        double: urns.has("double_bed"),
+    };
     if camp.bed != bed {
         camp.bed = bed;
     }
 }
 
-static NOTHING_YET: Progress = Progress { done: Vec::new(), given: BTreeMap::new() };
+static NOTHING_YET: Progress = Progress {
+    done: Vec::new(),
+    given: BTreeMap::new(),
+};
 
 impl Urns {
     /// Whether a step is done, in any urn.
@@ -360,7 +410,9 @@ struct StationModels;
 struct StationLabel;
 
 fn load_urns(mut commands: Commands, items: Res<Items>, dir: Res<SaveDir>) {
-    let book = match UrnData::from_ron(include_str!("../../../../assets/data/urns.ron"), |n| items.id(n).is_some()) {
+    let book = match UrnData::from_ron(include_str!("../../../../assets/data/urns.ron"), |n| {
+        items.id(n).is_some()
+    }) {
         Ok(d) => d,
         Err(e) => panic!("{e}"),
     };
@@ -387,7 +439,8 @@ fn load_urns(mut commands: Commands, items: Res<Items>, dir: Res<SaveDir>) {
 }
 
 fn screenshot_run() -> bool {
-    std::env::var_os("BLOCKGAME_SCREENSHOT").is_some() || std::env::var_os("BLOCKGAME_BENCH").is_some()
+    std::env::var_os("BLOCKGAME_SCREENSHOT").is_some()
+        || std::env::var_os("BLOCKGAME_BENCH").is_some()
 }
 
 fn store(dir: &SaveDir, urns: &Urns) {
@@ -433,7 +486,11 @@ fn urns_for_screenshot(
     }
     *done = true;
     let (sy, cy) = cam.yaw.sin_cos();
-    let forward = if at.is_some() { Vec3::NEG_Z } else { Vec3::new(-sy, 0.0, -cy) };
+    let forward = if at.is_some() {
+        Vec3::NEG_Z
+    } else {
+        Vec3::new(-sy, 0.0, -cy)
+    };
     if std::env::var_os("BLOCKGAME_CAMP").is_some() {
         let at = player.pos + forward * 3.5;
         camp.bedroll = Some(crate::survival::camp::Bedroll {
@@ -443,11 +500,16 @@ fn urns_for_screenshot(
     }
     if let Ok(v) = std::env::var("BLOCKGAME_URNS") {
         let right = Vec3::new(-forward.z, 0.0, forward.x);
-        let names: Vec<&str> = v.split(',').map(str::trim).filter(|s| !s.is_empty()).collect();
+        let names: Vec<&str> = v
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .collect();
         for (i, name) in names.iter().enumerate() {
             let middle = at.unwrap_or(player.pos + forward * 7.0);
             let at = middle + right * ((i as f32 - (names.len() as f32 - 1.0) / 2.0) * 7.0);
-            urns.placed.insert(name.to_string(), placed_facing(at, forward));
+            urns.placed
+                .insert(name.to_string(), placed_facing(at, forward));
         }
     }
 }
@@ -455,12 +517,26 @@ fn urns_for_screenshot(
 /// An urn set down at `at`, its stations spread across your view and behind it.
 fn placed_facing(at: Vec3, forward: Vec3) -> Placed {
     let along_x = forward.z.abs() >= forward.x.abs();
-    let back = if along_x { forward.z.signum() } else { forward.x.signum() };
-    Placed { pos: (at.x, at.y, at.z), along_x, back: if back == 0.0 { 1.0 } else { back } }
+    let back = if along_x {
+        forward.z.signum()
+    } else {
+        forward.x.signum()
+    };
+    Placed {
+        pos: (at.x, at.y, at.z),
+        along_x,
+        back: if back == 0.0 { 1.0 } else { back },
+    }
 }
 
 /// Where everything stands: each urn, and the stations its finished steps placed.
-fn layout(camp: &Camp, world: &World, blocks: &Blocks, urns: &Urns, book: &UrnData) -> Vec<Station> {
+fn layout(
+    camp: &Camp,
+    world: &World,
+    blocks: &Blocks,
+    urns: &Urns,
+    book: &UrnData,
+) -> Vec<Station> {
     let mut out = Vec::new();
     for (i, def) in book.urns.iter().enumerate() {
         let progress = urns.of(&def.name);
@@ -468,17 +544,37 @@ fn layout(camp: &Camp, world: &World, blocks: &Blocks, urns: &Urns, book: &UrnDa
             // The ancestral urn: on the far side of the bedroll from where you
             // wake, its stations along the bedroll on either side.
             let Some(b) = camp.bedroll else { continue };
-            let (along, side) = if b.along_x { (Vec3::X, Vec3::Z) } else { (Vec3::Z, Vec3::X) };
+            let (along, side) = if b.along_x {
+                (Vec3::X, Vec3::Z)
+            } else {
+                (Vec3::Z, Vec3::X)
+            };
             let c = b.center();
             let urn_at = c - side * 1.6;
             if urns.has("bedframe") {
-                out.push(Station { kind: StationKind::Bedframe, pos: c, turned: b.along_x, urn: i });
+                out.push(Station {
+                    kind: StationKind::Bedframe,
+                    pos: c,
+                    turned: b.along_x,
+                    urn: i,
+                });
             }
-            let spots = vec![urn_at + along * 1.7, urn_at - along * 2.0, urn_at - side * 1.6, urn_at - side * 1.6 + along * 1.8];
+            let spots = vec![
+                urn_at + along * 1.7,
+                urn_at - along * 2.0,
+                urn_at - side * 1.6,
+                urn_at - side * 1.6 + along * 1.8,
+            ];
             (urn_at, spots, !b.along_x)
         } else {
-            let Some(p) = urns.placed.get(&def.name) else { continue };
-            let (along, side) = if p.along_x { (Vec3::X, Vec3::Z * p.back) } else { (Vec3::Z, Vec3::X * p.back) };
+            let Some(p) = urns.placed.get(&def.name) else {
+                continue;
+            };
+            let (along, side) = if p.along_x {
+                (Vec3::X, Vec3::Z * p.back)
+            } else {
+                (Vec3::Z, Vec3::X * p.back)
+            };
             let urn_at = Vec3::new(p.pos.0, p.pos.1, p.pos.2);
             let spots = vec![
                 urn_at + along * 1.9,
@@ -490,13 +586,27 @@ fn layout(camp: &Camp, world: &World, blocks: &Blocks, urns: &Urns, book: &UrnDa
             ];
             (urn_at, spots, !p.along_x)
         };
-        out.push(Station { kind: StationKind::Urn, pos: ground(world, blocks, urn_at), turned: false, urn: i });
-        let placed = progress.done.iter().filter_map(|d| def.step(d)).filter_map(|s| match &s.gives {
-            Gives::Station(name) => StationKind::from_name(name),
-            _ => None,
+        out.push(Station {
+            kind: StationKind::Urn,
+            pos: ground(world, blocks, urn_at),
+            turned: false,
+            urn: i,
         });
+        let placed = progress
+            .done
+            .iter()
+            .filter_map(|d| def.step(d))
+            .filter_map(|s| match &s.gives {
+                Gives::Station(name) => StationKind::from_name(name),
+                _ => None,
+            });
         for (kind, spot) in placed.zip(spots) {
-            out.push(Station { kind, pos: ground(world, blocks, spot), turned, urn: i });
+            out.push(Station {
+                kind,
+                pos: ground(world, blocks, spot),
+                turned,
+                urn: i,
+            });
         }
     }
     out
@@ -507,7 +617,11 @@ fn ground(world: &World, blocks: &Blocks, at: Vec3) -> Vec3 {
     let (x, z) = (at.x.floor() as i32, at.z.floor() as i32);
     let y0 = at.y.floor() as i32;
     for y in (y0 - 3..=y0 + 2).rev() {
-        let solid = |y| world.block(BlockPos::new(x, y, z)).is_some_and(|b| blocks.registry.get(b).solid);
+        let solid = |y| {
+            world
+                .block(BlockPos::new(x, y, z))
+                .is_some_and(|b| blocks.registry.get(b).solid)
+        };
         if solid(y) && !solid(y + 1) {
             return Vec3::new(at.x, (y + 1) as f32, at.z);
         }
@@ -531,9 +645,21 @@ fn place_stations(
 ) {
     let Some(book) = book else { return };
     let stations = layout(&camp, &world, &blocks, &urns, &book.0);
-    let lit: Vec<u32> = book.0.urns.iter().map(|u| (urns.of(&u.name).next_fill(u) * MARKS as f32).floor() as u32).collect();
+    let lit: Vec<u32> = book
+        .0
+        .urns
+        .iter()
+        .map(|u| (urns.of(&u.name).next_fill(u) * MARKS as f32).floor() as u32)
+        .collect();
     // Rebuild when anything moved (the ground under a spot can still be loading) or a mark lit.
-    let key = format!("{:?}{lit:?}{:?}", stations.iter().map(|s| (s.kind, (s.pos * 4.0).round().as_ivec3(), s.turned)).collect::<Vec<_>>(), urns.progress);
+    let key = format!(
+        "{:?}{lit:?}{:?}",
+        stations
+            .iter()
+            .map(|s| (s.kind, (s.pos * 4.0).round().as_ivec3(), s.turned))
+            .collect::<Vec<_>>(),
+        urns.progress
+    );
     if *last == key {
         return;
     }
@@ -546,39 +672,115 @@ fn place_stations(
     let has = |s: &str| urns.has(s);
     for st in stations {
         let color = book.0.urns[st.urn].color;
-        let rot = if st.turned { Quat::from_rotation_y(std::f32::consts::FRAC_PI_2) } else { Quat::IDENTITY };
+        let rot = if st.turned {
+            Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)
+        } else {
+            Quat::IDENTITY
+        };
         let parts = models::parts(st.kind, &has, lit[st.urn]);
-        commands.spawn((StationModels, st, Transform::from_translation(st.pos).with_rotation(rot), Visibility::default())).with_children(|c| {
-            for p in parts {
-                let mat = cache
-                    .entry((st.urn, p.mat as u8))
-                    .or_insert_with(|| {
-                        let (base, glow) = p.mat.look(color);
-                        let lin = base.to_linear();
-                        materials.add(StandardMaterial {
-                            base_color: base,
-                            emissive: LinearRgba::rgb(lin.red * glow, lin.green * glow, lin.blue * glow),
-                            perceptual_roughness: if matches!(p.mat, Mat::Steel | Mat::Brass | Mat::Iron) { 0.5 } else { 0.95 },
-                            ..default()
+        commands
+            .spawn((
+                StationModels,
+                st,
+                Transform::from_translation(st.pos).with_rotation(rot),
+                Visibility::default(),
+            ))
+            .with_children(|c| {
+                let mut mat_for = |materials: &mut Assets<StandardMaterial>, p: models::Part| {
+                    cache
+                        .entry((st.urn, p.mat as u8))
+                        .or_insert_with(|| {
+                            let (base, glow) = p.mat.look(color);
+                            let lin = base.to_linear();
+                            let alpha = p.mat.alpha();
+                            materials.add(StandardMaterial {
+                                base_color: base.with_alpha(alpha.unwrap_or(1.0)),
+                                emissive: LinearRgba::rgb(
+                                    lin.red * glow,
+                                    lin.green * glow,
+                                    lin.blue * glow,
+                                ),
+                                perceptual_roughness: if alpha.is_some() {
+                                    0.08
+                                } else if matches!(p.mat, Mat::Steel | Mat::Brass | Mat::Iron) {
+                                    0.5
+                                } else {
+                                    0.95
+                                },
+                                reflectance: if alpha.is_some() { 0.6 } else { 0.5 },
+                                alpha_mode: if alpha.is_some() {
+                                    AlphaMode::Blend
+                                } else {
+                                    AlphaMode::Opaque
+                                },
+                                ..default()
+                            })
                         })
-                    })
-                    .clone();
-                let key = [p.size.x.to_bits(), p.size.y.to_bits(), p.size.z.to_bits()];
-                let mesh = cubes.entry(key).or_insert_with(|| meshes.add(Cuboid::new(p.size.x, p.size.y, p.size.z))).clone();
-                c.spawn((Mesh3d(mesh), MeshMaterial3d(mat), Transform::from_translation(p.at).with_rotation(Quat::from_rotation_z(p.tilt)), NotShadowCaster));
-            }
-        });
+                        .clone()
+                };
+                for p in parts {
+                    let mat = mat_for(&mut materials, p);
+                    let key = [p.size.x.to_bits(), p.size.y.to_bits(), p.size.z.to_bits()];
+                    let mesh = cubes
+                        .entry(key)
+                        .or_insert_with(|| meshes.add(Cuboid::new(p.size.x, p.size.y, p.size.z)))
+                        .clone();
+                    c.spawn((
+                        Mesh3d(mesh),
+                        MeshMaterial3d(mat),
+                        Transform::from_translation(p.at)
+                            .with_rotation(Quat::from_rotation_z(p.tilt)),
+                        NotShadowCaster,
+                    ));
+                }
+                // The bench's tool is its own thing, so it can be lifted or turned (`board`).
+                if let Some(tool) = models::tool(st.kind) {
+                    c.spawn((
+                        board::BenchTool {
+                            rest: tool.rest,
+                            how: tool.how,
+                        },
+                        Transform::from_translation(tool.rest),
+                        Visibility::default(),
+                    ))
+                    .with_children(|t| {
+                        for p in tool.parts {
+                            let mat = mat_for(&mut materials, p);
+                            let key = [p.size.x.to_bits(), p.size.y.to_bits(), p.size.z.to_bits()];
+                            let mesh = cubes
+                                .entry(key)
+                                .or_insert_with(|| {
+                                    meshes.add(Cuboid::new(p.size.x, p.size.y, p.size.z))
+                                })
+                                .clone();
+                            t.spawn((
+                                Mesh3d(mesh),
+                                MeshMaterial3d(mat),
+                                Transform::from_translation(p.at)
+                                    .with_rotation(Quat::from_rotation_z(p.tilt)),
+                                NotShadowCaster,
+                            ));
+                        }
+                    });
+                }
+            });
     }
 }
 
-fn aim(cam: Single<&Transform, With<FlyCamera>>, stations: Query<&Station>, mut aimed: ResMut<StationAim>) {
+fn aim(
+    cam: Single<&Transform, With<FlyCamera>>,
+    stations: Query<&Station>,
+    mut aimed: ResMut<StationAim>,
+) {
     let (o, d) = (cam.translation, cam.forward().as_vec3());
     let best = stations
         .iter()
         .filter(|s| s.kind != StationKind::Bedframe)
         .filter_map(|s| {
             let (min, max) = s.bounds();
-            ray_box(o, d, min, max).filter(|t| *t <= REACH).map(|t| (*s, t))
+            ray_box(o, d, min, max)
+                .filter(|t| *t <= REACH)
+                .map(|t| (*s, t))
         })
         .min_by(|a, b| a.1.total_cmp(&b.1));
     aimed.0 = best.map(|(s, t)| (s.kind, t));
@@ -600,27 +802,47 @@ fn place_urn(
     mut urns: ResMut<Urns>,
     mut toast: MessageWriter<Toast>,
 ) {
-    if !mouse.just_pressed(MouseButton::Right) || cursor.grab_mode == CursorGrabMode::None || menus.open {
+    if !mouse.just_pressed(MouseButton::Right)
+        || cursor.grab_mode == CursorGrabMode::None
+        || menus.open
+    {
         return;
     }
-    let (Some(book), Some(item), Some(hit)) = (book, wielded.0, target.hit) else { return };
-    let Some(def) = book.0.urn_of_item(&items.get(item).name) else { return };
+    let (Some(book), Some(item), Some(hit)) = (book, wielded.0, target.hit) else {
+        return;
+    };
+    let Some(def) = book.0.urn_of_item(&items.get(item).name) else {
+        return;
+    };
     if aimed.0.is_some() {
         return;
     }
     if hit.before.y != hit.block.y + 1 {
-        toast.write(Toast(format!("Set the {} down on top of the ground", def.title)));
+        toast.write(Toast(format!(
+            "Set the {} down on top of the ground",
+            def.title
+        )));
         return;
     }
-    let free = world.block(hit.before).is_none_or(|b| !blocks.registry.get(b).solid);
+    let free = world
+        .block(hit.before)
+        .is_none_or(|b| !blocks.registry.get(b).solid);
     if !free || !inv.take(item, 1) {
         return;
     }
-    let at = Vec3::new(hit.before.x as f32 + 0.5, hit.before.y as f32, hit.before.z as f32 + 0.5);
+    let at = Vec3::new(
+        hit.before.x as f32 + 0.5,
+        hit.before.y as f32,
+        hit.before.z as f32 + 0.5,
+    );
     let mut forward = cam.forward().as_vec3();
     forward.y = 0.0;
-    urns.placed.insert(def.name.clone(), placed_facing(at, forward));
-    toast.write(Toast(format!("Set down the {}. Right click it with an empty hand to see its tree", def.title)));
+    urns.placed
+        .insert(def.name.clone(), placed_facing(at, forward));
+    toast.write(Toast(format!(
+        "Set down the {}. Right click it with an empty hand to see its tree",
+        def.title
+    )));
 }
 
 /// Right click a station: an urn takes what you hold (or shows its tree);
@@ -630,21 +852,57 @@ fn use_station(
     mouse: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
     cursor: Single<&CursorOptions, With<PrimaryWindow>>,
-    (mut menus, mut at_bench, mode, player): (ResMut<Menus>, ResMut<board::AtBench>, Res<crate::player::MoveMode>, Res<crate::player::Player>),
-    (aimed, target, cam): (Res<StationAim>, Res<crate::interact::Target>, Single<&Transform, With<FlyCamera>>),
+    (mut menus, mut at_bench, mode, player): (
+        ResMut<Menus>,
+        ResMut<board::AtBench>,
+        Res<crate::player::MoveMode>,
+        Res<crate::player::Player>,
+    ),
+    (aimed, target, cam): (
+        Res<StationAim>,
+        Res<crate::interact::Target>,
+        Single<&Transform, With<FlyCamera>>,
+    ),
     (book, wielded, items): (Option<Res<UrnBook>>, Res<Wielded>, Res<Items>),
-    (mut inv, mut chests, mut urns, mut tree): (ResMut<Inventory>, ResMut<Chests>, ResMut<Urns>, ResMut<tree::TreeUi>),
-    (mut toast, mut done, mut open_chest, mut spill): (MessageWriter<Toast>, MessageWriter<StepDone>, MessageWriter<crate::interact::OpenChest>, MessageWriter<Spill>),
-    (mut scope, mut golem, clock, conditions): (ResMut<telescope::Scope>, ResMut<golem::Golem>, Res<crate::clock::WorldClock>, Res<crate::weather::Conditions>),
+    (mut inv, mut chests, mut urns, mut tree): (
+        ResMut<Inventory>,
+        ResMut<Chests>,
+        ResMut<Urns>,
+        ResMut<tree::TreeUi>,
+    ),
+    (mut toast, mut done, mut open_chest, mut spill): (
+        MessageWriter<Toast>,
+        MessageWriter<StepDone>,
+        MessageWriter<crate::interact::OpenChest>,
+        MessageWriter<Spill>,
+    ),
+    (mut scope, mut golem, clock, conditions): (
+        ResMut<telescope::Scope>,
+        ResMut<golem::Golem>,
+        Res<crate::clock::WorldClock>,
+        Res<crate::weather::Conditions>,
+    ),
 ) {
-    if !mouse.just_pressed(MouseButton::Right) || cursor.grab_mode == CursorGrabMode::None || menus.open {
+    if !mouse.just_pressed(MouseButton::Right)
+        || cursor.grab_mode == CursorGrabMode::None
+        || menus.open
+    {
         return;
     }
-    let (Some((kind, dist)), Some(st)) = (aimed.0, aimed.1) else { return };
+    let (Some((kind, dist)), Some(st)) = (aimed.0, aimed.1) else {
+        return;
+    };
     // A block in front of the station takes the click instead.
     if let Some(hit) = target.hit {
         let min = Vec3::new(hit.block.x as f32, hit.block.y as f32, hit.block.z as f32);
-        if ray_box(cam.translation, cam.forward().as_vec3(), min, min + Vec3::ONE).is_some_and(|t| t < dist) {
+        if ray_box(
+            cam.translation,
+            cam.forward().as_vec3(),
+            min,
+            min + Vec3::ONE,
+        )
+        .is_some_and(|t| t < dist)
+        {
             return;
         }
     }
@@ -659,7 +917,10 @@ fn use_station(
                     // Pick the urn back up; what it holds stays with it.
                     urns.placed.remove(&def.name);
                     if let Some(rest) = inv.add(&items, Stack::new(it, 1)) {
-                        spill.write(Spill { stack: rest, at: player.pos + Vec3::Y });
+                        spill.write(Spill {
+                            stack: rest,
+                            at: player.pos + Vec3::Y,
+                        });
                     }
                     toast.write(Toast(format!("Picked up the {}", def.title)));
                     return;
@@ -674,8 +935,15 @@ fn use_station(
             let progress = urns.of(&def.name);
             let wants = progress.wants(def, &name);
             if wants == 0 {
-                let next = progress.next(def).map_or("Every step is done".to_string(), |s| format!("Next: {}", needs_line(&items, progress, s)));
-                toast.write(Toast(format!("The {} doesn't need {title} now. {next}", def.title)));
+                let next = progress
+                    .next(def)
+                    .map_or("Every step is done".to_string(), |s| {
+                        format!("Next: {}", needs_line(&items, progress, s))
+                    });
+                toast.write(Toast(format!(
+                    "The {} doesn't need {title} now. {next}",
+                    def.title
+                )));
                 return;
             }
             let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
@@ -689,8 +957,13 @@ fn use_station(
             }
             if finished.is_empty() {
                 let p = urns.of(&def.name);
-                let next = p.next(def).map_or(String::new(), |s| format!("  {}: {}", s.title, needs_line(&items, p, s)));
-                toast.write(Toast(format!("{title} x{put} into the {}.{next}", def.title)));
+                let next = p.next(def).map_or(String::new(), |s| {
+                    format!("  {}: {}", s.title, needs_line(&items, p, s))
+                });
+                toast.write(Toast(format!(
+                    "{title} x{put} into the {}.{next}",
+                    def.title
+                )));
             }
             for s in finished {
                 done.write(StepDone(s));
@@ -706,8 +979,15 @@ fn use_station(
             menus.still = true;
         }
         StationKind::StoneFridge => {
-            let at = BlockPos::new(crate::inventory::FRIDGE_AT.0, crate::inventory::FRIDGE_AT.1, crate::inventory::FRIDGE_AT.2);
-            chests.map.entry(at).or_insert_with(|| Grid::new(crate::inventory::CHEST.0, crate::inventory::CHEST.1));
+            let at = BlockPos::new(
+                crate::inventory::FRIDGE_AT.0,
+                crate::inventory::FRIDGE_AT.1,
+                crate::inventory::FRIDGE_AT.2,
+            );
+            chests
+                .map
+                .entry(at)
+                .or_insert_with(|| Grid::new(crate::inventory::CHEST.0, crate::inventory::CHEST.1));
             open_chest.write(crate::interact::OpenChest(at));
         }
         StationKind::Telescope => {
@@ -715,28 +995,60 @@ fn use_station(
                 toast.write(Toast("Land to look through the telescope".into()));
                 return;
             }
-            telescope::look_through(&mut scope, &mut menus, clock.hour(), conditions.clouds, &mut toast);
+            telescope::look_through(
+                &mut scope,
+                &mut menus,
+                clock.hour(),
+                conditions.clouds,
+                &mut toast,
+            );
         }
         StationKind::GolemFrame => {
-            let line = if urns.has("golem_heart") { "The frame stands empty: its golem is up and about" } else { "A stone body waiting for a heart: put the golem heart into the golem urn" };
+            let line = if urns.has("golem_heart") {
+                "The frame stands empty: its golem is up and about"
+            } else {
+                "A stone body waiting for a heart: put the golem heart into the golem urn"
+            };
             toast.write(Toast(line.into()));
         }
         StationKind::Golem => {
             if player.crouching && urns.has("golem_hands") {
-                let at = BlockPos::new(crate::inventory::GOLEM_PACK_AT.0, crate::inventory::GOLEM_PACK_AT.1, crate::inventory::GOLEM_PACK_AT.2);
+                let at = BlockPos::new(
+                    crate::inventory::GOLEM_PACK_AT.0,
+                    crate::inventory::GOLEM_PACK_AT.1,
+                    crate::inventory::GOLEM_PACK_AT.2,
+                );
                 let size = crate::inventory::GOLEM_PACK;
-                chests.map.entry(at).or_insert_with(|| Grid::new(size.0, size.1));
+                chests
+                    .map
+                    .entry(at)
+                    .or_insert_with(|| Grid::new(size.0, size.1));
                 open_chest.write(crate::interact::OpenChest(at));
             } else {
                 golem.follow = !golem.follow;
-                let line = if golem.follow { "The golem follows you" } else { "The golem stays here" };
+                let line = if golem.follow {
+                    "The golem follows you"
+                } else {
+                    "The golem stays here"
+                };
                 toast.write(Toast(line.into()));
             }
         }
         StationKind::PersonalStorage => {
-            let at = BlockPos::new(crate::inventory::STORAGE_AT.0, crate::inventory::STORAGE_AT.1, crate::inventory::STORAGE_AT.2);
-            let want = if urns.has("storage_shelf") { crate::inventory::STORAGE_BIG } else { crate::inventory::CHEST };
-            let grid = chests.map.entry(at).or_insert_with(|| Grid::new(want.0, want.1));
+            let at = BlockPos::new(
+                crate::inventory::STORAGE_AT.0,
+                crate::inventory::STORAGE_AT.1,
+                crate::inventory::STORAGE_AT.2,
+            );
+            let want = if urns.has("storage_shelf") {
+                crate::inventory::STORAGE_BIG
+            } else {
+                crate::inventory::CHEST
+            };
+            let grid = chests
+                .map
+                .entry(at)
+                .or_insert_with(|| Grid::new(want.0, want.1));
             if (grid.w, grid.h) != want {
                 // The shelf came (or the save loaded at full size): move everything into a grid of the right size.
                 let old = std::mem::replace(grid, Grid::new(want.0, want.1));
@@ -744,15 +1056,24 @@ fn use_station(
                     if !grid.place(&items, p.stack, p.x, p.y, p.rotated)
                         && let Some(rest) = grid.add(&items, p.stack)
                     {
-                        spill.write(Spill { stack: rest, at: player.pos + Vec3::Y });
+                        spill.write(Spill {
+                            stack: rest,
+                            at: player.pos + Vec3::Y,
+                        });
                     }
                 }
             }
             open_chest.write(crate::interact::OpenChest(at));
         }
         _ => {
-            let line = kind.step().and_then(|s| book.0.step(s)).map_or(String::new(), |(_, s)| s.desc.clone());
-            toast.write(Toast(format!("{}: {line} Using it by hand comes in a later update.", kind.title())));
+            let line = kind
+                .step()
+                .and_then(|s| book.0.step(s))
+                .map_or(String::new(), |(_, s)| s.desc.clone());
+            toast.write(Toast(format!(
+                "{}: {line} Using it by hand comes in a later update.",
+                kind.title()
+            )));
         }
     }
 }
@@ -762,7 +1083,9 @@ pub fn needs_line(items: &Items, p: &Progress, step: &urns::Step) -> String {
     step.needs
         .iter()
         .map(|(it, n)| {
-            let title = items.id(it).map_or(it.as_str(), |i| items.get(i).title.as_str());
+            let title = items
+                .id(it)
+                .map_or(it.as_str(), |i| items.get(i).title.as_str());
             format!("{title} {}/{n}", p.given(&step.name, it).min(*n))
         })
         .collect::<Vec<_>>()
@@ -783,27 +1106,49 @@ fn steps_done(
 ) {
     let Some(book) = book else { return };
     for StepDone(name) in done.read() {
-        let Some((urn, step)) = book.0.step(name) else { continue };
+        let Some((urn, step)) = book.0.step(name) else {
+            continue;
+        };
         let line = match &step.gives {
             Gives::Station(_) => format!("The {} places a {} beside it", urn.title, step.title),
             Gives::Upgrade => format!("{} done", step.title),
             Gives::Recipes => {
-                let taught: Vec<String> =
-                    benches.0.recipes.iter().filter(|r| r.taught_by(name)).map(|r| items.get(r.makes.item).title.clone()).collect();
-                if taught.is_empty() { format!("{} done", step.title) } else { format!("{}: you can now make {}", step.title, taught.join(", ")) }
+                let taught: Vec<String> = benches
+                    .0
+                    .recipes
+                    .iter()
+                    .filter(|r| r.taught_by(name))
+                    .map(|r| items.get(r.makes.item).title.clone())
+                    .collect();
+                if taught.is_empty() {
+                    format!("{} done", step.title)
+                } else {
+                    format!("{}: you can now make {}", step.title, taught.join(", "))
+                }
             }
             Gives::Urn(other) => {
-                let Some(def) = book.0.urn(other) else { continue };
+                let Some(def) = book.0.urn(other) else {
+                    continue;
+                };
                 if let Some(it) = def.item.as_deref().and_then(|n| items.id(n))
                     && let Some(rest) = inv.add(&items, Stack::new(it, 1))
                 {
-                    spill.write(Spill { stack: rest, at: player.pos + Vec3::Y });
+                    spill.write(Spill {
+                        stack: rest,
+                        at: player.pos + Vec3::Y,
+                    });
                 }
-                format!("The {} gives you the {}. Right click the ground to set it down", urn.title, def.title)
+                format!(
+                    "The {} gives you the {}. Right click the ground to set it down",
+                    urn.title, def.title
+                )
             }
         };
         toast.write(Toast(line));
-        gain.write(crate::progress::GainXp { xp: 10.0 * step.tier as f32, why: step.title.clone() });
+        gain.write(crate::progress::GainXp {
+            xp: 10.0 * step.tier as f32,
+            why: step.title.clone(),
+        });
     }
 }
 
@@ -812,8 +1157,12 @@ fn sync_learned(urns: Res<Urns>, mut benches: ResMut<board::Benches>) {
     if !urns.is_changed() && !benches.is_added() {
         return;
     }
-    let learned: std::collections::BTreeSet<String> =
-        urns.progress.values().flat_map(|p| p.done.iter().cloned()).chain(urns.studied.iter().map(|i| format!("lens:{i}"))).collect();
+    let learned: std::collections::BTreeSet<String> = urns
+        .progress
+        .values()
+        .flat_map(|p| p.done.iter().cloned())
+        .chain(urns.studied.iter().map(|i| format!("lens:{i}")))
+        .collect();
     if benches.0.learned != learned {
         benches.0.learned = learned;
     }
@@ -822,16 +1171,37 @@ fn sync_learned(urns: Res<Urns>, mut benches: ResMut<board::Benches>) {
 fn spawn_label(mut commands: Commands, theme: Res<Theme>) {
     commands
         .spawn((
-            Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), top: Val::Percent(54.0), justify_content: JustifyContent::Center, ..default() },
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Percent(100.0),
+                top: Val::Percent(54.0),
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
             Visibility::Hidden,
             StationLabel,
         ))
         .with_children(|c| {
-            c.spawn((Node { flex_direction: FlexDirection::Column, align_items: AlignItems::Center, padding: UiRect::axes(Val::Px(10.0), Val::Px(4.0)), ..default() }, theme.skin("tooltip")))
-                .with_children(|c| {
-                    c.spawn((theme.bold(sizes::BODY), Text::new(""), TextColor(colors::HEADING)));
-                    c.spawn((crate::theme::text("", sizes::SMALL, colors::TEXT), Node::default()));
-                });
+            c.spawn((
+                Node {
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    padding: UiRect::axes(Val::Px(10.0), Val::Px(4.0)),
+                    ..default()
+                },
+                theme.skin("tooltip"),
+            ))
+            .with_children(|c| {
+                c.spawn((
+                    theme.bold(sizes::BODY),
+                    Text::new(""),
+                    TextColor(colors::HEADING),
+                ));
+                c.spawn((
+                    crate::theme::text("", sizes::SMALL, colors::TEXT),
+                    Node::default(),
+                ));
+            });
         });
 }
 
@@ -847,7 +1217,9 @@ fn show_label(
     children: Query<&Children>,
     mut texts: Query<&mut Text>,
 ) {
-    let Ok((mut vis, kids)) = label.single_mut() else { return };
+    let Ok((mut vis, kids)) = label.single_mut() else {
+        return;
+    };
     let Some(book) = book else { return };
     let (title, line) = match aimed.1 {
         Some(st) if !menus.open => {
@@ -859,17 +1231,37 @@ fn show_label(
                         Some(s) => format!("{}: {}", s.title, needs_line(&items, p, s)),
                         None => "Every step is done".into(),
                     };
-                    (format!("{} · {}", def.title, def.station), format!("{next}\nHold an item and right click to put it in · empty hand: see the tree"))
+                    (
+                        format!("{} · {}", def.title, def.station),
+                        format!(
+                            "{next}\nHold an item and right click to put it in · empty hand: see the tree"
+                        ),
+                    )
                 }
-                k if board::board_name(k).is_some() => (k.title().to_string(), "Right click to work it with your hands".into()),
-                StationKind::PersonalStorage | StationKind::StoneFridge => (st.kind.title().to_string(), "Right click to open".into()),
-                StationKind::Telescope => (st.kind.title().to_string(), "Right click to look through it on a clear night".into()),
+                k if board::board_name(k).is_some() => (
+                    k.title().to_string(),
+                    "Right click to work it with your hands".into(),
+                ),
+                StationKind::PersonalStorage | StationKind::StoneFridge => {
+                    (st.kind.title().to_string(), "Right click to open".into())
+                }
+                StationKind::Telescope => (
+                    st.kind.title().to_string(),
+                    "Right click to look through it on a clear night".into(),
+                ),
                 StationKind::Golem => {
-                    let what = if urns.has("golem_hands") { "Right click: follow / stay · crouch + right click: its pack" } else { "Right click: follow / stay" };
+                    let what = if urns.has("golem_hands") {
+                        "Right click: follow / stay · crouch + right click: its pack"
+                    } else {
+                        "Right click: follow / stay"
+                    };
                     (st.kind.title().to_string(), what.into())
                 }
                 k => {
-                    let desc = k.step().and_then(|s| book.0.step(s)).map_or(String::new(), |(_, s)| s.desc.clone());
+                    let desc = k
+                        .step()
+                        .and_then(|s| book.0.step(s))
+                        .map_or(String::new(), |(_, s)| s.desc.clone());
                     (k.title().to_string(), desc)
                 }
             }
@@ -885,7 +1277,9 @@ fn show_label(
         *vis = Visibility::Inherited;
     }
     let Some(panel) = kids.first() else { return };
-    let Ok(lines) = children.get(*panel) else { return };
+    let Ok(lines) = children.get(*panel) else {
+        return;
+    };
     for (e, s) in lines.iter().zip([title, line]) {
         if let Ok(mut t) = texts.get_mut(e)
             && t.0 != s

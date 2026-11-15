@@ -76,23 +76,38 @@ impl Exposure {
 
     /// The worst stage a value reaches on a scale, if any.
     pub fn stage(&self, scale: Scale, value: f32) -> Option<Active<'_>> {
-        let past = |s: &Stage| if scale == Scale::Heat { value - s.at } else { s.at - value };
+        let past = |s: &Stage| {
+            if scale == Scale::Heat {
+                value - s.at
+            } else {
+                s.at - value
+            }
+        };
         self.stages(scale)
             .iter()
             .enumerate()
             .rev()
             .find(|(_, s)| past(s) > 0.0)
-            .map(|(level, stage)| Active { stage, level, past: past(stage) })
+            .map(|(level, stage)| Active {
+                stage,
+                level,
+                past: past(stage),
+            })
     }
 
     /// The stage felt temperature puts you in: cold or heat.
     pub fn temperature(&self, feels: f32) -> Option<(Scale, Active<'_>)> {
-        self.stage(Scale::Cold, feels).map(|a| (Scale::Cold, a)).or_else(|| self.stage(Scale::Heat, feels).map(|a| (Scale::Heat, a)))
+        self.stage(Scale::Cold, feels)
+            .map(|a| (Scale::Cold, a))
+            .or_else(|| self.stage(Scale::Heat, feels).map(|a| (Scale::Heat, a)))
     }
 
     /// Where the comfortable band ends on each side, °C.
     pub fn comfort(&self) -> (f32, f32) {
-        (self.cold.first().map_or(f32::MIN, |s| s.at), self.heat.first().map_or(f32::MAX, |s| s.at))
+        (
+            self.cold.first().map_or(f32::MIN, |s| s.at),
+            self.heat.first().map_or(f32::MAX, |s| s.at),
+        )
     }
 }
 
@@ -119,7 +134,10 @@ pub(crate) mod tests {
                 }
             }
             // Only the last stage hurts for real.
-            assert!(s[..s.len() - 1].iter().all(|x| x.damage == 0.0) && s.last().unwrap().damage > 0.0, "{scale:?}");
+            assert!(
+                s[..s.len() - 1].iter().all(|x| x.damage == 0.0) && s.last().unwrap().damage > 0.0,
+                "{scale:?}"
+            );
         }
     }
 

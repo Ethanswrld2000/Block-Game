@@ -7,9 +7,11 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 use serde::Deserialize;
 
-use super::brain::{plan, Plan};
+use super::brain::{Plan, plan};
 use super::data::Kinds;
-use super::{flat, ground_near, spawn_creature, walk_to, wander, Creature, CreatureAssets, CreatureSet, Dice};
+use super::{
+    Creature, CreatureAssets, CreatureSet, Dice, flat, ground_near, spawn_creature, walk_to, wander,
+};
 use crate::blocks::Blocks;
 use crate::clock::WorldClock;
 use crate::interact::UseCreature;
@@ -21,10 +23,18 @@ pub struct VillagersPlugin;
 
 impl Plugin for VillagersPlugin {
     fn build(&self, app: &mut App) {
-        let lines: Talk = ron::from_str(include_str!("../../../../assets/data/villagers.ron")).unwrap_or_else(|e| panic!("villagers.ron: {e}"));
+        let lines: Talk = ron::from_str(include_str!("../../../../assets/data/villagers.ron"))
+            .unwrap_or_else(|e| panic!("villagers.ron: {e}"));
         app.insert_resource(lines)
             .init_resource::<Populated>()
-            .add_systems(crate::menu::GameUpdate, (populate, keep_day, talk).chain().in_set(CreatureSet).after(super::take_strikes).before(super::walk));
+            .add_systems(
+                crate::menu::GameUpdate,
+                (populate, keep_day, talk)
+                    .chain()
+                    .in_set(CreatureSet)
+                    .after(super::take_strikes)
+                    .before(super::walk),
+            );
     }
 }
 
@@ -76,13 +86,17 @@ fn populate(
     mut populated: ResMut<Populated>,
     mut timer: Local<f32>,
 ) {
-    let (Some(kinds), Some(assets), Some(generator)) = (kinds, assets, generator) else { return };
+    let (Some(kinds), Some(assets), Some(generator)) = (kinds, assets, generator) else {
+        return;
+    };
     *timer -= time.delta_secs();
     if *timer > 0.0 {
         return;
     }
     *timer = 1.0;
-    let Some(villager) = kinds.id("villager") else { return };
+    let Some(villager) = kinds.id("villager") else {
+        return;
+    };
     // Gone far away: they stay home.
     populated.live.retain(|_, (center, list)| {
         let keep = flat(*center - player.pos).length() < LEAVE;
@@ -97,7 +111,11 @@ fn populate(
     let r = VISIT as i32;
     let indoors = plan(clock.hour()) == Plan::Home;
     for v in generator.0.villages_in(px - r, pz - r, px + r, pz + r) {
-        let center = Vec3::new(v.center[0] as f32 + 0.5, v.center[1] as f32 + 1.0, v.center[2] as f32 + 0.5);
+        let center = Vec3::new(
+            v.center[0] as f32 + 0.5,
+            v.center[1] as f32 + 1.0,
+            v.center[2] as f32 + 0.5,
+        );
         if populated.live.contains_key(&v.id) || flat(center - player.pos).length() > VISIT {
             continue;
         }
@@ -107,21 +125,35 @@ fn populate(
             .iter()
             .map(|h| {
                 let (x, z) = h.doorstep();
-                ground_near(&world, &blocks, x, z, h.ground + 4, h.ground - 8, false).map(|y| Vec3::new(x as f32 + 0.5, y as f32, z as f32 + 0.5))
+                ground_near(&world, &blocks, x, z, h.ground + 4, h.ground - 8, false)
+                    .map(|y| Vec3::new(x as f32 + 0.5, y as f32, z as f32 + 0.5))
             })
             .collect();
         let Some(doors) = doors else { continue };
         let mut list = Vec::new();
         for (i, door) in doors.into_iter().enumerate() {
-            let name = worldgen::person_name(v.id.wrapping_mul(31).wrapping_add(i as u64 * 0x9E37_79B9));
+            let name =
+                worldgen::person_name(v.id.wrapping_mul(31).wrapping_add(i as u64 * 0x9E37_79B9));
             let e = spawn_creature(&mut commands, &kinds, &assets, villager, door, 0.0);
             let mut c = Creature::new(villager, kinds.get(villager).health, 0.0);
             c.fade = 1.0;
             c.leash = Some((center, v.radius as f32 - 6.0));
             commands.entity(e).insert((
                 c,
-                Villager { name, village_name: v.name.clone(), door, center, radius: v.radius as f32, home: indoors, talking: 0.0 },
-                if indoors { Visibility::Hidden } else { Visibility::Inherited },
+                Villager {
+                    name,
+                    village_name: v.name.clone(),
+                    door,
+                    center,
+                    radius: v.radius as f32,
+                    home: indoors,
+                    talking: 0.0,
+                },
+                if indoors {
+                    Visibility::Hidden
+                } else {
+                    Visibility::Inherited
+                },
             ));
             list.push(e);
         }
@@ -136,7 +168,12 @@ fn keep_day(
     kinds: Option<Res<Kinds>>,
     clock: Res<WorldClock>,
     player: Res<Player>,
-    mut q: Query<(&mut Transform, &mut Creature, &mut Villager, &mut Visibility)>,
+    mut q: Query<(
+        &mut Transform,
+        &mut Creature,
+        &mut Villager,
+        &mut Visibility,
+    )>,
     mut dice: ResMut<Dice>,
 ) {
     let Some(kinds) = kinds else { return };
@@ -186,7 +223,8 @@ fn keep_day(
                 if c.think <= 0.0 {
                     c.think = dice.0.range(5.0, 10.0);
                     let a = dice.0.range(0.0, std::f32::consts::TAU);
-                    c.goal = Some(v.center + Vec3::new(a.cos(), 0.0, a.sin()) * dice.0.range(2.5, 6.0));
+                    c.goal =
+                        Some(v.center + Vec3::new(a.cos(), 0.0, a.sin()) * dice.0.range(2.5, 6.0));
                 }
                 walk_to(&mut c, pos, speed);
             }
@@ -216,7 +254,9 @@ fn talk(
             _ => &lines.night,
         };
         if let Some(line) = dice.0.pick(pool) {
-            let line = line.replace("{village}", &v.village_name).replace("{name}", &v.name);
+            let line = line
+                .replace("{village}", &v.village_name)
+                .replace("{name}", &v.name);
             toast.write(Toast(format!("{}: \"{line}\"", v.name)));
         }
         v.talking = 4.0;

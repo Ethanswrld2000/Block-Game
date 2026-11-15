@@ -42,18 +42,32 @@ pub struct SurvivalPlugin;
 
 impl Plugin for SurvivalPlugin {
     fn build(&self, app: &mut App) {
-        let tiers = FoodTiers::from_ron(include_str!("../../../../assets/data/food_tiers.ron")).unwrap_or_else(|e| panic!("{e}"));
-        let exposure = Exposure::from_ron(include_str!("../../../../assets/data/exposure.ron")).unwrap_or_else(|e| panic!("{e}"));
+        let tiers = FoodTiers::from_ron(include_str!("../../../../assets/data/food_tiers.ron"))
+            .unwrap_or_else(|e| panic!("{e}"));
+        let exposure = Exposure::from_ron(include_str!("../../../../assets/data/exposure.ron"))
+            .unwrap_or_else(|e| panic!("{e}"));
         app.insert_resource(tiers)
             .insert_resource(exposure)
             .init_resource::<Survival>()
             .init_resource::<Camp>()
             .add_message::<Toast>()
             .add_message::<Ate>()
-            .add_systems(crate::menu::GamePostStartup, (remember_spawn, load_player).chain().after(crate::world::setup_generator))
+            .add_systems(
+                crate::menu::GamePostStartup,
+                (remember_spawn, load_player)
+                    .chain()
+                    .after(crate::world::setup_generator),
+            )
             .add_systems(
                 crate::menu::GameUpdate,
-                (debug_keys, take_hits, eat, tick_body, die_and_respawn, set_body)
+                (
+                    debug_keys,
+                    take_hits,
+                    eat,
+                    tick_body,
+                    die_and_respawn,
+                    set_body,
+                )
                     .chain()
                     .in_set(SurvivalSet)
                     .after(PlayerSet),
@@ -94,10 +108,16 @@ fn remember_spawn(mut commands: Commands, player: Res<Player>) {
 
 fn debug_keys(keys: Res<ButtonInput<KeyCode>>, mut hits: MessageWriter<Damage>) {
     if keys.just_pressed(KeyCode::F7) {
-        hits.write(Damage { amount: 20.0, cause: DamageCause::Piercing });
+        hits.write(Damage {
+            amount: 20.0,
+            cause: DamageCause::Piercing,
+        });
     }
     if keys.just_pressed(KeyCode::F8) {
-        hits.write(Damage { amount: 25.0, cause: DamageCause::Blunt });
+        hits.write(Damage {
+            amount: 25.0,
+            cause: DamageCause::Blunt,
+        });
     }
 }
 
@@ -111,7 +131,13 @@ pub fn entry_layer(cause: DamageCause) -> Layer {
     }
 }
 
-fn take_hits(mut hits: MessageReader<Damage>, inv: Res<Inventory>, items: Res<Items>, mut s: ResMut<Survival>, mut toast: MessageWriter<Toast>) {
+fn take_hits(
+    mut hits: MessageReader<Damage>,
+    inv: Res<Inventory>,
+    items: Res<Items>,
+    mut s: ResMut<Survival>,
+    mut toast: MessageWriter<Toast>,
+) {
     for d in hits.read() {
         let h = &mut s.vitals.health;
         let was_mortal = h.mortal();
@@ -127,7 +153,10 @@ fn take_hits(mut hits: MessageReader<Damage>, inv: Res<Inventory>, items: Res<It
             && Some(m) != was_mortal
             && !h.is_dead()
         {
-            toast.write(Toast(format!("{} is failing: treat it before anything else heals", m.name())));
+            toast.write(Toast(format!(
+                "{} is failing: treat it before anything else heals",
+                m.name()
+            )));
         }
     }
 }
@@ -157,7 +186,11 @@ fn eat(
         ItemKind::Food { tier, satiety } => Some((i, tier, satiety)),
         _ => None,
     });
-    let (Some((id, tier, satiety)), true, false) = (food, mouse.pressed(MouseButton::Right), body.frozen || menus.open) else {
+    let (Some((id, tier, satiety)), true, false) = (
+        food,
+        mouse.pressed(MouseButton::Right),
+        body.frozen || menus.open,
+    ) else {
         s.eating = 0.0;
         anim.eat = 0.0;
         return;
@@ -167,7 +200,10 @@ fn eat(
     if s.eating >= 1.0 {
         s.eating = 0.0;
         let Some(t) = tiers.get(tier) else {
-            warn!("{} names food tier {tier}, which food_tiers.ron doesn't have", items.get(id).name);
+            warn!(
+                "{} names food tier {tier}, which food_tiers.ron doesn't have",
+                items.get(id).name
+            );
             return;
         };
         if !inv.take(id, 1) {
@@ -175,7 +211,11 @@ fn eat(
         }
         s.vitals.eat(t, satiety);
         let verb = if tier == 0 { "Drank" } else { "Ate" };
-        toast.write(Toast(format!("{verb} {} ({})", items.get(id).title, t.title)));
+        toast.write(Toast(format!(
+            "{verb} {} ({})",
+            items.get(id).title,
+            t.title
+        )));
         ate.write(Ate(id));
     }
 }
@@ -195,23 +235,42 @@ fn feels_like(
     holding_torch: bool,
     parts: &mut Vec<(String, f32)>,
 ) -> f32 {
-    let biome = if climate.biome_title.is_empty() { "Climate".to_string() } else { climate.biome_title.clone() };
+    let biome = if climate.biome_title.is_empty() {
+        "Climate".to_string()
+    } else {
+        climate.biome_title.clone()
+    };
     parts.push((biome, climate.biome * 30.0));
     parts.push(("Season".into(), climate.season * 30.0));
     parts.push(("Height above ground".into(), climate.altitude * 30.0));
-    parts.push((if sun_height >= 0.0 { "Sun" } else { "Night" }.into(), sun_height * 5.0));
+    parts.push((
+        if sun_height >= 0.0 { "Sun" } else { "Night" }.into(),
+        sun_height * 5.0,
+    ));
     parts.push((format!("Weather: {weather}"), conditions.chill));
     if wet {
         parts.push(("Wet".into(), -6.0));
     }
     let mut fire = 0.0;
     for p in torches.positions() {
-        let d = eye.distance(Vec3::new(p.x as f32 + 0.5, p.y as f32 + 0.7, p.z as f32 + 0.5));
+        let d = eye.distance(Vec3::new(
+            p.x as f32 + 0.5,
+            p.y as f32 + 0.7,
+            p.z as f32 + 0.5,
+        ));
         fire += (10.0 * (1.0 - d / 6.0)).max(0.0);
     }
     // Fire tops out at +16 all told.
     let placed = fire.min(FIRE_MAX);
-    parts.push((if fire > FIRE_MAX { "Torches nearby (max)" } else { "Torches nearby" }.into(), placed));
+    parts.push((
+        if fire > FIRE_MAX {
+            "Torches nearby (max)"
+        } else {
+            "Torches nearby"
+        }
+        .into(),
+        placed,
+    ));
     if holding_torch {
         parts.push(("Torch in hand".into(), (FIRE_MAX - placed).min(3.0)));
     }
@@ -226,7 +285,12 @@ fn tick_body(
     time: Res<Time>,
     mode: Res<MoveMode>,
     player: Res<Player>,
-    (climate, conditions, weather, kinds): (Res<LocalClimate>, Res<Conditions>, Res<WeatherState>, Res<WeatherKinds>),
+    (climate, conditions, weather, kinds): (
+        Res<LocalClimate>,
+        Res<Conditions>,
+        Res<WeatherState>,
+        Res<WeatherKinds>,
+    ),
     clock: Res<WorldClock>,
     seasons: Res<Seasons>,
     torches: Res<Torches>,
@@ -234,7 +298,10 @@ fn tick_body(
     wielded: Res<Wielded>,
     inv: Res<Inventory>,
     items: Res<Items>,
-    (perks, spells): (Res<crate::progress::skills::Perks>, Res<crate::progress::Spells>),
+    (perks, spells): (
+        Res<crate::progress::skills::Perks>,
+        Res<crate::progress::Spells>,
+    ),
     (rules, mut forced): (Res<Exposure>, Local<Option<Forced>>),
     mut s: ResMut<Survival>,
     mut toast: MessageWriter<Toast>,
@@ -245,13 +312,35 @@ fn tick_body(
     let eye = player.pos + Vec3::Y * player.eye;
     let daylight = seasons.blended(seasons.at(&clock), |x| x.daylight);
     let sun = crate::sky::sun_direction(clock.time, daylight).y;
-    let carried = inv.mass(&items) + if camp.bedroll.is_none() { BEDROLL_MASS } else { 0.0 };
+    let carried = inv.mass(&items)
+        + if camp.bedroll.is_none() {
+            BEDROLL_MASS
+        } else {
+            0.0
+        };
     let mut parts = std::mem::take(&mut s.temperature);
     parts.clear();
-    let weather = kinds.list.get(weather.current).map_or("", |k| k.title.as_str());
-    let raw = feels_like(&climate, &conditions, weather, sun, player.in_water, eye, &torches, holding_torch, &mut parts);
+    let weather = kinds
+        .list
+        .get(weather.current)
+        .map_or("", |k| k.title.as_str());
+    let raw = feels_like(
+        &climate,
+        &conditions,
+        weather,
+        sun,
+        player.in_water,
+        eye,
+        &torches,
+        holding_torch,
+        &mut parts,
+    );
     let underwater = player.head_in_water;
-    let mut air = if underwater { 0.0 } else { vitals::air_at(eye.y) * conditions.air };
+    let mut air = if underwater {
+        0.0
+    } else {
+        vitals::air_at(eye.y) * conditions.air
+    };
     let dressed = vitals::clothed(raw, inv.insulation(&items));
     parts.push(("Clothes".into(), dressed - raw));
     let mut feels = perks.feel(dressed, vitals::COMFORT_LOW + 6.0);
@@ -311,15 +400,25 @@ struct Forced {
 impl Forced {
     fn from_env() -> Self {
         let get = |k| std::env::var(k).ok().and_then(|v| v.trim().parse().ok());
-        Self { feels: get("BLOCKGAME_FEELS"), oxygen: get("BLOCKGAME_OXYGEN") }
+        Self {
+            feels: get("BLOCKGAME_FEELS"),
+            oxygen: get("BLOCKGAME_OXYGEN"),
+        }
     }
 }
 
 /// The temperature and air stages in effect: (level, name).
 fn warnings(v: &Vitals, rules: &Exposure) -> [Option<(usize, String)>; 2] {
     [
-        rules.temperature(v.feels).map(|(scale, a)| (a.level + if scale == Scale::Heat { 100 } else { 0 }, a.stage.name.clone())),
-        rules.stage(Scale::Air, v.oxygen).map(|a| (a.level, a.stage.name.clone())),
+        rules.temperature(v.feels).map(|(scale, a)| {
+            (
+                a.level + if scale == Scale::Heat { 100 } else { 0 },
+                a.stage.name.clone(),
+            )
+        }),
+        rules
+            .stage(Scale::Air, v.oxygen)
+            .map(|a| (a.level, a.stage.name.clone())),
     ]
 }
 
@@ -353,22 +452,38 @@ fn die_and_respawn(
         return;
     }
     let to = camp.respawn().or(spawn.map(|p| p.0)).unwrap_or(player.pos);
-    s.vitals = Vitals { satiety: 60.0, ..Default::default() };
+    s.vitals = Vitals {
+        satiety: 60.0,
+        ..Default::default()
+    };
     s.dead_for = None;
     *player = Player::default();
     player.pos = to;
     for mut tf in &mut cam {
         tf.translation = to + Vec3::Y * crate::player::EYE;
     }
-    toast.write(Toast(if camp.bedroll.is_some() { "You wake at your camp".into() } else { "You wake at the edge of the swamp".into() }));
+    toast.write(Toast(if camp.bedroll.is_some() {
+        "You wake at your camp".into()
+    } else {
+        "You wake at the edge of the swamp".into()
+    }));
 }
 
 /// The Warmth spell takes the edge off the cold (but never makes you hot).
 fn perks_warm(feels: f32) -> f32 {
-    if feels >= vitals::COMFORT_HIGH - 4.0 { feels } else { (feels + crate::progress::WARMTH_SPELL).min(vitals::COMFORT_HIGH - 4.0) }
+    if feels >= vitals::COMFORT_HIGH - 4.0 {
+        feels
+    } else {
+        (feels + crate::progress::WARMTH_SPELL).min(vitals::COMFORT_HIGH - 4.0)
+    }
 }
 
-fn set_body(s: Res<Survival>, rules: Res<Exposure>, sleep: Res<camp::Sleep>, mut body: ResMut<Body>) {
+fn set_body(
+    s: Res<Survival>,
+    rules: Res<Exposure>,
+    sleep: Res<camp::Sleep>,
+    mut body: ResMut<Body>,
+) {
     let v = &s.vitals;
     *body = Body {
         speed: v.speed(s.env.carried, &rules),
@@ -421,7 +536,10 @@ fn load_player(
         }
     }
     if let Ok(spec) = std::env::var("BLOCKGAME_VITALS") {
-        let n: Vec<f32> = spec.split(',').filter_map(|v| v.trim().parse().ok()).collect();
+        let n: Vec<f32> = spec
+            .split(',')
+            .filter_map(|v| v.trim().parse().ok())
+            .collect();
         let v = &mut s.vitals;
         for (i, x) in n.iter().take(4).enumerate() {
             v.health.bars[i] = x.clamp(0.0, health::MAX);
@@ -433,7 +551,13 @@ fn load_player(
 }
 
 fn store(dir: &SaveDir, s: &Survival, camp: &Camp, player: &Player, cam: &FlyCamera) {
-    let save = PlayerSave { pos: player.pos.into(), yaw: cam.yaw, pitch: cam.pitch, vitals: s.vitals, camp: camp.bedroll };
+    let save = PlayerSave {
+        pos: player.pos.into(),
+        yaw: cam.yaw,
+        pitch: cam.pitch,
+        vitals: s.vitals,
+        camp: camp.bedroll,
+    };
     match ron::ser::to_string_pretty(&save, ron::ser::PrettyConfig::default()) {
         Ok(text) => {
             if let Err(e) = std::fs::write(dir.file("player.ron"), text) {
