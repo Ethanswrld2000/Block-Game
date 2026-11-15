@@ -16,7 +16,8 @@ import bevy_pbr::render::{
     mesh_view_bindings::globals,
 };
 
-// xy: wind direction (x, z); z: how hard to sway (0..~1.3).
+// xy: wind direction (x, z); z: how hard to sway (0..~1.3); w: the gust wave's
+// phase, summed up on the CPU so a change in strength never makes it jump.
 @group(constants::MATERIAL_BIND_GROUP) @binding(103) var<uniform> wind: vec4<f32>;
 // A tree shaking from an axe blow (`chop`): xyz = the block hit, w = how hard (1 -> 0).
 @group(constants::MATERIAL_BIND_GROUP) @binding(105) var<uniform> shake: vec4<f32>;
@@ -32,7 +33,7 @@ fn sway_offset(p: vec3<f32>, s: f32, t: f32) -> vec3<f32> {
     let strength = wind.z;
     // A wave of gusts rolling across the land with the wind.
     let along = dot(p.xz, wind.xy);
-    let wave = sin(along * 0.25 - t * (0.8 + strength * 1.6)) * 0.5 + 0.5;
+    let wave = sin(along * 0.25 - wind.w) * 0.5 + 0.5;
     let lean = strength * (0.12 + 0.3 * wave);
     // Quick flutter, different for every spot.
     let ph = p.x * 1.7 + p.z * 1.3 + p.y * 0.9;

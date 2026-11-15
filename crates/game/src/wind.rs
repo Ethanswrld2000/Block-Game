@@ -48,6 +48,10 @@ pub struct Wind {
     pub gust: f32,
     /// Seconds of wind so far (drives the slow wander and the gusts).
     time: f32,
+    /// Phase of the gust wave that runs across the foliage, radians (0..τ). Summed
+    /// from its speed each frame, so a change in strength speeds the wave up
+    /// smoothly instead of jumping it (`time * speed` would jump by `time * Δspeed`).
+    wave: f32,
     /// The world's usual quarter, from the seed.
     base: f32,
     /// How far the current weather veers it from `base`, eased.
@@ -59,7 +63,7 @@ pub struct Wind {
 
 impl Default for Wind {
     fn default() -> Self {
-        Self { angle: 0.33, speed: 0.0, gust: 0.0, time: 0.0, base: 0.33, veer: 0.0, weather: None, started: false }
+        Self { angle: 0.33, speed: 0.0, gust: 0.0, time: 0.0, wave: 0.0, base: 0.33, veer: 0.0, weather: None, started: false }
     }
 }
 
@@ -143,24 +147,19 @@ fn blow(time: Res<Time>, conditions: Res<Conditions>, state: Res<WeatherState>, 
     wind.speed += (conditions.wind - wind.speed) * (1.0 - (-dt / SPEED_EASE).exp());
     wind.angle = wind.base + wind.veer + wander(wind.time);
     wind.gust = gusts(wind.time);
+    let sway = wind.sway();
+    wind.wave = (wind.wave + dt * (0.8 + sway * 1.6)).rem_euclid(std::f32::consts::TAU);
 }
 
-/// Hand the terrain shader the wind: (x, z) direction, sway strength.
-fn push_to_material(wind: Res<Wind>, blocks: Res<Blocks>, mut materials: ResMut<Assets<VoxelMaterial>>, mut last: Local<Vec4>) {
+/// Hand the terrain shader the wind: (x, z) direction, sway strength, wave phase.
+/// Sent every frame: sending only bigger changes made the foliage step (click).
+fn push_to_material(wind: Res<Wind>, blocks: Res<Blocks>, mut materials: ResMut<Assets<VoxelMaterial>>) {
     let d = wind.dir();
-    let want = Vec4::new(d.x, d.y, wind.sway(), 0.0);
-    if (want - *last).abs().max_element() < 0.01 {
-        return;
-    }
-    let mut done = false;
+    let want = Vec4::new(d.x, d.y, wind.sway(), wind.wave);
     for h in [&blocks.material, &blocks.translucent_material].into_iter().flatten() {
         if let Some(mut m) = materials.get_mut(h) {
             m.extension.wind = want;
-            done = true;
         }
-    }
-    if done {
-        *last = want;
     }
 }
 
