@@ -207,17 +207,32 @@ impl ToolUse {
 /// about), its boxes around that point, and how it's worked.
 pub struct Tool {
     pub rest: Vec3,
+    /// How it lies (or hangs) at rest.
+    pub rest_turn: Quat,
     pub parts: Vec<Part>,
     pub how: ToolUse,
 }
 
+/// The tool bench's hammer, around the middle of its head: the head stands
+/// up and down, the handle runs along +x (as every lifted tool's does).
+fn hammer() -> Vec<Part> {
+    use Mat::*;
+    vec![b(0.07, 0.13, 0.08, 0.0, 0.0, 0.0, Iron), b(0.3, 0.035, 0.035, 0.18, 0.0, 0.0, WoodDark)]
+}
+
+/// Where the tool bench's hammer hangs: across two pegs on the rack at the
+/// bench's +x end, head toward the front (+z), handle toward the back.
+pub const HAMMER_REST: Vec3 = Vec3::new(0.49, 1.07, 0.13);
+
 /// The tool of a bench, in the station's frame.
 pub fn tool(kind: StationKind) -> Option<Tool> {
     use Mat::*;
+    if kind == StationKind::ToolBench {
+        return Some(Tool { rest: HAMMER_REST, rest_turn: Quat::from_rotation_y(std::f32::consts::FRAC_PI_2), parts: hammer(), how: ToolUse::Strike });
+    }
     let (rest, parts, how) = match kind {
         // A hammerstone resting on the knapping stone.
         StationKind::CampMat => (Vec3::new(0.35, 0.165, 0.23), vec![b(0.16, 0.09, 0.13, 0.35, 0.175, 0.23, StoneDark)], ToolUse::Strike),
-        StationKind::ToolBench => (Vec3::new(0.42, 0.89, -0.24), vec![b(0.22, 0.14, 0.18, 0.42, 0.89, -0.24, Stone)], ToolUse::Strike),
         StationKind::CarpentryBench => {
             (Vec3::new(0.15, 0.852, -0.3), vec![b(0.5, 0.012, 0.11, 0.15, 0.852, -0.3, Stone), b(0.16, 0.06, 0.09, -0.16, 0.87, -0.3, WoodDark)], ToolUse::Saw)
         }
@@ -255,7 +270,7 @@ pub fn tool(kind: StationKind) -> Option<Tool> {
         _ => return None,
     };
     let parts = parts.into_iter().map(|p| Part { at: p.at - rest, ..p }).collect();
-    Some(Tool { rest, parts, how })
+    Some(Tool { rest, rest_turn: Quat::IDENTITY, parts, how })
 }
 
 /// Marks around the urn's belly.
@@ -320,6 +335,12 @@ pub fn parts(kind: StationKind, has: &dyn Fn(&str) -> bool, lit: u32) -> Vec<Par
         StationKind::ToolBench => {
             legs(&mut v, 1.06, 0.7, 0.72, 0.1, WoodDark);
             v.extend([b(1.2, 0.1, 0.8, 0.0, 0.77, 0.0, Wood), b(0.62, 0.012, 0.14, -0.15, 0.826, -0.12, Groove), b(0.26, 0.012, 0.26, 0.32, 0.826, 0.12, Groove)]);
+            // The hammer's rack at the +x end: a board with two pegs (the hammer is the `tool`).
+            v.extend([
+                b(0.04, 0.34, 0.44, 0.565, 0.99, 0.0, WoodDark),
+                b(0.1, 0.03, 0.03, 0.52, 1.03, -0.1, Groove),
+                b(0.1, 0.03, 0.03, 0.52, 1.03, 0.08, Groove),
+            ]);
             if has("improved_tool_bench") {
                 // A tool rack along the back with pegs and a bench vise.
                 v.extend([

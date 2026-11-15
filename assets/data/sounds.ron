@@ -27,6 +27,9 @@
         // Working the cooking pot and the cutting board.
         "stir": 0.55,
         "knife": 0.55,
+        // A bench finishing something.
+        "craft_shimmer": 0.45,
+        "craft_pop": 0.7,
         "thunder": 0.9,
         "wind_loop": 0.5,
         "rain_loop": 0.5,
