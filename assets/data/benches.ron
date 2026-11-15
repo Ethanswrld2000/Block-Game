@@ -25,7 +25,7 @@
     fuel: { "plant_fiber": 1, "stick": 1, "planks": 2, "peat": 3, "log": 4, "swamp_log": 4, "coal": 6 },
     // Turns of the wheel; a sharpened tool works `speed` times as fast for `seconds` of play.
     sharpen: Some((work: 4, seconds: 600.0, speed: 1.6)),
-    // Turns of the lens's focusing knob to study something.
+    // Turns of the lens's focusing dial to study something.
     study: Some((work: 3)),
     recipes: [
         // Camp mat (sleeping station): the first axe, then gear for sleeping away from home.
