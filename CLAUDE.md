@@ -254,14 +254,21 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `BLOCKGAME_BOARD=<station name>:...` opens any bench for screenshots (`pot:`, `cut:` short forms).
 - Bench tools are their own models (`models::tool`, `board::BenchTool` children of the station): click the tool
   to lift it, it follows the cursor; click to swing it down (hammerstones, anvil hammer, knife, fan; one go when it
-  lands, `board::swing_pose`), hold the button and stir round the pot (ladle, paddle: a full turn = one stir, the pot
-  swirls with it) or saw back and forth (`board::Gesture`, `SAW_STROKE`). The sharpening wheel and the lens's
+  lands, `board::swing_pose`; the tool bench's hammer hangs on a rack, the knife drops edge-down), hold the button and
+  stir round the pot (ladle, paddle: a full turn = one stir) or saw back and forth (`board::Gesture`, `SAW_STROKE`). The sharpening wheel and the lens's
   focusing dial (now on a stand beside the plate) turn in place when clicked. Benches can have several views
   (`Layout.views`: pot and fire, cauldron and fire, rack and fire): W / S or the buttons under the title. The cooking
-  pot and cauldron are open with see-through broth/brew (`Mat::alpha`, `models::liquid`) and bubble
-  (`station::bubbles`, more in the cauldron). The telescope view is a round eyepiece with cross hairs
-  (`telescope::lens_image`) and hides the HUD. Screenshots: `BLOCKGAME_BOARDVIEW=1` (second view),
-  `BLOCKGAME_BOARDTOOL=lift|down|0.3`, `BLOCKGAME_SCOPE=1`.
+  pot and cauldron are open with see-through broth/brew (`Mat::alpha`, `models::liquid`). What's in them floats upright
+  (`station::float`, pure: the ladle pushes things, they bump each other and the walls, tip when shoved and right
+  themselves). `station::particles`: pixel-art camera-facing sprites (bubbles that pop, and a `Burst` message of chips,
+  sparks, sawdust, bits, smoke, splashes, sparkles per go, `board::burst_of`). `station::forge`: when a recipe makes
+  something, the parts used fly together with a holographic glint (`GlintMaterial`, `assets/shaders/glint.wesl`)
+  flashing stronger, then pop (`craft_shimmer`/`craft_pop` sounds) into the made thing. `station::book`: a floating
+  recipe book at the left shows each recipe as pictures. The strip of your things pages (arrows or wheel), usable
+  first. The sharpening stone lays tools head to the wheel (`Layout.flip`). The telescope view is a round eyepiece
+  with cross hairs (`telescope::lens_image`) and hides the HUD. Screenshots: `BLOCKGAME_BOARDVIEW=1` (second view),
+  `BLOCKGAME_BOARDTOOL=lift|down|0.3`, `BLOCKGAME_SCOPE=1`, `BLOCKGAME_FORGE=0.8` (works the board and holds the
+  craft coming together that many seconds in).
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen

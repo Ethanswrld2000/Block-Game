@@ -20,7 +20,10 @@
 
 pub mod bench;
 pub mod board;
-mod bubbles;
+mod book;
+mod float;
+mod forge;
+mod particles;
 mod dev;
 pub mod golem;
 pub mod models;
@@ -61,6 +64,8 @@ impl Plugin for StationPlugin {
             .init_resource::<dev::DevMenu>()
             .init_resource::<telescope::Scope>()
             .add_message::<StepDone>()
+            .add_message::<particles::Burst>()
+            .add_plugins(MaterialPlugin::<forge::GlintMaterial>::default())
             .add_systems(
                 crate::menu::GameStartup,
                 (
@@ -70,11 +75,12 @@ impl Plugin for StationPlugin {
                     telescope::load_constellations,
                     spawn_label,
                     board::spawn_board_ui,
+                    book::spawn_book,
                     board::load_benches,
                     tree::spawn_tree_ui,
                     telescope::spawn_scope_ui,
                     dev::spawn_dev_ui,
-                    bubbles::setup_bubbles,
+                    particles::setup_pixels,
                 )
                     .chain(),
             )
@@ -102,7 +108,9 @@ impl Plugin for StationPlugin {
                         board::board_tool,
                         board::board_click,
                         board::board_models,
+                        forge::forge,
                         board::board_ui,
+                        book::board_book,
                     )
                         .chain(),
                 )
@@ -118,7 +126,7 @@ impl Plugin for StationPlugin {
                     .before(crate::interact::InteractSet)
                     .after(crate::player::PlayerSet),
             )
-            .add_systems(crate::menu::GameUpdate, (save_urns, urns_for_screenshot, (bubbles::spawn_bubbles, bubbles::move_bubbles).chain()))
+            .add_systems(crate::menu::GameUpdate, (save_urns, urns_for_screenshot, (particles::spawn_bubbles, particles::move_particles, particles::spawn_bursts).chain()))
             .add_systems(Last, (save_urns_on_exit, save_edges_on_exit, golem::save_golem_on_exit).run_if(crate::menu::in_game));
     }
 }
@@ -589,7 +597,7 @@ fn place_stations(
             }
             // The bench's tool is its own thing, so it can be lifted or turned (`board`).
             if let Some(tool) = models::tool(st.kind) {
-                c.spawn((board::BenchTool { rest: tool.rest, how: tool.how }, Transform::from_translation(tool.rest), Visibility::default())).with_children(|t| {
+                c.spawn((board::BenchTool { rest: tool.rest, rest_turn: tool.rest_turn, how: tool.how }, Transform::from_translation(tool.rest).with_rotation(tool.rest_turn), Visibility::default())).with_children(|t| {
                     for p in tool.parts {
                         let mat = mat_for(&mut materials, p);
                         let key = [p.size.x.to_bits(), p.size.y.to_bits(), p.size.z.to_bits()];
