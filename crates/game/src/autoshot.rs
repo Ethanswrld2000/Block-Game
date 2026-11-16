@@ -75,7 +75,7 @@ fn place_camera(
 
 fn take_shot(
     mut commands: Commands,
-    time: Res<Time>,
+    time: Res<Time<Real>>,
     stats: Res<WorldStats>,
     path: Res<ShotPath>,
     mut state: Local<(u32, Option<f32>)>,

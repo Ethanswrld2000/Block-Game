@@ -151,6 +151,7 @@ def main():
     save("thunder", lowpass(n, 0.004) * env(len(n), 0.02, 1.3) * 3 + highpass(n, 0.2) * env(len(n), 0.001, 0.08))
 
     critters()
+    voices()
 
 
 def sweep(seconds, f0, f1, decay=0.05, attack=0.004):
@@ -194,6 +195,25 @@ def critters():
         return sequence([burst] * bursts, 0.045)
     save("cricket_chirp_0", trill(3, 4400))
     save("cricket_chirp_1", trill(4, 4700))
+
+
+def voices():
+    # NPC speech: one short voiced syllable per file (a buzzy tone shaped by two
+    # vowel formants). The game plays one per syllable at the speaker's pitch.
+    def syllable(f1, f2, seconds=0.13, f0=150):
+        tt = t(seconds)
+        glide = f0 * (1 + 0.08 * np.sin(np.pi * tt / seconds))
+        phase = 2 * np.pi * np.cumsum(glide) / RATE
+        x = 0
+        for h in range(1, 30):
+            f = glide * h
+            w = np.exp(-((f - f1) / 120) ** 2) + 0.6 * np.exp(-((f - f2) / 200) ** 2) + 0.15 / h
+            x = x + np.sin(h * phase) * w
+        return x * np.sin(np.pi * tt / seconds) ** 0.6
+    save("voice_0", syllable(730, 1090))  # ah
+    save("voice_1", syllable(530, 1840))  # eh
+    save("voice_2", syllable(570, 840))   # oh
+    save("voice_3", syllable(300, 870, 0.1))  # oo
 
 
 if __name__ == "__main__":

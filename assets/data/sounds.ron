@@ -24,6 +24,8 @@
         "spell_on": 0.5,
         "spell_off": 0.4,
         "level_up": 0.6,
+        // NPC speech blips (voice_0..3), one per syllable.
+        "voice": 0.45,
         // Working the cooking pot and the cutting board.
         "stir": 0.55,
         "knife": 0.55,

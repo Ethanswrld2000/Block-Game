@@ -11,6 +11,7 @@ mod clouds;
 mod creatures;
 mod lod;
 mod menu;
+mod npc;
 mod places;
 mod player;
 mod precipitation;
@@ -85,6 +86,6 @@ fn main() {
             survival::SurvivalPlugin,
             inventory::InventoryPlugin,
         ))
-        .add_plugins((creatures::CreaturesPlugin, places::PlacesPlugin, progress::ProgressPlugin, station::StationPlugin, settings::SettingsPlugin, sound::SoundPlugin, bench::BenchPlugin))
+        .add_plugins((creatures::CreaturesPlugin, places::PlacesPlugin, progress::ProgressPlugin, station::StationPlugin, settings::SettingsPlugin, sound::SoundPlugin, bench::BenchPlugin, npc::NpcPlugin))
         .run();
 }

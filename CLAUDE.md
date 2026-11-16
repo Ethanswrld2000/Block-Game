@@ -276,6 +276,18 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   radius 50-260, tops at y -140..240) float past the coast with the same climate, biomes and underside, and no
   water. `Column` has `land` (Void/Main/Outer), `bottom` and `water`; villages and barrows are main island only.
   Rootstone no longer generates. `game::lod` draws undersides and leaves the void empty.
+- NPCs: `game::npc` (kinds in `assets/data/npcs.ron`: name, title, looks colours, voice pitch/rate, walk speed,
+  dialogue tree key). Ctrl+Shift+N (Cmd+Shift+N) spawns the first kind ahead of you, following you. Pure parts:
+  `npc::motion` (critically damped `Spring` on every joint, `walk`/`idle`/`gesture` poses, `Gaze`: head on a slow
+  spring, pupils lead on a fast one, idle glances, blinks), `npc::voice` (`speak`: text -> timed syllables; mouth,
+  voice sounds `voice_0..3` and the typed subtitle all follow it), `npc::dialogue` (trees in `assets/data/dialogue.ron`,
+  `goto: "node"` works without `Some`; flags, `needs`/`without`, `once`, tone tags, `again` opening, acts
+  Follow/Stay/Wander). `npc::body`: jointed box model (hips, knees, torso, shoulders, elbows, neck, head) with eye
+  whites, iris + pupil that move, blinking lids, mood brows and a rectangular mouth with upper and lower teeth;
+  animates on real time. `npc::talk`: look at an NPC and press E: black bars, `Time<Virtual>` paused (so autoshot
+  uses real time), HUD and arms hidden, camera eases to frame the speaker; click/Space/E/Enter continue, replies by
+  mouse, 1-8 or W/S + Enter, Esc leaves. Not saved yet; no combat yet (room left in `npc::Order`).
+  Screenshots: `BLOCKGAME_NPC=3` spawns one 3 blocks ahead, `BLOCKGAME_TALK=1` talks to it (`=replies` jumps to the replies).
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen

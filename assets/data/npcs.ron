@@ -1,0 +1,21 @@
+// NPC kinds (game::npc). Each has looks (sRGB colours of its body parts),
+// a voice (pitch of the voice sounds, syllables per second) and a dialogue
+// tree from dialogue.ron. Ctrl+Shift+N (or Cmd+Shift+N) spawns the first one.
+[
+    (
+        name: "Mossa Tarn",
+        title: "Peddler of the Fen",
+        dialogue: "mossa",
+        voice: (pitch: 1.15, rate: 6.5),
+        walk: 2.4,
+        looks: (
+            skin: (0.80, 0.60, 0.46),
+            hair: (0.20, 0.22, 0.13),
+            shirt: (0.38, 0.44, 0.24),
+            scarf: (0.78, 0.55, 0.22),
+            trousers: (0.38, 0.27, 0.18),
+            boots: (0.22, 0.16, 0.11),
+            iris: (0.30, 0.48, 0.30),
+        ),
+    ),
+]
