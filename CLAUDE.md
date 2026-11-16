@@ -281,6 +281,12 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   uses real time), HUD and arms hidden, camera eases to frame the speaker; click/Space/E/Enter continue, replies by
   mouse, 1-8 or W/S + Enter, Esc leaves. Not saved yet; no combat yet (room left in `npc::Order`).
   Screenshots: `BLOCKGAME_NPC=3` spawns one 3 blocks ahead, `BLOCKGAME_TALK=1` talks to it (`=replies` jumps to the replies).
+- Rooms: `voxel::room::find_room` (pure) fills outward from a cell through open cells; walls (`BlockDef::is_wall`:
+  solid full cubes that aren't `plant` material; leaves, plants, water, torches are holes) stop it. Closed within
+  `MAX_ROOM` (4096) cells = a `Room` (`cells`, `shell`); otherwise `NotRoom::Open`/`InWall`/`Unknown` (unloaded).
+  `station::room_at` runs it on the world. A carried urn can only be set down inside a closed room with no other
+  urn in it (the ancestral urn by the bedroll is exempt but takes up its room). Insulation tiers, doors and the
+  shelter panel from the house plan aren't built yet.
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen
