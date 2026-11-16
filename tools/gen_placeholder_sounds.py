@@ -109,6 +109,15 @@ def main():
         i = int(RATE * start)
         bubbles[i:i + len(seg)] += np.sin(2 * np.pi * (f + 900 * seg) * seg) * env(len(seg), 0.002, 0.015) * 0.5
     save("stir", slosh + bubbles)
+    # A bench making something: a rising shimmer while the parts draw together, then a bright pop.
+    tt = t(1.1)
+    shimmer = sum(np.sin(2 * np.pi * (f + 500 * tt) * tt) for f in (880, 1320, 1760)) * (tt / 1.1) ** 2 * 0.25
+    shimmer *= 0.6 + 0.4 * np.sin(2 * np.pi * 18 * tt)
+    save("craft_shimmer", shimmer * np.minimum(1, (1.1 - tt) * 20))
+    tt = t(0.35)
+    pop = np.sin(2 * np.pi * (300 + 1400 * np.exp(-tt * 30)) * tt) * env(len(tt), 0.001, 0.05)
+    chime = sum(np.sin(2 * np.pi * f * tt) * env(len(tt), 0.002, 0.12) for f in (1046, 1568, 2093)) * 0.35
+    save("craft_pop", pop + chime + highpass(noise(0.35), 0.4) * env(len(tt), 0.001, 0.02) * 0.3)
     save("knife", np.concatenate([highpass(noise(0.05), 0.3) * env(int(RATE * 0.05), 0.001, 0.015) * 0.5, thud(0.12, 0.18, 0.03, pitch=260)]))
     # Fighting.
     save("swing", highpass(noise(0.22), 0.1) * np.sin(np.pi * t(0.22) / 0.22) ** 2 * 0.6)

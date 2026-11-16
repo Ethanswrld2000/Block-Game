@@ -20,6 +20,10 @@
 
 pub mod bench;
 pub mod board;
+mod book;
+mod float;
+mod forge;
+mod particles;
 mod dev;
 pub mod golem;
 pub mod models;
@@ -60,6 +64,8 @@ impl Plugin for StationPlugin {
             .init_resource::<dev::DevMenu>()
             .init_resource::<telescope::Scope>()
             .add_message::<StepDone>()
+            .add_message::<particles::Burst>()
+            .add_plugins(MaterialPlugin::<forge::GlintMaterial>::default())
             .add_systems(
                 crate::menu::GameStartup,
                 (
@@ -69,10 +75,12 @@ impl Plugin for StationPlugin {
                     telescope::load_constellations,
                     spawn_label,
                     board::spawn_board_ui,
+                    book::spawn_book,
                     board::load_benches,
                     tree::spawn_tree_ui,
                     telescope::spawn_scope_ui,
                     dev::spawn_dev_ui,
+                    particles::setup_pixels,
                 )
                     .chain(),
             )
@@ -92,13 +100,19 @@ impl Plugin for StationPlugin {
                     dev::dev_keys,
                     dev::dev_click,
                     dev::dev_build,
-                    board::board_for_screenshot,
-                    board::board_keys,
-                    board::board_camera,
-                    board::board_hides,
-                    board::board_click,
-                    board::board_models,
-                    board::board_ui,
+                    (
+                        board::board_for_screenshot,
+                        board::board_keys,
+                        board::board_camera,
+                        board::board_hides,
+                        board::board_tool,
+                        board::board_click,
+                        board::board_models,
+                        forge::forge,
+                        board::board_ui,
+                        book::board_book,
+                    )
+                        .chain(),
                 )
                     .chain()
                     .before(crate::interact::InteractSet)
@@ -112,7 +126,7 @@ impl Plugin for StationPlugin {
                     .before(crate::interact::InteractSet)
                     .after(crate::player::PlayerSet),
             )
-            .add_systems(crate::menu::GameUpdate, (save_urns, urns_for_screenshot))
+            .add_systems(crate::menu::GameUpdate, (save_urns, urns_for_screenshot, (particles::spawn_bubbles, particles::move_particles, particles::spawn_bursts).chain()))
             .add_systems(Last, (save_urns_on_exit, save_edges_on_exit, golem::save_golem_on_exit).run_if(crate::menu::in_game));
     }
 }
@@ -477,7 +491,9 @@ fn layout(camp: &Camp, world: &World, blocks: &Blocks, urns: &Urns, book: &UrnDa
             let spots = vec![urn_at + along * 1.7, urn_at - along * 2.0, urn_at - side * 1.6, urn_at - side * 1.6 + along * 1.8];
             (urn_at, spots, !b.along_x)
         } else {
-            let Some(p) = urns.placed.get(&def.name) else { continue };
+            let Some(p) = urns.placed.get(&def.name) else {
+                continue;
+            };
             let (along, side) = if p.along_x { (Vec3::X, Vec3::Z * p.back) } else { (Vec3::Z, Vec3::X * p.back) };
             let urn_at = Vec3::new(p.pos.0, p.pos.1, p.pos.2);
             let spots = vec![
@@ -549,23 +565,46 @@ fn place_stations(
         let rot = if st.turned { Quat::from_rotation_y(std::f32::consts::FRAC_PI_2) } else { Quat::IDENTITY };
         let parts = models::parts(st.kind, &has, lit[st.urn]);
         commands.spawn((StationModels, st, Transform::from_translation(st.pos).with_rotation(rot), Visibility::default())).with_children(|c| {
-            for p in parts {
-                let mat = cache
+            let mut mat_for = |materials: &mut Assets<StandardMaterial>, p: models::Part| {
+                cache
                     .entry((st.urn, p.mat as u8))
                     .or_insert_with(|| {
                         let (base, glow) = p.mat.look(color);
                         let lin = base.to_linear();
+                        let alpha = p.mat.alpha();
                         materials.add(StandardMaterial {
-                            base_color: base,
+                            base_color: base.with_alpha(alpha.unwrap_or(1.0)),
                             emissive: LinearRgba::rgb(lin.red * glow, lin.green * glow, lin.blue * glow),
-                            perceptual_roughness: if matches!(p.mat, Mat::Steel | Mat::Brass | Mat::Iron) { 0.5 } else { 0.95 },
+                            perceptual_roughness: if alpha.is_some() {
+                                0.08
+                            } else if matches!(p.mat, Mat::Steel | Mat::Brass | Mat::Iron) {
+                                0.5
+                            } else {
+                                0.95
+                            },
+                            reflectance: if alpha.is_some() { 0.6 } else { 0.5 },
+                            alpha_mode: if alpha.is_some() { AlphaMode::Blend } else { AlphaMode::Opaque },
                             ..default()
                         })
                     })
-                    .clone();
+                    .clone()
+            };
+            for p in parts {
+                let mat = mat_for(&mut materials, p);
                 let key = [p.size.x.to_bits(), p.size.y.to_bits(), p.size.z.to_bits()];
                 let mesh = cubes.entry(key).or_insert_with(|| meshes.add(Cuboid::new(p.size.x, p.size.y, p.size.z))).clone();
                 c.spawn((Mesh3d(mesh), MeshMaterial3d(mat), Transform::from_translation(p.at).with_rotation(Quat::from_rotation_z(p.tilt)), NotShadowCaster));
+            }
+            // The bench's tool is its own thing, so it can be lifted or turned (`board`).
+            if let Some(tool) = models::tool(st.kind) {
+                c.spawn((board::BenchTool { rest: tool.rest, rest_turn: tool.rest_turn, how: tool.how }, Transform::from_translation(tool.rest).with_rotation(tool.rest_turn), Visibility::default())).with_children(|t| {
+                    for p in tool.parts {
+                        let mat = mat_for(&mut materials, p);
+                        let key = [p.size.x.to_bits(), p.size.y.to_bits(), p.size.z.to_bits()];
+                        let mesh = cubes.entry(key).or_insert_with(|| meshes.add(Cuboid::new(p.size.x, p.size.y, p.size.z))).clone();
+                        t.spawn((Mesh3d(mesh), MeshMaterial3d(mat), Transform::from_translation(p.at).with_rotation(Quat::from_rotation_z(p.tilt)), NotShadowCaster));
+                    }
+                });
             }
         });
     }
@@ -603,8 +642,12 @@ fn place_urn(
     if !mouse.just_pressed(MouseButton::Right) || cursor.grab_mode == CursorGrabMode::None || menus.open {
         return;
     }
-    let (Some(book), Some(item), Some(hit)) = (book, wielded.0, target.hit) else { return };
-    let Some(def) = book.0.urn_of_item(&items.get(item).name) else { return };
+    let (Some(book), Some(item), Some(hit)) = (book, wielded.0, target.hit) else {
+        return;
+    };
+    let Some(def) = book.0.urn_of_item(&items.get(item).name) else {
+        return;
+    };
     if aimed.0.is_some() {
         return;
     }
@@ -640,7 +683,9 @@ fn use_station(
     if !mouse.just_pressed(MouseButton::Right) || cursor.grab_mode == CursorGrabMode::None || menus.open {
         return;
     }
-    let (Some((kind, dist)), Some(st)) = (aimed.0, aimed.1) else { return };
+    let (Some((kind, dist)), Some(st)) = (aimed.0, aimed.1) else {
+        return;
+    };
     // A block in front of the station takes the click instead.
     if let Some(hit) = target.hit {
         let min = Vec3::new(hit.block.x as f32, hit.block.y as f32, hit.block.z as f32);
@@ -783,7 +828,9 @@ fn steps_done(
 ) {
     let Some(book) = book else { return };
     for StepDone(name) in done.read() {
-        let Some((urn, step)) = book.0.step(name) else { continue };
+        let Some((urn, step)) = book.0.step(name) else {
+            continue;
+        };
         let line = match &step.gives {
             Gives::Station(_) => format!("The {} places a {} beside it", urn.title, step.title),
             Gives::Upgrade => format!("{} done", step.title),
@@ -793,7 +840,9 @@ fn steps_done(
                 if taught.is_empty() { format!("{} done", step.title) } else { format!("{}: you can now make {}", step.title, taught.join(", ")) }
             }
             Gives::Urn(other) => {
-                let Some(def) = book.0.urn(other) else { continue };
+                let Some(def) = book.0.urn(other) else {
+                    continue;
+                };
                 if let Some(it) = def.item.as_deref().and_then(|n| items.id(n))
                     && let Some(rest) = inv.add(&items, Stack::new(it, 1))
                 {
@@ -847,7 +896,9 @@ fn show_label(
     children: Query<&Children>,
     mut texts: Query<&mut Text>,
 ) {
-    let Ok((mut vis, kids)) = label.single_mut() else { return };
+    let Ok((mut vis, kids)) = label.single_mut() else {
+        return;
+    };
     let Some(book) = book else { return };
     let (title, line) = match aimed.1 {
         Some(st) if !menus.open => {
@@ -885,7 +936,9 @@ fn show_label(
         *vis = Visibility::Inherited;
     }
     let Some(panel) = kids.first() else { return };
-    let Ok(lines) = children.get(*panel) else { return };
+    let Ok(lines) = children.get(*panel) else {
+        return;
+    };
     for (e, s) in lines.iter().zip([title, line]) {
         if let Ok(mut t) = texts.get_mut(e)
             && t.0 != s
