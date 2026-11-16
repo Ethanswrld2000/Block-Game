@@ -548,10 +548,16 @@ fn draw_target(target: Res<Target>, mining: Res<Mining>, menus: Res<crate::camer
         let p = hit.block;
         let center = Vec3::new(p.x as f32 + 0.5, p.y as f32 + 0.5, p.z as f32 + 0.5);
         gizmos.cube(Transform::from_translation(center).with_scale(Vec3::splat(1.003)), Color::srgba(0.05, 0.05, 0.05, 0.9));
-        // Cracks close in as the block is mined: a shrinking inner box.
+        // Cracks close in as the block is mined: a shrinking square on each face,
+        // drawn just outside the surface so it shows over the block.
         if mining.block == Some(p) && mining.progress > 0.0 {
             let s = 1.0 - mining.progress.min(1.0) * 0.9;
-            gizmos.cube(Transform::from_translation(center).with_scale(Vec3::splat(s)), Color::srgba(0.9, 0.85, 0.7, 0.8));
+            let color = Color::srgba(0.9, 0.85, 0.7, 0.8);
+            for normal in [Dir3::X, Dir3::NEG_X, Dir3::Y, Dir3::NEG_Y, Dir3::Z, Dir3::NEG_Z] {
+                let at = center + *normal * 0.505;
+                let turn = Quat::from_rotation_arc(Vec3::Z, *normal);
+                gizmos.rect(Isometry3d::new(at, turn), Vec2::splat(s), color);
+            }
         }
     }
 }
