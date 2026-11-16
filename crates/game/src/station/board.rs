@@ -1,6 +1,6 @@
 //! Working a bench with your hands, not through a menu.
 //!
-//! Right click a bench (camp mat, tool bench, carpentry bench, cooking pot,
+//! Right click a bench (camp mat, tool bench, carpentry bench or table, cooking pot,
 //! cutting board) and the view glides down over its top. Your things lie in a strip along the bottom of the screen: click one
 //! to pick it up (Shift: the whole stack); it hangs under the cursor over the
 //! board. Click a slot to set it down there, or click what lies in a slot to
@@ -43,6 +43,7 @@ pub(super) fn board_name(kind: StationKind) -> Option<&'static str> {
         StationKind::CampMat => Some("camp_mat"),
         StationKind::ToolBench => Some("tool_bench"),
         StationKind::CarpentryBench => Some("carpentry_bench"),
+        StationKind::CarpentryTable => Some("carpentry_table"),
         StationKind::CookingPot => Some("cooking_pot"),
         StationKind::CuttingBoard => Some("cutting_board"),
         StationKind::SmokingRack => Some("smoking_rack"),
@@ -247,6 +248,24 @@ const CARPENTRY_BENCH: Layout = Layout {
     flip: false,
 };
 
+/// The carpentry table: the wood to join lies on the top, what joins it
+/// (pegs, cord, mud) in the tray at the end, and the mallet knocks it together.
+const CARPENTRY_TABLE: Layout = Layout {
+    slots: &[
+        ("top", Vec2::new(-0.2, -0.02), Vec2::new(0.4, 0.2), 0.86, "on the table"),
+        ("joint", Vec2::new(0.55, -0.1), Vec2::new(0.14, 0.12), 0.895, "in the tray"),
+    ],
+    tool: (Vec3::new(0.42, 0.86, 0.12), Vec3::new(0.76, 1.0, 0.32)),
+    made: (Vec2::new(-0.2, 0.3), Vec2::new(0.3, 0.1), 0.86),
+    views: &[view("the table", Vec3::new(0.0, 0.86, 0.04), Vec3::new(0.0, 1.15, 0.75))],
+    work: ("Knock it together with the mallet", "knock of the mallet"),
+    tool_name: "mallet",
+    sound: "dig_wood",
+    scale: 1.0,
+    pot: Vec2::ZERO,
+    flip: false,
+};
+
 /// The camp mat lies on the ground: things go on the mat or by the cord, and
 /// the flat knapping stone is what you knock.
 const CAMP_MAT: Layout = Layout {
@@ -402,6 +421,7 @@ pub(super) fn layout(kind: StationKind) -> &'static Layout {
     match kind {
         StationKind::CampMat => &CAMP_MAT,
         StationKind::CarpentryBench => &CARPENTRY_BENCH,
+        StationKind::CarpentryTable => &CARPENTRY_TABLE,
         StationKind::CookingPot => &COOKING_POT,
         StationKind::CuttingBoard => &CUTTING_BOARD,
         StationKind::SmokingRack => &SMOKING_RACK,
@@ -947,7 +967,7 @@ pub(super) fn board_click(
 fn burst_of(kind: StationKind) -> BurstKind {
     match kind {
         StationKind::IronAnvil | StationKind::SharpeningStone => BurstKind::Sparks,
-        StationKind::CarpentryBench => BurstKind::Sawdust,
+        StationKind::CarpentryBench | StationKind::CarpentryTable => BurstKind::Sawdust,
         StationKind::CuttingBoard => BurstKind::Bits,
         StationKind::SmokingRack => BurstKind::Smoke,
         StationKind::CookingPot => BurstKind::Splash,
@@ -1900,6 +1920,7 @@ mod tests {
             StationKind::CampMat,
             StationKind::ToolBench,
             StationKind::CarpentryBench,
+            StationKind::CarpentryTable,
             StationKind::CookingPot,
             StationKind::CuttingBoard,
             StationKind::SmokingRack,
@@ -1923,6 +1944,7 @@ mod tests {
             StationKind::CampMat,
             StationKind::ToolBench,
             StationKind::CarpentryBench,
+            StationKind::CarpentryTable,
             StationKind::CookingPot,
             StationKind::CuttingBoard,
             StationKind::SmokingRack,

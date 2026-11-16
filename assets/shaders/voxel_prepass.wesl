@@ -26,7 +26,7 @@ fn sway_offset(p: vec3<f32>, s: f32, t: f32) -> vec3<f32> {
     let dir = vec3<f32>(wind.x, 0.0, wind.y);
     let strength = wind.z;
     let along = dot(p.xz, wind.xy);
-    let wave = sin(along * 0.25 - t * (0.8 + strength * 1.6)) * 0.5 + 0.5;
+    let wave = sin(along * 0.25 - wind.w) * 0.5 + 0.5;
     let lean = strength * (0.12 + 0.3 * wave);
     let ph = p.x * 1.7 + p.z * 1.3 + p.y * 0.9;
     let flutter = vec3<f32>(sin(t * 5.3 + ph), sin(t * 4.1 + ph * 1.3) * 0.4, cos(t * 6.1 + ph * 0.7))

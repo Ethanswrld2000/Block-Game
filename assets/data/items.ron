@@ -46,6 +46,11 @@
         (name: "cobblestone", title: "Cobblestone", kind: Block("cobblestone"), mass: 2.0),
         (name: "log", title: "Log", kind: Block("log"), mass: 2.0),
         (name: "moss", title: "Moss", kind: Block("moss"), mass: 0.5),
+        // Building supplies, made at the carpentry table.
+        (name: "floorboards", title: "Floorboards", kind: Block("floorboards"), mass: 1.0),
+        (name: "timber_wall", title: "Timber Wall", kind: Block("timber_wall"), mass: 1.6),
+        (name: "wattle_wall", title: "Wattle Wall", kind: Block("wattle_wall"), mass: 1.2),
+        (name: "thatch", title: "Thatch", kind: Block("thatch"), mass: 0.4),
         // Food. Tier 1 is a quick buff, tier 4 can pull you back from a mortal wound.
         (name: "marsh_berries", title: "Marsh Berries", kind: Food(tier: 1, satiety: 6.0), mass: 0.2),
         (name: "swamp_reed", title: "Swamp Reed Hearts", kind: Food(tier: 1, satiety: 8.0), mass: 0.3),

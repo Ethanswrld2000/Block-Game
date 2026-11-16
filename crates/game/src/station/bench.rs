@@ -133,6 +133,9 @@ pub const TOOL_BENCH_SLOTS: [SlotDef; 2] = [plain("handle", 1), plain("material"
 /// The carpentry bench: a bed for logs and boards, and a vise.
 pub const CARPENTRY_SLOTS: [SlotDef; 2] = [plain("bed", 8), plain("vise", 4)];
 
+/// The carpentry table: the wood to join on the top, and what joins it.
+pub const CARPENTRY_TABLE_SLOTS: [SlotDef; 2] = [plain("top", 8), plain("joint", 4)];
+
 /// The camp mat: what lies on the mat, and what binds it.
 pub const CAMP_MAT_SLOTS: [SlotDef; 2] = [plain("base", 8), plain("tie", 8)];
 
@@ -178,6 +181,7 @@ pub fn slots_of(station: &str) -> &'static [SlotDef] {
         "camp_mat" => &CAMP_MAT_SLOTS,
         "tool_bench" => &TOOL_BENCH_SLOTS,
         "carpentry_bench" => &CARPENTRY_SLOTS,
+        "carpentry_table" => &CARPENTRY_TABLE_SLOTS,
         "cooking_pot" => &COOKING_POT_SLOTS,
         "cutting_board" => &CUTTING_BOARD_SLOTS,
         "smoking_rack" => &SMOKING_RACK_SLOTS,
@@ -560,6 +564,25 @@ mod tests {
             }
         };
         assert_eq!(made, Stack::new(id("planks"), 4));
+    }
+
+    #[test]
+    fn the_carpentry_table_joins_building_supplies() {
+        let (items, data) = data();
+        let id = |n| items.id(n).unwrap();
+        let [top, joint] = CARPENTRY_TABLE_SLOTS;
+        for (wood, n, with, m, makes) in [
+            ("planks", 4, "stick", 2, "floorboards"),
+            ("planks", 4, "log", 1, "timber_wall"),
+            ("stick", 6, "mud", 2, "wattle_wall"),
+            ("plant_fiber", 6, "stick", 2, "thatch"),
+        ] {
+            let mut b = Board::default();
+            b.put(top, Stack::new(id(wood), n));
+            b.put(joint, Stack::new(id(with), m));
+            assert_eq!(cook(&mut b, &data, "carpentry_table"), Stack::new(id(makes), 4), "{makes}");
+            assert!(matches!(items.get(id(makes)).kind, crate::items::ItemKind::Block(_)), "{makes} is a block you can place");
+        }
     }
 
     fn cook(b: &mut Board, data: &BenchData, station: &str) -> Stack {
