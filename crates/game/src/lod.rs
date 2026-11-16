@@ -22,7 +22,7 @@ use bevy::shader::ShaderRef;
 use bevy::tasks::futures::check_ready;
 use bevy::tasks::{AsyncComputeTaskPool, Task};
 use voxel::BlockRegistry;
-use worldgen::{WorldGen, SEA_LEVEL};
+use worldgen::WorldGen;
 
 use crate::blocks::Blocks;
 use crate::camera::FlyCamera;
@@ -258,7 +258,7 @@ impl MeshBuf {
                     // The exposed parts of [b, t]: above the neighbour, and below it.
                     let mut spans = Vec::with_capacity(2);
                     match other {
-                        None => spans.push((b.max(-200.0), t)),
+                        None => spans.push((b.max(-1000.0), t)),
                         Some(o) => {
                             if o.top < t {
                                 spans.push((o.top.max(b), t));
@@ -268,10 +268,15 @@ impl MeshBuf {
                             }
                         }
                     }
+                    // Ground colour down to a few blocks under the top, rock colour below
+                    // (island cliffs and undersides).
+                    let soil = t - 4.0;
                     for (lo, hi) in spans {
-                        if hi > lo {
-                            let q = quad.map(|v| Vec3::new(v.x, if v.y == 0.0 { lo } else { hi }, v.z));
-                            self.quad(q, normal, c.side_color);
+                        for (lo, hi, colour) in [(lo.max(soil), hi, c.side_color), (lo, hi.min(soil), c.bottom_color)] {
+                            if hi > lo {
+                                let q = quad.map(|v| Vec3::new(v.x, if v.y == 0.0 { lo } else { hi }, v.z));
+                                self.quad(q, normal, colour);
+                            }
                         }
                     }
                 }
@@ -295,6 +300,7 @@ fn build_tile(g: &WorldGen, reg: &BlockRegistry, colors: &Arc<Vec<Vec3>>, tile: 
     let color = |b: voxel::BlockId, face: usize| colors.get(reg.get(b).textures[face] as usize).copied().unwrap_or(Vec3::splat(0.5));
     let water = reg.id("water").map(|w| color(w, 2)).unwrap_or(Vec3::new(0.1, 0.2, 0.4));
     let deep = Vec3::new(0.01, 0.035, 0.08);
+    let underside = reg.id("stone").map(|b| color(b, 0)).unwrap_or(Vec3::splat(0.45));
     let mut buf = MeshBuf::default();
 
     // Land, one block lower than the real surface so real chunks always cover it.
@@ -304,18 +310,24 @@ fn build_tile(g: &WorldGen, reg: &BlockRegistry, colors: &Arc<Vec<Vec3>>, tile: 
         for x in -1..=n {
             let (wx, wz) = (ox + x * LAND_STEP + LAND_STEP / 2, oz + z * LAND_STEP + LAND_STEP / 2);
             let col = g.column(wx, wz);
+            if col.land == worldgen::Land::Void {
+                grid.push(None);
+                continue;
+            }
             let biome = g.biomes.get(col.biome);
-            let c = if col.height < SEA_LEVEL {
-                let depth = (SEA_LEVEL - col.height) as f32;
+            // Island undersides hang into open sky, so they're drawn too.
+            let bottom = col.bottom as f32 + 1.0;
+            let c = if col.height < col.water {
+                let depth = (col.water - col.height) as f32;
                 let tint = water.lerp(deep, (depth / 30.0).clamp(0.0, 1.0));
-                Col { bottom: -10_000.0, top: SEA_LEVEL as f32 - 0.2, top_color: tint, side_color: tint, bottom_color: tint }
+                Col { bottom, top: col.water as f32 - 0.2, top_color: tint, side_color: underside, bottom_color: underside * 0.8 }
             } else {
                 Col {
-                    bottom: -10_000.0,
+                    bottom,
                     top: col.height as f32,
                     top_color: color(biome.surface, 2),
                     side_color: color(biome.subsurface, 0) * 0.9,
-                    bottom_color: Vec3::ZERO,
+                    bottom_color: underside * 0.8,
                 }
             };
             grid.push(Some(c));
