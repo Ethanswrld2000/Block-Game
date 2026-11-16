@@ -74,11 +74,18 @@ pub struct Talk {
     /// The time was already paused before (leave it so).
     was_paused: bool,
     hidden: Vec<(Entity, Visibility)>,
+    /// A reply asked the NPC to cast the spirit spell (`dungeon::spirit` takes it).
+    cast: bool,
 }
 
 impl Talk {
     pub fn active(&self) -> bool {
         self.with.is_some()
+    }
+
+    /// The spirit spell was asked for in this talk (once).
+    pub fn take_cast(&mut self) -> bool {
+        std::mem::take(&mut self.cast)
     }
 }
 
@@ -379,6 +386,7 @@ fn choose(talk: &mut Talk, book: &NpcBook, npc: &mut Npc, i: usize) {
         Some(Act::Follow) => npc.order = Order::Follow,
         Some(Act::Stay) => npc.order = Order::Stay,
         Some(Act::Wander) => npc.order = Order::Wander { home: Vec3::NAN },
+        Some(Act::Spirit) => talk.cast = true,
         None => {}
     }
     match out.next {

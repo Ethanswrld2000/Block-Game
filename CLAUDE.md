@@ -288,6 +288,22 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   radius 50-260, tops at y -140..240) float past the coast with the same climate, biomes and underside, and no
   water. `Column` has `land` (Void/Main/Outer), `bottom` and `water`; villages and barrows are main island only.
   Rootstone no longer generates. `game::lod` draws undersides and leaves the void empty.
+- Warded dungeons: `worldgen::dungeons` (pure). One per 1024-block cell (chance 0.7, 700+ blocks from spawn) plus a home
+  dungeon 170-290 blocks from spawn, away from the home village. A stone gatehouse with one doorway, a stair 20-27 down,
+  then 7-10 large rooms (13-23 wide, 6-9 high) on a 30-block grid in the dungeon's own frame, joined by 3-wide corridors
+  (a few loops); the furthest room is the warden's hall (25x25, boss). `Dungeon` has `rooms`, `links`, `spaces` (open
+  boxes past the veil: `inside(p)`), `spawns` (`SpawnPoint` pos/kind Guard|Pack|Boss/room: hooks for enemies, nothing
+  spawns them yet), `bounds`, `outside` (path spot), `guide`, `veil`. Spirit ward: `WorldGen::warded(x, y, z)` covers
+  dungeons, barrows and villages; `interact` won't break, place or pick in them ("A spirit ward holds this place").
+  `game::dungeon`: `Nearby` dungeons, a shimmering veil in each doorway, a guide NPC (`warden` kind in npcs.ron and
+  dialogue.ron, `Npc.post` = dungeon id) by each path. Dialogue `act: Spirit` (`Talk::take_cast`) starts
+  `dungeon::spirit`: a 5.6 s cinematic (bars, view tips down, two arms rise and drain to see-through glowing blue with
+  sparkles, turn over, drop). As a spirit: arm materials tinted blue, faint blue screen wash, health starts full and the
+  body's health waits (`Spirit.body`). Non-spirits inside a dungeon are put back on the path. A spirit that falls is cast
+  out to the path with its body's health back (no death); walking out 14+ blocks from the gate ends the spirit form.
+  Messages for the enemy side: `EnteredRoom` (first time per run), `LeftDungeon { fell }`. Spirit form isn't saved.
+  Screenshots: `BLOCKGAME_DUNGEON=1` starts on the home dungeon's path facing the door (its position is logged),
+  `BLOCKGAME_SPIRIT=cast` runs the cinematic, `=1` starts as a spirit.
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen

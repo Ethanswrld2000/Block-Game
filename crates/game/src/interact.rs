@@ -366,7 +366,7 @@ fn use_hands(
     wielded: Res<Wielded>,
     items: Res<Items>,
     mut inv: ResMut<Inventory>,
-    (mut mined, mut blows, mut chops, mut open_chest, mut placed, mut strikes, mut use_creature): (
+    (mut mined, mut blows, mut chops, mut open_chest, mut placed, mut strikes, mut use_creature, mut toast): (
         MessageWriter<Mined>,
         MessageWriter<Blow>,
         MessageWriter<crate::chop::Chop>,
@@ -374,13 +374,15 @@ fn use_hands(
         MessageWriter<Placed>,
         MessageWriter<Strike>,
         MessageWriter<UseCreature>,
+        MessageWriter<crate::survival::Toast>,
     ),
-    (aimed, cam, perks, station, edges): (
+    (aimed, cam, perks, station, edges, generator): (
         Res<Aimed>,
         Single<&Transform, With<FlyCamera>>,
         Res<crate::progress::skills::Perks>,
         Res<crate::station::StationAim>,
         Option<Res<crate::station::Edges>>,
+        Option<Res<crate::world::Generator>>,
     ),
     blocks: Res<Blocks>,
     mode: Res<MoveMode>,
@@ -428,6 +430,11 @@ fn use_hands(
         return;
     }
 
+    // Named places (dungeons, barrows, villages) are under a spirit ward:
+    // nothing in them can be broken or built.
+    let warded = |p: BlockPos| generator.as_ref().is_some_and(|g| g.0.warded(p.x, p.y, p.z));
+    let ward_note = |toast: &mut MessageWriter<crate::survival::Toast>| toast.write(crate::survival::Toast("A spirit ward holds this place".into()));
+
     // A station nearer than the block you aim at takes right clicks (`station`).
     let at_station = station.0.is_some_and(|(_, d)| block_dist.is_none_or(|b| d < b));
 
@@ -449,6 +456,10 @@ fn use_hands(
         && let Some(hit) = target.hit
         && world.block(hit.block).is_some_and(|b| matches!(blocks.registry.get(b).shape, voxel::Shape::Twig | voxel::Shape::Pebble))
     {
+        if warded(hit.block) {
+            ward_note(&mut toast);
+            return;
+        }
         anim.start(hand, style);
         break_block(&mut world, &blocks, &mut mined, hit.block);
         return;
@@ -473,7 +484,10 @@ fn use_hands(
         let blocks_player = blocks.registry.get(place).solid && player.overlaps(into);
         // Nothing can be built at or above the world's ceiling.
         let under_ceiling = into.y < worldgen::WORLD_CEILING;
-        if free && !blocks_player && under_ceiling && item.is_some_and(|i| inv.take(i, 1)) && world.set_block(into, place) {
+        if free && mouse.just_pressed(MouseButton::Right) && warded(into) {
+            ward_note(&mut toast);
+        }
+        if free && !warded(into) && !blocks_player && under_ceiling && item.is_some_and(|i| inv.take(i, 1)) && world.set_block(into, place) {
             placed.write(Placed { pos: into, block: place });
             remesh_around(&mut world, &blocks, into);
             anim.start(hand, style);
@@ -485,6 +499,9 @@ fn use_hands(
     // when the tool meets the block, and the blows add up to break it.
     let breakable = |world: &World| {
         let hit = target.hit?;
+        if warded(hit.block) {
+            return None;
+        }
         let b = world.block(hit.block)?;
         // A tool sharpened at the sharpening stone cuts faster for a while.
         let sharp = edges.as_ref().map_or(1.0, |e| e.speed(&items, item));
@@ -493,6 +510,9 @@ fn use_hands(
     };
     let aim = breakable(&world);
     let pressed = mouse.pressed(MouseButton::Left);
+    if mouse.just_pressed(MouseButton::Left) && aim.is_none() && target.hit.is_some_and(|h| warded(h.block)) {
+        ward_note(&mut toast);
+    }
     // A blow lands on whatever is in front when the swing connects (even if
     // you let go of the button partway through the swing).
     let mut broke = None;

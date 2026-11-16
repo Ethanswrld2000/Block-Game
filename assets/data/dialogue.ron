@@ -112,4 +112,81 @@
             ),
         },
     ),
+    // The guide at every dungeon gate. `act: Spirit` casts the spirit spell:
+    // only a spirit passes the veil, and a spirit that falls inside wakes back here.
+    "warden": (
+        start: "greet",
+        again: "again",
+        nodes: {
+            "greet": (
+                mood: Curious,
+                say: [
+                    "Stop there, walker. That doorway is warded, and the ward does not know you.",
+                    "I am Ysolde. I keep this gate, and the dead below keep everything else.",
+                    "No living body passes the veil. Not with feet, not with a pick. The stones will not break for you.",
+                ],
+                choices: [
+                    (text: "Then how does anyone get in?", tone: "Ask", goto: "how"),
+                    (text: "What is down there?", tone: "Ask", goto: "below"),
+                    (text: "I'll leave it be.", end: true),
+                ],
+            ),
+            "again": (
+                mood: Neutral,
+                say: ["Back at the threshold. The halls have shifted their dust since you were here."],
+                choices: [
+                    (text: "Make me a spirit. I'm going in.", tone: "Ready", goto: "cast"),
+                    (text: "Remind me how this works.", tone: "Ask", goto: "how"),
+                    (text: "What is down there?", tone: "Ask", goto: "below"),
+                    (text: "Not today.", end: true),
+                ],
+            ),
+            "how": (
+                mood: Neutral,
+                say: [
+                    "I can lift your spirit out of your body for a while. Your body stays here with me, safe and sleeping on its feet.",
+                    "Your spirit walks the halls. It feels pain, it bleeds light, it can fall.",
+                    "If it falls, the ward spits it back out at this door and it settles into your body again. No harm done but pride.",
+                ],
+                choices: [
+                    (text: "And if I win?", tone: "Ask", goto: "win"),
+                    (text: "Do it. Make me a spirit.", tone: "Ready", goto: "cast"),
+                    (text: "I need to think.", end: true),
+                ],
+            ),
+            "win": (
+                mood: Happy,
+                say: [
+                    "Then you walk back out the way you came, and your spirit comes home on its own.",
+                    "Whatever you learned down there, you keep. The halls keep everything else.",
+                ],
+                choices: [
+                    (text: "Make me a spirit.", tone: "Ready", goto: "cast"),
+                    (text: "Later.", end: true),
+                ],
+            ),
+            "below": (
+                mood: Worried,
+                say: [
+                    "Long halls. Wide rooms. Things that were people once, and things that never were.",
+                    "They guard the deepest hall hardest. Whatever sleeps there wakes for spirits.",
+                ],
+                choices: [
+                    (text: "How do I get in?", tone: "Ask", goto: "how"),
+                    (text: "Make me a spirit.", tone: "Ready", goto: "cast"),
+                    (text: "I'll leave it be.", end: true),
+                ],
+            ),
+            "cast": (
+                mood: Happy,
+                say: [
+                    "Hold still. Look at your hands, and don't look away.",
+                ],
+                choices: [
+                    (text: "Ready.", act: Spirit, end: true),
+                    (text: "Wait, not yet.", goto: "again"),
+                ],
+            ),
+        },
+    ),
 }

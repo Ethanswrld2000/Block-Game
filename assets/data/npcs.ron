@@ -18,4 +18,21 @@
             iris: (0.30, 0.48, 0.30),
         ),
     ),
+    // Stands at every dungeon gate (game::dungeon) and casts the spirit spell.
+    (
+        name: "Ysolde Marrow",
+        title: "Keeper of the Ward",
+        dialogue: "warden",
+        voice: (pitch: 0.92, rate: 5.6),
+        walk: 2.0,
+        looks: (
+            skin: (0.72, 0.62, 0.56),
+            hair: (0.78, 0.80, 0.84),
+            shirt: (0.20, 0.26, 0.40),
+            scarf: (0.52, 0.74, 0.92),
+            trousers: (0.16, 0.18, 0.26),
+            boots: (0.14, 0.13, 0.15),
+            iris: (0.42, 0.66, 0.92),
+        ),
+    ),
 ]

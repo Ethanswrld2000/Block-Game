@@ -17,6 +17,7 @@ mod player;
 mod precipitation;
 mod progress;
 mod debug;
+mod dungeon;
 mod hands;
 mod hud;
 mod chop;
@@ -86,6 +87,6 @@ fn main() {
             survival::SurvivalPlugin,
             inventory::InventoryPlugin,
         ))
-        .add_plugins((creatures::CreaturesPlugin, places::PlacesPlugin, progress::ProgressPlugin, station::StationPlugin, settings::SettingsPlugin, sound::SoundPlugin, bench::BenchPlugin, npc::NpcPlugin))
+        .add_plugins((creatures::CreaturesPlugin, places::PlacesPlugin, progress::ProgressPlugin, station::StationPlugin, settings::SettingsPlugin, sound::SoundPlugin, bench::BenchPlugin, npc::NpcPlugin, dungeon::DungeonPlugin))
         .run();
 }
