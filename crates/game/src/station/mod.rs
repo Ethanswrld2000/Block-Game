@@ -11,7 +11,7 @@
 //! another urn. Marks around each urn's belly light up as its next step fills.
 //!
 //! The stations are models, not blocks. Benches with a board (camp mat, tool
-//! bench, carpentry bench, carpentry table, cooking pot, cutting board, smoking rack, iron anvil,
+//! bench, carpentry bench, carpentry table, machination table, cooking pot, cutting board, smoking rack, iron anvil,
 //! sharpening stone, magical lens, cauldron) are worked by hand (`board`);
 //! personal storage and the stone fridge open like chests; the telescope is
 //! looked through at night (`telescope`); the golem wakes and walks (`golem`);
@@ -256,6 +256,7 @@ pub enum StationKind {
     ToolBench,
     CarpentryBench,
     CarpentryTable,
+    MachinationTable,
     PersonalStorage,
     SharpeningStone,
     IronAnvil,
@@ -281,6 +282,7 @@ impl StationKind {
             "tool_bench" => Self::ToolBench,
             "carpentry_bench" => Self::CarpentryBench,
             "carpentry_table" => Self::CarpentryTable,
+            "machination_table" => Self::MachinationTable,
             "personal_storage" => Self::PersonalStorage,
             "sharpening_stone" => Self::SharpeningStone,
             "iron_anvil" => Self::IronAnvil,
@@ -303,6 +305,7 @@ impl StationKind {
             Self::ToolBench => "Tool Bench",
             Self::CarpentryBench => "Carpentry Bench",
             Self::CarpentryTable => "Carpentry Table",
+            Self::MachinationTable => "Machination Table",
             Self::PersonalStorage => "Personal Storage",
             Self::SharpeningStone => "Sharpening Stone",
             Self::IronAnvil => "Iron Anvil",
@@ -326,6 +329,7 @@ impl StationKind {
             Self::ToolBench => "tool_bench",
             Self::CarpentryBench => "carpentry_bench",
             Self::CarpentryTable => "carpentry_table",
+            Self::MachinationTable => "machination_table",
             Self::PersonalStorage => "personal_storage",
             Self::SharpeningStone => "sharpening_stone",
             Self::IronAnvil => "iron_anvil",

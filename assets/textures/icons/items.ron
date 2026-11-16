@@ -55,5 +55,6 @@
         "light_draught": (64, 250, 20, 40),
         "warmth_draught": (86, 250, 20, 40),
         "focus_tonic": (108, 250, 20, 40),
+        "airship": (130, 272, 60, 40),
     },
 )

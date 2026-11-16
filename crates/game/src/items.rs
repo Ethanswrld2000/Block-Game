@@ -63,6 +63,7 @@ enum KindSpec {
     },
     Bag { grid: (u8, u8) },
     Material,
+    Machine(String),
 }
 
 /// Where something is worn. Clothes and armor go on separate layers.
@@ -108,6 +109,8 @@ pub enum ItemKind {
     Bag { grid: (u8, u8) },
     /// Crafting materials.
     Material,
+    /// A machine from the machination table, set down in the world (`airship`).
+    Machine(String),
 }
 
 #[derive(Debug, Clone)]
@@ -169,6 +172,7 @@ impl Items {
                 }
                 KindSpec::Bag { grid } => ItemKind::Bag { grid },
                 KindSpec::Material => ItemKind::Material,
+                KindSpec::Machine(m) => ItemKind::Machine(m),
             };
             if list.iter().any(|i: &Item| i.name == s.name) {
                 return Err(format!("item '{}' is defined twice", s.name));

@@ -663,6 +663,7 @@ fn describe(items: &Items, id: crate::items::ItemId) -> (String, String) {
         ItemKind::Block(_) => s.push_str("\nRight click to place"),
         ItemKind::Torch => s.push_str("\nGives light; right click to place"),
         ItemKind::Material => s.push_str("\nCrafting material"),
+        ItemKind::Machine(_) => s.push_str("\nA machine; right click open ground to set it down"),
     }
     if it.damage > 1.0 {
         s.push_str(&format!("\nHits for {:.0}", it.damage));

@@ -5,6 +5,7 @@
 //            tool_bench:      "handle" (the long groove, 1), "material" (the hollow, up to 4)
 //            carpentry_bench: "bed" (logs and boards, up to 8), "vise" (up to 4)
 //            carpentry_table: "top" (the wood to join, up to 8), "joint" (pegs, cord, mud, up to 4)
+//            machination_table: "keel" (up to 8), "rigging" (up to 8), "envelope" (up to 4), "engine" (up to 8)
 //            cutting_board:   "board" (up to 4)
 //            smoking_rack:    "rack" (up to 4), and the fire (see `heat`)
 //            iron_anvil:      "anvil" (metal, up to 4), "flux" (the tray, up to 2), "handle" (1)
@@ -52,6 +53,9 @@
         (station: "carpentry_table", slots: {"top": ("planks", 4), "joint": ("log", 1)}, work: 5, makes: ("timber_wall", 4)),
         (station: "carpentry_table", slots: {"top": ("stick", 6), "joint": ("mud", 2)}, work: 4, makes: ("wattle_wall", 4)),
         (station: "carpentry_table", slots: {"top": ("plant_fiber", 6), "joint": ("stick", 2)}, work: 3, makes: ("thatch", 4)),
+
+        // Machination table (tool station): machines, set down in the world (machines.ron).
+        (station: "machination_table", slots: {"keel": ("planks", 8), "rigging": ("cordage", 6), "envelope": ("hide", 4), "engine": ("raw_iron", 6)}, work: 10, makes: ("airship", 1)),
 
         // Cutting board (cooking station): cut things up first, and they go further in the pot.
         (station: "cutting_board", slots: {"board": ("raw_meat", 1)}, work: 3, makes: ("meat_strips", 3)),

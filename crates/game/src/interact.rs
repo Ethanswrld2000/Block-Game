@@ -375,12 +375,13 @@ fn use_hands(
         MessageWriter<Strike>,
         MessageWriter<UseCreature>,
     ),
-    (aimed, cam, perks, station, edges): (
+    (aimed, cam, perks, station, edges, ship): (
         Res<Aimed>,
         Single<&Transform, With<FlyCamera>>,
         Res<crate::progress::skills::Perks>,
         Res<crate::station::StationAim>,
         Option<Res<crate::station::Edges>>,
+        Res<crate::airship::ShipAim>,
     ),
     blocks: Res<Blocks>,
     mode: Res<MoveMode>,
@@ -429,7 +430,8 @@ fn use_hands(
     }
 
     // A station nearer than the block you aim at takes right clicks (`station`).
-    let at_station = station.0.is_some_and(|(_, d)| block_dist.is_none_or(|b| d < b));
+    // So does an airship (`airship` boards it).
+    let at_station = station.0.is_some_and(|(_, d)| block_dist.is_none_or(|b| d < b)) || ship.0.is_some_and(|(_, d)| block_dist.is_none_or(|b| d < b));
 
     // Right click on a chest opens it (whatever you hold).
     let chest = blocks.registry.id("chest");

@@ -669,6 +669,19 @@ def portable_tent(c):
     c.rect(26, 12, 29, 32, CORD)
 
 
+def airship(c):
+    """A little airship, 60 x 40: hide envelope over a wooden gondola."""
+    c.ellipse(30, 13, 26, 10, HIDE)
+    c.rect(6, 12, 54, 14, hexc("8c3828"))
+    c.poly([(52, 6), (58, 2), (58, 13), (52, 13)], hexc("8c3828"))
+    for x in (18, 42):
+        c.line(x, 21, x - 2 if x < 30 else x + 2, 29, 1, CORD)
+    c.poly([(12, 29), (48, 29), (44, 36), (16, 36)], WOOD)
+    c.rect(12, 28, 48, 30, WOOD_D)
+    c.rect(47, 31, 51, 34, hexc("4a4a50"))
+    c.line(52, 28, 52, 37, 2, WOOD_D)
+
+
 DRAW = {f.__name__: f for f in [
     stone_pickaxe, stone_axe, stone_shovel, flint_spear, torch, marsh_berries, swamp_reed, smoked_fish, bread, peat_stew,
     cured_meat, feast_platter, ember_herb, stick, plant_fiber, cordage, coal, raw_iron, flint, hide, fur, linen_shirt,
@@ -677,7 +690,7 @@ DRAW = {f.__name__: f for f in [
     meat_strips, chopped_reeds, fish_flakes, roast_slices, reed_broth, bog_stew,
     iron_pickaxe, iron_axe, iron_shovel, steel_pickaxe, steel_axe, spirit_pickaxe, spirit_axe,
     levitation_draught, light_draught, warmth_draught, focus_tonic,
-    tool_urn, hearth_urn, star_urn, golem_urn, portable_bedroll, portable_tent,
+    tool_urn, hearth_urn, star_urn, golem_urn, portable_bedroll, portable_tent, airship,
 ]}
 
 

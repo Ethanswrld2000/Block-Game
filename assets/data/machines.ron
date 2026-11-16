@@ -1,0 +1,13 @@
+// Machines built at the machination table (benches.ron) and set down in the world.
+// Items of kind `Machine("name")` in items.ron name an entry here.
+(
+    airship: (
+        // Blocks per second at full ahead (W), and up or down (Space / Ctrl).
+        speed: 16.0,
+        climb: 6.0,
+        // Degrees per second at full rudder (A / D).
+        turn: 60.0,
+        // Seconds to come up to speed, and to slow down again.
+        ease: 1.2,
+    ),
+)

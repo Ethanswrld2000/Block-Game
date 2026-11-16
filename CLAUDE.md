@@ -295,6 +295,15 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   radius 50-260, tops at y -140..240) float past the coast with the same climate, biomes and underside, and no
   water. `Column` has `land` (Void/Main/Outer), `bottom` and `water`; villages and barrows are main island only.
   Rootstone no longer generates. `game::lod` draws undersides and leaves the void empty.
+- Machination table (tool urn, tier 2, after the carpentry table): `StationKind::MachinationTable`, a board like the
+  other benches (slots keel / rigging / envelope / engine, the drive wheel is a `ToolUse::Turn` tool). It builds
+  machines: items of kind `Machine("name")` in items.ron, numbers in `assets/data/machines.ron`. Only the airship so
+  far (8 planks, 6 cordage, 4 hide, 6 raw iron). `game::airship`: right click open ground with it to set it down
+  (bow the way you look; needs ~4 x 9 x 7 clear), right click or E to board, W/S ahead/astern, A/D turn, Space/Ctrl
+  rise/sink, E steps off over the rail. Pure flight rules in `airship::flight` (eased speed, oriented footprint,
+  stops on solid blocks one axis at a time). While aboard `player::walk` is off (`airship::not_aboard`) and the
+  player stands at the helm. Ships and who is aboard save to `airships.ron`. You can't walk on the deck (the ship
+  isn't a collider) and it can't be picked back up yet.
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen

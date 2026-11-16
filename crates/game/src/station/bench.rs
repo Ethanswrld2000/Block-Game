@@ -136,6 +136,10 @@ pub const CARPENTRY_SLOTS: [SlotDef; 2] = [plain("bed", 8), plain("vise", 4)];
 /// The carpentry table: the wood to join on the top, and what joins it.
 pub const CARPENTRY_TABLE_SLOTS: [SlotDef; 2] = [plain("top", 8), plain("joint", 4)];
 
+/// The machination table: the keel on the slipway, rigging and envelope in
+/// their trays, and the engine's metal in the gear box.
+pub const MACHINATION_SLOTS: [SlotDef; 4] = [plain("keel", 8), plain("rigging", 8), plain("envelope", 4), plain("engine", 8)];
+
 /// The camp mat: what lies on the mat, and what binds it.
 pub const CAMP_MAT_SLOTS: [SlotDef; 2] = [plain("base", 8), plain("tie", 8)];
 
@@ -182,6 +186,7 @@ pub fn slots_of(station: &str) -> &'static [SlotDef] {
         "tool_bench" => &TOOL_BENCH_SLOTS,
         "carpentry_bench" => &CARPENTRY_SLOTS,
         "carpentry_table" => &CARPENTRY_TABLE_SLOTS,
+        "machination_table" => &MACHINATION_SLOTS,
         "cooking_pot" => &COOKING_POT_SLOTS,
         "cutting_board" => &CUTTING_BOARD_SLOTS,
         "smoking_rack" => &SMOKING_RACK_SLOTS,
@@ -583,6 +588,20 @@ mod tests {
             assert_eq!(cook(&mut b, &data, "carpentry_table"), Stack::new(id(makes), 4), "{makes}");
             assert!(matches!(items.get(id(makes)).kind, crate::items::ItemKind::Block(_)), "{makes} is a block you can place");
         }
+    }
+
+    #[test]
+    fn the_machination_table_builds_an_airship() {
+        let (items, data) = data();
+        let id = |n| items.id(n).unwrap();
+        let [keel, rigging, envelope, engine] = MACHINATION_SLOTS;
+        let mut b = Board::default();
+        b.put(keel, Stack::new(id("planks"), 8));
+        b.put(rigging, Stack::new(id("cordage"), 6));
+        b.put(envelope, Stack::new(id("hide"), 4));
+        b.put(engine, Stack::new(id("raw_iron"), 6));
+        assert_eq!(cook(&mut b, &data, "machination_table"), Stack::new(id("airship"), 1));
+        assert!(matches!(&items.get(id("airship")).kind, crate::items::ItemKind::Machine(m) if m == "airship"));
     }
 
     fn cook(b: &mut Board, data: &BenchData, station: &str) -> Stack {
