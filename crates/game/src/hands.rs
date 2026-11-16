@@ -29,17 +29,23 @@ impl Plugin for HandsPlugin {
 pub(crate) struct HandRoot(Hand);
 
 /// Holds the model of the item in a hand; rebuilt when the item changes.
+/// The view-model arm has one, and so does the right fist of your body
+/// (`avatar`, seen in third person).
 #[derive(Component)]
-struct Held {
+pub(crate) struct Held {
     hand: Hand,
     showing: Option<Option<ItemId>>,
+}
+
+impl Held {
+    pub(crate) fn new(hand: Hand) -> Self {
+        Self { hand, showing: None }
+    }
 }
 
 /// Metres per sprite pixel for a held item (before the hand's own scale).
 const HAND_PX: f32 = 0.0095;
 
-const SKIN: Color = Color::srgb(0.86, 0.66, 0.5);
-const SLEEVE: Color = Color::srgb(0.32, 0.36, 0.26);
 
 /// Where the fist rests, relative to the eye.
 fn base_position(hand: Hand) -> Vec3 {
@@ -56,15 +62,18 @@ fn spawn_hands(
     existing: Query<(), With<HandRoot>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    looks: Res<crate::avatar::PlayerLooks>,
 ) {
     if !existing.is_empty() {
         return;
     }
+    // The same skin and shirt as your body.
+    let rgb = |c: (f32, f32, f32)| Color::srgb(c.0, c.1, c.2);
     let Ok(cam) = cam.single() else { return };
     let sleeve = meshes.add(Cuboid::new(0.09, 0.09, 0.34));
     let fist = meshes.add(Cuboid::new(0.075, 0.075, 0.075));
-    let sleeve_mat = materials.add(StandardMaterial { base_color: SLEEVE, perceptual_roughness: 1.0, ..default() });
-    let skin_mat = materials.add(StandardMaterial { base_color: SKIN, perceptual_roughness: 0.9, ..default() });
+    let sleeve_mat = materials.add(StandardMaterial { base_color: rgb(looks.0.shirt), perceptual_roughness: 1.0, ..default() });
+    let skin_mat = materials.add(StandardMaterial { base_color: rgb(looks.0.skin), perceptual_roughness: 0.9, ..default() });
     // One hand for now; add Hand::Left here with the off-hand slot.
     for hand in [Hand::Right] {
         commands.entity(cam).with_children(|c| {
@@ -188,7 +197,7 @@ fn update_held(
 
 /// `BLOCKGAME_SWING=0.55` holds the right arm still that far through a
 /// swing of what it holds, for screenshots of the swing.
-fn frozen_swing() -> Option<f32> {
+pub(crate) fn frozen_swing() -> Option<f32> {
     std::env::var("BLOCKGAME_SWING").ok()?.parse().ok()
 }
 
@@ -200,12 +209,18 @@ fn pose_hands(
     mode: Res<MoveMode>,
     wielded: Res<Wielded>,
     items: Res<Items>,
+    view: Res<crate::camera::View>,
     mut frozen: Local<Option<Option<f32>>>,
-    mut roots: Query<(&HandRoot, &mut Transform)>,
+    mut roots: Query<(&HandRoot, &mut Transform, &mut Visibility)>,
 ) {
     let walking = *mode == MoveMode::Walk;
     let frozen = *frozen.get_or_insert_with(frozen_swing);
-    for (root, mut tf) in &mut roots {
+    for (root, mut tf, mut vis) in &mut roots {
+        // In third person your body holds things instead.
+        let want = if view.pulled { Visibility::Hidden } else { Visibility::Inherited };
+        if *vis != want {
+            *vis = want;
+        }
         let hand = root.0;
         let arm = anim.arm(hand);
         let (style, t) = match (frozen, hand) {

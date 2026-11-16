@@ -288,6 +288,13 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   uses real time), HUD and arms hidden, camera eases to frame the speaker; click/Space/E/Enter continue, replies by
   mouse, 1-8 or W/S + Enter, Esc leaves. Not saved yet; no combat yet (room left in `npc::Order`).
   Screenshots: `BLOCKGAME_NPC=3` spawns one 3 blocks ahead, `BLOCKGAME_TALK=1` talks to it (`=replies` jumps to the replies).
+- Player body and third person: `game::avatar` builds your body with `npc::body::build` (the NPC rig; looks in
+  `assets/data/player.ron`, also used for the first-person arm) and moves it with `npc::body::drive` (shared with NPCs).
+  P toggles `camera::View` third person: the camera is pulled back 4 blocks (less if a wall is in the way) only for
+  drawing (`PostUpdate`), and put back at the eyes in `PreUpdate`, so aiming and every other system still use the eyes.
+  Off at benches and in talks (`Menus.still`). The body's right fist (`Rig.hands`) carries a `hands::Held`, so it holds
+  what you hold. Swings: `swing::Swing::limbs` gives the body's arms on the same keys as the first-person `pose`
+  (axe = flat horizontal swing with a bite and hold; pick = high overhead, straight down). `BLOCKGAME_VIEW=third` for screenshots.
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen
