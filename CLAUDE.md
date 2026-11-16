@@ -219,7 +219,8 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   base + tie, knapping stone (2 small rocks + stick = `rough_axe`, the first axe; portable bedroll and tent once
   taught). Tool bench: handle + material (stick + 3 small rocks = stone pickaxe, cobblestone tools; stone axe and
   flint spear after the improved tool bench). Carpentry bench: bed + vise, saw (logs -> planks, planks -> sticks,
-  chest). recipes.ron (Tab) keeps only what has no station yet. `Menus.still` stops walking at a bench.
+  chest). Carpentry table (tool urn, after the carpentry bench): top + joint tray, mallet; building supplies
+  (`floorboards`, `timber_wall`, `wattle_wall`, `thatch`: plain cube blocks). recipes.ron (Tab) keeps only what has no station yet. `Menus.still` stops walking at a bench.
   `BLOCKGAME_BOARD=stick,small_rock*2[,made]` (or `carpentry:log`, `mat:small_rock*2,stick`) opens a bench with
   those laid out (`-` skips a slot; the bench must stand, see above).
 - Chopping: an axe blow (`swing: Chop`) that lands on a log sends `chop::Chop`, which shakes the

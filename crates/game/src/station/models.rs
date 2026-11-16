@@ -236,6 +236,10 @@ pub fn tool(kind: StationKind) -> Option<Tool> {
         StationKind::CarpentryBench => {
             (Vec3::new(0.15, 0.852, -0.3), vec![b(0.5, 0.012, 0.11, 0.15, 0.852, -0.3, Stone), b(0.16, 0.06, 0.09, -0.16, 0.87, -0.3, WoodDark)], ToolUse::Saw)
         }
+        // A wooden mallet lying on the table by the tray.
+        StationKind::CarpentryTable => {
+            (Vec3::new(0.6, 0.92, 0.22), vec![b(0.14, 0.12, 0.12, 0.6, 0.92, 0.22, WoodDark), b(0.04, 0.04, 0.24, 0.6, 0.89, 0.06, Wood)], ToolUse::Strike)
+        }
         // Ladles and paddles: the bowl end is where they're held from.
         StationKind::CookingPot => (Vec3::new(0.6, 0.105, -0.13), vec![b(0.04, 0.03, 0.3, 0.6, 0.095, 0.05, Wood), b(0.11, 0.05, 0.1, 0.6, 0.105, -0.13, WoodDark)], ToolUse::Stir),
         StationKind::Cauldron => {
@@ -283,6 +287,7 @@ pub fn half(kind: StationKind) -> Vec3 {
         StationKind::CampMat => Vec3::new(0.6, 0.1, 0.45),
         StationKind::ToolBench => Vec3::new(0.6, 0.45, 0.4),
         StationKind::CarpentryBench => Vec3::new(0.85, 0.45, 0.45),
+        StationKind::CarpentryTable => Vec3::new(0.85, 0.5, 0.45),
         StationKind::PersonalStorage => Vec3::new(0.5, 0.4, 0.3),
         StationKind::SharpeningStone => Vec3::new(0.45, 0.5, 0.3),
         StationKind::IronAnvil => Vec3::new(0.86, 0.42, 0.3),
@@ -361,6 +366,21 @@ pub fn parts(kind: StationKind, has: &dyn Fn(&str) -> bool, lit: u32) -> Vec<Par
                 b(0.2, 0.2, 0.3, 0.72, 0.94, 0.0, WoodDark),
                 b(0.04, 0.03, 0.32, 0.72, 1.05, 0.0, Groove),
                 b(1.0, 0.012, 0.06, -0.2, 0.846, 0.3, Groove),
+            ]);
+        }
+        StationKind::CarpentryTable => {
+            // A wide joiner's table: thick top, a stretcher between the legs,
+            // a peg tray at +x and a back board with pegs and a square.
+            legs(&mut v, 1.6, 0.84, 0.8, 0.12, WoodDark);
+            v.extend([
+                b(1.7, 0.06, 0.9, 0.0, 0.83, 0.0, Wood),
+                b(1.4, 0.06, 0.06, 0.0, 0.2, 0.0, WoodDark),
+                b(0.32, 0.04, 0.28, 0.55, 0.875, -0.1, WoodDark),
+                b(1.7, 0.32, 0.05, 0.0, 1.02, -0.43, WoodDark),
+                b(0.05, 0.05, 0.08, -0.5, 1.08, -0.38, Groove),
+                b(0.05, 0.05, 0.08, -0.2, 1.08, -0.38, Groove),
+                b(0.22, 0.03, 0.03, 0.25, 1.06, -0.39, Iron),
+                b(0.03, 0.14, 0.03, 0.15, 1.0, -0.39, Iron),
             ]);
         }
         StationKind::PersonalStorage => {

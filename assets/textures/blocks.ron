@@ -38,5 +38,9 @@
         "bog_bloom": 31,
         "rootstone": 32,
         "vine": 33,
+        "floorboards": 34,
+        "timber_wall": 35,
+        "wattle_wall": 36,
+        "thatch": 37,
     },
 )

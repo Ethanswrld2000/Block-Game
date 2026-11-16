@@ -317,6 +317,52 @@ def bog_bloom(s):
     return img
 
 
+def floorboards(s):
+    # Long narrow boards running one way, with peg holes at their ends.
+    img = noisy(s, [(138, 100, 60), (170, 128, 78)], (16, 2))
+    ys, xs = np.mgrid[0:T, 0:T]
+    img[(xs % 6) == 5, :3] *= 0.55
+    ends = ((ys + (xs // 6) * 13) % 32) == 0
+    img[ends & ((xs % 6) != 5), :3] *= 0.6
+    img[((ys + (xs // 6) * 13) % 32 == 3) & ((xs % 6) == 2), :3] = (70, 50, 30)
+    return img
+
+
+def timber_wall(s):
+    # Pale plank infill inside a dark beam frame with a cross brace.
+    img = noisy(s, [(170, 140, 96), (196, 166, 118)], (16, 2))
+    ys, xs = np.mgrid[0:T, 0:T]
+    img[(ys % 8) == 7, :3] *= 0.75
+    beam = noisy(s + 1, [(66, 46, 28), (88, 62, 38)], (8, 2))
+    frame = (xs < 4) | (xs > 27) | (ys < 4) | (ys > 27) | (np.abs(xs - ys) < 3)
+    img[frame] = beam[frame]
+    return img
+
+
+def wattle_wall(s):
+    # Sticks woven over and under upright stakes, mud packed between.
+    img = noisy(s, [(84, 64, 44), (106, 82, 56)], (8, 2))
+    ys, xs = np.mgrid[0:T, 0:T]
+    stick = noisy(s + 2, [(120, 92, 58), (150, 116, 74)], (8, 2))
+    row = ys // 4
+    weave = ((ys % 4) != 3) & (((xs // 8 + row) % 2 == 0) | ((ys % 4) == 1))
+    img[weave] = stick[weave]
+    stakes = (xs % 8) == 0
+    img[stakes, :3] = (70, 52, 34)
+    return img
+
+
+def thatch(s):
+    # Bundles of dry reed laid in overlapping rows, tips hanging down.
+    img = noisy(s, [(150, 128, 70), (190, 164, 92)], (2, 1))
+    ys, xs = np.mgrid[0:T, 0:T]
+    streak = (np.sin(xs * 2.1 + value_noise(4, s) * 6) + 1) / 2
+    img[..., :3] *= (0.8 + 0.2 * streak)[..., None]
+    img[(ys % 8) == 0, :3] *= 0.6
+    img[(ys % 8) == 1, :3] *= 0.8
+    return img
+
+
 TILES = [
     ("grass_top", grass_top), ("grass_side", grass_side), ("dirt", dirt), ("stone", stone),
     ("cobblestone", cobble), ("sand", sand), ("mud", mud), ("moss", moss),
@@ -334,6 +380,7 @@ TILES = [
     ("tall_grass", tall_grass), ("fern", fern), ("bog_bloom", bog_bloom),
     ("rootstone", rootstone),
     ("vine", vine),
+    ("floorboards", floorboards), ("timber_wall", timber_wall), ("wattle_wall", wattle_wall), ("thatch", thatch),
 ]
 
 

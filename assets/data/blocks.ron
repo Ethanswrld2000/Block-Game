@@ -58,4 +58,9 @@
     (name: "twig_east", top: "log_side", solid: false, opaque: false, hardness: 0.0, material: "plant", shape: twig, attach: east),
     (name: "twig_west", top: "log_side", solid: false, opaque: false, hardness: 0.0, material: "plant", shape: twig, attach: west),
     (name: "pebble", top: "cobblestone", solid: false, opaque: false, hardness: 0.0, material: "stone", shape: pebble),
+    // Building supplies from the carpentry table (benches.ron).
+    (name: "floorboards", top: "floorboards", hardness: 2.0, material: "wood"),
+    (name: "timber_wall", top: "timber_wall", hardness: 2.5, material: "wood"),
+    (name: "wattle_wall", top: "wattle_wall", hardness: 1.5, material: "wood"),
+    (name: "thatch", top: "thatch", hardness: 0.8, material: "plant"),
 ]
