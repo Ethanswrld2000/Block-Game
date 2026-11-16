@@ -105,7 +105,7 @@ struct Bank {
 
 fn load_bank(mut commands: Commands, assets: Res<AssetServer>) {
     let mut names: Vec<String> = [
-        "break", "place", "swing", "hit", "hurt", "creature_hurt", "spirit", "spell_on", "spell_off", "level_up", "thunder",
+        "break", "place", "swing", "hit", "clash", "hurt", "creature_hurt", "spirit", "spell_on", "spell_off", "level_up", "thunder",
         "wind_loop", "rain_loop", "levitate_loop", "dig_soft", "dig_hard", "dig_wood", "dig_plant",
         "bird_flap",
     ]

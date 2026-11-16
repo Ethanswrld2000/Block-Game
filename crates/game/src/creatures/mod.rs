@@ -322,7 +322,7 @@ pub fn spawn_creature(commands: &mut Commands, kinds: &Kinds, assets: &CreatureA
 }
 
 /// Which creature is under the crosshair, within reach.
-fn aim(cam: Single<&Transform, With<FlyCamera>>, kinds: Option<Res<Kinds>>, mode: Res<MoveMode>, q: Query<(Entity, &Transform, &Creature)>, mut aimed: ResMut<Aimed>) {
+pub(crate) fn aim(cam: Single<&Transform, With<FlyCamera>>, kinds: Option<Res<Kinds>>, mode: Res<MoveMode>, q: Query<(Entity, &Transform, &Creature)>, mut aimed: ResMut<Aimed>) {
     let Some(kinds) = kinds else { return };
     let origin = cam.translation;
     let dir = cam.forward().as_vec3();
