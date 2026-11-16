@@ -49,6 +49,7 @@ impl Plugin for InteractPlugin {
             .add_message::<Placed>()
             .add_message::<Strike>()
             .add_message::<UseCreature>()
+            .add_message::<Swung>()
             .add_systems(
                 crate::menu::GameUpdate,
                 (choose_items, wield, find_target, use_hands, draw_target)
@@ -129,6 +130,17 @@ pub struct Strike {
     pub dir: Vec3,
 }
 
+/// A fighting swing (a sword's) reached its contact moment: whatever is in
+/// the arc in front of `origin` along `dir` within `reach` takes the blow
+/// (`combat` resolves it against foes and creatures).
+#[derive(Message, Debug, Clone, Copy)]
+pub struct Swung {
+    pub origin: Vec3,
+    pub dir: Vec3,
+    pub reach: f32,
+    pub damage: f32,
+}
+
 /// Right click on a creature (villagers talk).
 #[derive(Message, Debug, Clone, Copy)]
 pub struct UseCreature(pub Entity);
@@ -189,22 +201,25 @@ pub struct Arm {
     pub style: Swing,
     /// A mining swing: it lands a blow on the block in front at contact.
     mining: bool,
+    /// A fighting swing: it sends a `Swung` at contact.
+    striking: bool,
 }
 
 impl Arm {
     /// Starts a swing unless one is under way.
     fn start(&mut self, style: Swing, mining: bool) {
         if self.t.is_none() {
-            *self = Arm { t: Some(0.0), style, mining };
+            *self = Arm { t: Some(0.0), style, mining, striking: false };
         }
     }
 
-    /// Moves the swing on by `dt` seconds; true on the frame a mining swing lands.
+    /// Moves the swing on by `dt` seconds; true on the frame a mining or
+    /// fighting swing lands.
     fn advance(&mut self, dt: f32) -> bool {
         let Some(t) = self.t else { return false };
         let next = t + dt / self.style.period();
         self.t = (next < 1.0).then_some(next);
-        self.mining && swing::lands(self.style, t, next)
+        (self.mining || self.striking) && swing::lands(self.style, t, next)
     }
 }
 
@@ -234,7 +249,8 @@ impl HandAnim {
         }
     }
 
-    fn start(&mut self, hand: Hand, style: Swing) {
+    /// Starts a plain swing of `hand` (no blow) unless one is under way.
+    pub fn start(&mut self, hand: Hand, style: Swing) {
         self.arm_mut(hand).start(style, false);
     }
 }
@@ -375,12 +391,14 @@ fn use_hands(
         MessageWriter<Strike>,
         MessageWriter<UseCreature>,
     ),
-    (aimed, cam, perks, station, edges): (
+    (aimed, cam, perks, station, edges, guard, mut swung): (
         Res<Aimed>,
         Single<&Transform, With<FlyCamera>>,
         Res<crate::progress::skills::Perks>,
         Res<crate::station::StationAim>,
         Option<Res<crate::station::Edges>>,
+        Res<crate::combat::Guard>,
+        MessageWriter<Swung>,
     ),
     blocks: Res<Blocks>,
     mode: Res<MoveMode>,
@@ -394,14 +412,21 @@ fn use_hands(
     anim.place_cooldown -= dt;
     anim.strike_cooldown -= dt;
     let hand = Hand::Right;
+    let striking = anim.arm(hand).striking;
     let landed = anim.arm_mut(hand).advance(dt);
+    let item = wielded.0;
+    // A sword's cut lands at contact, on whatever is in its arc then.
+    if landed && striking {
+        let damage = item.map_or(crate::items::FIST_DAMAGE, |i| items.get(i).damage) * (1.0 + perks.damage);
+        swung.write(Swung { origin: cam.translation, dir: cam.forward().as_vec3(), reach: crate::combat::SWORD_REACH, damage });
+    }
+    let landed = landed && !striking;
     anim.left.advance(dt);
     // Clicks only act while the mouse is captured (the first click captures it).
     if cursor.grab_mode == CursorGrabMode::None || body.frozen {
         mining.block = None;
         return;
     }
-    let item = wielded.0;
     let kind = item.map(|i| &items.get(i).kind);
     let style = item.map_or(Swing::Jab, |i| items.get(i).swing);
 
@@ -411,6 +436,7 @@ fn use_hands(
         ray_box(cam.translation, cam.forward().as_vec3(), min, min + Vec3::ONE)
     });
     if let Some(e) = aimed.entity
+        && style != Swing::Slash
         && block_dist.is_none_or(|d| aimed.dist < d)
     {
         mining.block = None;
@@ -451,6 +477,18 @@ fn use_hands(
     {
         anim.start(hand, style);
         break_block(&mut world, &blocks, &mut mined, hit.block);
+        return;
+    }
+
+    // A sword fights and never mines: left click cuts (one cut per swing,
+    // landing at contact), right click blocks (`combat::Guard`).
+    if style == Swing::Slash {
+        mining.block = None;
+        if mouse.pressed(MouseButton::Left) && !guard.up && anim.arm(hand).t.is_none() {
+            let arm = anim.arm_mut(hand);
+            arm.start(Swing::Slash, false);
+            arm.striking = true;
+        }
         return;
     }
 

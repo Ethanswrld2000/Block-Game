@@ -122,6 +122,10 @@ def main():
     # Fighting.
     save("swing", highpass(noise(0.22), 0.1) * np.sin(np.pi * t(0.22) / 0.22) ** 2 * 0.6)
     save("hit", thud(0.2, 0.3, 0.05, pitch=110))
+    # Blades meeting: a bright, inharmonic ring with a sharp click.
+    tt = t(0.6)
+    ring = sum(np.sin(2 * np.pi * f * tt) * a for f, a in [(1180, 1.0), (1730, 0.7), (2610, 0.5), (3470, 0.3)]) * env(len(tt), 0.001, 0.12)
+    save("clash", ring * 0.5 + highpass(noise(0.6), 0.4) * env(len(tt), 0.001, 0.01) * 0.6)
     save("hurt", thud(0.3, 0.06, 0.09, pitch=70))
     save("creature_hurt", np.sin(2 * np.pi * (300 - 500 * t(0.25)) * t(0.25)) * env(int(RATE * 0.25), 0.01, 0.1) + 0.3 * thud(0.25, 0.2, 0.05))
     # Spirits: a breathy rising tone.
