@@ -180,7 +180,7 @@ impl WorldGen {
     fn build_village(&self, cx: i32, cz: i32, x: i32, z: i32) -> Option<Village> {
         let col = self.column(x, z);
         let biome = &self.biomes.get(col.biome).name;
-        if col.height < SEA_LEVEL - 2 || col.climate.overhang > 0.02 || matches!(biome.as_str(), "deep_sea" | "frost_peaks" | "highlands" | "skyreach") {
+        if col.land != crate::Land::Main || col.height < SEA_LEVEL - 2 || col.climate.overhang > 0.02 || matches!(biome.as_str(), "deep_sea" | "frost_peaks" | "highlands" | "skyreach") {
             return None;
         }
         let h = hash2(self.seed ^ 0x7112, cx, cz);
@@ -196,7 +196,8 @@ impl WorldGen {
             let mut low = i32::MAX;
             for dz in -2..=2 {
                 for dx in -2..=2 {
-                    let g = self.column(hx + dx, hz + dz).height;
+                    let c = self.column(hx + dx, hz + dz);
+                    let g = if c.land == crate::Land::Main { c.height } else { i32::MIN / 2 };
                     ground = ground.max(g);
                     low = low.min(g);
                 }
@@ -220,13 +221,17 @@ impl WorldGen {
 
     fn build_barrow(&self, h: u64, x: i32, z: i32) -> Option<Barrow> {
         let col = self.column(x, z);
-        if col.height < SEA_LEVEL + 1 || col.climate.overhang > 0.02 {
+        if col.land != crate::Land::Main || col.height < SEA_LEVEL + 1 || col.climate.overhang > 0.02 {
             return None;
         }
         let depth = 14 + (h >> 40) as i32 % 8;
         let surface = col.height;
         // The stair runs +x from the entrance, one step down per block.
         let hall = [x + depth + 7, surface - depth, z];
+        // The far end of the hall must still be under the island, not out over the void.
+        if self.column(hall[0] + 14, z).land != crate::Land::Main {
+            return None;
+        }
         let name = format!("The {} {}", pick(&BARROW_KIND, h >> 11), pick(&BARROW_KIN, h >> 23));
         Some(Barrow {
             id: h,
@@ -448,10 +453,13 @@ mod tests {
     #[test]
     fn villages_and_barrows_are_scattered() {
         let g = wg();
-        let villages = g.villages_in(-4000, -4000, 4000, 4000);
-        let barrows = g.barrows_in(-4000, -4000, 4000, 4000);
-        assert!(villages.len() >= 10, "{} villages", villages.len());
-        assert!(barrows.len() >= 20, "{} barrows", barrows.len());
+        // Only the main island has them.
+        let (cx, cz) = g.island_center();
+        let r = crate::MAIN_RADIUS as i32 + 400;
+        let villages = g.villages_in(cx - r, cz - r, cx + r, cz + r);
+        let barrows = g.barrows_in(cx - r, cz - r, cx + r, cz + r);
+        assert!(villages.len() >= 4, "{} villages", villages.len());
+        assert!(barrows.len() >= 6, "{} barrows", barrows.len());
         let mut names: Vec<_> = villages.iter().map(|v| v.name.clone()).collect();
         names.sort();
         names.dedup();

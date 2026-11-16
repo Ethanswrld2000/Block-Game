@@ -31,9 +31,9 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   WESL (`import bevy_pbr::render::...`, `@group(constants::MATERIAL_BIND_GROUP)`); check compiler
   hints and the 0.20.1 example shaders on GitHub before assuming older API.
 - Content (blocks, items, foods, biomes, skill nodes) goes in RON data files, not code.
-- Chunks are 32^3 (`voxel::CHUNK_SIZE`). Chunks stack vertically. The world runs from unbreakable
-  `rootstone` at y -300 (`worldgen::WORLD_FLOOR`, top a little bumpy) to a ceiling at y 1000
-  (`worldgen::WORLD_CEILING`: nothing generates or can be placed there, movement stops under it).
+- Chunks are 32^3 (`voxel::CHUNK_SIZE`). Chunks stack vertically. The world floats (`worldgen::floating`):
+  nothing generates below `worldgen::WORLD_FLOOR` (y -520, the void; falling past it kills) and there is a
+  ceiling at y 1000 (`worldgen::WORLD_CEILING`: nothing generates or can be placed there, movement stops under it).
 - Heavy work (generation, lighting, meshing) runs on `AsyncComputeTaskPool`, never the main thread.
 - Pixel art is sampled nearest-neighbour (`ImagePlugin::default_nearest()`).
 - Target: 60 fps at 16-chunk view distance on Ethan's MacBook (Apple Silicon, Metal).
@@ -287,6 +287,13 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `station::room_at` runs it on the world. A carried urn can only be set down inside a closed room with no other
   urn in it (the ancestral urn by the bedroll is exempt but takes up its room). Insulation tiers, doors and the
   shelter panel from the house plan aren't built yet.
+- Floating world: `worldgen::floating`. The land is one island, `MAIN_RADIUS` 2000 blocks (about 2.5 miles across,
+  coastline wobbles with `coast` noise), centred on spawn (`WorldGen::island_center`); the normal terrain is cut to it
+  and its rim is lifted above sea level so seas stay inside. Underside: a rounded bowl ~300 blocks deep at the
+  middle, hung with rounded lobes and stalactite drips (`underside`). Outer islands (jittered 520-block grid,
+  radius 50-260, tops at y -140..240) float past the coast with the same climate, biomes and underside, and no
+  water. `Column` has `land` (Void/Main/Outer), `bottom` and `water`; villages and barrows are main island only.
+  Rootstone no longer generates. `game::lod` draws undersides and leaves the void empty.
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen
