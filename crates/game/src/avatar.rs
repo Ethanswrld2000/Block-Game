@@ -14,7 +14,7 @@ use crate::items::Items;
 use crate::npc::body::{self, Drive, Parts, Rig};
 use crate::npc::data::Looks;
 use crate::npc::dialogue::Mood;
-use crate::npc::motion::wrap;
+use crate::npc::motion::{self, wrap, Spring};
 use crate::player::{MoveMode, Player};
 use crate::swing::{Limbs, Swing};
 
@@ -45,8 +45,15 @@ pub struct PlayerBody;
 const HELD_SCALE: f32 = 1.6;
 /// Walking speed the stride is measured against (`player`'s walk).
 const WALK: f32 = 4.4;
-/// Standing still, the body turns to where you look once the head can't reach.
-const TURN_AT: f32 = 0.9;
+/// Standing still, the body turns to where you look once the head has turned
+/// this far (Minecraft: 50°).
+const TURN_AT: f32 = 50.0 * std::f32::consts::PI / 180.0;
+/// Seconds the body takes to turn to its new facing (quicker than an NPC's
+/// amble, close to Minecraft's).
+const TURN_TIME: f32 = 0.13;
+/// Lean (radians) per block/s² of speeding up or slowing down, and the most.
+const LEAN_PER_ACCEL: f32 = 0.012;
+const MAX_LEAN: f32 = 0.22;
 
 fn spawn_body(
     mut commands: Commands,
@@ -77,6 +84,7 @@ fn animate(
     cam: Single<&FlyCamera>,
     mut frozen: Local<Option<Option<f32>>>,
     mut facing: Local<f32>,
+    mut weight: Local<(Vec2, [Spring; 2])>,
     mut body: Query<(&mut Transform, &mut Rig, &mut Visibility), With<PlayerBody>>,
     mut parts: Parts,
 ) {
@@ -100,24 +108,47 @@ fn animate(
         (None, None) => held.map(|_| Limbs::hold()),
     };
 
-    // Facing: the way you look while moving or working; standing, the head
-    // turns first and the body follows once it has turned far enough.
-    let speed = if *mode == MoveMode::Walk { Vec2::new(player.vel.x, player.vel.z).length() } else { 0.0 };
-    let off = wrap(cam.yaw - *facing);
-    if speed > 0.3 || arm.t.is_some() || frozen.is_some() || off.abs() > TURN_AT {
+    // Facing (Minecraft-style): moving, the body turns toward where you go,
+    // at most 75° from where you look, and keeps facing forward when you
+    // back up; working, it squares up to what you hit; standing, the head
+    // turns first and the body follows once it has turned 50°.
+    let walking = *mode == MoveMode::Walk;
+    let vel = if walking { Vec2::new(player.vel.x, player.vel.z) } else { Vec2::ZERO };
+    let speed = vel.length();
+    if arm.t.is_some() || frozen.is_some() {
+        *facing = cam.yaw;
+    } else if speed > 0.3 {
+        *facing = motion::moving_facing(cam.yaw, crate::npc::yaw_of(Vec3::new(vel.x, 0.0, vel.y)));
+    } else if wrap(cam.yaw - *facing).abs() > TURN_AT {
         *facing = cam.yaw;
     }
+
+    // Weight: lean into speeding up, rock back when stopping, tip into turns.
+    let gdt = game.delta_secs().min(0.05);
+    let (prev, springs) = &mut *weight;
+    let accel = if gdt > 0.0 { (vel - *prev) / gdt } else { Vec2::ZERO };
+    *prev = vel;
+    let yaw = rig.facing();
+    let ahead = Vec2::new(-yaw.sin(), -yaw.cos());
+    let left = Vec2::new(-yaw.cos(), yaw.sin());
+    let lean = (accel.dot(ahead) * LEAN_PER_ACCEL).clamp(-MAX_LEAN, MAX_LEAN);
+    let tip = (accel.dot(left) * LEAN_PER_ACCEL * 0.6).clamp(-MAX_LEAN, MAX_LEAN);
+    let dt = real.delta_secs().min(0.05);
+    let sway = [springs[0].step(lean, 0.15, dt), springs[1].step(tip, 0.15, dt)];
+
     let drive = Drive {
         yaw: *facing,
+        turn: TURN_TIME,
         speed,
         walk: WALK,
-        game_dt: game.delta_secs().min(0.05),
+        game_dt: gdt,
         focus: Some([wrap(cam.yaw - rig.facing()), cam.pitch]),
         gesture: 0.0,
         mood: Mood::Neutral,
         mouth: (0.0, 0.85),
         speaking: 0.0,
         arms,
+        sway,
     };
-    body::drive(&mut tf, &mut rig, &mut parts, real.delta_secs().min(0.05), &drive);
+    body::drive(&mut tf, &mut rig, &mut parts, dt, &drive);
 }

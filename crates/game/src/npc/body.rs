@@ -91,8 +91,6 @@ const MOUTH_OPEN: f32 = 0.085;
 /// Pupil travel from the eye's centre.
 const PUPIL_X: f32 = 0.03;
 const PUPIL_Y: f32 = 0.018;
-/// Blocks walked per full stride (two steps).
-const STRIDE: f32 = 1.5;
 
 struct Kit<'a> {
     meshes: &'a mut Assets<Mesh>,
@@ -298,8 +296,10 @@ pub type Parts<'w, 's> = Query<'w, 's, (&'static mut Transform, &'static mut Vis
 
 /// What a body is doing this frame; `drive` turns it into joint motion.
 pub struct Drive {
-    /// Where the body faces (it turns towards it on a spring).
+    /// Where the body faces (it turns towards it on a spring) and about how
+    /// many seconds the turn takes.
     pub yaw: f32,
+    pub turn: f32,
     /// Horizontal speed and the walking speed it is measured against.
     pub speed: f32,
     pub walk: f32,
@@ -315,6 +315,9 @@ pub struct Drive {
     pub speaking: f32,
     /// Arms holding something or swinging it (they take over from the stance).
     pub arms: Option<Limbs>,
+    /// Extra lean forward and roll to the left (radians), e.g. from speeding
+    /// up, stopping or turning.
+    pub sway: [f32; 2],
 }
 
 fn animate(real: Res<Time<Real>>, game: Res<Time>, book: Res<NpcBook>, cam: Single<&GlobalTransform, With<FlyCamera>>, mut npcs: Query<(&mut Transform, &Npc, &mut Rig)>, mut parts: Parts) {
@@ -333,6 +336,7 @@ fn animate(real: Res<Time<Real>>, game: Res<Time>, book: Res<NpcBook>, cam: Sing
         });
         let drive_with = Drive {
             yaw: npc.yaw,
+            turn: 0.28,
             speed: Vec2::new(npc.vel.x, npc.vel.z).length(),
             walk: book.kinds.get(npc.kind).map_or(2.4, |k| k.walk),
             game_dt: gdt,
@@ -342,6 +346,7 @@ fn animate(real: Res<Time<Real>>, game: Res<Time>, book: Res<NpcBook>, cam: Sing
             mouth: npc.mouth,
             speaking: npc.speaking,
             arms: None,
+            sway: [0.0; 2],
         };
         drive(&mut tf, &mut rig, &mut parts, dt, &drive_with);
     }
@@ -353,24 +358,28 @@ pub fn drive(tf: &mut Transform, rig: &mut Rig, parts: &mut Parts, dt: f32, d: &
     rig.t += dt;
     let t = rig.t;
     // Turn the whole body towards where it faces.
-    let yaw = rig.yaw.step_angle(d.yaw, 0.28, dt);
+    let yaw = rig.yaw.step_angle(d.yaw, d.turn, dt);
     tf.rotation = Quat::from_rotation_y(yaw);
 
-    // Walking: pace eases in and out, the stride advances with distance.
-    let pace = rig.pace.step((d.speed / d.walk.max(0.1)).min(2.0), 0.18, dt);
-    rig.phase = (rig.phase + d.speed * d.game_dt / STRIDE * std::f32::consts::TAU) % std::f32::consts::TAU;
+    // Walking: pace eases in and out; the stride advances with the distance
+    // covered, one stride per `motion::stride`, so the feet don't slide.
+    let pace = rig.pace.step((d.speed / d.walk.max(0.1)).min(2.0), 0.12, dt);
+    rig.phase = (rig.phase + d.speed * d.game_dt / motion::stride(pace) * std::f32::consts::TAU) % std::f32::consts::TAU;
 
     let look = rig.gaze.step(dt, d.focus);
 
-    // Pose: idle blended with walking, plus hands when speaking.
+    // Pose: the stance (idle and talking hands) eases on springs; the walk
+    // cycle goes straight on top, scaled by the eased pace, so the legs keep
+    // their full swing and timing.
     let energy = rig.gesture.step(d.gesture, 0.35, dt);
-    let base = motion::idle(t).lerp(motion::walk(rig.phase, pace), pace.min(1.0));
-    let want = base.add(motion::gesture(t, energy));
-    let mut arr = want.to_array();
+    let stance = motion::idle(t).lerp(Pose::default(), pace.min(1.0)).add(motion::gesture(t, energy));
+    let mut arr = stance.to_array();
     for (i, s) in rig.joints.iter_mut().enumerate() {
         arr[i] = s.step(arr[i], 0.07, dt);
     }
-    let mut pose = Pose::from_array(arr);
+    let mut pose = Pose::from_array(arr).add(motion::walk(rig.phase, pace));
+    pose.lean += d.sway[0];
+    pose.roll += d.sway[1];
     // Arms at work: straight from the swing's keys (no spring, so the blow
     // lands on time), the walk's arm swing only faintly under them.
     let mut arm_yaw = 0.0;
