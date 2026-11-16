@@ -51,6 +51,8 @@
         (name: "timber_wall", title: "Timber Wall", kind: Block("timber_wall"), mass: 1.6),
         (name: "wattle_wall", title: "Wattle Wall", kind: Block("wattle_wall"), mass: 1.2),
         (name: "thatch", title: "Thatch", kind: Block("thatch"), mass: 0.4),
+        // Machines, built at the machination table and set down in the world (machines.ron).
+        (name: "airship", title: "Airship", kind: Machine("airship"), mass: 12.0, size: (3, 2), stack: 1),
         // Food. Tier 1 is a quick buff, tier 4 can pull you back from a mortal wound.
         (name: "marsh_berries", title: "Marsh Berries", kind: Food(tier: 1, satiety: 6.0), mass: 0.2),
         (name: "swamp_reed", title: "Swamp Reed Hearts", kind: Food(tier: 1, satiety: 8.0), mass: 0.3),

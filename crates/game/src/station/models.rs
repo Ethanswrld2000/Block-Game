@@ -240,6 +240,19 @@ pub fn tool(kind: StationKind) -> Option<Tool> {
         StationKind::CarpentryTable => {
             (Vec3::new(0.6, 0.92, 0.22), vec![b(0.14, 0.12, 0.12, 0.6, 0.92, 0.22, WoodDark), b(0.04, 0.04, 0.24, 0.6, 0.89, 0.06, Wood)], ToolUse::Strike)
         }
+        // The drive wheel and its crank handle turn on an axle at the +x end.
+        StationKind::MachinationTable => (
+            Vec3::new(0.74, 1.16, 0.0),
+            vec![
+                b(0.06, 0.5, 0.5, 0.74, 1.16, 0.0, Brass),
+                b(0.07, 0.36, 0.36, 0.74, 1.16, 0.0, WoodDark),
+                b(0.08, 0.5, 0.06, 0.74, 1.16, 0.0, Iron),
+                b(0.08, 0.06, 0.5, 0.74, 1.16, 0.0, Iron),
+                b(0.18, 0.05, 0.05, 0.8, 1.16, 0.0, Iron),
+                b(0.05, 0.05, 0.12, 0.81, 1.36, 0.05, WoodDark),
+            ],
+            ToolUse::Turn(Vec3::X),
+        ),
         // Ladles and paddles: the bowl end is where they're held from.
         StationKind::CookingPot => (Vec3::new(0.6, 0.105, -0.13), vec![b(0.04, 0.03, 0.3, 0.6, 0.095, 0.05, Wood), b(0.11, 0.05, 0.1, 0.6, 0.105, -0.13, WoodDark)], ToolUse::Stir),
         StationKind::Cauldron => {
@@ -288,6 +301,7 @@ pub fn half(kind: StationKind) -> Vec3 {
         StationKind::ToolBench => Vec3::new(0.6, 0.45, 0.4),
         StationKind::CarpentryBench => Vec3::new(0.85, 0.45, 0.45),
         StationKind::CarpentryTable => Vec3::new(0.85, 0.5, 0.45),
+        StationKind::MachinationTable => Vec3::new(0.9, 0.72, 0.5),
         StationKind::PersonalStorage => Vec3::new(0.5, 0.4, 0.3),
         StationKind::SharpeningStone => Vec3::new(0.45, 0.5, 0.3),
         StationKind::IronAnvil => Vec3::new(0.86, 0.42, 0.3),
@@ -381,6 +395,28 @@ pub fn parts(kind: StationKind, has: &dyn Fn(&str) -> bool, lit: u32) -> Vec<Par
                 b(0.05, 0.05, 0.08, -0.2, 1.08, -0.38, Groove),
                 b(0.22, 0.03, 0.03, 0.25, 1.06, -0.39, Iron),
                 b(0.03, 0.14, 0.03, 0.15, 1.0, -0.39, Iron),
+            ]);
+        }
+        StationKind::MachinationTable => {
+            // A heavy drafting table: iron-shod legs, a slipway groove down the
+            // middle, trays front and back, a gear box at the back edge, a
+            // drafting board with a plan pinned up, and the wheel's axle post.
+            legs(&mut v, 1.6, 0.9, 0.86, 0.12, WoodDark);
+            v.extend([
+                b(1.7, 0.06, 1.0, 0.0, 0.86, 0.0, Wood),
+                b(1.4, 0.06, 0.06, 0.0, 0.2, 0.0, Iron),
+                b(0.76, 0.012, 0.3, -0.32, 0.896, 0.02, Groove),
+                b(0.34, 0.04, 0.22, 0.24, 0.905, 0.22, WoodDark),
+                b(0.34, 0.04, 0.22, 0.24, 0.905, -0.18, WoodDark),
+                b(0.64, 0.05, 0.18, -0.32, 0.905, 0.32, Iron),
+                b(0.08, 0.06, 0.08, -0.5, 0.94, 0.32, Brass),
+                b(0.1, 0.07, 0.1, -0.36, 0.945, 0.32, Brass),
+                b(0.06, 0.05, 0.06, -0.22, 0.94, 0.32, Brass),
+                b(1.2, 0.5, 0.05, -0.2, 1.17, -0.48, WoodDark),
+                b(0.9, 0.36, 0.01, -0.2, 1.17, -0.45, Linen),
+                b(0.5, 0.012, 0.012, -0.25, 1.22, -0.444, Groove),
+                b(0.3, 0.1, 0.012, -0.25, 1.32, -0.444, Hide),
+                b(0.06, 0.3, 0.06, 0.74, 1.03, 0.0, Iron),
             ]);
         }
         StationKind::PersonalStorage => {

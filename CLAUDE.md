@@ -270,13 +270,6 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   with cross hairs (`telescope::lens_image`) and hides the HUD. Screenshots: `BLOCKGAME_BOARDVIEW=1` (second view),
   `BLOCKGAME_BOARDTOOL=lift|down|0.3`, `BLOCKGAME_SCOPE=1`, `BLOCKGAME_FORGE=0.8` (works the board and holds the
   craft coming together that many seconds in).
-- Floating world: `worldgen::floating`. The land is one island, `MAIN_RADIUS` 2000 blocks (about 2.5 miles across,
-  coastline wobbles with `coast` noise), centred on spawn (`WorldGen::island_center`); the normal terrain is cut to it
-  and its rim is lifted above sea level so seas stay inside. Underside: a rounded bowl ~300 blocks deep at the
-  middle, hung with rounded lobes and stalactite drips (`underside`). Outer islands (jittered 520-block grid,
-  radius 50-260, tops at y -140..240) float past the coast with the same climate, biomes and underside, and no
-  water. `Column` has `land` (Void/Main/Outer), `bottom` and `water`; villages and barrows are main island only.
-  Rootstone no longer generates. `game::lod` draws undersides and leaves the void empty.
 - NPCs: `game::npc` (kinds in `assets/data/npcs.ron`: name, title, looks colours, voice pitch/rate, walk speed,
   dialogue tree key). Ctrl+Shift+N (Cmd+Shift+N) spawns the first kind ahead of you, following you. Pure parts:
   `npc::motion` (critically damped `Spring` on every joint, `walk`/`idle`/`gesture` poses, `Gaze`: head on a slow
@@ -289,6 +282,28 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   uses real time), HUD and arms hidden, camera eases to frame the speaker; click/Space/E/Enter continue, replies by
   mouse, 1-8 or W/S + Enter, Esc leaves. Not saved yet; no combat yet (room left in `npc::Order`).
   Screenshots: `BLOCKGAME_NPC=3` spawns one 3 blocks ahead, `BLOCKGAME_TALK=1` talks to it (`=replies` jumps to the replies).
+- Rooms: `voxel::room::find_room` (pure) fills outward from a cell through open cells; walls (`BlockDef::is_wall`:
+  solid full cubes that aren't `plant` material; leaves, plants, water, torches are holes) stop it. Closed within
+  `MAX_ROOM` (4096) cells = a `Room` (`cells`, `shell`); otherwise `NotRoom::Open`/`InWall`/`Unknown` (unloaded).
+  `station::room_at` runs it on the world. A carried urn can only be set down inside a closed room with no other
+  urn in it (the ancestral urn by the bedroll is exempt but takes up its room). Insulation tiers, doors and the
+  shelter panel from the house plan aren't built yet.
+- Floating world: `worldgen::floating`. The land is one island, `MAIN_RADIUS` 2000 blocks (about 2.5 miles across,
+  coastline wobbles with `coast` noise), centred on spawn (`WorldGen::island_center`); the normal terrain is cut to it
+  and its rim is lifted above sea level so seas stay inside. Underside: a rounded bowl ~300 blocks deep at the
+  middle, hung with rounded lobes and stalactite drips (`underside`). Outer islands (jittered 520-block grid,
+  radius 50-260, tops at y -140..240) float past the coast with the same climate, biomes and underside, and no
+  water. `Column` has `land` (Void/Main/Outer), `bottom` and `water`; villages and barrows are main island only.
+  Rootstone no longer generates. `game::lod` draws undersides and leaves the void empty.
+- Machination table (tool urn, tier 2, after the carpentry table): `StationKind::MachinationTable`, a board like the
+  other benches (slots keel / rigging / envelope / engine, the drive wheel is a `ToolUse::Turn` tool). It builds
+  machines: items of kind `Machine("name")` in items.ron, numbers in `assets/data/machines.ron`. Only the airship so
+  far (8 planks, 6 cordage, 4 hide, 6 raw iron). `game::airship`: right click open ground with it to set it down
+  (bow the way you look; needs ~4 x 9 x 7 clear), right click or E to board, W/S ahead/astern, A/D turn, Space/Ctrl
+  rise/sink, E steps off over the rail. Pure flight rules in `airship::flight` (eased speed, oriented footprint,
+  stops on solid blocks one axis at a time). While aboard `player::walk` is off (`airship::not_aboard`) and the
+  player stands at the helm. Ships and who is aboard save to `airships.ron`. You can't walk on the deck (the ship
+  isn't a collider) and it can't be picked back up yet.
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen

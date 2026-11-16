@@ -1,6 +1,6 @@
 //! Working a bench with your hands, not through a menu.
 //!
-//! Right click a bench (camp mat, tool bench, carpentry bench or table, cooking pot,
+//! Right click a bench (camp mat, tool bench, carpentry bench or table, machination table, cooking pot,
 //! cutting board) and the view glides down over its top. Your things lie in a strip along the bottom of the screen: click one
 //! to pick it up (Shift: the whole stack); it hangs under the cursor over the
 //! board. Click a slot to set it down there, or click what lies in a slot to
@@ -44,6 +44,7 @@ pub(super) fn board_name(kind: StationKind) -> Option<&'static str> {
         StationKind::ToolBench => Some("tool_bench"),
         StationKind::CarpentryBench => Some("carpentry_bench"),
         StationKind::CarpentryTable => Some("carpentry_table"),
+        StationKind::MachinationTable => Some("machination_table"),
         StationKind::CookingPot => Some("cooking_pot"),
         StationKind::CuttingBoard => Some("cutting_board"),
         StationKind::SmokingRack => Some("smoking_rack"),
@@ -266,6 +267,28 @@ const CARPENTRY_TABLE: Layout = Layout {
     flip: false,
 };
 
+/// The machination table: the keel's wood on the slipway in the middle, the
+/// rigging and the envelope in trays at the front and back, the engine's metal
+/// in the gear box, and the drive wheel at the +x end that you turn.
+const MACHINATION_TABLE: Layout = Layout {
+    slots: &[
+        ("keel", Vec2::new(-0.32, 0.02), Vec2::new(0.36, 0.16), 0.91, "on the slipway"),
+        ("rigging", Vec2::new(0.24, 0.22), Vec2::new(0.16, 0.1), 0.925, "in the rigging tray"),
+        ("envelope", Vec2::new(0.24, -0.18), Vec2::new(0.16, 0.1), 0.925, "in the envelope tray"),
+        ("engine", Vec2::new(-0.32, 0.3), Vec2::new(0.3, 0.08), 0.925, "in the gear box"),
+    ],
+    // The drive wheel stands on its axle at the +x end.
+    tool: (Vec3::new(0.62, 0.88, -0.3), Vec3::new(0.84, 1.44, 0.3)),
+    made: (Vec2::new(-0.32, 0.02), Vec2::new(0.36, 0.16), 0.91),
+    views: &[view("the table", Vec3::new(-0.05, 0.91, 0.04), Vec3::new(-0.05, 1.3, 0.85))],
+    work: ("Turn the drive wheel", "turn of the drive wheel"),
+    tool_name: "drive wheel",
+    sound: "dig_hard",
+    scale: 1.0,
+    pot: Vec2::ZERO,
+    flip: false,
+};
+
 /// The camp mat lies on the ground: things go on the mat or by the cord, and
 /// the flat knapping stone is what you knock.
 const CAMP_MAT: Layout = Layout {
@@ -422,6 +445,7 @@ pub(super) fn layout(kind: StationKind) -> &'static Layout {
         StationKind::CampMat => &CAMP_MAT,
         StationKind::CarpentryBench => &CARPENTRY_BENCH,
         StationKind::CarpentryTable => &CARPENTRY_TABLE,
+        StationKind::MachinationTable => &MACHINATION_TABLE,
         StationKind::CookingPot => &COOKING_POT,
         StationKind::CuttingBoard => &CUTTING_BOARD,
         StationKind::SmokingRack => &SMOKING_RACK,
@@ -966,7 +990,7 @@ pub(super) fn board_click(
 /// What a go at each bench throws about.
 fn burst_of(kind: StationKind) -> BurstKind {
     match kind {
-        StationKind::IronAnvil | StationKind::SharpeningStone => BurstKind::Sparks,
+        StationKind::IronAnvil | StationKind::SharpeningStone | StationKind::MachinationTable => BurstKind::Sparks,
         StationKind::CarpentryBench | StationKind::CarpentryTable => BurstKind::Sawdust,
         StationKind::CuttingBoard => BurstKind::Bits,
         StationKind::SmokingRack => BurstKind::Smoke,
@@ -1921,6 +1945,7 @@ mod tests {
             StationKind::ToolBench,
             StationKind::CarpentryBench,
             StationKind::CarpentryTable,
+            StationKind::MachinationTable,
             StationKind::CookingPot,
             StationKind::CuttingBoard,
             StationKind::SmokingRack,
@@ -1945,6 +1970,7 @@ mod tests {
             StationKind::ToolBench,
             StationKind::CarpentryBench,
             StationKind::CarpentryTable,
+            StationKind::MachinationTable,
             StationKind::CookingPot,
             StationKind::CuttingBoard,
             StationKind::SmokingRack,

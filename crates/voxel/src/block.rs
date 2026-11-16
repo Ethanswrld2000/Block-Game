@@ -135,6 +135,12 @@ pub struct BlockDef {
 }
 
 impl BlockDef {
+    /// Whether it can be part of a room's walls, floor or roof: a solid full
+    /// cube that isn't foliage. Leaves, plants, water and torches are holes.
+    pub fn is_wall(&self) -> bool {
+        self.solid && self.shape == Shape::Cube && self.material != "plant"
+    }
+
     /// Offsets to the blocks that can hold this one up (any one is enough):
     /// the ground for plants and pebbles, the attached side for twigs, and for
     /// vines the attached side or the vine above. Empty = needs no support.

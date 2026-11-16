@@ -42,7 +42,7 @@ impl Plugin for PlayerPlugin {
                 crate::menu::GameUpdate,
                 (
                     toggle_mode,
-                    walk.run_if(resource_equals(MoveMode::Walk)),
+                    walk.run_if(resource_equals(MoveMode::Walk)).run_if(crate::airship::not_aboard),
                     ride_camera.run_if(resource_equals(MoveMode::Walk)),
                     follow_fly_camera.run_if(resource_equals(MoveMode::Fly)),
                 )
