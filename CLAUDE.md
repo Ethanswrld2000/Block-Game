@@ -31,9 +31,9 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   WESL (`import bevy_pbr::render::...`, `@group(constants::MATERIAL_BIND_GROUP)`); check compiler
   hints and the 0.20.1 example shaders on GitHub before assuming older API.
 - Content (blocks, items, foods, biomes, skill nodes) goes in RON data files, not code.
-- Chunks are 32^3 (`voxel::CHUNK_SIZE`). Chunks stack vertically. The world runs from unbreakable
-  `rootstone` at y -300 (`worldgen::WORLD_FLOOR`, top a little bumpy) to a ceiling at y 1000
-  (`worldgen::WORLD_CEILING`: nothing generates or can be placed there, movement stops under it).
+- Chunks are 32^3 (`voxel::CHUNK_SIZE`). Chunks stack vertically. The world floats (`worldgen::floating`):
+  nothing generates below `worldgen::WORLD_FLOOR` (y -520, the void; falling past it kills) and there is a
+  ceiling at y 1000 (`worldgen::WORLD_CEILING`: nothing generates or can be placed there, movement stops under it).
 - Heavy work (generation, lighting, meshing) runs on `AsyncComputeTaskPool`, never the main thread.
 - Pixel art is sampled nearest-neighbour (`ImagePlugin::default_nearest()`).
 - Target: 60 fps at 16-chunk view distance on Ethan's MacBook (Apple Silicon, Metal).
@@ -281,6 +281,57 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   uses real time), HUD and arms hidden, camera eases to frame the speaker; click/Space/E/Enter continue, replies by
   mouse, 1-8 or W/S + Enter, Esc leaves. Not saved yet; no combat yet (room left in `npc::Order`).
   Screenshots: `BLOCKGAME_NPC=3` spawns one 3 blocks ahead, `BLOCKGAME_TALK=1` talks to it (`=replies` jumps to the replies).
+- Floating world: `worldgen::floating`. The land is one island, `MAIN_RADIUS` 2000 blocks (about 2.5 miles across,
+  coastline wobbles with `coast` noise), centred on spawn (`WorldGen::island_center`); the normal terrain is cut to it
+  and its rim is lifted above sea level so seas stay inside. Underside: a rounded bowl ~300 blocks deep at the
+  middle, hung with rounded lobes and stalactite drips (`underside`). Outer islands (jittered 520-block grid,
+  radius 50-260, tops at y -140..240) float past the coast with the same climate, biomes and underside, and no
+  water. `Column` has `land` (Void/Main/Outer), `bottom` and `water`; villages and barrows are main island only.
+  Rootstone no longer generates. `game::lod` draws undersides and leaves the void empty.
+- Warded dungeons: `worldgen::dungeons` (pure). One per 1024-block cell (chance 0.7, 700+ blocks from spawn) plus a home
+  dungeon 170-290 blocks from spawn, away from the home village. A stone gatehouse with one doorway, a stair 20-27 down,
+  then 7-10 large rooms (13-23 wide, 6-9 high) on a 30-block grid in the dungeon's own frame, joined by 3-wide corridors
+  (a few loops); the furthest room is the warden's hall (25x25, boss). `Dungeon` has `rooms`, `links`, `spaces` (open
+  boxes past the veil: `inside(p)`), `spawns` (`SpawnPoint` pos/kind Guard|Pack|Boss/room: hooks for enemies, nothing
+  spawns them yet), `bounds`, `outside` (path spot), `guide`, `veil`. Spirit ward: `WorldGen::warded(x, y, z)` covers
+  dungeons, barrows and villages; `interact` won't break, place or pick in them ("A spirit ward holds this place").
+  `game::dungeon`: `Nearby` dungeons, a shimmering veil in each doorway, a guide NPC (`warden` kind in npcs.ron and
+  dialogue.ron, `Npc.post` = dungeon id) by each path. Dialogue `act: Spirit` (`Talk::take_cast`) starts
+  `dungeon::spirit`: a 5.6 s cinematic (bars, view tips down, two arms rise and drain to see-through glowing blue with
+  sparkles, turn over, drop). As a spirit: arm materials tinted blue, faint blue screen wash, health starts full and the
+  body's health waits (`Spirit.body`). Non-spirits inside a dungeon are put back on the path. A spirit that falls is cast
+  out to the path with its body's health back (no death); walking out 14+ blocks from the gate ends the spirit form.
+  `EnteredRoom` (first time per run) and `LeftDungeon { fell }` drive `dungeon::foes`: entering a room spawns the foes
+  (`combat::SpawnFoe`) of it and the rooms its corridors lead to, from the dungeon's spawn points (guards hollows, packs
+  mixed hollows and shades, boss a shade: `foes::kind_for`); the run ending despawns every foe whose home is inside that
+  dungeon. Spirit form isn't saved.
+  Screenshots: `BLOCKGAME_DUNGEON=1` starts on the home dungeon's path facing the door (its position is logged),
+  `BLOCKGAME_SPIRIT=cast` runs the cinematic, `=1` starts as a spirit.
+- Player body and third person: `game::avatar` builds your body with `npc::body::build` (the NPC rig; looks in
+  `assets/data/player.ron`, also used for the first-person arm) and moves it with `npc::body::drive` (shared with NPCs).
+  P toggles `camera::View` third person: the camera is pulled back 4 blocks (less if a wall is in the way) only for
+  drawing (`PostUpdate`), and put back at the eyes in `PreUpdate`, so aiming and every other system still use the eyes.
+  Off at benches and in talks (`Menus.still`). The body's right fist (`Rig.hands`) carries a `hands::Held`, so it holds
+  what you hold. Swings: `swing::Swing::limbs` gives the body's arms on the same keys as the first-person `pose`
+  (axe = flat horizontal swing with a bite and hold; pick = high overhead, straight down). `BLOCKGAME_VIEW=third` for screenshots.
+  Movement feel: the walk cycle advances by distance over `motion::stride(pace)` (from leg length and swing), so feet
+  don't slide, and goes on top of the sprung stance unfiltered; the body turns Minecraft-style while moving
+  (`motion::moving_facing`: toward the way you go, at most 75° from the head, forwards when backing up; standing it
+  turns once the head is 50° off) and leans into speeding up, stopping and turns (`Drive.sway`, from `avatar`).
+- Combat: `game::combat`. Swords (`swing: Slash` in items.ron: `iron_sword`, `steel_sword`, `spirit_sword`, made at
+  the iron anvil) cut on left click and never mine: the cut lands at `Swing::contact` as `interact::Swung`, hitting every
+  foe in a 55° sweep within `SWORD_REACH` (and the creature you aim at). Hold right click to block (`combat::Guard`,
+  `swing::guard_pose` / `Limbs::guard`); a block raised under `ai::PARRY_WINDOW` before a cut lands parries it (the foe
+  reels). Q shoves every foe close in front back and off balance (2 s cooldown). Foes: kinds in `assets/data/foes.ron`
+  (NPC rig looks, weapon item held via `hands::Held::holding`, damage, reach, swing time, sight/forget/leash, style:
+  aggression, caution, guard, poise). Pure mind in `combat::ai` (`Brain`: Idle, Return, Approach, Circle, Press, Attack,
+  Recover, Guard, Backoff, Stagger; at most `PRESSERS` press you at once, the rest circle; gives up past `forget` or
+  `leash` from home and walks back; guards when it sees your cut coming, guard breaks after `poise` blocks; hits
+  interrupt its swing; fury when hurt). Pure A* in `combat::path` (steps up one block, drops up to 3, no corner cutting,
+  budgeted; goes as near as it can when there's no way). Ghosts (`ghost: true`): own materials made blue and see-through,
+  shimmering per part, a faint light, `BurstKind::Wisp` particles trailing (and a burst on death). Sound `clash`.
+  Dev keys: Ctrl+Shift+J (Cmd on a Mac) spawns a Hollow Warden, Ctrl+Shift+H a Fen Shade, 6 blocks ahead; either gives
+  you an iron sword on the hotbar if you have no sword. Foes are not saved and don't despawn.
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen

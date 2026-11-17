@@ -1,0 +1,13 @@
+// Your own body (game::avatar): built like the NPCs (npcs.ron), seen in third
+// person (P) and in the arm you see in first person. sRGB colours, 0..1.
+(
+    looks: (
+        skin: (0.86, 0.66, 0.50),
+        hair: (0.27, 0.19, 0.12),
+        shirt: (0.32, 0.36, 0.26),
+        scarf: (0.55, 0.30, 0.20),
+        trousers: (0.30, 0.25, 0.20),
+        boots: (0.20, 0.15, 0.10),
+        iris: (0.35, 0.30, 0.20),
+    ),
+)

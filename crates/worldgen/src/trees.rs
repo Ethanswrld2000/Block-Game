@@ -5,7 +5,7 @@ use voxel::chunk::index;
 use voxel::{BlockId, ChunkPos, CHUNK_SIZE_I32};
 
 use crate::util::{hash2, hash3, unit};
-use crate::{TreeKind, WorldGen, SEA_LEVEL};
+use crate::{TreeKind, WorldGen};
 
 /// How far a canopy can reach sideways from its trunk.
 const REACH: i32 = 4;
@@ -56,6 +56,8 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) {
     let mut canvas = Canvas { origin: [o.x, o.y, o.z], dense };
     // No trees through the middle of a village.
     let villages = wg.villages_in(o.x - REACH, o.z - REACH, o.x + CHUNK_SIZE_I32 + REACH, o.z + CHUNK_SIZE_I32 + REACH);
+    // Nor through a dungeon's gatehouse or its path.
+    let gates: Vec<_> = wg.dungeons_in(o.x - REACH, o.z - REACH, o.x + CHUNK_SIZE_I32 + REACH, o.z + CHUNK_SIZE_I32 + REACH).iter().map(|d| d.gate).collect();
     for tz in o.z - REACH..o.z + CHUNK_SIZE_I32 + REACH {
         for tx in o.x - REACH..o.x + CHUNK_SIZE_I32 + REACH {
             let h = hash2(wg.seed ^ 0x7EE5, tx, tz);
@@ -65,11 +67,11 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) {
             }
             let col = wg.column(tx, tz);
             let biome = wg.biomes.get(col.biome);
-            if roll >= biome.tree_chance || col.climate.overhang > 0.02 || crate::structures::in_village(&villages, tx, tz) {
+            if col.land == crate::Land::Void || roll >= biome.tree_chance || col.climate.overhang > 0.02 || crate::structures::in_village(&villages, tx, tz) || gates.iter().any(|g| (g[0] - tx).abs() <= 11 && (g[2] - tz).abs() <= 11) {
                 continue;
             }
             let ground = col.height;
-            let min_ground = if biome.trees == TreeKind::Swamp { SEA_LEVEL } else { SEA_LEVEL + 1 };
+            let min_ground = if biome.trees == TreeKind::Swamp { col.water } else { col.water.saturating_add(1) };
             if ground < min_ground || ground + TALLEST < o.y || ground > o.y + CHUNK_SIZE_I32 {
                 continue;
             }

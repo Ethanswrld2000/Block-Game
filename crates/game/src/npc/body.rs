@@ -15,8 +15,10 @@ use bevy::prelude::*;
 
 use super::dialogue::Mood;
 use super::motion::{self, Gaze, Pose, Spring};
+use super::data::Looks;
 use super::{Npc, NpcBook, EYES};
 use crate::camera::FlyCamera;
+use crate::swing::Limbs;
 
 pub struct BodyPlugin;
 
@@ -43,6 +45,8 @@ pub struct Rig {
     torso: Entity,
     shoulders: [Entity; 2],
     elbows: [Entity; 2],
+    /// Where each fist is (on the forearm): things held go here.
+    pub hands: [Entity; 2],
     head: Entity,
     pupils: [Entity; 2],
     lids: [Entity; 2],
@@ -64,6 +68,13 @@ pub struct Rig {
     brow: [Spring; 3],
 }
 
+impl Rig {
+    /// Where the body faces now (it turns on a spring).
+    pub fn facing(&self) -> f32 {
+        self.yaw.x
+    }
+}
+
 /// Where the parts sit (blocks, from the feet; the model faces -Z). Left is -X.
 const HIP_Y: f32 = 0.76;
 const HIP_X: f32 = 0.12;
@@ -80,8 +91,6 @@ const MOUTH_OPEN: f32 = 0.085;
 /// Pupil travel from the eye's centre.
 const PUPIL_X: f32 = 0.03;
 const PUPIL_Y: f32 = 0.018;
-/// Blocks walked per full stride (two steps).
-const STRIDE: f32 = 1.5;
 
 struct Kit<'a> {
     meshes: &'a mut Assets<Mesh>,
@@ -123,129 +132,139 @@ impl Kit<'_> {
 fn spawn(mut commands: Commands, mut msgs: MessageReader<SpawnNpc>, book: Res<NpcBook>, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<StandardMaterial>>) {
     for m in msgs.read() {
         let Some(kind) = book.kinds.get(m.npc.kind) else { continue };
-        let l = &kind.looks;
-        let flat = |c: (f32, f32, f32), rough: f32| StandardMaterial { base_color: Color::srgb(c.0, c.1, c.2), perceptual_roughness: rough, ..default() };
-        let mats = [
-            flat(l.skin, 0.8),
-            flat(l.hair, 0.9),
-            flat(l.shirt, 0.95),
-            flat(l.scarf, 0.95),
-            flat(l.trousers, 0.95),
-            flat(l.boots, 0.85),
-            flat((0.95, 0.94, 0.90), 0.4),
-            flat(l.iris, 0.4),
-            flat((0.02, 0.02, 0.025), 0.3),
-            flat((0.28, 0.07, 0.07), 0.9),
-            flat((0.97, 0.95, 0.88), 0.5),
-        ]
-        .into_iter()
-        .map(|m| materials.add(m))
-        .collect();
-        let mut kit = Kit { meshes: &mut meshes, mats };
-        let c = &mut commands;
-        let root = c.spawn((Transform::from_translation(m.at).with_rotation(Quat::from_rotation_y(m.npc.yaw)), Visibility::default(), Name::new(kind.name.clone()))).id();
-
-        // Legs.
-        let hips = joint(c, root, Vec3::Y * HIP_Y);
-        let mut legs = [root; 2];
-        let mut knees = [root; 2];
-        for (i, side) in [-1.0f32, 1.0].into_iter().enumerate() {
-            legs[i] = joint(c, hips, Vec3::X * HIP_X * side);
-            kit.part(c, legs[i], Vec3::new(0.21, 0.40, 0.23), Vec3::Y * -0.20, TROUSERS);
-            knees[i] = joint(c, legs[i], Vec3::Y * -0.40);
-            kit.part(c, knees[i], Vec3::new(0.20, 0.30, 0.22), Vec3::Y * -0.14, TROUSERS);
-            kit.part(c, knees[i], Vec3::new(0.22, 0.10, 0.30), Vec3::new(0.0, -0.31, -0.03), BOOTS);
-        }
-
-        // Torso, scarf and arms.
-        let torso = joint(c, hips, Vec3::ZERO);
-        kit.part(c, torso, Vec3::new(0.50, 0.56, 0.28), Vec3::Y * 0.28, SHIRT);
-        kit.part(c, torso, Vec3::new(0.52, 0.06, 0.30), Vec3::Y * 0.08, BOOTS);
-        kit.part(c, torso, Vec3::new(0.36, 0.09, 0.32), Vec3::Y * 0.56, SCARF);
-        kit.part(c, torso, Vec3::new(0.10, 0.18, 0.03), Vec3::new(0.08, 0.44, -0.15), SCARF);
-        let mut shoulders = [root; 2];
-        let mut elbows = [root; 2];
-        for (i, side) in [-1.0f32, 1.0].into_iter().enumerate() {
-            shoulders[i] = joint(c, torso, SHOULDER * Vec3::new(side, 1.0, 1.0));
-            kit.part(c, shoulders[i], Vec3::new(0.15, 0.28, 0.16), Vec3::Y * -0.11, SHIRT);
-            elbows[i] = joint(c, shoulders[i], Vec3::Y * -0.25);
-            kit.part(c, elbows[i], Vec3::new(0.13, 0.22, 0.14), Vec3::Y * -0.10, SKIN);
-            kit.part(c, elbows[i], Vec3::new(0.14, 0.10, 0.15), Vec3::Y * -0.25, SKIN);
-        }
-
-        // Neck and head.
-        let neck = joint(c, torso, Vec3::Y * NECK_Y);
-        kit.part(c, neck, Vec3::new(0.16, 0.08, 0.16), Vec3::Y * 0.02, SKIN);
-        let head = joint(c, neck, Vec3::Y * 0.05);
-        kit.part(c, head, Vec3::new(0.46, 0.42, 0.42), Vec3::Y * 0.21, SKIN);
-        kit.part(c, head, Vec3::new(0.48, 0.08, 0.44), Vec3::new(0.0, 0.43, 0.0), HAIR);
-        kit.part(c, head, Vec3::new(0.48, 0.30, 0.08), Vec3::new(0.0, 0.28, 0.20), HAIR);
-        for side in [-1.0f32, 1.0] {
-            kit.part(c, head, Vec3::new(0.03, 0.20, 0.30), Vec3::new(0.235 * side, 0.31, 0.06), HAIR);
-        }
-        kit.detail(c, head, Vec3::new(0.46, 0.05, 0.03), Vec3::new(0.0, 0.385, FACE - 0.005), HAIR);
-        kit.detail(c, head, Vec3::new(0.08, 0.10, 0.05), Vec3::new(0.0, 0.18, FACE - 0.025), SKIN);
-
-        // Eyes: white, then iris and pupil on a moving node, then the lid (scaled down from the top).
-        let mut pupils = [root; 2];
-        let mut lids = [root; 2];
-        let mut brows = [root; 2];
-        for (i, side) in [-1.0f32, 1.0].into_iter().enumerate() {
-            let x = EYE.x * side;
-            kit.detail(c, head, Vec3::new(0.13, 0.10, 0.012), Vec3::new(x, EYE.y, FACE - 0.006), WHITE);
-            pupils[i] = joint(c, head, Vec3::new(x, EYE.y, FACE - 0.013));
-            kit.detail(c, pupils[i], Vec3::new(0.06, 0.07, 0.004), Vec3::ZERO, IRIS);
-            kit.detail(c, pupils[i], Vec3::new(0.034, 0.046, 0.004), Vec3::Z * -0.003, BLACK);
-            lids[i] = joint(c, head, Vec3::new(x, EYE.y + 0.053, FACE - 0.019));
-            kit.detail(c, lids[i], Vec3::new(0.14, 0.106, 0.006), Vec3::Y * -0.053, SKIN);
-            brows[i] = joint(c, head, Vec3::new(x, BROW_Y, FACE - 0.009));
-            kit.detail(c, brows[i], Vec3::new(0.14, 0.03, 0.016), Vec3::ZERO, HAIR);
-        }
-
-        // Mouth: a dark hole hanging from its top edge, upper teeth under the
-        // top edge, lower teeth on the jaw at the bottom edge.
-        let mouth = joint(c, head, Vec3::new(0.0, MOUTH_Y, FACE - 0.003));
-        let hole = joint(c, mouth, Vec3::ZERO);
-        kit.detail(c, hole, Vec3::new(0.17, 1.0, 0.006), Vec3::Y * -0.5, MOUTH);
-        let top = kit.detail(c, mouth, Vec3::new(0.15, 0.022, 0.004), Vec3::new(0.0, -0.012, -0.005), TEETH);
-        let jaw = joint(c, mouth, Vec3::Y * -MOUTH_SHUT);
-        let low = kit.detail(c, jaw, Vec3::new(0.13, 0.02, 0.004), Vec3::new(0.0, 0.011, -0.005), TEETH);
-
-        let seed = (m.at.x.to_bits() as u64) << 32 ^ m.at.z.to_bits() as u64 ^ 0x9E37_79B9;
-        let rig = Rig {
-            hips,
-            legs,
-            knees,
-            torso,
-            shoulders,
-            elbows,
-            head,
-            pupils,
-            lids,
-            brows,
-            mouth,
-            hole,
-            jaw,
-            teeth: [top, low],
-            t: 0.0,
-            phase: 0.0,
-            pace: Spring::default(),
-            yaw: Spring::new(m.npc.yaw),
-            joints: motion::idle(0.0).to_array().map(Spring::new),
-            gaze: Gaze::new(seed),
-            gesture: Spring::default(),
-            open: Spring::default(),
-            wide: Spring::new(0.8),
-            brow: [Spring::default(); 3],
-        };
-        c.entity(root).insert((clone_npc(&m.npc), rig));
+        let (root, rig) = build(&mut commands, &mut meshes, &mut materials, &kind.looks, m.at, m.npc.yaw);
+        commands.entity(root).insert((Name::new(kind.name.clone()), clone_npc(&m.npc), rig));
     }
+}
+
+/// Build a jointed body with these looks, feet at `at`, facing `yaw`.
+/// Returns its root (no `Rig` on it yet) and the rig to put on it. The
+/// player's body (`avatar`) is built the same way.
+pub fn build(c: &mut Commands, meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, l: &Looks, at: Vec3, yaw: f32) -> (Entity, Rig) {
+    let flat = |c: (f32, f32, f32), rough: f32| StandardMaterial { base_color: Color::srgb(c.0, c.1, c.2), perceptual_roughness: rough, ..default() };
+    let mats = [
+        flat(l.skin, 0.8),
+        flat(l.hair, 0.9),
+        flat(l.shirt, 0.95),
+        flat(l.scarf, 0.95),
+        flat(l.trousers, 0.95),
+        flat(l.boots, 0.85),
+        flat((0.95, 0.94, 0.90), 0.4),
+        flat(l.iris, 0.4),
+        flat((0.02, 0.02, 0.025), 0.3),
+        flat((0.28, 0.07, 0.07), 0.9),
+        flat((0.97, 0.95, 0.88), 0.5),
+    ]
+    .into_iter()
+    .map(|m| materials.add(m))
+    .collect();
+    let mut kit = Kit { meshes, mats };
+    let root = c.spawn((Transform::from_translation(at).with_rotation(Quat::from_rotation_y(yaw)), Visibility::default())).id();
+
+    // Legs.
+    let hips = joint(c, root, Vec3::Y * HIP_Y);
+    let mut legs = [root; 2];
+    let mut knees = [root; 2];
+    for (i, side) in [-1.0f32, 1.0].into_iter().enumerate() {
+        legs[i] = joint(c, hips, Vec3::X * HIP_X * side);
+        kit.part(c, legs[i], Vec3::new(0.21, 0.40, 0.23), Vec3::Y * -0.20, TROUSERS);
+        knees[i] = joint(c, legs[i], Vec3::Y * -0.40);
+        kit.part(c, knees[i], Vec3::new(0.20, 0.30, 0.22), Vec3::Y * -0.14, TROUSERS);
+        kit.part(c, knees[i], Vec3::new(0.22, 0.10, 0.30), Vec3::new(0.0, -0.31, -0.03), BOOTS);
+    }
+
+    // Torso, scarf and arms.
+    let torso = joint(c, hips, Vec3::ZERO);
+    kit.part(c, torso, Vec3::new(0.50, 0.56, 0.28), Vec3::Y * 0.28, SHIRT);
+    kit.part(c, torso, Vec3::new(0.52, 0.06, 0.30), Vec3::Y * 0.08, BOOTS);
+    kit.part(c, torso, Vec3::new(0.36, 0.09, 0.32), Vec3::Y * 0.56, SCARF);
+    kit.part(c, torso, Vec3::new(0.10, 0.18, 0.03), Vec3::new(0.08, 0.44, -0.15), SCARF);
+    let mut shoulders = [root; 2];
+    let mut elbows = [root; 2];
+    let mut hands = [root; 2];
+    for (i, side) in [-1.0f32, 1.0].into_iter().enumerate() {
+        shoulders[i] = joint(c, torso, SHOULDER * Vec3::new(side, 1.0, 1.0));
+        kit.part(c, shoulders[i], Vec3::new(0.15, 0.28, 0.16), Vec3::Y * -0.11, SHIRT);
+        elbows[i] = joint(c, shoulders[i], Vec3::Y * -0.25);
+        kit.part(c, elbows[i], Vec3::new(0.13, 0.22, 0.14), Vec3::Y * -0.10, SKIN);
+        kit.part(c, elbows[i], Vec3::new(0.14, 0.10, 0.15), Vec3::Y * -0.25, SKIN);
+        hands[i] = joint(c, elbows[i], Vec3::Y * -0.25);
+    }
+
+    // Neck and head.
+    let neck = joint(c, torso, Vec3::Y * NECK_Y);
+    kit.part(c, neck, Vec3::new(0.16, 0.08, 0.16), Vec3::Y * 0.02, SKIN);
+    let head = joint(c, neck, Vec3::Y * 0.05);
+    kit.part(c, head, Vec3::new(0.46, 0.42, 0.42), Vec3::Y * 0.21, SKIN);
+    kit.part(c, head, Vec3::new(0.48, 0.08, 0.44), Vec3::new(0.0, 0.43, 0.0), HAIR);
+    kit.part(c, head, Vec3::new(0.48, 0.30, 0.08), Vec3::new(0.0, 0.28, 0.20), HAIR);
+    for side in [-1.0f32, 1.0] {
+        kit.part(c, head, Vec3::new(0.03, 0.20, 0.30), Vec3::new(0.235 * side, 0.31, 0.06), HAIR);
+    }
+    kit.detail(c, head, Vec3::new(0.46, 0.05, 0.03), Vec3::new(0.0, 0.385, FACE - 0.005), HAIR);
+    kit.detail(c, head, Vec3::new(0.08, 0.10, 0.05), Vec3::new(0.0, 0.18, FACE - 0.025), SKIN);
+
+    // Eyes: white, then iris and pupil on a moving node, then the lid (scaled down from the top).
+    let mut pupils = [root; 2];
+    let mut lids = [root; 2];
+    let mut brows = [root; 2];
+    for (i, side) in [-1.0f32, 1.0].into_iter().enumerate() {
+        let x = EYE.x * side;
+        kit.detail(c, head, Vec3::new(0.13, 0.10, 0.012), Vec3::new(x, EYE.y, FACE - 0.006), WHITE);
+        pupils[i] = joint(c, head, Vec3::new(x, EYE.y, FACE - 0.013));
+        kit.detail(c, pupils[i], Vec3::new(0.06, 0.07, 0.004), Vec3::ZERO, IRIS);
+        kit.detail(c, pupils[i], Vec3::new(0.034, 0.046, 0.004), Vec3::Z * -0.003, BLACK);
+        lids[i] = joint(c, head, Vec3::new(x, EYE.y + 0.053, FACE - 0.019));
+        kit.detail(c, lids[i], Vec3::new(0.14, 0.106, 0.006), Vec3::Y * -0.053, SKIN);
+        brows[i] = joint(c, head, Vec3::new(x, BROW_Y, FACE - 0.009));
+        kit.detail(c, brows[i], Vec3::new(0.14, 0.03, 0.016), Vec3::ZERO, HAIR);
+    }
+
+    // Mouth: a dark hole hanging from its top edge, upper teeth under the
+    // top edge, lower teeth on the jaw at the bottom edge.
+    let mouth = joint(c, head, Vec3::new(0.0, MOUTH_Y, FACE - 0.003));
+    let hole = joint(c, mouth, Vec3::ZERO);
+    kit.detail(c, hole, Vec3::new(0.17, 1.0, 0.006), Vec3::Y * -0.5, MOUTH);
+    let top = kit.detail(c, mouth, Vec3::new(0.15, 0.022, 0.004), Vec3::new(0.0, -0.012, -0.005), TEETH);
+    let jaw = joint(c, mouth, Vec3::Y * -MOUTH_SHUT);
+    let low = kit.detail(c, jaw, Vec3::new(0.13, 0.02, 0.004), Vec3::new(0.0, 0.011, -0.005), TEETH);
+
+    let seed = (at.x.to_bits() as u64) << 32 ^ at.z.to_bits() as u64 ^ 0x9E37_79B9;
+    let rig = Rig {
+        hips,
+        legs,
+        knees,
+        torso,
+        shoulders,
+        elbows,
+        hands,
+        head,
+        pupils,
+        lids,
+        brows,
+        mouth,
+        hole,
+        jaw,
+        teeth: [top, low],
+        t: 0.0,
+        phase: 0.0,
+        pace: Spring::default(),
+        yaw: Spring::new(yaw),
+        joints: motion::idle(0.0).to_array().map(Spring::new),
+        gaze: Gaze::new(seed),
+        gesture: Spring::default(),
+        open: Spring::default(),
+        wide: Spring::new(0.8),
+        brow: [Spring::default(); 3],
+    };
+    (root, rig)
 }
 
 fn clone_npc(n: &Npc) -> Npc {
     let mut out = Npc::new(n.kind, n.yaw);
     out.order = n.order;
     out.flags = n.flags.clone();
+    out.post = n.post;
     out
 }
 
@@ -273,131 +292,193 @@ fn energy_of(mood: Mood) -> f32 {
     }
 }
 
-#[allow(clippy::type_complexity)]
-fn animate(
-    real: Res<Time<Real>>,
-    game: Res<Time>,
-    book: Res<NpcBook>,
-    cam: Single<&GlobalTransform, With<FlyCamera>>,
-    mut npcs: Query<(&mut Transform, &Npc, &mut Rig)>,
-    mut parts: Query<(&mut Transform, &mut Visibility), Without<Rig>>,
-) {
+/// The parts of every body (joints and boxes), moved by `drive`.
+pub type Parts<'w, 's> = Query<'w, 's, (&'static mut Transform, &'static mut Visibility), Without<Rig>>;
+
+/// What a body is doing this frame; `drive` turns it into joint motion.
+pub struct Drive {
+    /// Where the body faces (it turns towards it on a spring) and about how
+    /// many seconds the turn takes.
+    pub yaw: f32,
+    pub turn: f32,
+    /// Horizontal speed and the walking speed it is measured against.
+    pub speed: f32,
+    pub walk: f32,
+    /// Game-time step, for the stride (stops while the game is paused).
+    pub game_dt: f32,
+    /// (yaw, pitch) to look at, relative to the body; `None` glances about.
+    pub focus: Option<[f32; 2]>,
+    /// Hand movement while talking (0..1) and the mood shown on the face.
+    pub gesture: f32,
+    pub mood: Mood,
+    /// Mouth (open, wide) and how much it is speaking (0..1).
+    pub mouth: (f32, f32),
+    pub speaking: f32,
+    /// Arms holding something or swinging it (they take over from the stance).
+    pub arms: Option<Limbs>,
+    /// Extra lean forward and roll to the left (radians), e.g. from speeding
+    /// up, stopping or turning.
+    pub sway: [f32; 2],
+}
+
+fn animate(real: Res<Time<Real>>, game: Res<Time>, book: Res<NpcBook>, cam: Single<&GlobalTransform, With<FlyCamera>>, mut npcs: Query<(&mut Transform, &Npc, &mut Rig)>, mut parts: Parts) {
     let dt = real.delta_secs().min(0.05);
     let gdt = game.delta_secs().min(0.05);
     let eye = cam.translation();
     for (mut tf, npc, mut rig) in &mut npcs {
-        rig.t += dt;
-        let t = rig.t;
-        // Turn the whole body towards where it faces.
-        let yaw = rig.yaw.step_angle(npc.yaw, 0.28, dt);
-        tf.rotation = Quat::from_rotation_y(yaw);
-
-        // Walking: pace eases in and out, the stride advances with distance.
-        let walk = book.kinds.get(npc.kind).map_or(2.4, |k| k.walk);
-        let speed = Vec2::new(npc.vel.x, npc.vel.z).length();
-        let pace = rig.pace.step((speed / walk).min(2.0), 0.18, dt);
-        rig.phase = (rig.phase + speed * gdt / STRIDE * std::f32::consts::TAU) % std::f32::consts::TAU;
-
         // Where to look: at you when near or talking, else idle glances.
         let head_at = tf.translation + Vec3::Y * EYES;
         let d = eye - head_at;
         let near = npc.talking || d.length() < 10.0;
+        let yaw = rig.yaw.x;
         let focus = near.then(|| {
             let flat = Vec2::new(d.x, d.z).length();
             [motion::wrap(super::yaw_of(d) - yaw), d.y.atan2(flat)]
         });
-        let look = rig.gaze.step(dt, focus);
-
-        // Pose: idle blended with walking, plus hands when speaking.
-        let energy = rig.gesture.step(npc.speaking * energy_of(npc.mood), 0.35, dt);
-        let base = motion::idle(t).lerp(motion::walk(rig.phase, pace), pace.min(1.0));
-        let want = base.add(motion::gesture(t, energy));
-        let mut arr = want.to_array();
-        for (i, s) in rig.joints.iter_mut().enumerate() {
-            arr[i] = s.step(arr[i], 0.07, dt);
-        }
-        let pose = Pose::from_array(arr);
-        let twist = pose.twist + look.twist;
-
-        macro_rules! set {
-            ($e:expr, |$t:ident| $body:expr) => {
-                if let Ok((mut $t, _)) = parts.get_mut($e) {
-                    $body;
-                }
-            };
-        }
-        set!(rig.hips, |t| {
-            t.translation.y = HIP_Y + pose.bob;
-            t.rotation = Quat::from_rotation_z(pose.roll);
-        });
-        for i in 0..2 {
-            let side = if i == 0 { -1.0 } else { 1.0 };
-            let (hip, knee) = (pose.hip[i], pose.knee[i]);
-            // Legs stay upright under a rolling pelvis.
-            set!(rig.legs[i], |t| t.rotation = Quat::from_rotation_z(-pose.roll) * Quat::from_rotation_x(hip));
-            set!(rig.knees[i], |t| t.rotation = Quat::from_rotation_x(-knee));
-            let (sh, out, el) = (pose.shoulder[i], pose.arm_out[i], pose.elbow[i]);
-            set!(rig.shoulders[i], |t| t.rotation = Quat::from_rotation_z(out * side) * Quat::from_rotation_x(sh));
-            set!(rig.elbows[i], |t| t.rotation = Quat::from_rotation_x(el));
-        }
-        set!(rig.torso, |t| t.rotation = Quat::from_rotation_z(-pose.roll * 0.6) * Quat::from_rotation_y(twist) * Quat::from_rotation_x(-pose.lean));
-        // The head looks where the gaze says, undoing the torso's twist and lean,
-        // with a small nod while talking and a tilt when curious.
-        let nod = 0.035 * energy * (t * 5.3).sin();
-        let tilt = if npc.mood == Mood::Curious { 0.12 } else { 0.0 } + 0.02 * (t * 0.7).sin();
-        set!(rig.head, |t| {
-            t.rotation = Quat::from_rotation_y(look.head_yaw - twist) * Quat::from_rotation_x(look.head_pitch + pose.lean + nod) * Quat::from_rotation_z(tilt);
-        });
-
-        // Eyes.
-        for (e, side) in rig.pupils.into_iter().zip([-1.0, 1.0]) {
-            let p = Vec3::new(EYE.x * side - look.pupil[0] * PUPIL_X, EYE.y + look.pupil[1] * PUPIL_Y, FACE - 0.013);
-            set!(e, |t| t.translation = p);
-        }
-        // Lids: also half-lower when looking down.
-        let lid = (look.blink + (-look.pupil[1]).max(0.0) * 0.25).clamp(0.0, 1.0);
-        for e in rig.lids {
-            if let Ok((mut t, mut v)) = parts.get_mut(e) {
-                t.scale.y = lid.max(0.02);
-                let want = if lid < 0.04 { Visibility::Hidden } else { Visibility::Inherited };
-                if *v != want {
-                    *v = want;
-                }
-            }
-        }
-        // Brows.
-        let target = brows_of(npc.mood);
-        let lift = rig.brow[0].step(target[0] + 0.006 * energy * (t * 3.1).sin().max(0.0), 0.15, dt);
-        let inner = rig.brow[1].step(target[1], 0.15, dt);
-        let left = rig.brow[2].step(target[2], 0.15, dt);
-        for (e, side) in rig.brows.into_iter().zip([-1.0f32, 1.0]) {
-            let y = BROW_Y + lift + if side < 0.0 { left } else { 0.0 };
-            if let Ok((mut t, _)) = parts.get_mut(e) {
-                t.translation.y = y;
-                t.rotation = Quat::from_rotation_z(inner * -side);
-            }
-        }
-
-        // Mouth: open on each syllable; at rest a happy face shows its teeth a little.
-        let rest = match npc.mood {
-            Mood::Happy => 0.12,
-            Mood::Surprised => 0.25,
-            _ => 0.0,
+        let drive_with = Drive {
+            yaw: npc.yaw,
+            turn: 0.28,
+            speed: Vec2::new(npc.vel.x, npc.vel.z).length(),
+            walk: book.kinds.get(npc.kind).map_or(2.4, |k| k.walk),
+            game_dt: gdt,
+            focus,
+            gesture: npc.speaking * energy_of(npc.mood),
+            mood: npc.mood,
+            mouth: npc.mouth,
+            speaking: npc.speaking,
+            arms: None,
+            sway: [0.0; 2],
         };
-        let open = rig.open.step(npc.mouth.0.max(rest * (1.0 - npc.speaking)), 0.035, dt).clamp(0.0, 1.2);
-        let wide = rig.wide.step(if npc.speaking > 0.0 { npc.mouth.1 } else { 0.85 + rest }, 0.06, dt);
-        let h = MOUTH_SHUT + (MOUTH_OPEN - MOUTH_SHUT) * open;
-        set!(rig.mouth, |t| t.scale.x = wide.clamp(0.4, 1.3));
-        set!(rig.hole, |t| t.scale.y = h);
-        set!(rig.jaw, |t| t.translation.y = -h);
-        // Teeth show once the lips part.
-        let shown = if h > MOUTH_SHUT * 1.6 { Visibility::Inherited } else { Visibility::Hidden };
-        for e in rig.teeth {
-            if let Ok((_, mut v)) = parts.get_mut(e)
-                && *v != shown
-            {
-                *v = shown;
+        drive(&mut tf, &mut rig, &mut parts, dt, &drive_with);
+    }
+}
+
+/// Move one body for a frame (real-time `dt`): turn, walk, stance, gaze,
+/// arms, face.
+pub fn drive(tf: &mut Transform, rig: &mut Rig, parts: &mut Parts, dt: f32, d: &Drive) {
+    rig.t += dt;
+    let t = rig.t;
+    // Turn the whole body towards where it faces.
+    let yaw = rig.yaw.step_angle(d.yaw, d.turn, dt);
+    tf.rotation = Quat::from_rotation_y(yaw);
+
+    // Walking: pace eases in and out; the stride advances with the distance
+    // covered, one stride per `motion::stride`, so the feet don't slide.
+    let pace = rig.pace.step((d.speed / d.walk.max(0.1)).min(2.0), 0.12, dt);
+    rig.phase = (rig.phase + d.speed * d.game_dt / motion::stride(pace) * std::f32::consts::TAU) % std::f32::consts::TAU;
+
+    let look = rig.gaze.step(dt, d.focus);
+
+    // Pose: the stance (idle and talking hands) eases on springs; the walk
+    // cycle goes straight on top, scaled by the eased pace, so the legs keep
+    // their full swing and timing.
+    let energy = rig.gesture.step(d.gesture, 0.35, dt);
+    let stance = motion::idle(t).lerp(Pose::default(), pace.min(1.0)).add(motion::gesture(t, energy));
+    let mut arr = stance.to_array();
+    for (i, s) in rig.joints.iter_mut().enumerate() {
+        arr[i] = s.step(arr[i], 0.07, dt);
+    }
+    let mut pose = Pose::from_array(arr).add(motion::walk(rig.phase, pace));
+    pose.lean += d.sway[0];
+    pose.roll += d.sway[1];
+    // Arms at work: straight from the swing's keys (no spring, so the blow
+    // lands on time), the walk's arm swing only faintly under them.
+    let mut arm_yaw = 0.0;
+    let mut wrist = [0.0; 2];
+    if let Some(a) = d.arms {
+        pose.twist += a.twist;
+        pose.lean += a.lean;
+        pose.shoulder[1] = a.shoulder + pose.shoulder[1] * 0.15;
+        pose.arm_out[1] = a.arm_out;
+        pose.elbow[1] = a.elbow;
+        pose.shoulder[0] = a.left_shoulder + pose.shoulder[0] * (1.0 - (a.left_shoulder.abs() * 2.0).min(1.0));
+        pose.elbow[0] = pose.elbow[0].max(a.left_elbow);
+        arm_yaw = a.yaw;
+        wrist = a.wrist;
+    }
+    let twist = pose.twist + look.twist;
+
+    macro_rules! set {
+        ($e:expr, |$t:ident| $body:expr) => {
+            if let Ok((mut $t, _)) = parts.get_mut($e) {
+                $body;
             }
+        };
+    }
+    set!(rig.hips, |t| {
+        t.translation.y = HIP_Y + pose.bob;
+        t.rotation = Quat::from_rotation_z(pose.roll);
+    });
+    for i in 0..2 {
+        let side = if i == 0 { -1.0 } else { 1.0 };
+        let (hip, knee) = (pose.hip[i], pose.knee[i]);
+        // Legs stay upright under a rolling pelvis.
+        set!(rig.legs[i], |t| t.rotation = Quat::from_rotation_z(-pose.roll) * Quat::from_rotation_x(hip));
+        set!(rig.knees[i], |t| t.rotation = Quat::from_rotation_x(-knee));
+        let (sh, out, el) = (pose.shoulder[i], pose.arm_out[i], pose.elbow[i]);
+        let turn = if i == 1 { arm_yaw } else { 0.0 };
+        set!(rig.shoulders[i], |t| t.rotation = Quat::from_rotation_y(turn) * Quat::from_rotation_z(out * side) * Quat::from_rotation_x(sh));
+        set!(rig.elbows[i], |t| t.rotation = Quat::from_rotation_x(el));
+    }
+    // The held item: tip down (pitch) and rolled about the forearm.
+    set!(rig.hands[1], |t| t.rotation = Quat::from_rotation_y(wrist[1]) * Quat::from_rotation_x(wrist[0]));
+    set!(rig.torso, |t| t.rotation = Quat::from_rotation_z(-pose.roll * 0.6) * Quat::from_rotation_y(twist) * Quat::from_rotation_x(-pose.lean));
+    // The head looks where the gaze says, undoing the torso's twist and lean,
+    // with a small nod while talking and a tilt when curious.
+    let nod = 0.035 * energy * (t * 5.3).sin();
+    let tilt = if d.mood == Mood::Curious { 0.12 } else { 0.0 } + 0.02 * (t * 0.7).sin();
+    set!(rig.head, |t| {
+        t.rotation = Quat::from_rotation_y(look.head_yaw - twist) * Quat::from_rotation_x(look.head_pitch + pose.lean + nod) * Quat::from_rotation_z(tilt);
+    });
+
+    // Eyes.
+    for (e, side) in rig.pupils.into_iter().zip([-1.0, 1.0]) {
+        let p = Vec3::new(EYE.x * side - look.pupil[0] * PUPIL_X, EYE.y + look.pupil[1] * PUPIL_Y, FACE - 0.013);
+        set!(e, |t| t.translation = p);
+    }
+    // Lids: also half-lower when looking down.
+    let lid = (look.blink + (-look.pupil[1]).max(0.0) * 0.25).clamp(0.0, 1.0);
+    for e in rig.lids {
+        if let Ok((mut t, mut v)) = parts.get_mut(e) {
+            t.scale.y = lid.max(0.02);
+            let want = if lid < 0.04 { Visibility::Hidden } else { Visibility::Inherited };
+            if *v != want {
+                *v = want;
+            }
+        }
+    }
+    // Brows.
+    let target = brows_of(d.mood);
+    let lift = rig.brow[0].step(target[0] + 0.006 * energy * (t * 3.1).sin().max(0.0), 0.15, dt);
+    let inner = rig.brow[1].step(target[1], 0.15, dt);
+    let left = rig.brow[2].step(target[2], 0.15, dt);
+    for (e, side) in rig.brows.into_iter().zip([-1.0f32, 1.0]) {
+        let y = BROW_Y + lift + if side < 0.0 { left } else { 0.0 };
+        if let Ok((mut t, _)) = parts.get_mut(e) {
+            t.translation.y = y;
+            t.rotation = Quat::from_rotation_z(inner * -side);
+        }
+    }
+
+    // Mouth: open on each syllable; at rest a happy face shows its teeth a little.
+    let rest = match d.mood {
+        Mood::Happy => 0.12,
+        Mood::Surprised => 0.25,
+        _ => 0.0,
+    };
+    let open = rig.open.step(d.mouth.0.max(rest * (1.0 - d.speaking)), 0.035, dt).clamp(0.0, 1.2);
+    let wide = rig.wide.step(if d.speaking > 0.0 { d.mouth.1 } else { 0.85 + rest }, 0.06, dt);
+    let h = MOUTH_SHUT + (MOUTH_OPEN - MOUTH_SHUT) * open;
+    set!(rig.mouth, |t| t.scale.x = wide.clamp(0.4, 1.3));
+    set!(rig.hole, |t| t.scale.y = h);
+    set!(rig.jaw, |t| t.translation.y = -h);
+    // Teeth show once the lips part.
+    let shown = if h > MOUTH_SHUT * 1.6 { Visibility::Inherited } else { Visibility::Hidden };
+    for e in rig.teeth {
+        if let Ok((_, mut v)) = parts.get_mut(e)
+            && *v != shown
+        {
+            *v = shown;
         }
     }
 }
@@ -405,4 +486,17 @@ fn animate(
 /// Feet position and the box you aim at to talk (for `talk`).
 pub fn talk_box(at: Vec3) -> (Vec3, Vec3) {
     (at - Vec3::new(0.35, 0.0, 0.35), at + Vec3::new(0.35, super::HEIGHT, 0.35))
+}
+
+#[cfg(test)]
+mod spawn_tests {
+    use super::*;
+
+    #[test]
+    fn a_spawned_npc_keeps_its_post() {
+        // A gate guide that lost its post looked unguarded, so another spawned on top of it.
+        let mut n = Npc::new(1, 0.3);
+        n.post = Some(42);
+        assert_eq!(clone_npc(&n).post, Some(42));
+    }
 }

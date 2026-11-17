@@ -16,5 +16,8 @@
         "steel_axe": (108, 42, 20, 60),
         "spirit_pickaxe": (0, 62, 40, 60),
         "spirit_axe": (42, 62, 20, 60),
+        "iron_sword": (64, 62, 20, 60),
+        "steel_sword": (130, 62, 20, 60),
+        "spirit_sword": (152, 62, 20, 60),
     },
 )

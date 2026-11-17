@@ -42,6 +42,7 @@ pub struct ShowCard {
 enum Place {
     Village(u64),
     Barrow(u64),
+    Dungeon(u64),
     Wild,
 }
 
@@ -153,7 +154,10 @@ fn notice(
         let (dx, dz) = (x - v.center[0], z - v.center[2]);
         dx * dx + dz * dz <= v.radius * v.radius && (y - v.center[1]).abs() < 24
     });
-    let (place, card) = if let Some(b) = barrow {
+    let dungeon = wg.dungeons_in(x, z, x, z).into_iter().find(|d| d.inside(player.pos.to_array()));
+    let (place, card) = if let Some(d) = dungeon {
+        (Place::Dungeon(d.id), Some((format!("dungeon:{}", d.id), d.name.clone(), "A warded dungeon".to_string())))
+    } else if let Some(b) = barrow {
         (Place::Barrow(b.id), Some((format!("barrow:{}", b.id), b.name.clone(), "A barrow of the old dead".to_string())))
     } else if let Some(v) = village {
         (Place::Village(v.id), Some((format!("village:{}", v.id), v.name.clone(), format!("A village of {}", lower_the(&biome.title)))))
@@ -166,7 +170,7 @@ fn notice(
             && here.shown.get(&key).is_none_or(|t| now - t > AGAIN)
         {
             if progress.found.insert(key.clone()) {
-                let xp = if key.starts_with("barrow") { prog.xp.barrow } else { prog.xp.village };
+                let xp = if key.starts_with("barrow") || key.starts_with("dungeon") { prog.xp.barrow } else { prog.xp.village };
                 gain.write(crate::progress::GainXp { xp, why: format!("Found {title}") });
             }
             here.shown.insert(key, now);

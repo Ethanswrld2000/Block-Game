@@ -23,7 +23,7 @@ pub mod board;
 mod book;
 mod float;
 mod forge;
-mod particles;
+pub mod particles;
 mod dev;
 pub mod golem;
 pub mod models;
