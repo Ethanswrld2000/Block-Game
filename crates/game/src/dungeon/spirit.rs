@@ -40,12 +40,17 @@ impl Plugin for SpiritPlugin {
                 crate::menu::GameUpdate,
                 (take_spell, cast, cast_hands, hide_for_cast, ward_gate, spirit_look)
                     .chain()
+                    .in_set(SpiritSet)
                     .after(crate::npc::talk::TalkSet)
                     .after(crate::player::PlayerSet),
             )
-            .add_systems(crate::menu::GameUpdate, fall_inside.after(crate::survival::SurvivalSet));
+            .add_systems(crate::menu::GameUpdate, fall_inside.in_set(SpiritSet).after(crate::survival::SurvivalSet));
     }
 }
+
+/// The spirit's systems (rooms entered, runs ended); `foes` runs after them.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SpiritSet;
 
 /// Seconds the whole cast takes.
 const CAST: f32 = 5.6;

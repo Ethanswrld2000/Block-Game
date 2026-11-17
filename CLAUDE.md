@@ -301,9 +301,37 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   sparkles, turn over, drop). As a spirit: arm materials tinted blue, faint blue screen wash, health starts full and the
   body's health waits (`Spirit.body`). Non-spirits inside a dungeon are put back on the path. A spirit that falls is cast
   out to the path with its body's health back (no death); walking out 14+ blocks from the gate ends the spirit form.
-  Messages for the enemy side: `EnteredRoom` (first time per run), `LeftDungeon { fell }`. Spirit form isn't saved.
+  `EnteredRoom` (first time per run) and `LeftDungeon { fell }` drive `dungeon::foes`: entering a room spawns the foes
+  (`combat::SpawnFoe`) of it and the rooms its corridors lead to, from the dungeon's spawn points (guards hollows, packs
+  mixed hollows and shades, boss a shade: `foes::kind_for`); the run ending despawns every foe whose home is inside that
+  dungeon. Spirit form isn't saved.
   Screenshots: `BLOCKGAME_DUNGEON=1` starts on the home dungeon's path facing the door (its position is logged),
   `BLOCKGAME_SPIRIT=cast` runs the cinematic, `=1` starts as a spirit.
+- Player body and third person: `game::avatar` builds your body with `npc::body::build` (the NPC rig; looks in
+  `assets/data/player.ron`, also used for the first-person arm) and moves it with `npc::body::drive` (shared with NPCs).
+  P toggles `camera::View` third person: the camera is pulled back 4 blocks (less if a wall is in the way) only for
+  drawing (`PostUpdate`), and put back at the eyes in `PreUpdate`, so aiming and every other system still use the eyes.
+  Off at benches and in talks (`Menus.still`). The body's right fist (`Rig.hands`) carries a `hands::Held`, so it holds
+  what you hold. Swings: `swing::Swing::limbs` gives the body's arms on the same keys as the first-person `pose`
+  (axe = flat horizontal swing with a bite and hold; pick = high overhead, straight down). `BLOCKGAME_VIEW=third` for screenshots.
+  Movement feel: the walk cycle advances by distance over `motion::stride(pace)` (from leg length and swing), so feet
+  don't slide, and goes on top of the sprung stance unfiltered; the body turns Minecraft-style while moving
+  (`motion::moving_facing`: toward the way you go, at most 75° from the head, forwards when backing up; standing it
+  turns once the head is 50° off) and leans into speeding up, stopping and turns (`Drive.sway`, from `avatar`).
+- Combat: `game::combat`. Swords (`swing: Slash` in items.ron: `iron_sword`, `steel_sword`, `spirit_sword`, made at
+  the iron anvil) cut on left click and never mine: the cut lands at `Swing::contact` as `interact::Swung`, hitting every
+  foe in a 55° sweep within `SWORD_REACH` (and the creature you aim at). Hold right click to block (`combat::Guard`,
+  `swing::guard_pose` / `Limbs::guard`); a block raised under `ai::PARRY_WINDOW` before a cut lands parries it (the foe
+  reels). Q shoves every foe close in front back and off balance (2 s cooldown). Foes: kinds in `assets/data/foes.ron`
+  (NPC rig looks, weapon item held via `hands::Held::holding`, damage, reach, swing time, sight/forget/leash, style:
+  aggression, caution, guard, poise). Pure mind in `combat::ai` (`Brain`: Idle, Return, Approach, Circle, Press, Attack,
+  Recover, Guard, Backoff, Stagger; at most `PRESSERS` press you at once, the rest circle; gives up past `forget` or
+  `leash` from home and walks back; guards when it sees your cut coming, guard breaks after `poise` blocks; hits
+  interrupt its swing; fury when hurt). Pure A* in `combat::path` (steps up one block, drops up to 3, no corner cutting,
+  budgeted; goes as near as it can when there's no way). Ghosts (`ghost: true`): own materials made blue and see-through,
+  shimmering per part, a faint light, `BurstKind::Wisp` particles trailing (and a burst on death). Sound `clash`.
+  Dev keys: Ctrl+Shift+J (Cmd on a Mac) spawns a Hollow Warden, Ctrl+Shift+H a Fen Shade, 6 blocks ahead; either gives
+  you an iron sword on the hotbar if you have no sword. Foes are not saved and don't despawn.
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen

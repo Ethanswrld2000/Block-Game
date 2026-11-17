@@ -299,6 +299,29 @@ def spirit_axe(c):
         c.dot(14, y, SPIRIT_L)
 
 
+def sword(c, metal, edge, guard):
+    # Blade up the middle to a point, a crossguard, a wrapped grip and a pommel.
+    c.poly([(7, 44), (7, 6), (10, 0), (13, 6), (13, 44)], metal)
+    c.line(10, 3, 10, 42, 1, edge)
+    c.rect(2, 44, 18, 47, guard)
+    handle(c, 8, 47, 57, 4)
+    c.rect(7, 56, 13, 59, guard)
+
+
+def iron_sword(c):
+    sword(c, IRON, IRON_L, WOOD_D)
+
+
+def steel_sword(c):
+    sword(c, STEEL, STEEL_L, mul(STEEL, 0.6))
+
+
+def spirit_sword(c):
+    sword(c, SPIRIT, SPIRIT_L, mul(SPIRIT, 0.7))
+    for y in (12, 22, 32):
+        c.dot(10, y, SPIRIT_L)
+
+
 # --- items -------------------------------------------------------------------
 
 
@@ -670,7 +693,7 @@ def portable_tent(c):
 
 
 DRAW = {f.__name__: f for f in [
-    stone_pickaxe, stone_axe, stone_shovel, flint_spear, torch, marsh_berries, swamp_reed, smoked_fish, bread, peat_stew,
+    stone_pickaxe, stone_axe, stone_shovel, flint_spear, iron_sword, steel_sword, spirit_sword, torch, marsh_berries, swamp_reed, smoked_fish, bread, peat_stew,
     cured_meat, feast_platter, ember_herb, stick, plant_fiber, cordage, coal, raw_iron, flint, hide, fur, linen_shirt,
     linen_trousers, hide_boots, reed_hat, reed_cloak, fur_hood, fur_coat, hide_leggings, bark_helm, bark_vest, hide_jerkin,
     reed_satchel, hide_pack, raw_meat, roast_meat, spirit_ember, old_coin, small_rock, rough_axe,

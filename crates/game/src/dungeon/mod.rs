@@ -11,6 +11,7 @@
 //! what kind, which room); `EnteredRoom` fires the first time a spirit walks
 //! into a room on a run; `LeftDungeon` fires when the run ends (walked out or fell).
 
+pub mod foes;
 pub mod spirit;
 
 use std::collections::HashMap;
@@ -36,7 +37,7 @@ impl Plugin for DungeonPlugin {
                 crate::menu::GameUpdate,
                 (refresh_nearby, place_guides, place_veils, shimmer_veils).chain().after(crate::player::PlayerSet).before(crate::npc::NpcSet),
             )
-            .add_plugins(spirit::SpiritPlugin);
+            .add_plugins((spirit::SpiritPlugin, foes::DungeonFoesPlugin));
     }
 }
 
@@ -48,7 +49,6 @@ const GONE: f32 = 160.0;
 
 /// A spirit walked into a room for the first time this run (spawn its enemies).
 #[derive(Message, Debug, Clone)]
-#[allow(dead_code)] // for the enemy spawner (combat), not built yet
 pub struct EnteredRoom {
     pub dungeon: Arc<Dungeon>,
     pub room: usize,
@@ -56,9 +56,9 @@ pub struct EnteredRoom {
 
 /// A run ended: the spirit walked back out (`fell: false`) or fell inside.
 #[derive(Message, Debug, Clone)]
-#[allow(dead_code)] // for the enemy spawner (combat), not built yet
 pub struct LeftDungeon {
     pub dungeon: Arc<Dungeon>,
+    #[allow(dead_code)] // nothing tells the two apart yet
     pub fell: bool,
 }
 

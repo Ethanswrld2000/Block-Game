@@ -129,28 +129,67 @@ pub fn idle(t: f32) -> Pose {
     }
 }
 
+/// Hip to sole, blocks (the body's leg length).
+pub const LEG: f32 = 0.76;
+
+/// How far each leg swings from the hip (radians) at `pace` 0..2: bigger
+/// strides as it speeds up into a jog.
+fn swing_of(pace: f32) -> f32 {
+    let a = pace.clamp(0.0, 2.0);
+    0.55 + 0.25 * (a - 1.0).max(0.0)
+}
+
+/// Ground covered by one full stride (two steps) at `pace`: the planted foot
+/// sweeps from `swing` in front to `swing` behind, so the feet keep their grip
+/// when the cycle advances by distance travelled over this.
+pub fn stride(pace: f32) -> f32 {
+    // Bent knees shorten the reach a little.
+    2.0 * 2.0 * LEG * swing_of(pace.max(1.0)).sin() * 0.9
+}
+
 /// One stride of walking (`phase` in radians, a full turn = two steps) at
 /// `pace` 0 (standing) .. 1 (walking) .. 2 (jogging).
 pub fn walk(phase: f32, pace: f32) -> Pose {
     let a = pace.clamp(0.0, 2.0);
-    let swing = 0.42 + 0.12 * (a - 1.0).max(0.0);
+    let swing = swing_of(a);
+    let run = (a - 1.0).max(0.0);
     let (s, c) = phase.sin_cos();
     // A leg bends at the knee while it swings forward (cos > 0 for the left).
     let lift = |c: f32| c.max(0.0).powf(0.8);
+    // Weight: the body drops hard as each heel lands (twice per stride) and
+    // rises over the planted leg.
+    let step = (2.0 * phase).cos();
+    let drop = -(-step).max(0.0).powi(2);
     Pose {
-        // Highest when the legs pass each other, lowest as a heel lands.
-        bob: a * 0.03 * (2.0 * phase).cos() - 0.015 * (a - 1.0).max(0.0),
-        roll: a * 0.035 * s,
-        lean: a * 0.06,
-        twist: -a * 0.10 * s,
+        bob: a * (0.025 * step + 0.03 * drop) - 0.03 * run,
+        roll: a * 0.05 * s,
+        lean: a * 0.07 + 0.08 * run,
+        twist: -a * (0.12 + 0.05 * run) * s,
         hip: [a * swing * s, -a * swing * s],
-        knee: [a * (0.08 + 0.6 * lift(c)), a * (0.08 + 0.6 * lift(-c))],
+        knee: [a * (0.12 + (0.65 + 0.35 * run) * lift(c)), a * (0.12 + (0.65 + 0.35 * run) * lift(-c))],
         // Arms swing against the legs, the forearm trailing a little.
-        shoulder: [-a * 0.35 * s, a * 0.35 * s],
-        arm_out: [0.06 + a * 0.02, 0.06 + a * 0.02],
-        elbow: [a * (0.2 + 0.25 * (-s).max(0.0)), a * (0.2 + 0.25 * s.max(0.0))],
+        shoulder: [-a * (0.4 + 0.15 * run) * s, a * (0.4 + 0.15 * run) * s],
+        arm_out: [a.min(1.0) * 0.06 + a * 0.02, a.min(1.0) * 0.06 + a * 0.02],
+        elbow: [a * (0.2 + 0.3 * run + 0.25 * (-s).max(0.0)), a * (0.2 + 0.3 * run + 0.25 * s.max(0.0))],
     }
 }
+
+/// Where the body faces while moving, Minecraft-style: it turns toward the
+/// way you are going, but never more than `BODY_REACH` from where the head
+/// looks; walking backwards it keeps facing forwards (the legs walk back).
+/// `look` is the head's yaw, `going` the yaw of the movement.
+pub fn moving_facing(look: f32, going: f32) -> f32 {
+    let mut off = wrap(going - look);
+    if off.abs() > BACKWARDS {
+        off = wrap(off + PI);
+    }
+    look + off.clamp(-BODY_REACH, BODY_REACH)
+}
+
+/// The body turns at most this far from the head (Minecraft uses 75°).
+pub const BODY_REACH: f32 = 75.0 * PI / 180.0;
+/// Moving more than this far off the look direction counts as backwards.
+const BACKWARDS: f32 = 95.0 * PI / 180.0;
 
 /// Hands that move while talking, added on top of the stance. `energy` 0..1
 /// is how much the speaker is putting into it; `t` is seconds.
@@ -334,6 +373,34 @@ mod tests {
                 assert!((x[j] - y[j]).abs() < 0.05, "joint {j} jumps at phase {p}");
             }
         }
+    }
+
+    #[test]
+    fn stride_matches_the_feet() {
+        // While a foot is planted it moves back as fast as the body moves
+        // forward: one stride's sweep of both feet covers `stride`.
+        for pace in [1.0f32, 1.5, 2.0] {
+            let sweep = 2.0 * 2.0 * LEG * swing_of(pace).sin();
+            let st = stride(pace);
+            assert!(st > sweep * 0.85 && st <= sweep, "{pace}: {st} vs {sweep}");
+        }
+        assert!(stride(2.0) > stride(1.0), "longer strides when jogging");
+    }
+
+    #[test]
+    fn body_turns_toward_a_strafe_but_not_past_its_reach() {
+        let look = 0.3;
+        // Straight ahead: no turn.
+        assert!((moving_facing(look, look) - look).abs() < 1e-5);
+        // Diagonal forward-left: the body faces the way it goes.
+        assert!((moving_facing(look, look + 0.7) - (look + 0.7)).abs() < 1e-5);
+        // Sideways: turned as far as it may.
+        assert!((moving_facing(look, look + PI / 2.0) - (look + BODY_REACH)).abs() < 1e-5);
+        assert!((moving_facing(look, look - PI / 2.0) - (look - BODY_REACH)).abs() < 1e-5);
+        // Backwards: still facing forwards; back-left turns the body right a little.
+        assert!((wrap(moving_facing(look, look + PI) - look)).abs() < 1e-5);
+        let back_left = moving_facing(look, look + PI - 0.5);
+        assert!((wrap(back_left - (look - 0.5))).abs() < 1e-5);
     }
 
     #[test]

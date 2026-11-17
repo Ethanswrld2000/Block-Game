@@ -13,7 +13,8 @@
 //   stack:  how many share one cell (defaults: blocks and materials 32, torches 16, food 8, else 1)
 //   damage: how hard it hits a creature (defaults: tools 4, anything else 2, like a fist)
 //   swing:  Jab (default, a punch), Chop (axe: diagonal from the upper right) or
-//           Overhead (pick: straight down). Mining lands one blow per swing, when it connects.
+//           Overhead (pick: straight down) or Slash (sword: a fighting cut, never mines).
+//           Mining lands one blow per swing, when it connects.
 // Pictures: every item has a sprite in assets/textures/icons/ (items.png, weapons.png for
 // tools, blocks.png for blocks), 20 px per cell of its size. The same sprite is the held model.
 // After adding an item, run `python3 tools/gen_item_art.py` to give it a placeholder sprite.
@@ -155,6 +156,11 @@
             name: "spirit_axe", title: "Spirit-Etched Axe", mass: 1.8, size: (1, 3), damage: 14.0, swing: Chop,
             kind: Tool(speeds: { "log": 11.0, "wood": 11.0, "plant": 6.0 }),
         ),
+        // Swords: swung with a quick diagonal cut (left click, never mines); hold right click
+        // to block, a block just as the cut comes parries it. Hammered at the iron anvil.
+        (name: "iron_sword", title: "Iron Sword", mass: 1.6, size: (1, 3), damage: 9.0, swing: Slash, kind: Tool(speeds: {})),
+        (name: "steel_sword", title: "Steel Sword", mass: 1.4, size: (1, 3), damage: 12.0, swing: Slash, kind: Tool(speeds: {})),
+        (name: "spirit_sword", title: "Spirit-Etched Sword", mass: 1.2, size: (1, 3), damage: 15.0, swing: Slash, kind: Tool(speeds: {})),
         (name: "flint_spear", title: "Flint Spear", mass: 1.6, size: (1, 4), damage: 10.0, kind: Tool(speeds: {})),
         // Urns: carry one and right click the ground to set it down; its station grows around it
         // (urns.ron). Crouch and right click an urn with an empty hand to pick it back up.

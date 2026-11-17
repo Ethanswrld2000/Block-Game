@@ -1,0 +1,66 @@
+// Foes (game::combat): people-shaped enemies on the NPC rig (npcs.ron looks), each with a
+// sword. Ctrl+Shift+J (Cmd+Shift+J) spawns a hollow, Ctrl+Shift+H a shade, a little ahead.
+//   ghost:  see-through blue, shimmering, trailing wisps
+//   weapon: item it holds (items.ron)
+//   damage, cause: a cut that lands (Blunt | Piercing | Chill)
+//   reach:  blocks a cut reaches; swing: seconds per swing (wind-up shows how it's coming)
+//   walk, run: blocks/s
+//   sight:  notices you within this (with a clear line); forget: gives up past this;
+//   leash:  never strays further than this from where it began
+//   style:  aggression / caution 0..1 (pressing vs circling and backing off),
+//           guard 0..1 (chance it blocks your swing), poise (blocks before its guard breaks)
+[
+    (
+        name: "hollow",
+        title: "Hollow Warden",
+        health: 40.0,
+        weapon: "iron_sword",
+        damage: 7.0,
+        cause: Piercing,
+        reach: 2.3,
+        swing: 0.85,
+        walk: 2.2,
+        run: 4.4,
+        sight: 18.0,
+        forget: 28.0,
+        leash: 40.0,
+        style: (aggression: 0.6, caution: 0.45, guard: 0.55, poise: 3.0),
+        drops: [("old_coin", 3, 0.8), ("raw_iron", 1, 0.3)],
+        looks: (
+            skin: (0.52, 0.55, 0.48),
+            hair: (0.12, 0.13, 0.12),
+            shirt: (0.24, 0.26, 0.22),
+            scarf: (0.42, 0.14, 0.12),
+            trousers: (0.20, 0.19, 0.17),
+            boots: (0.12, 0.11, 0.10),
+            iris: (0.85, 0.65, 0.25),
+        ),
+    ),
+    (
+        name: "shade",
+        title: "Fen Shade",
+        ghost: true,
+        health: 30.0,
+        weapon: "spirit_sword",
+        damage: 6.0,
+        cause: Chill,
+        reach: 2.4,
+        swing: 0.75,
+        walk: 2.6,
+        run: 5.0,
+        sight: 22.0,
+        forget: 32.0,
+        leash: 45.0,
+        style: (aggression: 0.75, caution: 0.35, guard: 0.35, poise: 2.0),
+        drops: [("spirit_ember", 1, 0.7)],
+        looks: (
+            skin: (0.70, 0.85, 1.00),
+            hair: (0.40, 0.55, 0.85),
+            shirt: (0.45, 0.62, 0.95),
+            scarf: (0.80, 0.92, 1.00),
+            trousers: (0.35, 0.50, 0.85),
+            boots: (0.30, 0.42, 0.75),
+            iris: (0.90, 1.00, 1.00),
+        ),
+    ),
+]
