@@ -66,6 +66,8 @@ pub struct Rig {
     open: Spring,
     wide: Spring,
     brow: [Spring; 3],
+    /// The chest's twist and roll follow the hips a moment later.
+    chest: [Spring; 2],
 }
 
 impl Rig {
@@ -256,6 +258,7 @@ pub fn build(c: &mut Commands, meshes: &mut Assets<Mesh>, materials: &mut Assets
         open: Spring::default(),
         wide: Spring::new(0.8),
         brow: [Spring::default(); 3],
+        chest: [Spring::default(); 2],
     };
     (root, rig)
 }
@@ -378,6 +381,10 @@ pub fn drive(tf: &mut Transform, rig: &mut Rig, parts: &mut Parts, dt: f32, d: &
         arr[i] = s.step(arr[i], 0.07, dt);
     }
     let mut pose = Pose::from_array(arr).add(motion::walk(rig.phase, pace));
+    // Follow-through: the chest's turn lags the hips a touch, and it rocks
+    // against them, so the upper body flows rather than moving locked to the legs.
+    pose.twist = rig.chest[0].step(pose.twist, 0.06, dt);
+    let chest_roll = rig.chest[1].step(-pose.roll * 0.6, 0.08, dt);
     pose.lean += d.sway[0];
     pose.roll += d.sway[1];
     // Arms at work: straight from the swing's keys (no spring, so the blow
@@ -406,6 +413,7 @@ pub fn drive(tf: &mut Transform, rig: &mut Rig, parts: &mut Parts, dt: f32, d: &
     }
     set!(rig.hips, |t| {
         t.translation.y = HIP_Y + pose.bob;
+        t.translation.x = pose.shift;
         t.rotation = Quat::from_rotation_z(pose.roll);
     });
     for i in 0..2 {
@@ -421,7 +429,7 @@ pub fn drive(tf: &mut Transform, rig: &mut Rig, parts: &mut Parts, dt: f32, d: &
     }
     // The held item: tip down (pitch) and rolled about the forearm.
     set!(rig.hands[1], |t| t.rotation = Quat::from_rotation_y(wrist[1]) * Quat::from_rotation_x(wrist[0]));
-    set!(rig.torso, |t| t.rotation = Quat::from_rotation_z(-pose.roll * 0.6) * Quat::from_rotation_y(twist) * Quat::from_rotation_x(-pose.lean));
+    set!(rig.torso, |t| t.rotation = Quat::from_rotation_z(chest_roll) * Quat::from_rotation_y(twist) * Quat::from_rotation_x(-pose.lean));
     // The head looks where the gaze says, undoing the torso's twist and lean,
     // with a small nod while talking and a tilt when curious.
     let nod = 0.035 * energy * (t * 5.3).sin();

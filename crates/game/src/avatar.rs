@@ -52,8 +52,8 @@ const TURN_AT: f32 = 50.0 * std::f32::consts::PI / 180.0;
 /// amble, close to Minecraft's).
 const TURN_TIME: f32 = 0.13;
 /// Lean (radians) per block/s² of speeding up or slowing down, and the most.
-const LEAN_PER_ACCEL: f32 = 0.012;
-const MAX_LEAN: f32 = 0.22;
+const LEAN_PER_ACCEL: f32 = 0.007;
+const MAX_LEAN: f32 = 0.14;
 
 fn spawn_body(
     mut commands: Commands,
@@ -134,7 +134,7 @@ fn animate(
     let lean = (accel.dot(ahead) * LEAN_PER_ACCEL).clamp(-MAX_LEAN, MAX_LEAN);
     let tip = (accel.dot(left) * LEAN_PER_ACCEL * 0.6).clamp(-MAX_LEAN, MAX_LEAN);
     let dt = real.delta_secs().min(0.05);
-    let sway = [springs[0].step(lean, 0.15, dt), springs[1].step(tip, 0.15, dt)];
+    let sway = [springs[0].step(lean, 0.25, dt), springs[1].step(tip, 0.25, dt)];
 
     let drive = Drive {
         yaw: *facing,

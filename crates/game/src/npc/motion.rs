@@ -45,7 +45,7 @@ pub fn wrap(a: f32) -> f32 {
     (a + PI).rem_euclid(TAU) - PI
 }
 
-/// Every joint of a body, in radians (and blocks for `bob`). Left is index 0.
+/// Every joint of a body, in radians (and blocks for `bob` and `shift`). Left is index 0.
 ///
 /// Signs: `hip`/`shoulder` > 0 swings the limb forward, `knee` > 0 bends it
 /// back, `elbow` > 0 bends the forearm up, `arm_out` > 0 lifts the arm away
@@ -54,6 +54,9 @@ pub fn wrap(a: f32) -> f32 {
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Pose {
     pub bob: f32,
+    /// Hips moved sideways (blocks, > 0 to the left): the weight shifting
+    /// over the planted foot.
+    pub shift: f32,
     pub roll: f32,
     pub lean: f32,
     pub twist: f32,
@@ -65,11 +68,12 @@ pub struct Pose {
 }
 
 impl Pose {
-    pub const JOINTS: usize = 14;
+    pub const JOINTS: usize = 15;
 
     pub fn to_array(self) -> [f32; Self::JOINTS] {
         [
             self.bob,
+            self.shift,
             self.roll,
             self.lean,
             self.twist,
@@ -89,14 +93,15 @@ impl Pose {
     pub fn from_array(a: [f32; Self::JOINTS]) -> Self {
         Self {
             bob: a[0],
-            roll: a[1],
-            lean: a[2],
-            twist: a[3],
-            hip: [a[4], a[5]],
-            knee: [a[6], a[7]],
-            shoulder: [a[8], a[9]],
-            arm_out: [a[10], a[11]],
-            elbow: [a[12], a[13]],
+            shift: a[1],
+            roll: a[2],
+            lean: a[3],
+            twist: a[4],
+            hip: [a[5], a[6]],
+            knee: [a[7], a[8]],
+            shoulder: [a[9], a[10]],
+            arm_out: [a[11], a[12]],
+            elbow: [a[13], a[14]],
         }
     }
 
@@ -118,6 +123,7 @@ pub fn idle(t: f32) -> Pose {
     let shift = (t * 0.37).sin();
     Pose {
         bob: 0.006 * breath,
+        shift: -0.012 * shift,
         roll: 0.025 * shift,
         lean: 0.02 + 0.01 * breath,
         twist: 0.03 * (t * 0.23).sin(),
@@ -129,48 +135,54 @@ pub fn idle(t: f32) -> Pose {
     }
 }
 
-/// Hip to sole, blocks (the body's leg length).
-pub const LEG: f32 = 0.76;
-
-/// How far each leg swings from the hip (radians) at `pace` 0..2: bigger
-/// strides as it speeds up into a jog.
+/// How far each leg swings from the hip (radians) at `pace` 0..2: a little
+/// longer as it speeds up into a jog.
 fn swing_of(pace: f32) -> f32 {
     let a = pace.clamp(0.0, 2.0);
-    0.55 + 0.25 * (a - 1.0).max(0.0)
+    0.46 + 0.18 * (a - 1.0).max(0.0)
 }
 
-/// Ground covered by one full stride (two steps) at `pace`: the planted foot
-/// sweeps from `swing` in front to `swing` behind, so the feet keep their grip
-/// when the cycle advances by distance travelled over this.
+/// Ground covered by one full stride (two steps) at `pace`, blocks. Long,
+/// unhurried strides: about two strides a second at walking speed. The feet
+/// reach a little less than this, which reads as a relaxed glide rather than
+/// a quick shuffle.
 pub fn stride(pace: f32) -> f32 {
-    // Bent knees shorten the reach a little.
-    2.0 * 2.0 * LEG * swing_of(pace.max(1.0)).sin() * 0.9
+    1.95 + 0.45 * (pace.clamp(1.0, 2.0) - 1.0)
 }
 
 /// One stride of walking (`phase` in radians, a full turn = two steps) at
 /// `pace` 0 (standing) .. 1 (walking) .. 2 (jogging).
+///
+/// Everything moves on smooth curves with no corners: the knee folds as the
+/// leg comes through and straightens as it reaches forward; the hips sway
+/// over the planted foot and roll with it; the chest counter-turns against
+/// the legs and the arms swing a beat behind them, the forearms trailing, so
+/// the body flows instead of moving as one block. No up-and-down bob.
 pub fn walk(phase: f32, pace: f32) -> Pose {
     let a = pace.clamp(0.0, 2.0);
-    let swing = swing_of(a);
     let run = (a - 1.0).max(0.0);
+    let swing = swing_of(a);
     let (s, c) = phase.sin_cos();
-    // A leg bends at the knee while it swings forward (cos > 0 for the left).
-    let lift = |c: f32| c.max(0.0).powf(0.8);
-    // Weight: the body drops hard as each heel lands (twice per stride) and
-    // rises over the planted leg.
-    let step = (2.0 * phase).cos();
-    let drop = -(-step).max(0.0).powi(2);
+    // The upper body trails the legs a little.
+    let (ls, lc) = (phase - 0.35).sin_cos();
+    // Knee: folds most as the leg passes under the body coming forward
+    // (cos = 1 for the left), straight-ish as it plants. Smooth both ways.
+    let fold = |c: f32| ((1.0 + c) * 0.5).powi(3);
+    let knee = 0.6 + 0.35 * run;
+    // Forearm bends more on the back swing.
+    let curl = |x: f32| (1.0 - x) * 0.5;
+    let arm = 0.3 + 0.15 * run;
     Pose {
-        bob: a * (0.025 * step + 0.03 * drop) - 0.03 * run,
-        roll: a * 0.05 * s,
-        lean: a * 0.07 + 0.08 * run,
-        twist: -a * (0.12 + 0.05 * run) * s,
+        bob: -0.02 * run,
+        shift: -a * 0.025 * ls,
+        roll: a * 0.035 * ls,
+        lean: a * 0.035 + 0.06 * run,
+        twist: -a * (0.11 + 0.04 * run) * ls,
         hip: [a * swing * s, -a * swing * s],
-        knee: [a * (0.12 + (0.65 + 0.35 * run) * lift(c)), a * (0.12 + (0.65 + 0.35 * run) * lift(-c))],
-        // Arms swing against the legs, the forearm trailing a little.
-        shoulder: [-a * (0.4 + 0.15 * run) * s, a * (0.4 + 0.15 * run) * s],
+        knee: [a * (0.08 + knee * fold(c)), a * (0.08 + knee * fold(-c))],
+        shoulder: [-a * arm * ls, a * arm * ls],
         arm_out: [a.min(1.0) * 0.06 + a * 0.02, a.min(1.0) * 0.06 + a * 0.02],
-        elbow: [a * (0.2 + 0.3 * run + 0.25 * (-s).max(0.0)), a * (0.2 + 0.3 * run + 0.25 * s.max(0.0))],
+        elbow: [a * (0.18 + 0.3 * run + 0.22 * curl(lc)), a * (0.18 + 0.3 * run + 0.22 * curl(-lc))],
     }
 }
 
@@ -328,6 +340,9 @@ impl Gaze {
 mod tests {
     use super::*;
 
+    /// Hip to sole, blocks (the body's leg length).
+    const LEG: f32 = 0.76;
+
     #[test]
     fn spring_eases_without_overshoot() {
         let mut s = Spring::new(0.0);
@@ -376,15 +391,18 @@ mod tests {
     }
 
     #[test]
-    fn stride_matches_the_feet() {
-        // While a foot is planted it moves back as fast as the body moves
-        // forward: one stride's sweep of both feet covers `stride`.
-        for pace in [1.0f32, 1.5, 2.0] {
-            let sweep = 2.0 * 2.0 * LEG * swing_of(pace).sin();
-            let st = stride(pace);
-            assert!(st > sweep * 0.85 && st <= sweep, "{pace}: {st} vs {sweep}");
+    fn walking_is_unhurried_and_level() {
+        // About two strides a second at walking speed (4.4 blocks/s), a bit
+        // quicker jogging; the feet still reach most of the way.
+        let per_second = |speed: f32, pace: f32| speed / stride(pace);
+        assert!((1.9..2.5).contains(&per_second(4.4, 1.0)));
+        assert!(per_second(6.8, 1.55) > per_second(4.4, 1.0));
+        let reach = 4.0 * LEG * swing_of(1.0).sin();
+        assert!(reach > stride(1.0) * 0.6, "feet reach most of the stride");
+        // Walking doesn't bob the body up and down.
+        for i in 0..100 {
+            assert_eq!(walk(i as f32 * 0.07, 1.0).bob, 0.0);
         }
-        assert!(stride(2.0) > stride(1.0), "longer strides when jogging");
     }
 
     #[test]

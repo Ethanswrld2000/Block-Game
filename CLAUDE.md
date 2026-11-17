@@ -295,8 +295,10 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   Off at benches and in talks (`Menus.still`). The body's right fist (`Rig.hands`) carries a `hands::Held`, so it holds
   what you hold. Swings: `swing::Swing::limbs` gives the body's arms on the same keys as the first-person `pose`
   (axe = flat horizontal swing with a bite and hold; pick = high overhead, straight down). `BLOCKGAME_VIEW=third` for screenshots.
-  Movement feel: the walk cycle advances by distance over `motion::stride(pace)` (from leg length and swing), so feet
-  don't slide, and goes on top of the sprung stance unfiltered; the body turns Minecraft-style while moving
+  Movement feel: the walk cycle advances by distance over `motion::stride(pace)` (about two unhurried strides a second
+  at walking speed) and goes on top of the sprung stance unfiltered; no up-and-down bob (Ethan found it too much); hips
+  sway sideways over the planted foot (`Pose.shift`), the chest's twist lags the hips (`Rig.chest` springs), arms
+  and forearms trail the legs; the body turns Minecraft-style while moving
   (`motion::moving_facing`: toward the way you go, at most 75° from the head, forwards when backing up; standing it
   turns once the head is 50° off) and leans into speeding up, stopping and turns (`Drive.sway`, from `avatar`).
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
