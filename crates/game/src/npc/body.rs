@@ -246,6 +246,7 @@ fn clone_npc(n: &Npc) -> Npc {
     let mut out = Npc::new(n.kind, n.yaw);
     out.order = n.order;
     out.flags = n.flags.clone();
+    out.post = n.post;
     out
 }
 
