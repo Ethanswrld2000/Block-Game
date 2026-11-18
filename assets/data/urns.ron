@@ -55,10 +55,7 @@
                 (name: "portable_tent", title: "Portable Tent", tier: 3, gives: Recipes, after: ["portable_bedroll"],
                  needs: { "hide": 4, "stick": 8, "cordage": 4, "deepstone_shard": 4, "warden_sigil": 1 },
                  desc: "The camp mat learns to make a tent: shelter from rain and wind on the road."),
-                (name: "star_urn", title: "Star Urn", tier: 3, gives: Urn("star"), after: ["tool_urn"],
-                 needs: { "old_coin": 1, "flint": 6, "cobblestone": 12, "deepstone_shard": 4, "warden_sigil": 1 },
-                 desc: "Set it down to start the Astronomy Station. Its coin comes from a barrow."),
-                (name: "golem_urn", title: "Golem Urn", tier: 3, gives: Urn("golem"), after: ["star_urn"],
+                (name: "golem_urn", title: "Golem Urn", tier: 3, gives: Urn("golem"), after: ["tool_urn"],
                  needs: { "raw_iron": 8, "spirit_ember": 4, "skystone": 6, "deepstone_shard": 4, "warden_sigil": 1 },
                  desc: "Set it down to start the Golem Station."),
             ],
@@ -170,7 +167,7 @@
         (
             name: "star", title: "Star Urn", station: "Astronomy Station", item: Some("star_urn"),
             color: (0.28, 0.32, 0.62),
-            how: "The ancestral urn gives it, for a coin from a barrow.",
+            how: "It stands at the top of the abandoned castle in the mountains, by Orrin Vale.",
             steps: [
                 (name: "telescope", title: "Telescope", tier: 1, gives: Station("telescope"),
                  needs: { "planks": 6, "flint": 4, "raw_iron": 2 },

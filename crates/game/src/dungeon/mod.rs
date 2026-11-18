@@ -129,14 +129,15 @@ fn place_guides(
     pending.retain(|_, t| now - *t < 3.0);
     // Guides of dungeons you left behind go.
     for (e, npc) in &npcs {
-        if let Some(id) = npc.post
+        if npc.kind == kind
+            && let Some(id) = npc.post
             && nearby.list.iter().find(|d| d.id == id).is_none_or(|d| gate_dist(d, player.pos) > GONE)
         {
             commands.entity(e).despawn();
         }
     }
     for d in &nearby.list {
-        if gate_dist(d, player.pos) > NEAR || pending.contains_key(&d.id) || npcs.iter().any(|(_, n)| n.post == Some(d.id)) {
+        if gate_dist(d, player.pos) > NEAR || pending.contains_key(&d.id) || npcs.iter().any(|(_, n)| n.kind == kind && n.post == Some(d.id)) {
             continue;
         }
         let want = Vec3::from_array(d.guide);

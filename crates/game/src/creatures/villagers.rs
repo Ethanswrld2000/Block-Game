@@ -39,6 +39,9 @@ struct Talk {
     day: Vec<String>,
     evening: Vec<String>,
     night: Vec<String>,
+    /// Sporrow's mushroom folk say these at any hour.
+    #[serde(default)]
+    mushroom: Vec<String>,
 }
 
 #[derive(Component, Debug)]
@@ -54,6 +57,8 @@ pub struct Villager {
     pub home: bool,
     /// Seconds left standing still to talk.
     pub talking: f32,
+    /// Sporrow's mushroom folk (wary talk).
+    pub mushroom: bool,
 }
 
 /// Villages whose people are out, by village id.
@@ -83,6 +88,7 @@ fn populate(
     }
     *timer = 1.0;
     let Some(villager) = kinds.id("villager") else { return };
+    let mushroom_folk = kinds.id("mushroom_folk").unwrap_or(villager);
     // Gone far away: they stay home.
     populated.live.retain(|_, (center, list)| {
         let keep = flat(*center - player.pos).length() < LEAVE;
@@ -112,6 +118,8 @@ fn populate(
             .collect();
         let Some(doors) = doors else { continue };
         let mut list = Vec::new();
+        let mushroom = v.folk == worldgen::Folk::Mushroom;
+        let villager = if mushroom { mushroom_folk } else { villager };
         for (i, door) in doors.into_iter().enumerate() {
             let name = worldgen::person_name(v.id.wrapping_mul(31).wrapping_add(i as u64 * 0x9E37_79B9));
             let e = spawn_creature(&mut commands, &kinds, &assets, villager, door, 0.0);
@@ -120,7 +128,7 @@ fn populate(
             c.leash = Some((center, v.radius as f32 - 6.0));
             commands.entity(e).insert((
                 c,
-                Villager { name, village_name: v.name.clone(), door, center, radius: v.radius as f32, home: indoors, talking: 0.0 },
+                Villager { name, village_name: v.name.clone(), door, center, radius: v.radius as f32, home: indoors, talking: 0.0, mushroom },
                 if indoors { Visibility::Hidden } else { Visibility::Inherited },
             ));
             list.push(e);
@@ -210,6 +218,7 @@ fn talk(
         let Ok(mut v) = q.get_mut(u.0) else { continue };
         let h = clock.hour();
         let pool = match h {
+            _ if v.mushroom && !lines.mushroom.is_empty() => &lines.mushroom,
             h if (5.0..10.0).contains(&h) => &lines.morning,
             h if (10.0..18.0).contains(&h) => &lines.day,
             h if (18.0..21.0).contains(&h) => &lines.evening,

@@ -56,6 +56,9 @@ pub struct Choice {
     pub without: Vec<String>,
     #[serde(default)]
     pub sets: Vec<String>,
+    /// Something the NPC does for you (`game::cast::services`); it picks the node that follows.
+    #[serde(default)]
+    pub service: Option<String>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -97,6 +100,7 @@ pub struct Offer {
 pub struct Outcome {
     pub next: Option<String>,
     pub act: Option<Act>,
+    pub service: Option<String>,
 }
 
 pub const MET: &str = "met";
@@ -140,8 +144,8 @@ impl Tree {
                 {
                     return Err(format!("reply `{}` in `{id}` goes to missing `{g}`", c.text));
                 }
-                if c.goto.is_none() && !c.end && c.act.is_none() {
-                    return Err(format!("reply `{}` in `{id}` leads nowhere (give it goto, end or act)", c.text));
+                if c.goto.is_none() && !c.end && c.act.is_none() && c.service.is_none() {
+                    return Err(format!("reply `{}` in `{id}` leads nowhere (give it goto, end, act or service)", c.text));
                 }
             }
         }
@@ -181,7 +185,7 @@ impl Tree {
     /// Pick reply `index` at node `id`.
     pub fn pick(&self, id: &str, index: usize, flags: &mut HashSet<String>, asked: &mut HashSet<(String, usize)>) -> Outcome {
         let Some(c) = self.nodes.get(id).and_then(|n| n.choices.get(index)) else {
-            return Outcome { next: None, act: None };
+            return Outcome { next: None, act: None, service: None };
         };
         asked.insert((id.to_string(), index));
         flags.extend(c.sets.iter().cloned());
@@ -196,7 +200,7 @@ impl Tree {
             Some(Act::Spirit) | None => {}
         }
         let next = if c.end { None } else { c.goto.clone() };
-        Outcome { next, act: c.act }
+        Outcome { next, act: c.act, service: c.service.clone() }
     }
 }
 

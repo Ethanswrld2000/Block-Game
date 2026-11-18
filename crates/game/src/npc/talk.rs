@@ -29,7 +29,7 @@ impl Plugin for TalkPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Talk>().add_systems(crate::menu::GameStartup, spawn_ui).add_systems(
             crate::menu::GameUpdate,
-            (prompt, input, run, camera, hide_hud, draw)
+            (prompt, input.in_set(TalkInput), run.in_set(TalkRun), camera, hide_hud, draw)
                 .chain()
                 .in_set(TalkSet)
                 .after(super::NpcSet)
@@ -40,6 +40,12 @@ impl Plugin for TalkPlugin {
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TalkSet;
+
+/// Services (`game::cast`) run between these: after a reply is picked, before its node starts.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TalkInput;
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TalkRun;
 
 /// How close you must be to talk.
 const REACH: f32 = 4.5;
@@ -76,6 +82,13 @@ pub struct Talk {
     hidden: Vec<(Entity, Visibility)>,
     /// A reply asked the NPC to cast the spirit spell (`dungeon::spirit` takes it).
     cast: bool,
+    /// A reply asked for a service (`game::cast` takes it and picks the next node).
+    service: Option<String>,
+    /// `{key}` in a line is replaced by `vars[key]` (set by services).
+    pub vars: std::collections::HashMap<String, String>,
+    /// Flags that count for this talk's replies besides the NPC's own (what you can
+    /// make, what's in stock today), kept up to date by `game::cast`.
+    pub extra: std::collections::HashSet<String>,
 }
 
 impl Talk {
@@ -86,6 +99,26 @@ impl Talk {
     /// The spirit spell was asked for in this talk (once).
     pub fn take_cast(&mut self) -> bool {
         std::mem::take(&mut self.cast)
+    }
+
+    /// Who you are talking to.
+    pub fn with(&self) -> Option<Entity> {
+        self.with
+    }
+
+    /// A service asked for by the reply just picked (once).
+    pub fn take_service(&mut self) -> Option<String> {
+        self.service.take()
+    }
+
+    /// Go on to a node of the tree (it starts on the next run).
+    pub fn go_to(&mut self, node: &str) {
+        self.node = node.to_string();
+        self.line = 0;
+        self.choosing = false;
+        self.t = -0.25;
+        self.speech = Speech::default();
+        self.text.clear();
     }
 }
 
@@ -241,6 +274,7 @@ fn prompt(
     let node = tree.opening(&npc.flags).to_string();
     tree.enter(&node, &mut npc.flags);
     talk.with = Some(e);
+    talk.vars.clear();
     talk.leaving = false;
     talk.choosing = false;
     talk.was_paused = vtime.is_paused();
@@ -264,12 +298,21 @@ fn begin_node(talk: &mut Talk, book: &NpcBook, npc: &Npc, node: String) {
 fn begin_line(talk: &mut Talk, book: &NpcBook, npc: &Npc, t: f32) {
     let Some(kind) = book.kinds.get(npc.kind) else { return };
     let Some(node) = book.trees.get(&kind.dialogue).and_then(|tr| tr.nodes.get(&talk.node)) else { return };
-    talk.text = node.say.get(talk.line).cloned().unwrap_or_default();
+    talk.text = fill(node.say.get(talk.line).map_or("", |s| s.as_str()), &talk.vars);
     talk.mood = node.mood;
     talk.speech = voice::speak(&talk.text, kind.voice.rate);
     talk.t = t;
     talk.offers = Vec::new();
     talk.selected = 0;
+}
+
+/// `{key}` replaced by `vars[key]` (pure).
+pub fn fill(line: &str, vars: &std::collections::HashMap<String, String>) -> String {
+    let mut out = line.to_string();
+    for (k, v) in vars {
+        out = out.replace(&format!("{{{k}}}"), v);
+    }
+    out
 }
 
 /// Keys and clicks during a talk.
@@ -353,7 +396,8 @@ fn next_line(talk: &mut Talk, book: &NpcBook, npc: &Npc) {
         begin_line(talk, book, npc, -0.15);
         return;
     }
-    let offers = tree.offers(&talk.node, &npc.flags, &npc.asked);
+    let flags: std::collections::HashSet<String> = npc.flags.union(&talk.extra).cloned().collect();
+    let offers = tree.offers(&talk.node, &flags, &npc.asked);
     if !offers.is_empty() {
         talk.offers = offers;
         talk.choosing = true;
@@ -388,6 +432,13 @@ fn choose(talk: &mut Talk, book: &NpcBook, npc: &mut Npc, i: usize) {
         Some(Act::Wander) => npc.order = Order::Wander { home: Vec3::NAN },
         Some(Act::Spirit) => talk.cast = true,
         None => {}
+    }
+    if let Some(service) = out.service {
+        // `game::cast` does it and sends the talk on (this node again if nothing does).
+        talk.service = Some(service);
+        let node = talk.node.clone();
+        talk.go_to(&node);
+        return;
     }
     match out.next {
         Some(next) => {

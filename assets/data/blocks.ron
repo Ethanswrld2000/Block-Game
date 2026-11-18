@@ -68,4 +68,7 @@
     (name: "wooden_door", top: "wooden_door", hardness: 2.0, material: "wood"),
     (name: "glass", top: "glass", opaque: false, translucent: true, hardness: 0.5, material: "stone"),
     (name: "window", top: "window", opaque: false, translucent: true, hardness: 1.0, material: "wood"),
+    // Sporrow's houses (worldgen::landmarks): giant mushrooms.
+    (name: "mushroom_stem", top: "mushroom_stem", hardness: 1.2, material: "wood"),
+    (name: "mushroom_cap", top: "mushroom_cap", bottom: "mushroom_gills", hardness: 0.8, material: "wood"),
 ]

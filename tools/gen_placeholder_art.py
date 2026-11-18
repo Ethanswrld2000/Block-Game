@@ -418,6 +418,30 @@ def window(s):
     return img
 
 
+def mushroom_stem(s):
+    img = noisy(s, [(206, 196, 170), (226, 218, 196)], (8, 2))
+    xs = np.mgrid[0:T, 0:T][1]
+    img[(xs % 7) == 3, :3] *= 0.9
+    return img
+
+
+def mushroom_cap(s):
+    img = noisy(s, [(150, 44, 34), (178, 60, 44)], (8, 2))
+    rng = np.random.default_rng(s)
+    for _ in range(5):
+        cx, cy, r = rng.integers(3, T - 3), rng.integers(3, T - 3), rng.integers(2, 4)
+        ys, xs = np.mgrid[0:T, 0:T]
+        img[(xs - cx) ** 2 + (ys - cy) ** 2 <= r * r, :3] = (236, 226, 204)
+    return img
+
+
+def mushroom_gills(s):
+    img = noisy(s, [(196, 170, 140), (222, 200, 170)], (4, 2))
+    xs = np.mgrid[0:T, 0:T][1]
+    img[(xs % 3) == 0, :3] *= 0.8
+    return img
+
+
 TILES = [
     ("grass_top", grass_top), ("grass_side", grass_side), ("dirt", dirt), ("stone", stone),
     ("cobblestone", cobble), ("sand", sand), ("mud", mud), ("moss", moss),
@@ -437,6 +461,7 @@ TILES = [
     ("vine", vine),
     ("floorboards", floorboards), ("timber_wall", timber_wall), ("wattle_wall", wattle_wall), ("thatch", thatch),
     ("chair", chair), ("table", table), ("wooden_door", wooden_door), ("glass", glass), ("window", window),
+    ("mushroom_stem", mushroom_stem), ("mushroom_cap", mushroom_cap), ("mushroom_gills", mushroom_gills),
 ]
 
 

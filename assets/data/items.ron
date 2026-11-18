@@ -58,6 +58,8 @@
         (name: "wooden_door", title: "Wooden Door", kind: Block("wooden_door"), mass: 3.0),
         (name: "glass", title: "Glass", kind: Block("glass"), mass: 1.0),
         (name: "window", title: "Window", kind: Block("window"), mass: 1.2),
+        (name: "mushroom_stem", title: "Mushroom Stem", kind: Block("mushroom_stem"), mass: 0.8),
+        (name: "mushroom_cap", title: "Mushroom Cap", kind: Block("mushroom_cap"), mass: 0.6),
         // Machines, built at the machination table and set down in the world (machines.ron).
         (name: "airship", title: "Airship", kind: Machine("airship"), mass: 12.0, size: (3, 2), stack: 1),
         // Food. Tier 1 is a quick buff, tier 4 can pull you back from a mortal wound.

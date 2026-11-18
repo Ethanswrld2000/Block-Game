@@ -66,6 +66,7 @@ impl Plugin for StationPlugin {
             .init_resource::<telescope::Scope>()
             .add_message::<StepDone>()
             .add_message::<particles::Burst>()
+            .add_message::<board::Cooked>()
             .add_plugins(MaterialPlugin::<forge::GlintMaterial>::default())
             .add_systems(
                 crate::menu::GameStartup,
@@ -160,6 +161,9 @@ pub struct Urns {
     /// Constellations charted through the telescope.
     #[serde(default)]
     pub charted: std::collections::BTreeSet<String>,
+    /// Recipe keys people taught you (`messler:...`; benches.ron `unlock`).
+    #[serde(default)]
+    pub taught: std::collections::BTreeSet<String>,
 }
 
 /// Tools sharpened at the sharpening stone: item name -> seconds of edge left,
@@ -941,7 +945,9 @@ fn sync_learned(urns: Res<Urns>, mut benches: ResMut<board::Benches>) {
         return;
     }
     let learned: std::collections::BTreeSet<String> =
-        urns.progress.values().flat_map(|p| p.done.iter().cloned()).chain(urns.studied.iter().map(|i| format!("lens:{i}"))).collect();
+        urns.progress.values().flat_map(|p| p.done.iter().cloned()).chain(urns.studied.iter().map(|i| format!("lens:{i}")))
+            .chain(urns.taught.iter().cloned())
+            .collect();
     if benches.0.learned != learned {
         benches.0.learned = learned;
     }

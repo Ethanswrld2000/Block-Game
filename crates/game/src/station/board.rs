@@ -748,6 +748,17 @@ pub(super) fn board_keys(
     }
 }
 
+/// What came of stirring the cooking pot (Messler has something to say about it).
+#[derive(Message, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Cooked {
+    /// It made something.
+    Made,
+    /// Nothing cooked: no recipe, or the fire too low.
+    Failed,
+    /// Stirred over a lit fire with nothing in the pot that makes anything.
+    Burnt,
+}
+
 /// Clicks at the bench: the strip, the slots, the strike stone.
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub(super) fn board_click(
@@ -762,7 +773,7 @@ pub(super) fn board_click(
     mut at: ResMut<AtBench>,
     mut inv: ResMut<Inventory>,
     (mut spill, mut sound, mut toast, mut gain): (MessageWriter<Spill>, MessageWriter<PlaySound>, MessageWriter<Toast>, MessageWriter<crate::progress::GainXp>),
-    (prog, mut bursts): (Option<Res<crate::progress::xp::Progression>>, MessageWriter<Burst>),
+    (prog, mut bursts, mut cooked): (Option<Res<crate::progress::xp::Progression>>, MessageWriter<Burst>, MessageWriter<Cooked>),
     (mut urns, mut edges): (ResMut<Urns>, ResMut<Edges>),
     (recipes, drops, blocks): (Option<Res<crate::inventory::crafting::Recipes>>, Option<Res<crate::inventory::drops::Drops>>, Res<crate::blocks::Blocks>),
 ) {
@@ -818,6 +829,11 @@ pub(super) fn board_click(
                 at.study = Some(study_text(s.item, &items, &benches.0, recipes.as_deref(), drops.as_deref(), &blocks));
             }
             (Work::Nothing, _) => {
+                if st.kind == StationKind::CookingPot && at.board.made.is_none() {
+                    let lit = benches.0.heat_of(name, &at.board) > 0;
+                    let low = benches.0.needs_heat(name, &at.board).is_some();
+                    cooked.write(if lit && !low { Cooked::Burnt } else { Cooked::Failed });
+                }
                 sound.write(PlaySound::new("hit").gain(0.35));
                 let line = if at.board.made.is_some() {
                     "Take what you made first".to_string()
@@ -837,6 +853,9 @@ pub(super) fn board_click(
                 at.dirty = true;
             }
             (Work::Made(s), _) => {
+                if st.kind == StationKind::CookingPot {
+                    cooked.write(Cooked::Made);
+                }
                 sound.write(PlaySound::new(layout(st.kind).sound).gain(0.9));
                 // The parts come together into it (`forge`), which lays the board out again.
                 let used: Vec<(String, usize)> = before

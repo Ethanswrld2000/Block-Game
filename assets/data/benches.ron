@@ -107,6 +107,12 @@
         (station: "cooking_pot", mix: [("chopped_reeds", 3), ("marsh_berries", 3)], heat: 3, work: 5, makes: ("bog_stew", 1), unlock: "herb_rack"),
         (station: "cooking_pot", mix: [("roast_slices", 4), ("chopped_reeds", 3), ("marsh_berries", 3), ("ember_herb", 1)], heat: 4, work: 6, makes: ("feast_platter", 1), unlock: "herb_rack"),
 
+        // Taught by Messler when you feed him (services.ron `messler_teaches`).
+        (station: "cooking_pot", mix: [("raw_meat", 1), ("marsh_berries", 2)], heat: 2, work: 4, makes: ("roast_meat", 2), unlock: "messler:berry_roast"),
+        (station: "cooking_pot", mix: [("fish_flakes", 2), ("chopped_reeds", 2)], heat: 2, work: 4, makes: ("reed_broth", 3), unlock: "messler:fish_broth"),
+        (station: "cooking_pot", mix: [("meat_strips", 2), ("fish_flakes", 2), ("chopped_reeds", 2)], heat: 3, work: 5, makes: ("bog_stew", 3), unlock: "messler:hearty_stew"),
+        (station: "cooking_pot", mix: [("roast_slices", 3), ("marsh_berries", 2), ("ember_herb", 1)], heat: 4, work: 6, makes: ("feast_platter", 1), unlock: "messler:ember_platter"),
+
         // Smoking rack (cooking station): meat hangs in peat smoke and keeps.
         (station: "smoking_rack", slots: {"rack": ("raw_meat", 1)}, heat: 2, work: 4, makes: ("cured_meat", 1)),
         (station: "smoking_rack", slots: {"rack": ("raw_meat", 2)}, heat: 3, work: 5, makes: ("cured_meat", 2)),

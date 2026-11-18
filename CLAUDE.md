@@ -387,6 +387,20 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `npc::SETTLE` (5) blocks of that urn: they wander round it from then on (flag `recruited`). `npc::people` saves every
   NPC but the gate guides to `people.ron` (order, flags, place). Nothing places the cast in the world yet: Ctrl+Shift+N
   spawns the next kind each press; `BLOCKGAME_NPC=3 BLOCKGAME_NPC_KIND=gilm` for screenshots.
+- Landmarks and cast services (Legacy prompts 10-12): `worldgen::landmarks` (pure, once per world): Sporrow, a village of
+  giant mushroom houses (`mushroom_stem`/`mushroom_cap` blocks) 60-110 blocks from the Rotting Gate, a `Village` with
+  `folk: Folk::Mushroom` (so `villages_in`, warding and villagers include it; its villagers are the `mushroom_folk` creature,
+  wary lines in villagers.ron `mushroom`); Gilm's stone hut with a forge just outside it (`gilm_forge`); the castle
+  (`castle`): a walled court on a plinth on the highest level-enough mountain ground, a 7x7 tower 20 high with a stair round
+  the inside coming out on the roof. Positions are logged at startup. `game::cast`: Brindlespheimer stands by the gate
+  (`GATE_POST`, not saved); Gilm (at his hut) and Orrin (on the tower roof) are placed once per world, the Star Urn is set
+  on the tower once (`urns.placed["star"]`; the ancestral urn no longer gives it); `cast.ron` remembers what was placed.
+  `cast::services` (`assets/data/services.ron`, `trades.ron`): dialogue replies with `service:` are done between picking and
+  the next node (`npc::talk::{TalkInput, TalkRun}`, `Talk::take_service`/`go_to`, `{key}` vars, `Talk.extra` flags):
+  Orrin `weather` (WeatherState next/until), Messler `feed` (teaches the next `messler_teaches` recipe: `Urns.taught`, merged
+  into the learned set) and remarks on `board::Cooked` (made/failed/burnt), Gilm and Liora `commission:<n>` (Gilm only what
+  you can't make yet: `knows:<item>`), Wren `trade:<id>` (`stock:<id>` per day). `cast::wren`: on even days Wren lands a small
+  flying machine by the vehicle urn and stays (`WREN_POST`, not saved); the next day she flies off.
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen

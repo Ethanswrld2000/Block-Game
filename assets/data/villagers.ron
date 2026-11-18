@@ -21,4 +21,13 @@
         "Shh. They're out there.",
         "Get inside, or get a torch lit.",
     ],
+    // Sporrow's mushroom folk: wary of you, whatever the hour.
+    mushroom: [
+        "...You're not from Sporrow. Don't touch anything.",
+        "Is that fire on you? Keep it away. Keep it away!",
+        "We don't trade. We don't talk. Go on.",
+        "Gilm lives out there now. Go bother him.",
+        "Hm. You smell of smoke.",
+        "Stay off the caps. They bruise.",
+    ],
 )

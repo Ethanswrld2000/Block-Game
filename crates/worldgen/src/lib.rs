@@ -22,6 +22,7 @@ mod biome;
 mod dungeons;
 mod floating;
 mod islands;
+mod landmarks;
 mod plants;
 mod rotting;
 mod structures;
@@ -32,7 +33,8 @@ pub use biome::{Biome, Biomes, TreeKind};
 pub use dungeons::{Aabb, Dungeon, Room, RoomKind, SpawnKind, SpawnPoint, Veil};
 pub use floating::{Land, MAIN_RADIUS};
 pub use rotting::{floor as rotting_floor, in_pocket, Floor, FloorKind, FloorRoom, RottingGate, DEPTHS, POCKET};
-pub use structures::{person_name, Barrow, Hut, Village, VILLAGE_RADIUS};
+pub use landmarks::{Castle, Forge, SPORROW_RADIUS};
+pub use structures::{person_name, Barrow, Folk, Hut, Village, VILLAGE_RADIUS};
 
 use std::sync::Arc;
 
@@ -116,6 +118,8 @@ struct Ids {
     pebble: BlockId,
     moss: BlockId,
     mud: BlockId,
+    mushroom_stem: BlockId,
+    mushroom_cap: BlockId,
 }
 
 /// The world generator. Build once, share between threads with `Arc`.
@@ -152,6 +156,15 @@ pub struct WorldGen {
     home_dungeon: Option<Arc<dungeons::Dungeon>>,
     /// The Rotting Gate (one per world).
     rotting_gate: Option<rotting::RottingGate>,
+    /// Sporrow, Gilm's hut and the castle (one each per world).
+    landmarks: Landmarks,
+}
+
+#[derive(Default)]
+struct Landmarks {
+    sporrow: Option<Arc<Village>>,
+    forge: Option<landmarks::Forge>,
+    castle: Option<landmarks::Castle>,
 }
 
 impl WorldGen {
@@ -165,6 +178,8 @@ impl WorldGen {
             pebble: b("pebble")?,
             moss: b("moss")?,
             mud: b("mud")?,
+            mushroom_stem: b("mushroom_stem")?,
+            mushroom_cap: b("mushroom_cap")?,
             dirt: b("dirt")?,
             water: b("water")?,
             coal: b("coal_ore")?,
@@ -209,12 +224,18 @@ impl WorldGen {
             center: (0, 0),
             home_dungeon: None,
             rotting_gate: None,
+            landmarks: Landmarks::default(),
         };
         wg.spawn = wg.search_spawn();
         wg.center = (wg.spawn[0], wg.spawn[2]);
         wg.home = wg.search_home();
         wg.home_dungeon = wg.search_home_dungeon().map(Arc::new);
         wg.rotting_gate = wg.search_rotting_gate();
+        if let Some((v, f)) = wg.search_sporrow() {
+            wg.landmarks.sporrow = Some(Arc::new(v));
+            wg.landmarks.forge = Some(f);
+        }
+        wg.landmarks.castle = wg.search_castle();
         Ok(wg)
     }
 

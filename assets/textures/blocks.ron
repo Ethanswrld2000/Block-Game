@@ -47,5 +47,8 @@
         "wooden_door": 40,
         "glass": 41,
         "window": 42,
+        "mushroom_stem": 43,
+        "mushroom_cap": 44,
+        "mushroom_gills": 45,
     },
 )

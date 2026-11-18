@@ -24,6 +24,7 @@ mod delve;
 mod dungeon;
 mod hands;
 mod hud;
+mod cast;
 mod chop;
 mod interact;
 mod inventory;
@@ -92,6 +93,6 @@ fn main() {
             inventory::InventoryPlugin,
         ))
         .add_plugins((creatures::CreaturesPlugin, places::PlacesPlugin, progress::ProgressPlugin, station::StationPlugin, airship::AirshipPlugin, settings::SettingsPlugin, sound::SoundPlugin, bench::BenchPlugin, npc::NpcPlugin, avatar::AvatarPlugin, combat::CombatPlugin, dungeon::DungeonPlugin))
-        .add_plugins(delve::DelvePlugin)
+        .add_plugins((delve::DelvePlugin, cast::CastPlugin))
         .run();
 }

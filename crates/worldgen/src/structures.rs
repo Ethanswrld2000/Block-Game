@@ -51,6 +51,15 @@ pub struct Village {
     pub center: [i32; 3],
     pub radius: i32,
     pub huts: Vec<Hut>,
+    /// Who lives here and what their houses look like.
+    pub folk: Folk,
+}
+
+/// Stilt huts of the marsh folk, or Sporrow's mushroom houses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Folk {
+    Marsh,
+    Mushroom,
 }
 
 impl Village {
@@ -144,6 +153,13 @@ impl WorldGen {
                 }
             }
         }
+        if let Some(v) = &self.landmarks.sporrow {
+            let r = v.radius + 2;
+            let [x, _, z] = v.center;
+            if x + r >= x0 && x - r <= x1 && z + r >= z0 && z - r <= z1 {
+                out.push(v.clone());
+            }
+        }
         out
     }
 
@@ -233,7 +249,7 @@ impl WorldGen {
         if huts.len() < 3 {
             return None;
         }
-        Some(Village { id: h, name, center: [x, col.height.max(SEA_LEVEL), z], radius: VILLAGE_RADIUS, huts })
+        Some(Village { id: h, name, center: [x, col.height.max(SEA_LEVEL), z], radius: VILLAGE_RADIUS, huts, folk: Folk::Marsh })
     }
 
     fn build_barrow(&self, h: u64, x: i32, z: i32) -> Option<Barrow> {
@@ -279,7 +295,10 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) {
         if top < lo || bottom > hi {
             continue;
         }
-        draw_village(wg, &mut canvas, &v);
+        match v.folk {
+            Folk::Marsh => draw_village(wg, &mut canvas, &v),
+            Folk::Mushroom => crate::landmarks::draw_sporrow(wg, &mut canvas, &v),
+        }
     }
     for b in wg.barrows_in(x0, z0, x1, z1) {
         if b.max[1] + 2 < lo || b.min[1] > hi {
@@ -302,6 +321,15 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) {
         && g.bounds.min[1] - 40 <= hi
     {
         crate::rotting::draw_gate(wg, &mut canvas, g);
+    }
+    let near = |b: &crate::dungeons::Aabb| {
+        b.min[0] - 4 <= x1 && b.max[0] + 4 >= x0 && b.min[2] - 4 <= z1 && b.max[2] + 4 >= z0 && b.max[1] + 2 >= lo && b.min[1] - 40 <= hi
+    };
+    if let Some(f) = wg.gilm_forge().filter(|f| near(&f.bounds)) {
+        crate::landmarks::draw_forge(wg, &mut canvas, f);
+    }
+    if let Some(k) = wg.castle().filter(|k| near(&k.bounds)) {
+        crate::landmarks::draw_castle(wg, &mut canvas, k);
     }
 }
 
