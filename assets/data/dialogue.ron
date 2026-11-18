@@ -189,4 +189,502 @@
             ),
         },
     ),
+    // Bram Holloway, the guide. Settles by the ancestral urn (by your bedroll).
+    "bram": (
+        start: "greet",
+        again: "again",
+        nodes: {
+            "greet": (
+                mood: Curious,
+                say: [
+                    "Easy. I'm not here to drag you anywhere.",
+                    "Bram Holloway. I know whose daughter you are, and I don't care. The court took enough from me.",
+                    "You've got a bedroll and not much else. Let me help with that.",
+                ],
+                choices: [
+                    (text: "What should I do first?", tone: "Ask", goto: "first"),
+                    (text: "Why help me?", tone: "Ask", goto: "why"),
+                    (text: "Where's worth exploring?", tone: "Ask", goto: "explore"),
+                    (text: "Come back to camp with me.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "See you, Bram.", end: true),
+                ],
+            ),
+            "again": (
+                mood: Neutral,
+                say: ["Still breathing. Good. What do you need?"],
+                choices: [
+                    (text: "What should I do first?", tone: "Ask", goto: "first"),
+                    (text: "Why help me?", tone: "Ask", goto: "why"),
+                    (text: "Where's worth exploring?", tone: "Ask", goto: "explore"),
+                    (text: "Come back to camp with me.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "See you, Bram.", end: true),
+                ],
+            ),
+            "hub": (
+                mood: Neutral,
+                say: ["Anything else?"],
+                choices: [
+                    (text: "What should I do first?", tone: "Ask", goto: "first"),
+                    (text: "Why help me?", tone: "Ask", goto: "why"),
+                    (text: "Where's worth exploring?", tone: "Ask", goto: "explore"),
+                    (text: "Come back to camp with me.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "That's all.", end: true),
+                ],
+            ),
+            "first": (
+                mood: Neutral,
+                say: [
+                    "Sticks and fibre. A camp mat. Then rocks for an axe.",
+                    "The urn by your bedroll takes what you give it and makes it into something better. Feed it.",
+                ],
+                then: "hub",
+            ),
+            "why": (
+                mood: Angry,
+                say: [
+                    "Because they'd want me not to.",
+                    "The court burns what it can't own. You ran from it. That's enough for me.",
+                ],
+                then: "hub",
+            ),
+            "explore": (
+                mood: Worried,
+                say: [
+                    "There's a gate of rotten stone not far from here. Mold all over it, a strange man in blue beside it.",
+                    "What's under it changes every time you go down. The things at the bottom guard old urns.",
+                ],
+                then: "hub",
+            ),
+            "follow": (
+                mood: Happy,
+                say: ["Lead the way. I'll set myself down by your urn and keep the fire honest."],
+                choices: [(text: "Come on, then.", act: Follow, end: true)],
+            ),
+            "stay": (
+                mood: Neutral,
+                say: ["I'll be right here. Don't get yourself killed."],
+                choices: [(text: "I'll be back.", act: Stay, end: true)],
+            ),
+        },
+    ),
+    // Gilm, the mushroom blacksmith, one block tall. Settles by the tool urn.
+    "gilm": (
+        start: "greet",
+        again: "again",
+        nodes: {
+            "greet": (
+                mood: Angry,
+                say: [
+                    "What. You're staring.",
+                    "Yes, I'm a mushroom. Yes, I work a forge. Sporrow threw me out for it. Fire frightens them.",
+                    "Name's Gilm. If you've come to laugh, laugh fast. I've work.",
+                ],
+                choices: [
+                    (text: "You make tools?", tone: "Ask", goto: "tools"),
+                    (text: "Why did Sporrow cast you out?", tone: "Ask", goto: "sporrow"),
+                    (text: "I have a forge you could use. Come with me.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "Later, Gilm.", end: true),
+                ],
+            ),
+            "again": (
+                mood: Neutral,
+                say: ["Hm. You again. Brought ore?"],
+                choices: [
+                    (text: "You make tools?", tone: "Ask", goto: "tools"),
+                    (text: "Why did Sporrow cast you out?", tone: "Ask", goto: "sporrow"),
+                    (text: "I have a forge you could use. Come with me.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "Later, Gilm.", end: true),
+                ],
+            ),
+            "hub": (
+                mood: Neutral,
+                say: ["Anything else?"],
+                choices: [
+                    (text: "You make tools?", tone: "Ask", goto: "tools"),
+                    (text: "Why did Sporrow cast you out?", tone: "Ask", goto: "sporrow"),
+                    (text: "I have a forge you could use. Come with me.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "That's all.", end: true),
+                ],
+            ),
+            "tools": (
+                mood: Happy,
+                say: [
+                    "Better than yours. Better than anyone's on this rock.",
+                    "Give me a proper forge and good metal and I'll show you.",
+                ],
+                then: "hub",
+            ),
+            "sporrow": (
+                mood: Sad,
+                say: [
+                    "Mold folk and fire don't mix. One spark and a whole village goes up like dry moss.",
+                    "I only wanted to make things. They wanted me gone. So I'm gone.",
+                ],
+                then: "hub",
+            ),
+            "follow": (
+                mood: Happy,
+                say: ["A forge? A real one? ...Fine. Show me. If it's a pile of rocks I'm leaving."],
+                choices: [(text: "Come on, then.", act: Follow, end: true)],
+            ),
+            "stay": (
+                mood: Neutral,
+                say: ["Fine. I'll stand here like a stump."],
+                choices: [(text: "I'll be back.", act: Stay, end: true)],
+            ),
+        },
+    ),
+    // Wren Calloway, the barterer with her own flying machine. Settles by the vehicle urn.
+    "wren": (
+        start: "greet",
+        again: "again",
+        nodes: {
+            "greet": (
+                mood: Happy,
+                say: [
+                    "Oh, a customer! Don't mind the oil, she leaks when she's happy.",
+                    "Wren Calloway. I buy, I sell, I fly. Mostly I haggle.",
+                    "Where have I been? Here and there. Mostly there.",
+                ],
+                choices: [
+                    (text: "What do you sell?", tone: "Ask", goto: "sell"),
+                    (text: "Where do you fly?", tone: "Ask", goto: "fly"),
+                    (text: "Land by my camp. There's room for a machine.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "Safe skies, Wren.", end: true),
+                ],
+            ),
+            "again": (
+                mood: Neutral,
+                say: ["There you are! Got coin, or got stories? I take both."],
+                choices: [
+                    (text: "What do you sell?", tone: "Ask", goto: "sell"),
+                    (text: "Where do you fly?", tone: "Ask", goto: "fly"),
+                    (text: "Land by my camp. There's room for a machine.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "Safe skies, Wren.", end: true),
+                ],
+            ),
+            "hub": (
+                mood: Neutral,
+                say: ["Anything else?"],
+                choices: [
+                    (text: "What do you sell?", tone: "Ask", goto: "sell"),
+                    (text: "Where do you fly?", tone: "Ask", goto: "fly"),
+                    (text: "Land by my camp. There's room for a machine.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "That's all.", end: true),
+                ],
+            ),
+            "sell": (
+                mood: Happy,
+                say: [
+                    "Today? Rope, bolts, a fan blade that's only a little bent.",
+                    "Tomorrow, who knows. Depends where the wind takes me.",
+                ],
+                then: "hub",
+            ),
+            "fly": (
+                mood: Curious,
+                say: [
+                    "Everywhere and nowhere you'd find on a map.",
+                    "A trader who tells you where her stock comes from isn't a trader for long.",
+                ],
+                then: "hub",
+            ),
+            "follow": (
+                mood: Happy,
+                say: ["A spot for my machine and a steady customer? Done. Show me where."],
+                choices: [(text: "Come on, then.", act: Follow, end: true)],
+            ),
+            "stay": (
+                mood: Neutral,
+                say: ["I'll wait. Not long, mind. Time's coin."],
+                choices: [(text: "I'll be back.", act: Stay, end: true)],
+            ),
+        },
+    ),
+    // Liora Vance, once a courtesan of the court. Sews clothes and armor. Settles by the gear urn.
+    "liora": (
+        start: "greet",
+        again: "again",
+        nodes: {
+            "greet": (
+                mood: Curious,
+                say: [
+                    "Well. I know that face. Half the court would pay a fortune to see it again.",
+                    "Don't worry, I'm not one of them. Not any more. Liora Vance. I bought my way out and left in the night.",
+                    "Same as you, I think.",
+                ],
+                choices: [
+                    (text: "What did you do at court?", tone: "Ask", goto: "court"),
+                    (text: "Can you sew?", tone: "Ask", goto: "sew"),
+                    (text: "You could stay at my camp.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "Goodbye, Liora.", end: true),
+                ],
+            ),
+            "again": (
+                mood: Neutral,
+                say: ["Your Highness. Joking. Mostly."],
+                choices: [
+                    (text: "What did you do at court?", tone: "Ask", goto: "court"),
+                    (text: "Can you sew?", tone: "Ask", goto: "sew"),
+                    (text: "You could stay at my camp.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "Goodbye, Liora.", end: true),
+                ],
+            ),
+            "hub": (
+                mood: Neutral,
+                say: ["Anything else?"],
+                choices: [
+                    (text: "What did you do at court?", tone: "Ask", goto: "court"),
+                    (text: "Can you sew?", tone: "Ask", goto: "sew"),
+                    (text: "You could stay at my camp.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "That's all.", end: true),
+                ],
+            ),
+            "court": (
+                mood: Neutral,
+                say: [
+                    "Listened. People tell a courtesan everything, and forget she was in the room.",
+                    "I learned which lords owed what, and to whom. It bought my freedom.",
+                ],
+                then: "hub",
+            ),
+            "sew": (
+                mood: Happy,
+                say: [
+                    "Can I sew? I dressed half the court and mended the other half.",
+                    "Give me cloth and hide and a table, and you'll look like someone worth hunting.",
+                ],
+                then: "hub",
+            ),
+            "follow": (
+                mood: Happy,
+                say: ["With a runaway heir and a pile of urns? How could I refuse. Lead on."],
+                choices: [(text: "Come on, then.", act: Follow, end: true)],
+            ),
+            "stay": (
+                mood: Neutral,
+                say: ["I'll wait. Don't keep a lady waiting too long."],
+                choices: [(text: "I'll be back.", act: Stay, end: true)],
+            ),
+        },
+    ),
+    // Messler, a rat one block tall and 130 years old, made to think by a court wizard. Settles by the hearth urn.
+    "messler": (
+        start: "greet",
+        again: "again",
+        nodes: {
+            "greet": (
+                mood: Angry,
+                say: [
+                    "Don't step on me. People always step on me. One hundred and thirty years of being stepped on.",
+                    "Messler. A wizard of the court made me think, then made me wish I couldn't.",
+                    "Are you going to eat that? You look like you burn things.",
+                ],
+                choices: [
+                    (text: "Who made you like this?", tone: "Ask", goto: "wizard"),
+                    (text: "Can you cook?", tone: "Ask", goto: "cook"),
+                    (text: "There's a cooking fire at my camp.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "Bye, Messler.", end: true),
+                ],
+            ),
+            "again": (
+                mood: Neutral,
+                say: ["Oh. You. Did you bring food, or just your face?"],
+                choices: [
+                    (text: "Who made you like this?", tone: "Ask", goto: "wizard"),
+                    (text: "Can you cook?", tone: "Ask", goto: "cook"),
+                    (text: "There's a cooking fire at my camp.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "Bye, Messler.", end: true),
+                ],
+            ),
+            "hub": (
+                mood: Neutral,
+                say: ["Anything else?"],
+                choices: [
+                    (text: "Who made you like this?", tone: "Ask", goto: "wizard"),
+                    (text: "Can you cook?", tone: "Ask", goto: "cook"),
+                    (text: "There's a cooking fire at my camp.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "That's all.", end: true),
+                ],
+            ),
+            "wizard": (
+                mood: Sad,
+                say: [
+                    "A court wizard with soft hands and a hard heart. I was his experiment. Then his footstool.",
+                    "I've no idea if I can die. I've stopped asking.",
+                ],
+                then: "hub",
+            ),
+            "cook": (
+                mood: Happy,
+                say: [
+                    "Better than you, and I've only got paws.",
+                    "Feed me and I might even tell you how.",
+                ],
+                then: "hub",
+            ),
+            "follow": (
+                mood: Happy,
+                say: ["A fire and someone to feed me? Lead on. Mind the tail."],
+                choices: [(text: "Come on, then.", act: Follow, end: true)],
+            ),
+            "stay": (
+                mood: Neutral,
+                say: ["Fine. I'll sit here and starve politely."],
+                choices: [(text: "I'll be back.", act: Stay, end: true)],
+            ),
+        },
+    ),
+    // Orrin Vale, the weather keeper in the mountain castle. Settles by the star urn.
+    "orrin": (
+        start: "greet",
+        again: "again",
+        nodes: {
+            "greet": (
+                mood: Curious,
+                say: [
+                    "Shh. The clouds were telling me something.",
+                    "Ah, it's gone now. Never mind. I'm Orrin. I watch the sky. Someone ought to.",
+                    "You walk like someone with the wind at her back. Running, are you?",
+                ],
+                choices: [
+                    (text: "What do the clouds say?", tone: "Ask", goto: "clouds"),
+                    (text: "Why live up here alone?", tone: "Ask", goto: "alone"),
+                    (text: "Come watch the sky from my camp.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "Goodbye, Orrin.", end: true),
+                ],
+            ),
+            "again": (
+                mood: Neutral,
+                say: ["The sky's been talking about you."],
+                choices: [
+                    (text: "What do the clouds say?", tone: "Ask", goto: "clouds"),
+                    (text: "Why live up here alone?", tone: "Ask", goto: "alone"),
+                    (text: "Come watch the sky from my camp.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "Goodbye, Orrin.", end: true),
+                ],
+            ),
+            "hub": (
+                mood: Neutral,
+                say: ["Anything else?"],
+                choices: [
+                    (text: "What do the clouds say?", tone: "Ask", goto: "clouds"),
+                    (text: "Why live up here alone?", tone: "Ask", goto: "alone"),
+                    (text: "Come watch the sky from my camp.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "That's all.", end: true),
+                ],
+            ),
+            "clouds": (
+                mood: Curious,
+                say: [
+                    "Mostly, rain. Sometimes, more rain.",
+                    "But listen long enough and they tell you what's coming, and when it'll pass.",
+                ],
+                then: "hub",
+            ),
+            "alone": (
+                mood: Neutral,
+                say: [
+                    "The castle was empty. So was I. We suit each other.",
+                    "Up here there's nothing between me and the sky.",
+                ],
+                then: "hub",
+            ),
+            "follow": (
+                mood: Happy,
+                say: ["A new sky to read. Why not. I'll follow."],
+                choices: [(text: "Come on, then.", act: Follow, end: true)],
+            ),
+            "stay": (
+                mood: Neutral,
+                say: ["I'll stay and count the clouds."],
+                choices: [(text: "I'll be back.", act: Stay, end: true)],
+            ),
+        },
+    ),
+    // Brindlespheimer, the moldy wizard at the Rotting Gate. Blank face, slow speech; never follows.
+    "brindlespheimer": (
+        start: "greet",
+        again: "again",
+        nodes: {
+            "greet": (
+                mood: Neutral,
+                say: [
+                    "Hello.",
+                    "I am Brindlespheimer. I think.",
+                    "I do not remember how I came to this island. The mold remembers. It does not say.",
+                ],
+                choices: [
+                    (text: "What is this gate?", tone: "Ask", goto: "gate"),
+                    (text: "Are you all right?", tone: "Ask", goto: "well"),
+                    (text: "Can you help me below?", tone: "Ask", goto: "help"),
+                    (text: "Goodbye.", end: true),
+                ],
+            ),
+            "again": (
+                mood: Neutral,
+                say: ["Hello again."],
+                choices: [
+                    (text: "What is this gate?", tone: "Ask", goto: "gate"),
+                    (text: "Are you all right?", tone: "Ask", goto: "well"),
+                    (text: "Can you help me below?", tone: "Ask", goto: "help"),
+                    (text: "Goodbye.", end: true),
+                ],
+            ),
+            "hub": (
+                mood: Neutral,
+                say: ["Anything else?"],
+                choices: [
+                    (text: "What is this gate?", tone: "Ask", goto: "gate"),
+                    (text: "Are you all right?", tone: "Ask", goto: "well"),
+                    (text: "Can you help me below?", tone: "Ask", goto: "help"),
+                    (text: "That's all.", end: true),
+                ],
+            ),
+            "gate": (
+                mood: Neutral,
+                say: [
+                    "It is the Rotting Gate. It goes down.",
+                    "It is different every time. So am I.",
+                ],
+                then: "hub",
+            ),
+            "well": (
+                mood: Neutral,
+                say: [
+                    "I do not feel anything. That is probably fine.",
+                    "If you...",
+                ],
+                then: "hub",
+            ),
+            "help": (
+                mood: Neutral,
+                say: [
+                    "I can take you out of your body.",
+                    "If you...",
+                    "...",
+                    "Nothing happened. That is usual.",
+                ],
+                then: "hub",
+            ),
+        },
+    ),
 }

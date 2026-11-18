@@ -646,6 +646,27 @@ def old_coin(c):
     c.rect(9, 7, 11, 13, hexc("e8c860"))
 
 
+def mold_bloom(c):
+    c.ellipse(10, 12, 7, 6, hexc("6a8a4a"))
+    c.ellipse(10, 10, 5, 4, hexc("9ab86a"))
+    for x, y in [(6, 12), (13, 9), (11, 14), (8, 8)]:
+        c.dot(x, y, hexc("d8e8a8"))
+
+
+def deepstone_shard(c):
+    c.poly([(4, 17), (7, 6), (11, 1), (16, 8), (14, 18)], hexc("38404e"))
+    c.poly([(8, 7), (11, 3), (13, 9), (10, 12)], hexc("6a7a92"))
+    c.line(9, 14, 13, 10, 1, hexc("8ab4d8"))
+
+
+def warden_sigil(c):
+    c.ellipse(10, 10, 8, 8, hexc("3a3428"))
+    c.ellipse(10, 10, 6, 6, hexc("5a4e38"))
+    c.line(10, 5, 10, 15, 1, hexc("a8e070"))
+    c.line(6, 8, 14, 12, 1, hexc("a8e070"))
+    c.dot(10, 10, hexc("e8ffc0"))
+
+
 def urn_sprite(c, body, band, mark):
     """A carried urn, 40 x 40: foot, round belly, neck and lip, a band of marks."""
     c.rect(13, 34, 27, 38, mul(body, 0.75))
@@ -783,6 +804,7 @@ DRAW = {f.__name__: f for f in [
     levitation_draught, light_draught, warmth_draught, focus_tonic,
     tool_urn, hearth_urn, star_urn, golem_urn, portable_bedroll, portable_tent, airship,
     carpentry_urn, gear_urn, vehicle_urn, iron_dagger, rapier, makeshift_pistol, rifle, iron_helm, iron_mail,
+    mold_bloom, deepstone_shard, warden_sigil,
 ]}
 
 

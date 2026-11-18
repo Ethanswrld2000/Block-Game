@@ -63,5 +63,8 @@
         "carpentry_urn": (84, 292, 40, 40),
         "gear_urn": (0, 294, 40, 40),
         "vehicle_urn": (42, 314, 40, 40),
+        "mold_bloom": (126, 314, 20, 20),
+        "deepstone_shard": (148, 314, 20, 20),
+        "warden_sigil": (170, 314, 20, 20),
     },
 )

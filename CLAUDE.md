@@ -368,7 +368,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `in_pocket`): `world::PocketFloor` makes chunk generation use `generate_pocket` there, pocket chunks are never saved and
   `World::forget_pocket` drops them when the floor changes; no height cold or thin air there, no creatures or critters.
   `game::delve`: walk into the gate to start a run at the deepest unlocked depth; rooms spawn foes as you reach them
-  (`combat::SpawnFoe` with `boost` per depth and a `tag`; the boss is a Rot Brute x3 until real bosses exist); the boss's
+  (`combat::SpawnFoe` with `boost` per depth and a `tag`; each depth's boss is its own kind, see below); the boss's
   `FoeSlain` opens the stair; the stair goes down a depth (after depth 4 it brings you back up); the start room's west
   doorway leads back to the gate. Pure rules in `delve::rules` (`Delve { runs, deepest, cleared }`, saved to `delve.ron`;
   clearing a depth's boss lets the next run start one deeper; `lost_on_death`). Dying below loses what you picked up or put
@@ -376,6 +376,17 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   (ranged: `ranged: Some((speed, color))` shoots bolts a raised guard blocks), `rot_brute` (slow, heavy), `mire_skitter`
   (fast). Place name banners are off (`places::PLACE_CARDS`). Screenshots: `BLOCKGAME_GATE=1` starts facing the gate,
   `BLOCKGAME_DELVE=n` starts a run at depth n.
+- Boss urns and the cast (Legacy prompts 8-9): each Rotting Gate depth has its own boss in foes.ron (`bog_warden`,
+  `spore_matron` (ranged), `gloam_stalker` (fast), `rotting_king`; `delve::rules::boss_for`). The first time each falls it
+  drops its urn (depth 1 carpentry, 2 gear, 3 hearth, 4 vehicle; `Delve.urns`, once per world); the ancestral urn no longer
+  gives those four. Foes below roll loot.ron `rotting`, bosses `rotting_warden` (`Loot::roll`): dungeon-only `mold_bloom`
+  (tier 2 urn steps need 3), `deepstone_shard` and `warden_sigil` (tier 3 steps need 4 + 1). The cast in npcs.ron and
+  dialogue.ron: Bram Holloway, Gilm, Wren Calloway, Liora Vance, Messler, Orrin Vale, Brindlespheimer. NPC looks have
+  `scale` (Gilm and Messler 0.55 = one block tall), `extras` (boxes on Head/Torso/Hips: caps, ears, hats, robes) and
+  `blank` (no expression). Kinds with `urn: Some(..)` are recruited by asking them to follow and leading them within
+  `npc::SETTLE` (5) blocks of that urn: they wander round it from then on (flag `recruited`). `npc::people` saves every
+  NPC but the gate guides to `people.ron` (order, flags, place). Nothing places the cast in the world yet: Ctrl+Shift+N
+  spawns the next kind each press; `BLOCKGAME_NPC=3 BLOCKGAME_NPC_KIND=gilm` for screenshots.
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen

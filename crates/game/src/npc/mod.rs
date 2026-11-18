@@ -19,6 +19,7 @@ pub mod body;
 pub mod data;
 pub mod dialogue;
 pub mod motion;
+pub mod people;
 pub mod talk;
 pub mod voice;
 
@@ -44,9 +45,9 @@ impl Plugin for NpcPlugin {
             .insert_resource(NpcDice(Rng(0x0DD_BA11_5EED)))
             .add_systems(
                 crate::menu::GameUpdate,
-                (spawn_key, think, walk).chain().in_set(NpcSet).after(crate::player::PlayerSet),
+                (spawn_key, settle, think, walk).chain().in_set(NpcSet).after(crate::player::PlayerSet),
             )
-            .add_plugins((body::BodyPlugin, talk::TalkPlugin));
+            .add_plugins((body::BodyPlugin, talk::TalkPlugin, people::PeoplePlugin));
     }
 }
 
@@ -154,8 +155,8 @@ pub(crate) fn ground_near(world: &World, blocks: &Blocks, at: Vec3) -> Option<Ve
     })
 }
 
-/// Ctrl+Shift+N (or Cmd+Shift+N) spawns the test NPC (the first kind) a few
-/// blocks in front of you, facing you, following you.
+/// Ctrl+Shift+N (or Cmd+Shift+N) spawns an NPC a few blocks in front of you,
+/// facing you, following you: the first kind, then the next one each press.
 #[allow(clippy::too_many_arguments)]
 fn spawn_key(
     keys: Res<ButtonInput<KeyCode>>,
@@ -166,7 +167,7 @@ fn spawn_key(
     cam: Single<&Transform, With<FlyCamera>>,
     talk: Res<talk::Talk>,
     mut spawn: MessageWriter<body::SpawnNpc>,
-    mut auto_done: Local<bool>,
+    (mut auto_done, mut next): (Local<bool>, Local<usize>),
 ) {
     let held = |a, b| keys.pressed(a) || keys.pressed(b);
     let combo = held(KeyCode::ControlLeft, KeyCode::ControlRight) || held(KeyCode::SuperLeft, KeyCode::SuperRight);
@@ -188,10 +189,60 @@ fn spawn_key(
         None => at,
     };
     *auto_done = true;
-    let mut npc = Npc::new(0, yaw_of(-fwd));
+    // `BLOCKGAME_NPC_KIND=gilm` picks the kind for `BLOCKGAME_NPC` (by name, any case).
+    let named = auto.is_some().then(|| std::env::var("BLOCKGAME_NPC_KIND").ok()).flatten().and_then(|want| {
+        let want = want.to_lowercase();
+        book.kinds.iter().position(|k| k.name.to_lowercase().contains(&want) || k.dialogue == want)
+    });
+    let kind = named.unwrap_or(*next % book.kinds.len());
+    if named.is_none() {
+        *next = (*next + 1) % book.kinds.len();
+    }
+    let mut npc = Npc::new(kind, yaw_of(-fwd));
     npc.order = Order::Follow;
     npc.flags.insert(dialogue::FOLLOWING.to_string());
     spawn.write(body::SpawnNpc { npc, at: pos });
+}
+
+/// How close (blocks, across the ground) a follower must come to its urn to settle there.
+pub const SETTLE: f32 = 5.0;
+/// Flag set on an NPC once it has settled by its urn.
+pub const RECRUITED: &str = "recruited";
+
+/// A follower that has been led to its urn settles there: it wanders round
+/// the urn from then on. The new order, or `None` to carry on (pure).
+pub fn settles(order: Order, at: Vec3, urn: Option<Vec3>) -> Option<Order> {
+    let urn = urn?;
+    (order == Order::Follow && Vec2::new(urn.x - at.x, urn.z - at.z).length() <= SETTLE).then_some(Order::Wander { home: urn })
+}
+
+/// Followers led to their own urn (npcs.ron `urn`) settle by it: recruited.
+fn settle(
+    book: Res<NpcBook>,
+    urns: Option<Res<crate::station::UrnBook>>,
+    stations: Query<&crate::station::Station>,
+    mut q: Query<(&Transform, &mut Npc)>,
+    mut toast: MessageWriter<crate::survival::Toast>,
+) {
+    let Some(urns) = urns else { return };
+    for (tf, mut npc) in &mut q {
+        if npc.order != Order::Follow || npc.talking {
+            continue;
+        }
+        let Some(kind) = book.kinds.get(npc.kind) else { continue };
+        let Some(want) = &kind.urn else { continue };
+        let urn = stations
+            .iter()
+            .find(|s| s.kind == crate::station::StationKind::Urn && urns.0.urns.get(s.urn).is_some_and(|u| &u.name == want))
+            .map(|s| s.pos);
+        if let Some(order) = settles(npc.order, tf.translation, urn) {
+            npc.order = order;
+            npc.flags.remove(dialogue::FOLLOWING);
+            if npc.flags.insert(RECRUITED.to_string()) {
+                toast.write(crate::survival::Toast(format!("{} settles in by the {}", kind.name, urns.0.urns.iter().find(|u| &u.name == want).map_or("urn", |u| u.title.as_str()))));
+            }
+        }
+    }
 }
 
 /// Orders become a wanted velocity and facing.
@@ -311,5 +362,51 @@ fn walk(time: Res<Time>, world: Res<World>, blocks: Res<Blocks>, mut q: Query<(&
             npc.vel.y = HOP;
         }
         tf.translation = pos;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_follower_settles_by_its_urn() {
+        let urn = Vec3::new(10.0, 64.0, 10.0);
+        // Far off: keeps following.
+        assert_eq!(settles(Order::Follow, Vec3::new(30.0, 64.0, 10.0), Some(urn)), None);
+        // Led there: wanders round the urn.
+        assert_eq!(settles(Order::Follow, Vec3::new(13.0, 65.0, 12.0), Some(urn)), Some(Order::Wander { home: urn }));
+        // Not following, or no urn set down: nothing changes.
+        assert_eq!(settles(Order::Stay, urn, Some(urn)), None);
+        assert_eq!(settles(Order::Follow, urn, None), None);
+    }
+
+    #[test]
+    fn the_cast_have_trees_and_real_urns() {
+        let kinds = data::load(include_str!("../../../../assets/data/npcs.ron")).expect("npcs.ron");
+        let trees = dialogue::load(include_str!("../../../../assets/data/dialogue.ron")).expect("dialogue.ron");
+        let urns = crate::station::urns::UrnData::from_ron(include_str!("../../../../assets/data/urns.ron"), |_| true).expect("urns.ron");
+        for (name, urn) in [
+            ("Bram Holloway", Some("ancestral")),
+            ("Gilm", Some("tool")),
+            ("Wren Calloway", Some("vehicle")),
+            ("Liora Vance", Some("gear")),
+            ("Messler", Some("hearth")),
+            ("Orrin Vale", Some("star")),
+            ("Brindlespheimer", None),
+        ] {
+            let k = kinds.iter().find(|k| k.name == name).unwrap_or_else(|| panic!("no {name}"));
+            assert_eq!(k.urn.as_deref(), urn, "{name}'s urn");
+            if let Some(u) = urn {
+                assert!(urns.urns.iter().any(|d| d.name == u), "no urn {u}");
+            }
+            let tree = trees.get(&k.dialogue).unwrap_or_else(|| panic!("no tree for {name}"));
+            // Everyone with an urn can be asked to follow.
+            let follows = tree.nodes.values().flat_map(|n| &n.choices).any(|c| c.act == Some(dialogue::Act::Follow));
+            assert_eq!(follows, urn.is_some(), "{name} follow choice");
+        }
+        let gilm = kinds.iter().find(|k| k.name == "Gilm").unwrap();
+        assert!((gilm.looks.scale * HEIGHT - 1.0).abs() < 0.05, "Gilm is one block tall");
+        assert!(kinds.iter().find(|k| k.name == "Brindlespheimer").unwrap().looks.blank);
     }
 }

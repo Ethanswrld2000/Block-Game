@@ -123,6 +123,8 @@ impl SpawnFoe {
 #[derive(Message, Debug, Clone, Copy)]
 pub struct FoeSlain {
     pub tag: u32,
+    /// Where it fell (its middle).
+    pub at: Vec3,
 }
 
 /// A ranged foe looses a bolt.
@@ -765,9 +767,9 @@ fn fall(
         if foe.health > 0.0 {
             continue;
         }
-        slain.write(FoeSlain { tag: foe.tag });
         let k = &book.kinds[foe.kind];
         let at = tf.translation + Vec3::Y;
+        slain.write(FoeSlain { tag: foe.tag, at });
         for (name, n, p) in &k.drops {
             if let Some(item) = items.id(name)
                 && (*p >= 1.0 || dice.0.unit() < *p)

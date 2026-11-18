@@ -15,7 +15,7 @@ use bevy::prelude::*;
 
 use super::dialogue::Mood;
 use super::motion::{self, Gaze, Pose, Spring};
-use super::data::Looks;
+use super::data::{Looks, On};
 use super::{Npc, NpcBook, EYES};
 use crate::camera::FlyCamera;
 use crate::swing::Limbs;
@@ -161,7 +161,7 @@ pub fn build(c: &mut Commands, meshes: &mut Assets<Mesh>, materials: &mut Assets
     .map(|m| materials.add(m))
     .collect();
     let mut kit = Kit { meshes, mats };
-    let root = c.spawn((Transform::from_translation(at).with_rotation(Quat::from_rotation_y(yaw)), Visibility::default())).id();
+    let root = c.spawn((Transform::from_translation(at).with_rotation(Quat::from_rotation_y(yaw)).with_scale(Vec3::splat(l.scale)), Visibility::default())).id();
 
     // Legs.
     let hips = joint(c, root, Vec3::Y * HIP_Y);
@@ -231,6 +231,18 @@ pub fn build(c: &mut Commands, meshes: &mut Assets<Mesh>, materials: &mut Assets
     let jaw = joint(c, mouth, Vec3::Y * -MOUTH_SHUT);
     let low = kit.detail(c, jaw, Vec3::new(0.13, 0.02, 0.004), Vec3::new(0.0, 0.011, -0.005), TEETH);
 
+    // Extras (caps, ears, hats, robes), each in its own colour.
+    for x in &l.extras {
+        let mat = kit.mats.len();
+        kit.mats.push(materials.add(flat(x.color, 0.9)));
+        let parent = match x.on {
+            On::Head => head,
+            On::Torso => torso,
+            On::Hips => hips,
+        };
+        kit.part(c, parent, Vec3::new(x.size.0, x.size.1, x.size.2), Vec3::new(x.at.0, x.at.1, x.at.2), mat);
+    }
+
     let seed = (at.x.to_bits() as u64) << 32 ^ at.z.to_bits() as u64 ^ 0x9E37_79B9;
     let rig = Rig {
         hips,
@@ -267,6 +279,7 @@ fn clone_npc(n: &Npc) -> Npc {
     let mut out = Npc::new(n.kind, n.yaw);
     out.order = n.order;
     out.flags = n.flags.clone();
+    out.asked = n.asked.clone();
     out.post = n.post;
     out
 }
@@ -338,6 +351,7 @@ fn animate(real: Res<Time<Real>>, game: Res<Time>, book: Res<NpcBook>, cam: Sing
             let flat = Vec2::new(d.x, d.z).length();
             [motion::wrap(super::yaw_of(d) - yaw), d.y.atan2(flat)]
         });
+        let blank = book.kinds.get(npc.kind).is_some_and(|k| k.looks.blank);
         let drive_with = Drive {
             yaw: npc.yaw,
             turn: 0.28,
@@ -345,8 +359,8 @@ fn animate(real: Res<Time<Real>>, game: Res<Time>, book: Res<NpcBook>, cam: Sing
             walk: book.kinds.get(npc.kind).map_or(2.4, |k| k.walk),
             game_dt: gdt,
             focus,
-            gesture: npc.speaking * energy_of(npc.mood),
-            mood: npc.mood,
+            gesture: if blank { 0.0 } else { npc.speaking * energy_of(npc.mood) },
+            mood: if blank { Mood::Neutral } else { npc.mood },
             mouth: npc.mouth,
             speaking: npc.speaking,
             arms: None,

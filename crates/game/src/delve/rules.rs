@@ -6,7 +6,7 @@
 //! below costs you everything you picked up during the run (what you brought
 //! in stays with you) and you wake outside the gate.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -21,6 +21,30 @@ pub struct Delve {
     pub deepest: u8,
     /// The deepest depth whose boss has been beaten.
     pub cleared: u8,
+    /// Depths whose boss has already dropped its urn (once per world).
+    #[serde(default)]
+    pub urns: BTreeSet<u8>,
+}
+
+/// Each depth's boss (foes.ron name).
+pub fn boss_for(depth: u8) -> &'static str {
+    match depth {
+        0 | 1 => "bog_warden",
+        2 => "spore_matron",
+        3 => "gloam_stalker",
+        _ => "rotting_king",
+    }
+}
+
+/// The urn (items.ron name) each depth's boss drops the first time it falls.
+pub fn urn_for(depth: u8) -> Option<&'static str> {
+    match depth {
+        1 => Some("carpentry_urn"),
+        2 => Some("gear_urn"),
+        3 => Some("hearth_urn"),
+        4 => Some("vehicle_urn"),
+        _ => None,
+    }
 }
 
 /// The run being played.
@@ -61,6 +85,12 @@ impl Delve {
     pub fn boss_down(&mut self, run: &mut Run) {
         run.boss_down = true;
         self.cleared = self.cleared.max(run.depth);
+    }
+
+    /// The urn this depth's boss drops, the first time only.
+    pub fn claim_urn(&mut self, depth: u8) -> Option<&'static str> {
+        let urn = urn_for(depth)?;
+        self.urns.insert(depth).then_some(urn)
     }
 
     /// Step onto the stair.
@@ -113,7 +143,7 @@ mod tests {
 
     #[test]
     fn the_last_depth_ends_the_run() {
-        let mut d = Delve { runs: 5, deepest: 4, cleared: 3 };
+        let mut d = Delve { runs: 5, deepest: 4, cleared: 3, ..Default::default() };
         let mut r = d.begin();
         assert_eq!(r.depth, 4);
         d.boss_down(&mut r);
@@ -132,8 +162,24 @@ mod tests {
 
     #[test]
     fn saves_round_trip() {
-        let d = Delve { runs: 3, deepest: 2, cleared: 1 };
+        let d = Delve { runs: 3, deepest: 2, cleared: 1, urns: BTreeSet::from([1]) };
         let back: Delve = ron::from_str(&ron::to_string(&d).unwrap()).unwrap();
         assert_eq!(back, d);
+        // Saves from before the urn drops still load.
+        let old: Delve = ron::from_str("(runs: 3, deepest: 2, cleared: 1)").unwrap();
+        assert!(old.urns.is_empty());
+    }
+
+    #[test]
+    fn each_boss_drops_its_urn_once_per_world() {
+        let mut d = Delve::default();
+        assert_eq!(d.claim_urn(1), Some("carpentry_urn"));
+        assert_eq!(d.claim_urn(1), None, "only the first time");
+        assert_eq!(d.claim_urn(2), Some("gear_urn"));
+        assert_eq!(d.claim_urn(3), Some("hearth_urn"));
+        assert_eq!(d.claim_urn(4), Some("vehicle_urn"));
+        assert_eq!(d.claim_urn(4), None);
+        let names: BTreeSet<_> = (1..=DEPTHS).map(boss_for).collect();
+        assert_eq!(names.len(), DEPTHS as usize, "one boss per depth");
     }
 }

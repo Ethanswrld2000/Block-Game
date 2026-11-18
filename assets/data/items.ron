@@ -151,6 +151,10 @@
         (name: "focus_tonic", title: "Focus Tonic", kind: Food(tier: 0, satiety: 1.0), mass: 0.3, size: (1, 2), stack: 4),
         (name: "spirit_ember", title: "Spirit Ember", kind: Material, mass: 0.05, stack: 16),
         (name: "old_coin", title: "Old Coin", kind: Material, mass: 0.02, stack: 64),
+        // Only found below the Rotting Gate (loot.ron "rotting", "rotting_warden"); tier 2 and 3 urn steps need them.
+        (name: "mold_bloom", title: "Mold Bloom", kind: Material, mass: 0.05, stack: 32),
+        (name: "deepstone_shard", title: "Deepstone Shard", kind: Material, mass: 0.3, stack: 32),
+        (name: "warden_sigil", title: "Warden's Sigil", kind: Material, mass: 0.1, stack: 8),
         // A weapon.
         // Hammered at the iron anvil (benches.ron); steel and spirit ones once it's upgraded.
         (

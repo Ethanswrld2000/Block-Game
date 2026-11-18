@@ -23,7 +23,9 @@ use worldgen::{Floor, SpawnKind};
 
 use crate::camera::FlyCamera;
 use crate::combat::{Foe, FoeBook, FoeSlain, SpawnFoe};
-use crate::inventory::Inventory;
+use crate::inventory::grid::Stack;
+use crate::inventory::loot::Loot;
+use crate::inventory::{Inventory, Spill};
 use crate::items::{ItemId, Items};
 use crate::player::{MoveMode, Player};
 use crate::save::SaveDir;
@@ -273,7 +275,7 @@ fn walk_floor(
                 continue;
             }
             for s in floor.spawns.iter().filter(|s| s.room == r) {
-                let name = kind_for(s.kind, s.pos);
+                let name = kind_for(s.kind, s.pos, run.depth);
                 let Some(kind) = book.kinds.iter().position(|k| k.name == name) else { continue };
                 let boss = s.kind == SpawnKind::Boss;
                 if boss && run.boss_down {
@@ -282,7 +284,8 @@ fn walk_floor(
                 spawn.write(SpawnFoe {
                     kind,
                     at: Vec3::new(s.pos[0] as f32 + 0.5, s.pos[1] as f32, s.pos[2] as f32 + 0.5),
-                    boost: if boss { boost * 3.0 } else { boost },
+                    // Each depth's boss is made for its depth (foes.ron).
+                    boost: if boss { 1.0 } else { boost },
                     tag: if boss { BOSS } else { TAG },
                 });
             }
@@ -324,11 +327,10 @@ fn walk_floor(
 }
 
 /// The foe kind (by name in foes.ron) for a spawn point on a floor.
-pub fn kind_for(kind: SpawnKind, pos: [i32; 3]) -> &'static str {
+pub fn kind_for(kind: SpawnKind, pos: [i32; 3], depth: u8) -> &'static str {
     let roll = (pos[0] ^ pos[2].wrapping_mul(3)).rem_euclid(5);
     match kind {
-        // Until each depth has its own boss: a Rot Brute, made much tougher.
-        SpawnKind::Boss => "rot_brute",
+        SpawnKind::Boss => rules::boss_for(depth),
         SpawnKind::Guard => {
             if roll < 3 {
                 "rot_brute"
@@ -344,15 +346,42 @@ pub fn kind_for(kind: SpawnKind, pos: [i32; 3]) -> &'static str {
     }
 }
 
-/// The boss falls: the stair opens, and the next run may start a depth down.
-fn boss_falls(mut slain: MessageReader<FoeSlain>, mut below: ResMut<Below>, dir: Res<SaveDir>, mut toast: MessageWriter<Toast>) {
+/// Foes below drop the dungeon materials (loot.ron). The boss falls: the
+/// stair opens, the next run may start a depth down, and the first time each
+/// depth's boss falls it drops its urn.
+#[allow(clippy::too_many_arguments)]
+fn boss_falls(
+    mut slain: MessageReader<FoeSlain>,
+    mut below: ResMut<Below>,
+    dir: Res<SaveDir>,
+    (items, loot): (Res<Items>, Res<Loot>),
+    mut dice: Local<u32>,
+    mut spill: MessageWriter<Spill>,
+    mut toast: MessageWriter<Toast>,
+) {
     for s in slain.read() {
+        if s.tag != BOSS && s.tag != TAG {
+            continue;
+        }
+        let mut rand = || {
+            *dice = dice.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            (*dice >> 8) as f32 / (1u32 << 24) as f32
+        };
+        for stack in loot.roll(if s.tag == BOSS { "rotting_warden" } else { "rotting" }, &mut rand) {
+            spill.write(Spill { stack, at: s.at });
+        }
         if s.tag != BOSS {
             continue;
         }
         let Some(mut run) = below.run else { continue };
         below.delve.boss_down(&mut run);
         below.run = Some(run);
+        if let Some(urn) = below.delve.claim_urn(run.depth)
+            && let Some(item) = items.id(urn)
+        {
+            spill.write(Spill { stack: Stack::new(item, 1), at: s.at });
+            toast.write(Toast(format!("The warden drops the {}", items.get(item).title)));
+        }
         save(&below.delve, &dir);
         toast.write(Toast(if run.depth < rules::DEPTHS {
             format!("The warden of depth {} falls. The stair down is open", run.depth)
@@ -417,12 +446,12 @@ mod tests {
         let mut seen = HashSet::new();
         for kind in [SpawnKind::Guard, SpawnKind::Pack, SpawnKind::Boss] {
             for x in 0..10 {
-                let name = kind_for(kind, [x, 0, x * 7]);
+                let name = kind_for(kind, [x, 0, x * 7], (x % 4 + 1) as u8);
                 assert!(kinds.iter().any(|k| k.name == name), "no foe `{name}`");
                 seen.insert(name);
             }
         }
-        for name in ["sporecaster", "rot_brute", "mire_skitter"] {
+        for name in ["sporecaster", "rot_brute", "mire_skitter", "bog_warden", "spore_matron", "gloam_stalker", "rotting_king"] {
             assert!(seen.contains(name), "{name} never appears");
         }
         assert!(kinds.iter().any(|k| k.name == "sporecaster" && k.ranged.is_some()));

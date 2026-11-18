@@ -247,9 +247,11 @@ mod tests {
         let d = data();
         assert_eq!(d.urns[0].name, "ancestral");
         assert!(d.urns[0].item.is_none(), "the ancestral urn comes with the bedroll");
+        // The Rotting Gate's bosses drop these (game::delve::rules::urn_for).
+        let from_bosses = ["carpentry", "gear", "hearth", "vehicle"];
         for u in &d.urns[1..] {
             let giver = d.urns.iter().flat_map(|x| &x.steps).find(|s| s.gives == Gives::Urn(u.name.clone()));
-            assert!(giver.is_some(), "nothing gives the {}", u.title);
+            assert_eq!(giver.is_some(), !from_bosses.contains(&u.name.as_str()), "what gives the {}", u.title);
         }
     }
 
