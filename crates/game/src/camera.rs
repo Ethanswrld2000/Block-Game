@@ -4,6 +4,7 @@
 //! Controls: click to capture the mouse, Esc to release it.
 //! WASD to move, Space/Shift up/down, Ctrl to go fast, mouse wheel to change
 //! the base speed (from a crawl up to about 2000 blocks a second).
+//! P switches between first and third person (`View`).
 
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
 use bevy::prelude::*;
@@ -14,7 +15,13 @@ pub struct FlyCameraPlugin;
 impl Plugin for FlyCameraPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Menus>()
+            .insert_resource(View { third: std::env::var("BLOCKGAME_VIEW").is_ok_and(|v| v == "third"), ..default() })
             .add_systems(crate::menu::GameStartup, spawn_camera)
+            // Gameplay always sees the camera at the eyes: it is pulled back
+            // for drawing only, and put back before the next frame's systems.
+            .add_systems(PreUpdate, back_to_eyes.run_if(crate::menu::in_game))
+            .add_systems(PostUpdate, pull_back.run_if(crate::menu::in_game).before(bevy::transform::TransformSystems::Propagate))
+            .add_systems(crate::menu::GameUpdate, toggle_view)
             .add_systems(
             crate::menu::GameUpdate,
             (look, fly.run_if(resource_equals(crate::player::MoveMode::Fly))).chain(),
@@ -31,6 +38,66 @@ pub struct Menus {
     pub open: bool,
     /// Standing still at a bench: no walking.
     pub still: bool,
+}
+
+/// First or third person. In third person the camera sits behind your head
+/// (closer when a wall is in the way) and your body shows; aiming still goes
+/// from your eyes along the view, which passes through the crosshair.
+#[derive(Resource, Default, Debug)]
+pub struct View {
+    pub third: bool,
+    /// The camera is pulled back this frame (third person and not at a bench
+    /// or in a talk, which place the camera themselves).
+    pub pulled: bool,
+    /// How far behind the eyes, eased.
+    back: f32,
+    /// Where the eyes are while the camera is pulled back.
+    eye: Option<Vec3>,
+}
+
+/// Blocks behind the head in third person.
+pub const THIRD_PERSON_BACK: f32 = 4.0;
+
+fn toggle_view(keys: Res<ButtonInput<KeyCode>>, menus: Res<Menus>, mut view: ResMut<View>) {
+    if keys.just_pressed(KeyCode::KeyP) && !menus.open {
+        view.third = !view.third;
+        view.back = 0.0;
+    }
+}
+
+fn back_to_eyes(mut view: ResMut<View>, mut cam: Query<&mut Transform, With<FlyCamera>>) {
+    if let Some(eye) = view.eye.take()
+        && let Ok(mut tf) = cam.single_mut()
+    {
+        tf.translation = eye;
+    }
+}
+
+fn pull_back(time: Res<Time<Real>>, menus: Res<Menus>, world: Res<crate::world::World>, blocks: Res<crate::blocks::Blocks>, mut view: ResMut<View>, mut cam: Query<&mut Transform, With<FlyCamera>>) {
+    let Ok(mut tf) = cam.single_mut() else { return };
+    view.pulled = view.third && !menus.still;
+    if !view.pulled {
+        view.back = 0.0;
+        return;
+    }
+    let eye = tf.translation;
+    let back = tf.back().as_vec3();
+    // Stop short of the first solid block behind the head.
+    let solid = |p: Vec3| world.block(voxel::BlockPos::from_world(p.to_array())).is_some_and(|b| blocks.registry.get(b).solid);
+    let mut room = THIRD_PERSON_BACK;
+    let mut d = 0.1;
+    while d <= THIRD_PERSON_BACK {
+        if solid(eye + back * d) {
+            room = (d - 0.3).max(0.0);
+            break;
+        }
+        d += 0.1;
+    }
+    // Snap in when a wall comes between, ease back out when it's gone.
+    let ease = 1.0 - (-time.delta_secs() * 6.0).exp();
+    view.back = if room < view.back { room } else { view.back + (room - view.back) * ease };
+    view.eye = Some(eye);
+    tf.translation = eye + back * view.back;
 }
 
 #[derive(Component)]

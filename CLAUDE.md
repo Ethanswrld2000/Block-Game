@@ -304,6 +304,19 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   stops on solid blocks one axis at a time). While aboard `player::walk` is off (`airship::not_aboard`) and the
   player stands at the helm. Ships and who is aboard save to `airships.ron`. You can't walk on the deck (the ship
   isn't a collider) and it can't be picked back up yet.
+- Player body and third person: `game::avatar` builds your body with `npc::body::build` (the NPC rig; looks in
+  `assets/data/player.ron`, also used for the first-person arm) and moves it with `npc::body::drive` (shared with NPCs).
+  P toggles `camera::View` third person: the camera is pulled back 4 blocks (less if a wall is in the way) only for
+  drawing (`PostUpdate`), and put back at the eyes in `PreUpdate`, so aiming and every other system still use the eyes.
+  Off at benches and in talks (`Menus.still`). The body's right fist (`Rig.hands`) carries a `hands::Held`, so it holds
+  what you hold. Swings: `swing::Swing::limbs` gives the body's arms on the same keys as the first-person `pose`
+  (axe = flat horizontal swing with a bite and hold; pick = high overhead, straight down). `BLOCKGAME_VIEW=third` for screenshots.
+  Movement feel: the walk cycle advances by distance over `motion::stride(pace)` (about two unhurried strides a second
+  at walking speed) and goes on top of the sprung stance unfiltered; no up-and-down bob (Ethan found it too much); hips
+  sway sideways over the planted foot (`Pose.shift`), the chest's twist lags the hips (`Rig.chest` springs), arms
+  and forearms trail the legs; the body turns Minecraft-style while moving
+  (`motion::moving_facing`: toward the way you go, at most 75° from the head, forwards when backing up; standing it
+  turns once the head is 50° off) and leans into speeding up, stopping and turns (`Drive.sway`, from `avatar`).
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen

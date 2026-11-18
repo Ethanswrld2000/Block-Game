@@ -2,6 +2,7 @@
 
 mod airship;
 mod atmosphere;
+mod avatar;
 mod autoshot;
 mod bench;
 mod blocks;
@@ -87,6 +88,6 @@ fn main() {
             survival::SurvivalPlugin,
             inventory::InventoryPlugin,
         ))
-        .add_plugins((creatures::CreaturesPlugin, places::PlacesPlugin, progress::ProgressPlugin, station::StationPlugin, airship::AirshipPlugin, settings::SettingsPlugin, sound::SoundPlugin, bench::BenchPlugin, npc::NpcPlugin))
+        .add_plugins((creatures::CreaturesPlugin, places::PlacesPlugin, progress::ProgressPlugin, station::StationPlugin, airship::AirshipPlugin, settings::SettingsPlugin, sound::SoundPlugin, bench::BenchPlugin, npc::NpcPlugin, avatar::AvatarPlugin))
         .run();
 }
