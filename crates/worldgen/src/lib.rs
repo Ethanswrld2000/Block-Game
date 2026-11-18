@@ -23,6 +23,7 @@ mod dungeons;
 mod floating;
 mod islands;
 mod plants;
+mod rotting;
 mod structures;
 mod trees;
 mod util;
@@ -30,6 +31,7 @@ mod util;
 pub use biome::{Biome, Biomes, TreeKind};
 pub use dungeons::{Aabb, Dungeon, Room, RoomKind, SpawnKind, SpawnPoint, Veil};
 pub use floating::{Land, MAIN_RADIUS};
+pub use rotting::{floor as rotting_floor, in_pocket, Floor, FloorKind, FloorRoom, RottingGate, DEPTHS, POCKET};
 pub use structures::{person_name, Barrow, Hut, Village, VILLAGE_RADIUS};
 
 use std::sync::Arc;
@@ -112,6 +114,8 @@ struct Ids {
     /// Twigs poking out of the trunk beside them, by the side they're attached to.
     twig: [BlockId; 4],
     pebble: BlockId,
+    moss: BlockId,
+    mud: BlockId,
 }
 
 /// The world generator. Build once, share between threads with `Arc`.
@@ -146,6 +150,8 @@ pub struct WorldGen {
     center: (i32, i32),
     /// The dungeon a short walk from spawn.
     home_dungeon: Option<Arc<dungeons::Dungeon>>,
+    /// The Rotting Gate (one per world).
+    rotting_gate: Option<rotting::RottingGate>,
 }
 
 impl WorldGen {
@@ -157,6 +163,8 @@ impl WorldGen {
             vine: [b("vine_north")?, b("vine_south")?, b("vine_east")?, b("vine_west")?],
             twig: [b("twig_north")?, b("twig_south")?, b("twig_east")?, b("twig_west")?],
             pebble: b("pebble")?,
+            moss: b("moss")?,
+            mud: b("mud")?,
             dirt: b("dirt")?,
             water: b("water")?,
             coal: b("coal_ore")?,
@@ -200,11 +208,13 @@ impl WorldGen {
             home: (0, 0),
             center: (0, 0),
             home_dungeon: None,
+            rotting_gate: None,
         };
         wg.spawn = wg.search_spawn();
         wg.center = (wg.spawn[0], wg.spawn[2]);
         wg.home = wg.search_home();
         wg.home_dungeon = wg.search_home_dungeon().map(Arc::new);
+        wg.rotting_gate = wg.search_rotting_gate();
         Ok(wg)
     }
 

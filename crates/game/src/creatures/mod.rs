@@ -434,7 +434,8 @@ fn spawn_around(
 ) {
     let (Some(kinds), Some(assets), Some(generator)) = (kinds, assets, generator) else { return };
     *timer -= time.delta_secs();
-    if *timer > 0.0 || !(player.ready || *mode == MoveMode::Fly) {
+    // Nothing wanders into the Rotting Gate's floors.
+    if *timer > 0.0 || !(player.ready || *mode == MoveMode::Fly) || worldgen::in_pocket(player.pos.x as i32, player.pos.z as i32) {
         return;
     }
     *timer = 1.5;

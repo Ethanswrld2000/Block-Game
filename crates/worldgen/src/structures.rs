@@ -293,6 +293,16 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) {
         }
         crate::dungeons::draw(wg, &mut canvas, &d);
     }
+    if let Some(g) = wg.rotting_gate()
+        && g.bounds.min[0] - 4 <= x1
+        && g.bounds.max[0] + 4 >= x0
+        && g.bounds.min[2] - 4 <= z1
+        && g.bounds.max[2] + 4 >= z0
+        && g.bounds.max[1] + 2 >= lo
+        && g.bounds.min[1] - 40 <= hi
+    {
+        crate::rotting::draw_gate(wg, &mut canvas, g);
+    }
 }
 
 /// Is this column inside any village (trees keep out)?

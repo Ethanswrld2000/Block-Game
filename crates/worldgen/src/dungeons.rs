@@ -218,7 +218,7 @@ impl WorldGen {
                 if x + REACH < x0 || x - REACH > x1 || z + REACH < z0 || z - REACH > z1 {
                     continue;
                 }
-                if (x - sx).pow(2) + (z - sz).pow(2) < CLEAR_OF_SPAWN * CLEAR_OF_SPAWN {
+                if ((x - sx) as i64).pow(2) + ((z - sz) as i64).pow(2) < (CLEAR_OF_SPAWN as i64).pow(2) {
                     continue;
                 }
                 if let Some(d) = cached(&self.structures.dungeons, (cx, cz), || self.build_dungeon(h, x, z))
@@ -259,6 +259,8 @@ impl WorldGen {
         self.dungeons_in(x, z, x, z).iter().any(|d| d.warded(x, y, z))
             || self.barrows_in(x, z, x, z).iter().any(|b| b.warded(x, y, z))
             || self.villages_in(x, z, x, z).iter().any(|v| v.warded(x, y, z))
+            || self.rotting_gate().is_some_and(|g| g.bounds.contains(x, y, z))
+            || crate::rotting::in_pocket(x, z)
     }
 
     pub(crate) fn build_dungeon(&self, h: u64, gx: i32, gz: i32) -> Option<Dungeon> {

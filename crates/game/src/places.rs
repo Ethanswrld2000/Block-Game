@@ -30,6 +30,10 @@ const FADE_OUT: f32 = 1.4;
 const SETTLE: f32 = 3.0;
 /// The same place doesn't announce itself again within this many seconds.
 const AGAIN: f64 = 90.0;
+/// Title cards for villages, barrows, dungeons and regions are off for now
+/// (Ethan found them too big and distracting; they need work before they
+/// come back). Finds still count and give XP. Other cards (`ShowCard`) still show.
+const PLACE_CARDS: bool = false;
 
 /// Put a title card on screen.
 #[derive(Message, Debug, Clone)]
@@ -174,7 +178,9 @@ fn notice(
                 gain.write(crate::progress::GainXp { xp, why: format!("Found {title}") });
             }
             here.shown.insert(key, now);
-            cards.write(ShowCard { title, subtitle });
+            if PLACE_CARDS {
+                cards.write(ShowCard { title, subtitle });
+            }
             // Arriving in a village counts as arriving in its region too.
             here.biome = Some(biome.name.clone());
         }
@@ -200,7 +206,9 @@ fn notice(
             here.shown.insert(key, now);
             let sp = seasons.at(&clock);
             let season = &seasons.list[sp.current].title;
-            cards.write(ShowCard { title: biome.title.clone(), subtitle: format!("{season}, day {}", sp.day_in_season + 1) });
+            if PLACE_CARDS {
+                cards.write(ShowCard { title: biome.title.clone(), subtitle: format!("{season}, day {}", sp.day_in_season + 1) });
+            }
         }
     }
 }

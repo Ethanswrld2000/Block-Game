@@ -361,6 +361,21 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   shimmering per part, a faint light, `BurstKind::Wisp` particles trailing (and a burst on death). Sound `clash`.
   Dev keys: Ctrl+Shift+J (Cmd on a Mac) spawns a Hollow Warden, Ctrl+Shift+H a Fen Shade, 6 blocks ahead; either gives
   you an iron sword on the hotbar if you have no sword. Foes are not saved and don't despawn.
+- Rotting Gate (Legacy prompts 5-7): `worldgen::rotting` (pure). The gate is a mossy cobblestone arch placed once on the
+  main island 300-600 blocks from spawn (`WorldGen::rotting_gate`, warded, position logged). `rotting_floor(seed, run, depth)`
+  lays out a fresh floor per run on a 28-block grid: start room (way out in its west wall), halls, boss room with the stair;
+  `DEPTHS` = 4, each deeper floor has more rooms and spawns. Floors are built in the pocket (`POCKET`, x/z 60000, y 780,
+  `in_pocket`): `world::PocketFloor` makes chunk generation use `generate_pocket` there, pocket chunks are never saved and
+  `World::forget_pocket` drops them when the floor changes; no height cold or thin air there, no creatures or critters.
+  `game::delve`: walk into the gate to start a run at the deepest unlocked depth; rooms spawn foes as you reach them
+  (`combat::SpawnFoe` with `boost` per depth and a `tag`; the boss is a Rot Brute x3 until real bosses exist); the boss's
+  `FoeSlain` opens the stair; the stair goes down a depth (after depth 4 it brings you back up); the start room's west
+  doorway leads back to the gate. Pure rules in `delve::rules` (`Delve { runs, deepest, cleared }`, saved to `delve.ron`;
+  clearing a depth's boss lets the next run start one deeper; `lost_on_death`). Dying below loses what you picked up or put
+  on during the run and wakes you outside the gate (`survival::RespawnAt`). Dungeon foes in foes.ron: `sporecaster`
+  (ranged: `ranged: Some((speed, color))` shoots bolts a raised guard blocks), `rot_brute` (slow, heavy), `mire_skitter`
+  (fast). Place name banners are off (`places::PLACE_CARDS`). Screenshots: `BLOCKGAME_GATE=1` starts facing the gate,
+  `BLOCKGAME_DELVE=n` starts a run at depth n.
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen

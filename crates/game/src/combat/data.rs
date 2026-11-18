@@ -20,6 +20,16 @@ pub struct Style {
     pub poise: f32,
 }
 
+/// A foe that fights from afar: its "cut" throws a bolt that flies at you
+/// (`reach` is then how far it shoots from).
+#[derive(Deserialize, Debug, Clone, Copy)]
+pub struct Ranged {
+    /// Blocks per second the bolt flies.
+    pub speed: f32,
+    /// Colour of the bolt (r, g, b 0..1).
+    pub color: (f32, f32, f32),
+}
+
 #[derive(Deserialize, Debug, Clone)]
 pub struct FoeKind {
     pub name: String,
@@ -50,6 +60,9 @@ pub struct FoeKind {
     #[serde(default)]
     pub drops: Vec<(String, u16, f32)>,
     pub looks: Looks,
+    /// Shoots instead of cutting.
+    #[serde(default)]
+    pub ranged: Option<Ranged>,
 }
 
 pub fn load(text: &str) -> Result<Vec<FoeKind>, String> {

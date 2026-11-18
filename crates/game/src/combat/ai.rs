@@ -104,6 +104,8 @@ pub struct Traits {
     pub swing: f32,
     /// When in its swing the cut lands (0..1).
     pub contact: f32,
+    /// Shoots from up to `reach` away instead of closing in to cut.
+    pub ranged: bool,
 }
 
 /// What a blow on it did.
@@ -210,6 +212,8 @@ impl Brain {
         }
 
         match self.tactic {
+            // A shooter looses as soon as it has a clear line within range.
+            Tactic::Approach | Tactic::Circle | Tactic::Press if t.ranged && s.sees && s.dist <= t.reach => self.set(Tactic::Attack, 0.0),
             Tactic::Press if s.dist <= t.reach => self.set(Tactic::Attack, 0.0),
             Tactic::Approach if s.dist <= ENGAGE => self.decide(s, t, rng),
             Tactic::Circle if s.dist > ENGAGE + 2.0 => self.set(Tactic::Approach, 0.0),
@@ -306,8 +310,34 @@ impl Brain {
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_shooter_looses_from_range_with_a_clear_line() {
+        let mut t = traits(0.3, 0.8, 0.1);
+        t.ranged = true;
+        t.reach = 12.0;
+        let mut b = Brain::new(&t.style, 7);
+        let mut rng = Rng(3);
+        let mut s = Senses { dist: 10.0, sees: true, from_home: 0.0, health: 1.0, threatened: false, you_guard: false, pressing: 0 };
+        b.step(&s, &t, &mut rng, 0.05);
+        // Noticed you; next it shoots from where it stands.
+        b.step(&s, &t, &mut rng, 0.05);
+        assert_eq!(b.tactic, Tactic::Attack, "shoots at 10 blocks");
+        let mut landed = false;
+        for _ in 0..40 {
+            landed |= b.step(&s, &t, &mut rng, 0.05);
+        }
+        assert!(landed, "the shot goes off");
+        // Out of sight it has to come closer instead.
+        let mut b = Brain::new(&t.style, 7);
+        s.sees = false;
+        b.aware = true;
+        b.set(Tactic::Approach, 0.0);
+        b.step(&s, &t, &mut rng, 0.05);
+        assert_ne!(b.tactic, Tactic::Attack);
+    }
+
     fn traits(aggression: f32, caution: f32, guard: f32) -> Traits {
-        Traits { style: Style { aggression, caution, guard, poise: 2.0 }, reach: 2.3, sight: 18.0, forget: 28.0, leash: 40.0, swing: 0.8, contact: 0.5 }
+        Traits { style: Style { aggression, caution, guard, poise: 2.0 }, reach: 2.3, sight: 18.0, forget: 28.0, leash: 40.0, swing: 0.8, contact: 0.5, ranged: false }
     }
 
     fn near(dist: f32) -> Senses {

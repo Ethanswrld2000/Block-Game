@@ -46,13 +46,15 @@ impl Plugin for CombatPlugin {
             .init_resource::<Guard>()
             .init_resource::<ShoveTimer>()
             .add_message::<SpawnFoe>()
+            .add_message::<Shoot>()
+            .add_message::<FoeSlain>()
             .add_systems(
                 crate::menu::GameUpdate,
                 (guard_input, aim_foes).chain().after(crate::creatures::aim).after(crate::player::PlayerSet).before(InteractSet),
             )
             .add_systems(
                 crate::menu::GameUpdate,
-                (spawn_key, spawn, take_swings, take_strikes, shove, think, walk, animate, haunt, fall)
+                (spawn_key, spawn, take_swings, take_strikes, shove, think, shoot, fly_bolts, walk, animate, haunt, fall)
                     .chain()
                     .after(InteractSet)
                     .after(crate::npc::NpcSet),
@@ -105,6 +107,41 @@ struct ShoveTimer(f32);
 pub struct SpawnFoe {
     pub kind: usize,
     pub at: Vec3,
+    /// Scales its health and damage (deeper dungeon floors are tougher). 1 = as in foes.ron.
+    pub boost: f32,
+    /// Tagged on the foe entity, so whoever spawned it can tell it apart (0 = none).
+    pub tag: u32,
+}
+
+impl SpawnFoe {
+    pub fn new(kind: usize, at: Vec3) -> Self {
+        Self { kind, at, boost: 1.0, tag: 0 }
+    }
+}
+
+/// A foe fell (just before it is despawned).
+#[derive(Message, Debug, Clone, Copy)]
+pub struct FoeSlain {
+    pub tag: u32,
+}
+
+/// A ranged foe looses a bolt.
+#[derive(Message, Debug, Clone, Copy)]
+struct Shoot {
+    from: Vec3,
+    vel: Vec3,
+    damage: f32,
+    cause: crate::creatures::data::Cause,
+    color: (f32, f32, f32),
+}
+
+/// A bolt in flight: hits you (or your raised blade) or the first wall.
+#[derive(Component)]
+pub struct Bolt {
+    vel: Vec3,
+    damage: f32,
+    cause: crate::creatures::data::Cause,
+    life: f32,
 }
 
 #[derive(Component, Debug)]
@@ -125,6 +162,10 @@ pub struct Foe {
     bumped: bool,
     /// Eased 0..1: how far its blade is raised.
     guard: f32,
+    /// Health and damage scale (`SpawnFoe::boost`).
+    pub boost: f32,
+    /// `SpawnFoe::tag`.
+    pub tag: u32,
 }
 
 /// A spirit's look: its own materials (made see-through and blue once its
@@ -137,7 +178,7 @@ pub struct Ghost {
 }
 
 fn traits(k: &FoeKind) -> Traits {
-    Traits { style: k.style, reach: k.reach, sight: k.sight, forget: k.forget, leash: k.leash, swing: k.swing, contact: Swing::Slash.contact() }
+    Traits { style: k.style, reach: k.reach, sight: k.sight, forget: k.forget, leash: k.leash, swing: k.swing, contact: Swing::Slash.contact(), ranged: k.ranged.is_some() }
 }
 
 fn flat(v: Vec3) -> Vec3 {
@@ -217,7 +258,7 @@ fn spawn_key(
     let at = player.pos + fwd * 6.0;
     let (x, z) = (at.x.floor() as i32, at.z.floor() as i32);
     let y = crate::creatures::ground_near(&world, &blocks, x, z, at.y as i32 - 8, at.y as i32 + 6, false).map_or(at.y, |y| y as f32);
-    spawn.write(SpawnFoe { kind, at: Vec3::new(x as f32 + 0.5, y, z as f32 + 0.5) });
+    spawn.write(SpawnFoe::new(kind, Vec3::new(x as f32 + 0.5, y, z as f32 + 0.5)));
 
     // A sword to test with.
     let has_sword = items.ids().any(|i| items.get(i).swing == Swing::Slash && inv.count(i) > 0);
@@ -249,7 +290,7 @@ fn spawn(
         }
         let foe = Foe {
             kind: m.kind,
-            health: k.health,
+            health: k.health * m.boost,
             brain: Brain::new(&k.style, dice.0.next()),
             vel: Vec3::ZERO,
             yaw,
@@ -261,6 +302,8 @@ fn spawn(
             repath: 0.0,
             bumped: false,
             guard: 0.0,
+            boost: m.boost,
+            tag: m.tag,
         };
         commands.entity(root).insert((Name::new(k.title.clone()), foe, rig));
         if k.ghost {
@@ -416,6 +459,7 @@ fn think(
     mut hits: MessageWriter<Damage>,
     mut sound: MessageWriter<PlaySound>,
     mut bursts: MessageWriter<Burst>,
+    mut shots: MessageWriter<Shoot>,
 ) {
     let dt = time.delta_secs().min(0.05);
     if dt <= 0.0 {
@@ -454,8 +498,18 @@ fn think(
         };
         let lands = foe.brain.step(&senses, &t, &mut dice.0, dt);
 
-        // Its cut lands: on you, on your blade, or on air.
+        // A shooter looses its bolt at your chest instead of cutting.
         if lands
+            && let Some(r) = k.ranged
+        {
+            if fightable && sees {
+                let from = pos + Vec3::Y * 1.45;
+                let target = player.pos + Vec3::Y * 1.1;
+                let vel = (target - from).normalize_or_zero() * r.speed;
+                shots.write(Shoot { from, vel, damage: k.damage * foe.boost, cause: k.cause, color: r.color });
+                sound.write(PlaySound::new("knife").speed(0.7));
+            }
+        } else if lands
             && fightable
             && dist <= k.reach + 0.35
             && to.y.abs() < 2.0
@@ -468,7 +522,7 @@ fn think(
                 sound.write(PlaySound::new("clash").speed(if parried { 1.2 } else { 1.0 }));
                 bursts.write(Burst::new(pos + to * 0.5 + Vec3::Y * 1.4, BurstKind::Sparks, if parried { 22 } else { 10 }));
             } else {
-                hits.write(Damage { amount: k.damage, cause: k.cause.into() });
+                hits.write(Damage { amount: k.damage * foe.boost, cause: k.cause.into() });
                 sound.write(PlaySound::new("hit"));
             }
         }
@@ -496,7 +550,7 @@ fn think(
             Tactic::Guard => toward * ((dist - 2.0) * 0.6).clamp(-0.6, 0.6),
             Tactic::Backoff => -toward * k.walk * 1.1,
             // A step in behind the cut, then planted.
-            Tactic::Attack if (0.2..t.contact).contains(&foe.brain.swing) => toward * k.run * 0.55,
+            Tactic::Attack if !t.ranged && (0.2..t.contact).contains(&foe.brain.swing) => toward * k.run * 0.55,
             Tactic::Attack => Vec3::ZERO,
         };
         // Don't crowd into each other.
@@ -705,11 +759,13 @@ fn fall(
     mut toast: MessageWriter<crate::survival::Toast>,
     (mut gain, prog): (MessageWriter<crate::progress::GainXp>, Res<crate::progress::xp::Progression>),
     mut bursts: MessageWriter<Burst>,
+    mut slain: MessageWriter<FoeSlain>,
 ) {
     for (e, tf, foe) in &q {
         if foe.health > 0.0 {
             continue;
         }
+        slain.write(FoeSlain { tag: foe.tag });
         let k = &book.kinds[foe.kind];
         let at = tf.translation + Vec3::Y;
         for (name, n, p) in &k.drops {
@@ -721,7 +777,64 @@ fn fall(
         }
         bursts.write(Burst::new(at, if k.ghost { BurstKind::Wisp } else { BurstKind::Smoke }, if k.ghost { 40 } else { 14 }));
         toast.write(crate::survival::Toast(format!("{} slain", k.title)));
-        gain.write(crate::progress::GainXp { xp: k.health * prog.xp.kill, why: String::new() });
+        gain.write(crate::progress::GainXp { xp: k.health * foe.boost * prog.xp.kill, why: String::new() });
         commands.entity(e).despawn();
+    }
+}
+
+/// Bolts loosed this frame become glowing darts.
+fn shoot(mut commands: Commands, mut shots: MessageReader<Shoot>, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<StandardMaterial>>) {
+    for s in shots.read() {
+        let (r, g, b) = s.color;
+        let mat = materials.add(StandardMaterial { base_color: Color::srgb(r, g, b), emissive: LinearRgba::rgb(r * 3.0, g * 3.0, b * 3.0), ..default() });
+        let mesh = meshes.add(Cuboid::new(0.12, 0.12, 0.45));
+        commands.spawn((
+            Bolt { vel: s.vel, damage: s.damage, cause: s.cause, life: 4.0 },
+            Mesh3d(mesh),
+            MeshMaterial3d(mat),
+            Transform::from_translation(s.from).looking_to(s.vel.normalize_or(Vec3::Z), Vec3::Y),
+            bevy::light::NotShadowCaster,
+        ));
+    }
+}
+
+/// Bolts fly straight; they stop in walls, on your raised blade, or in you.
+#[allow(clippy::too_many_arguments)]
+fn fly_bolts(
+    mut commands: Commands,
+    time: Res<Time>,
+    (world, blocks): (Res<World>, Res<Blocks>),
+    player: Res<Player>,
+    cam: Single<&Transform, (With<FlyCamera>, Without<Bolt>)>,
+    guard: Res<Guard>,
+    mut bolts: Query<(Entity, &mut Transform, &mut Bolt)>,
+    mut hits: MessageWriter<Damage>,
+    mut sound: MessageWriter<PlaySound>,
+    mut bursts: MessageWriter<Burst>,
+) {
+    let dt = time.delta_secs().min(0.05);
+    for (e, mut tf, mut b) in &mut bolts {
+        b.life -= dt;
+        let next = tf.translation + b.vel * dt;
+        let body = player.pos + Vec3::Y * 0.9;
+        let d = next - body;
+        if Vec2::new(d.x, d.z).length() < 0.45 && d.y.abs() < 1.0 {
+            let ahead = cam.forward().as_vec3();
+            if guard.up && ahead_of(ahead, -b.vel, ai::GUARD_ARC) {
+                sound.write(PlaySound::new("clash").speed(1.3));
+                bursts.write(Burst::new(next, BurstKind::Sparks, 8));
+            } else {
+                hits.write(Damage { amount: b.damage, cause: b.cause.into() });
+                sound.write(PlaySound::new("hit"));
+            }
+            commands.entity(e).despawn();
+            continue;
+        }
+        if b.life <= 0.0 || solid(&world, &blocks, BlockPos::from_world(next.to_array())) {
+            bursts.write(Burst::new(tf.translation, BurstKind::Smoke, 6));
+            commands.entity(e).despawn();
+            continue;
+        }
+        tf.translation = next;
     }
 }

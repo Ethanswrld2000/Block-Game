@@ -70,7 +70,7 @@ fn fill_rooms(mut entered: MessageReader<EnteredRoom>, book: Res<FoeBook>, mut r
             }
             for s in d.spawns.iter().filter(|s| s.room == room) {
                 let Some(kind) = book.kinds.iter().position(|k| k.name == kind_for(s.kind, s.pos)) else { continue };
-                spawn.write(SpawnFoe { kind, at: Vec3::new(s.pos[0] as f32 + 0.5, s.pos[1] as f32, s.pos[2] as f32 + 0.5) });
+                spawn.write(SpawnFoe::new(kind, Vec3::new(s.pos[0] as f32 + 0.5, s.pos[1] as f32, s.pos[2] as f32 + 0.5)));
             }
         }
     }
