@@ -35,6 +35,8 @@ pub enum BurstKind {
     Sparkle,
     /// The pop of something made: a ring of stars and a puff.
     Pop,
+    /// A ghost's pale blue wisp, drifting up and fading.
+    Wisp,
 }
 
 /// Throw some particles at a point in the world.
@@ -166,6 +168,10 @@ fn burst_particle(kind: BurstKind, seed: &mut u32) -> (Sprite, LinearRgba, Vec3,
         BurstKind::Splash => (Sprite::Dot, LinearRgba::new(0.75, 0.52, 0.22, 0.85), up(seed, 0.8), 0.5, (0.01, 0.008), free(4.5, 0.5)),
         BurstKind::BrewSplash => (Sprite::Dot, LinearRgba::new(0.5, 2.0, 0.7, 0.9), up(seed, 0.8), 0.5, (0.01, 0.008), free(4.5, 0.5)),
         BurstKind::Sparkle => (Sprite::Star, LinearRgba::rgb(1.6, 1.5, 2.4), spread(seed, 0.25) + Vec3::Y * 0.1, 0.8, (0.025, 0.0), free(-0.2, 2.0)),
+        BurstKind::Wisp => {
+            let c = LinearRgba::new(0.35 + rnd(seed) * 0.2, 0.75, 2.2, 0.45);
+            (Sprite::Puff, c, Vec3::Y * (0.35 + rnd(seed) * 0.3) + spread(seed, 0.12), 1.2, (0.025, 0.07), free(-0.15, 1.2))
+        }
         BurstKind::Pop => {
             // A flat ring outward, a little up.
             let a = rnd(seed) * std::f32::consts::TAU;

@@ -107,6 +107,8 @@ pub struct Npc {
     pub mood: Mood,
     /// In a conversation: stands still and faces you.
     pub talking: bool,
+    /// The place it keeps watch over (a dungeon's id for the gate guides).
+    pub post: Option<u64>,
 }
 
 impl Npc {
@@ -127,6 +129,7 @@ impl Npc {
             speaking: 0.0,
             mood: Mood::Neutral,
             talking: false,
+            post: None,
         }
     }
 }
@@ -142,7 +145,7 @@ fn solid(world: &World, blocks: &Blocks, p: BlockPos) -> bool {
 
 /// Feet height on the ground near `at`: the first spot from a few blocks up,
 /// going down, with solid ground under two free blocks.
-fn ground_near(world: &World, blocks: &Blocks, at: Vec3) -> Option<Vec3> {
+pub(crate) fn ground_near(world: &World, blocks: &Blocks, at: Vec3) -> Option<Vec3> {
     let (x, z) = (at.x.floor() as i32, at.z.floor() as i32);
     let top = at.y.floor() as i32 + 4;
     (top - 12..=top).rev().find_map(|y| {

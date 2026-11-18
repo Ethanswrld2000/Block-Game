@@ -34,12 +34,19 @@ pub(crate) struct HandRoot(Hand);
 #[derive(Component)]
 pub(crate) struct Held {
     hand: Hand,
+    /// Always this item, whatever you wield (a foe's sword).
+    fixed: Option<ItemId>,
     showing: Option<Option<ItemId>>,
 }
 
 impl Held {
     pub(crate) fn new(hand: Hand) -> Self {
-        Self { hand, showing: None }
+        Self { hand, fixed: None, showing: None }
+    }
+
+    /// A fist that always holds `item` (foes' weapons).
+    pub(crate) fn holding(item: ItemId) -> Self {
+        Self { hand: Hand::Right, fixed: Some(item), showing: None }
     }
 }
 
@@ -82,7 +89,7 @@ fn spawn_hands(
                 h.spawn((Mesh3d(fist.clone()), MeshMaterial3d(skin_mat.clone()), Transform::default(), NotShadowCaster));
                 // Items are held tilted up and forward.
                 h.spawn((
-                    Held { hand, showing: None },
+                    Held { hand, fixed: None, showing: None },
                     // Items are life-size; at arm's length in front of the
                     // eye they read better a bit smaller.
                     Transform::from_xyz(0.0, 0.03, -0.02).with_rotation(Quat::from_rotation_x(0.9)).with_scale(Vec3::splat(0.42)),
@@ -145,7 +152,11 @@ fn update_held(
     }
     for (e, mut h) in &mut held {
         // One hand for now: the right hand holds what's wielded.
-        let id = if h.hand == Hand::Right { wielded.0 } else { None };
+        let id = match h.fixed {
+            Some(item) => Some(item),
+            None if h.hand == Hand::Right => wielded.0,
+            None => None,
+        };
         if h.showing == Some(id) {
             continue;
         }
@@ -210,6 +221,7 @@ fn pose_hands(
     wielded: Res<Wielded>,
     items: Res<Items>,
     view: Res<crate::camera::View>,
+    guard: Res<crate::combat::Guard>,
     mut frozen: Local<Option<Option<f32>>>,
     mut roots: Query<(&HandRoot, &mut Transform, &mut Visibility)>,
 ) {
@@ -228,7 +240,13 @@ fn pose_hands(
             _ => (arm.style, arm.t),
         };
         // Wind up, strike, bounce off, back to rest (see `swing`).
-        let (swing_pos, swing_rot) = t.map_or((Vec3::ZERO, Quat::IDENTITY), |t| style.pose(t));
+        let (mut swing_pos, mut swing_rot) = t.map_or((Vec3::ZERO, Quat::IDENTITY), |t| style.pose(t));
+        // A sword raised to block (`combat::Guard`).
+        if hand == Hand::Right && guard.blend > 0.001 {
+            let (gp, gr) = crate::swing::guard_pose();
+            swing_pos = swing_pos.lerp(gp, guard.blend);
+            swing_rot = swing_rot.slerp(gr, guard.blend);
+        }
         let side = if hand == Hand::Right { 1.0 } else { -1.0 };
         let mirror = Vec3::new(side, 1.0, 1.0);
         let swing_rot = if hand == Hand::Right { swing_rot } else { Quat::from_xyzw(swing_rot.x, -swing_rot.y, -swing_rot.z, swing_rot.w) };

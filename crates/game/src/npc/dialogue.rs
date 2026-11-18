@@ -32,6 +32,8 @@ pub enum Act {
     Follow,
     Stay,
     Wander,
+    /// Cast the spirit spell on you (the guides at dungeon gates).
+    Spirit,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -188,10 +190,10 @@ impl Tree {
             Some(Act::Follow) => {
                 flags.insert(FOLLOWING.to_string());
             }
-            Some(_) => {
+            Some(Act::Stay | Act::Wander) => {
                 flags.remove(FOLLOWING);
             }
-            None => {}
+            Some(Act::Spirit) | None => {}
         }
         let next = if c.end { None } else { c.goto.clone() };
         Outcome { next, act: c.act }

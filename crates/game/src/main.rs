@@ -10,6 +10,7 @@ mod camera;
 mod chunk_mesh;
 mod clock;
 mod clouds;
+mod combat;
 mod creatures;
 mod lod;
 mod menu;
@@ -19,6 +20,7 @@ mod player;
 mod precipitation;
 mod progress;
 mod debug;
+mod dungeon;
 mod hands;
 mod hud;
 mod chop;
@@ -88,6 +90,6 @@ fn main() {
             survival::SurvivalPlugin,
             inventory::InventoryPlugin,
         ))
-        .add_plugins((creatures::CreaturesPlugin, places::PlacesPlugin, progress::ProgressPlugin, station::StationPlugin, airship::AirshipPlugin, settings::SettingsPlugin, sound::SoundPlugin, bench::BenchPlugin, npc::NpcPlugin, avatar::AvatarPlugin))
+        .add_plugins((creatures::CreaturesPlugin, places::PlacesPlugin, progress::ProgressPlugin, station::StationPlugin, airship::AirshipPlugin, settings::SettingsPlugin, sound::SoundPlugin, bench::BenchPlugin, npc::NpcPlugin, avatar::AvatarPlugin, combat::CombatPlugin, dungeon::DungeonPlugin))
         .run();
 }

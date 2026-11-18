@@ -82,6 +82,7 @@ fn animate(
     wielded: Res<Wielded>,
     items: Res<Items>,
     cam: Single<&FlyCamera>,
+    guard: Res<crate::combat::Guard>,
     mut frozen: Local<Option<Option<f32>>>,
     mut facing: Local<f32>,
     mut weight: Local<(Vec2, [Spring; 2])>,
@@ -105,7 +106,7 @@ fn animate(
     let arms = match (frozen, arm.t) {
         (Some(t), _) => Some(held.unwrap_or(Swing::Jab).limbs(t)),
         (None, Some(t)) => Some(arm.style.limbs(t)),
-        (None, None) => held.map(|_| Limbs::hold()),
+        (None, None) => held.map(|_| Limbs::hold().lerp(Limbs::guard(), guard.blend)),
     };
 
     // Facing (Minecraft-style): moving, the body turns toward where you go,

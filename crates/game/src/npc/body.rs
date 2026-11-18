@@ -267,6 +267,7 @@ fn clone_npc(n: &Npc) -> Npc {
     let mut out = Npc::new(n.kind, n.yaw);
     out.order = n.order;
     out.flags = n.flags.clone();
+    out.post = n.post;
     out
 }
 
@@ -493,4 +494,17 @@ pub fn drive(tf: &mut Transform, rig: &mut Rig, parts: &mut Parts, dt: f32, d: &
 /// Feet position and the box you aim at to talk (for `talk`).
 pub fn talk_box(at: Vec3) -> (Vec3, Vec3) {
     (at - Vec3::new(0.35, 0.0, 0.35), at + Vec3::new(0.35, super::HEIGHT, 0.35))
+}
+
+#[cfg(test)]
+mod spawn_tests {
+    use super::*;
+
+    #[test]
+    fn a_spawned_npc_keeps_its_post() {
+        // A gate guide that lost its post looked unguarded, so another spawned on top of it.
+        let mut n = Npc::new(1, 0.3);
+        n.post = Some(42);
+        assert_eq!(clone_npc(&n).post, Some(42));
+    }
 }

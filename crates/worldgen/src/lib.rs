@@ -19,6 +19,7 @@
 //! in the distance.
 
 mod biome;
+mod dungeons;
 mod floating;
 mod islands;
 mod plants;
@@ -27,8 +28,11 @@ mod trees;
 mod util;
 
 pub use biome::{Biome, Biomes, TreeKind};
+pub use dungeons::{Aabb, Dungeon, Room, RoomKind, SpawnKind, SpawnPoint, Veil};
 pub use floating::{Land, MAIN_RADIUS};
 pub use structures::{person_name, Barrow, Hut, Village, VILLAGE_RADIUS};
+
+use std::sync::Arc;
 
 use fastnoise_lite::{FastNoiseLite, FractalType};
 use voxel::chunk::{index, CHUNK_VOLUME};
@@ -140,6 +144,8 @@ pub struct WorldGen {
     home: (i32, i32),
     /// Centre of the main island (the spawn column).
     center: (i32, i32),
+    /// The dungeon a short walk from spawn.
+    home_dungeon: Option<Arc<dungeons::Dungeon>>,
 }
 
 impl WorldGen {
@@ -193,10 +199,12 @@ impl WorldGen {
             spawn: [0, 0, 0],
             home: (0, 0),
             center: (0, 0),
+            home_dungeon: None,
         };
         wg.spawn = wg.search_spawn();
         wg.center = (wg.spawn[0], wg.spawn[2]);
         wg.home = wg.search_home();
+        wg.home_dungeon = wg.search_home_dungeon().map(Arc::new);
         Ok(wg)
     }
 

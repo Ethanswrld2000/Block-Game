@@ -20,6 +20,9 @@ pub enum Swing {
     Chop,
     /// A pick: raised high over the shoulder, then driven straight down.
     Overhead,
+    /// A sword: drawn back high on the right, then a quick diagonal cut down
+    /// and across, following through. Always a fighting swing, never mining.
+    Slash,
 }
 
 #[derive(Clone, Copy)]
@@ -110,6 +113,22 @@ const OVERHEAD: [Hand; 7] = [
     key(1.0, [0.0; 3], [0.0; 3], Ease::InOut),
 ];
 
+/// The sword: a quick settle, drawn back high over the right shoulder with
+/// the blade laid back, a fast cut down and across to the left, a short
+/// follow-through, back to rest. Lighter and quicker than the axe.
+const SLASH: [Hand; 6] = [
+    REST,
+    key(0.08, [0.01, -0.01, 0.01], [-0.05, 0.04, 0.0], Ease::InOut),
+    key(0.38, [0.14, 0.12, 0.08], [0.55, -0.85, -0.7], Ease::InOut),
+    key(0.50, [-0.17, -0.07, -0.14], [-0.65, 1.05, 0.45], Ease::In),
+    key(0.62, [-0.15, -0.09, -0.11], [-0.7, 0.98, 0.45], Ease::Out),
+    key(1.0, [0.0; 3], [0.0; 3], Ease::InOut),
+];
+
+/// Holding a sword up across the body to block: blade tipped up and to the
+/// left, in front of the face.
+const GUARD: [f32; 6] = [-0.13, 0.1, 0.03, 0.5, 1.15, 0.9];
+
 /// The body's arms while holding and swinging (third person), all radians.
 /// Signs as `npc::motion::Pose`; `yaw` > 0 turns the right arm in across the
 /// chest; `wrist` is the held item's tip down (pitch) and roll about the forearm.
@@ -165,6 +184,18 @@ const BODY_OVERHEAD: [Body; 7] = [
     limbs(1.0, HOLD, Ease::InOut),
 ];
 
+const BODY_SLASH: [Body; 6] = [
+    limbs(0.0, HOLD, Ease::InOut),
+    limbs(0.08, [0.04, 0.02, 0.3, 0.08, 0.04, 0.8, 0.0, 0.15, 0.0, 0.0], Ease::InOut),
+    limbs(0.38, [-0.7, -0.06, 2.3, 0.45, -0.9, 0.9, 0.2, 0.3, 0.5, -1.0], Ease::InOut),
+    limbs(0.50, [0.6, 0.16, 1.1, 0.05, 0.75, 0.1, -0.1, 0.3, -1.2, -1.2], Ease::In),
+    limbs(0.62, [0.55, 0.18, 0.95, 0.05, 0.7, 0.15, -0.1, 0.3, -1.25, -1.2], Ease::Out),
+    limbs(1.0, HOLD, Ease::InOut),
+];
+
+/// Blocking: the sword arm up and across, blade raised in front of the face.
+const BODY_GUARD: [f32; 10] = [0.3, 0.06, 1.55, 0.12, 0.85, 1.25, 0.4, 0.9, -0.35, -1.45];
+
 impl Limbs {
     fn from_array(v: [f32; 10]) -> Self {
         Self { twist: v[0], lean: v[1], shoulder: v[2], arm_out: v[3], yaw: v[4], elbow: v[5], left_shoulder: v[6], left_elbow: v[7], wrist: [v[8], v[9]] }
@@ -174,6 +205,27 @@ impl Limbs {
     pub fn hold() -> Self {
         Self::from_array(HOLD)
     }
+
+    /// Arms raised to block with a sword.
+    pub fn guard() -> Self {
+        Self::from_array(BODY_GUARD)
+    }
+
+    /// `self` blended `k` (0..1) of the way to `other`.
+    pub fn lerp(self, other: Self, k: f32) -> Self {
+        let (a, b) = (self.to_array(), other.to_array());
+        Self::from_array(std::array::from_fn(|i| a[i] + (b[i] - a[i]) * k))
+    }
+
+    fn to_array(self) -> [f32; 10] {
+        [self.twist, self.lean, self.shoulder, self.arm_out, self.yaw, self.elbow, self.left_shoulder, self.left_elbow, self.wrist[0], self.wrist[1]]
+    }
+}
+
+/// The first-person hand's offset and turn while blocking with a sword.
+pub fn guard_pose() -> (Vec3, Quat) {
+    let v = GUARD;
+    (Vec3::new(v[0], v[1], v[2]), Quat::from_euler(EulerRot::XYZ, v[3], v[4], v[5]))
 }
 
 impl Swing {
@@ -182,6 +234,7 @@ impl Swing {
             Swing::Jab => &JAB,
             Swing::Chop => &CHOP,
             Swing::Overhead => &OVERHEAD,
+            Swing::Slash => &SLASH,
         }
     }
 
@@ -190,6 +243,7 @@ impl Swing {
             Swing::Jab => &BODY_JAB,
             Swing::Chop => &BODY_CHOP,
             Swing::Overhead => &BODY_OVERHEAD,
+            Swing::Slash => &BODY_SLASH,
         }
     }
 
@@ -197,7 +251,7 @@ impl Swing {
     fn contact_key(self) -> usize {
         match self {
             Swing::Jab => 2,
-            Swing::Chop | Swing::Overhead => 3,
+            Swing::Chop | Swing::Overhead | Swing::Slash => 3,
         }
     }
 
@@ -208,6 +262,7 @@ impl Swing {
             Swing::Jab => 0.32,
             Swing::Chop => 0.55,
             Swing::Overhead => 0.58,
+            Swing::Slash => 0.42,
         }
     }
 
@@ -247,7 +302,7 @@ pub fn blow_share(swing: Swing, seconds: f32) -> f32 {
 mod tests {
     use super::*;
 
-    const ALL: [Swing; 3] = [Swing::Jab, Swing::Chop, Swing::Overhead];
+    const ALL: [Swing; 4] = [Swing::Jab, Swing::Chop, Swing::Overhead, Swing::Slash];
 
     fn pitch(q: Quat) -> f32 {
         q.to_euler(EulerRot::XYZ).0
@@ -261,7 +316,7 @@ mod tests {
     /// (toward the middle) for the axe. Smaller = further into the strike.
     fn drive(s: Swing, t: f32) -> f32 {
         let q = s.pose(t).1;
-        if s == Swing::Chop { -yaw(q) } else { pitch(q) }
+        if matches!(s, Swing::Chop | Swing::Slash) { -yaw(q) } else { pitch(q) }
     }
 
     #[test]
@@ -329,6 +384,20 @@ mod tests {
         assert!(b.twist - a.twist > 1.0 && b.yaw - a.yaw > 1.2 && (b.shoulder - a.shoulder).abs() < 0.3);
         let (a, b) = (Swing::Overhead.limbs(windup), Swing::Overhead.limbs(Swing::Overhead.contact()));
         assert!(a.shoulder - b.shoulder > 1.2 && (b.twist - a.twist).abs() < 0.4);
+    }
+
+    #[test]
+    fn sword_cuts_down_and_across_quicker_than_the_axe() {
+        let (p0, q0) = Swing::Slash.pose(0.38);
+        let (p1, q1) = Swing::Slash.pose(Swing::Slash.contact());
+        // Across (a big turn) and down (a drop), not flat like the axe.
+        assert!(yaw(q1) - yaw(q0) > 1.5 && p0.y - p1.y > 0.15 && pitch(q0) - pitch(q1) > 0.8);
+        assert!(Swing::Slash.period() < Swing::Chop.period());
+        // The guard holds the blade up and across.
+        let (_, g) = guard_pose();
+        assert!(yaw(g) > 0.8);
+        let l = Limbs::hold().lerp(Limbs::guard(), 1.0);
+        assert_eq!(l, Limbs::guard());
     }
 
     #[test]
