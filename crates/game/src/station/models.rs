@@ -227,6 +227,7 @@ pub const HAMMER_REST: Vec3 = Vec3::new(0.49, 1.07, 0.13);
 /// The tool of a bench, in the station's frame.
 pub fn tool(kind: StationKind) -> Option<Tool> {
     use Mat::*;
+    let kind = kind.base();
     if kind == StationKind::ToolBench {
         return Some(Tool { rest: HAMMER_REST, rest_turn: Quat::from_rotation_y(std::f32::consts::FRAC_PI_2), parts: hammer(), how: ToolUse::Strike });
     }
@@ -315,6 +316,7 @@ pub fn half(kind: StationKind) -> Vec3 {
         StationKind::GolemFrame => Vec3::new(0.6, 0.85, 0.4),
         StationKind::Bedframe => Vec3::new(0.5, 0.15, 1.0),
         StationKind::Golem => Vec3::new(0.45, 0.8, 0.3),
+        k => half(k.base()),
     }
 }
 
@@ -623,6 +625,78 @@ pub fn parts(kind: StationKind, has: &dyn Fn(&str) -> bool, lit: u32) -> Vec<Par
                 v.push(b(0.9, 0.12, 1.9, 0.98, 0.06, 0.0, Cloth));
                 v.push(b(0.9, 0.06, 1.0, 0.98, 0.15, 0.35, Hide));
                 v.push(b(0.72, 0.14, 0.36, 0.98, 0.14, -0.72, Linen));
+            }
+        }
+        // Benches built on an older one's frame (`StationKind::base`), with a few
+        // parts of their own so they read differently. Placeholder looks.
+        k => {
+            v = parts(k.base(), has, lit);
+            match k {
+                StationKind::JoinersTable => {
+                    // A half-made chair hangs on the back board.
+                    v.extend([
+                        b(0.3, 0.03, 0.26, -0.45, 1.12, -0.32, Wood),
+                        b(0.03, 0.3, 0.03, -0.58, 1.02, -0.2, WoodDark),
+                        b(0.03, 0.3, 0.03, -0.32, 1.02, -0.2, WoodDark),
+                        b(0.3, 0.3, 0.03, -0.45, 1.3, -0.44, Wood),
+                    ]);
+                }
+                StationKind::DoorFrame => {
+                    // A tall door frame stands behind the table.
+                    v.extend([
+                        b(0.1, 2.0, 0.1, -0.55, 1.0, -0.55, WoodDark),
+                        b(0.1, 2.0, 0.1, 0.55, 1.0, -0.55, WoodDark),
+                        b(1.2, 0.12, 0.12, 0.0, 2.0, -0.55, WoodDark),
+                        b(0.9, 1.1, 0.05, 0.0, 1.4, -0.58, Wood),
+                        b(0.06, 0.06, 0.04, 0.32, 1.35, -0.54, Iron),
+                    ]);
+                }
+                StationKind::SewingTable => {
+                    // A bolt of linen, a spool and shears on the back board's shelf.
+                    v.extend([
+                        b(0.6, 0.14, 0.14, -0.35, 1.25, -0.36, Linen),
+                        b(0.08, 0.12, 0.08, 0.2, 1.24, -0.36, Cord),
+                        b(0.18, 0.02, 0.05, 0.45, 1.2, -0.36, Iron),
+                        b(0.5, 0.01, 0.3, -0.2, 0.865, 0.25, Cloth),
+                    ]);
+                }
+                StationKind::ArmorStand => {
+                    // A post with a leather torso on it at the table's end.
+                    v.extend([
+                        b(0.36, 0.06, 0.36, 1.1, 0.03, 0.0, WoodDark),
+                        b(0.06, 1.3, 0.06, 1.1, 0.65, 0.0, Wood),
+                        b(0.5, 0.06, 0.06, 1.1, 1.28, 0.0, Wood),
+                        b(0.42, 0.5, 0.24, 1.1, 1.05, 0.0, Hide),
+                        b(0.44, 0.06, 0.26, 1.1, 0.82, 0.0, WoodDark),
+                    ]);
+                }
+                StationKind::GlassKiln => {
+                    // Clay walls and a chimney around the rack; a pane cooling on top.
+                    v.extend([
+                        b(1.1, 0.95, 0.06, 0.0, 0.475, -0.27, Clay),
+                        b(0.06, 0.6, 0.5, -0.6, 0.3, 0.0, Clay),
+                        b(0.24, 0.6, 0.24, 0.0, 1.25, -0.27, Clay),
+                        b(0.22, 0.22, 0.02, 0.42, 1.12, -0.22, Crystal),
+                    ]);
+                }
+                StationKind::BladesmithBench => {
+                    // Blades stood up in a rack behind the anvil.
+                    v.push(b(1.0, 0.08, 0.12, 0.0, 0.5, -0.42, WoodDark));
+                    for x in [-0.35, -0.12, 0.12, 0.35] {
+                        v.push(b(0.05, 0.6, 0.02, x, 0.85, -0.42, Steel));
+                        v.push(b(0.12, 0.03, 0.04, x, 0.56, -0.42, Brass));
+                    }
+                }
+                StationKind::GunsmithBench => {
+                    // A long barrel and a stock laid out behind the anvil.
+                    v.extend([
+                        b(1.0, 0.08, 0.2, 0.0, 0.5, -0.42, WoodDark),
+                        b(0.8, 0.05, 0.05, 0.05, 0.57, -0.42, Iron),
+                        b(0.3, 0.08, 0.08, -0.45, 0.58, -0.42, Wood),
+                        b(0.08, 0.06, 0.06, -0.2, 0.58, -0.38, Brass),
+                    ]);
+                }
+                _ => {}
             }
         }
     }

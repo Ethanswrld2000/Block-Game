@@ -42,5 +42,10 @@
         "timber_wall": 35,
         "wattle_wall": 36,
         "thatch": 37,
+        "chair": 38,
+        "table": 39,
+        "wooden_door": 40,
+        "glass": 41,
+        "window": 42,
     },
 )

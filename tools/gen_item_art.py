@@ -261,6 +261,7 @@ def metal_axe(c, metal, edge):
 
 IRON, IRON_L = hexc("6e7078"), hexc("b8bcc4")
 STEEL, STEEL_L = hexc("9aa4b2"), hexc("e8f0f8")
+BRASS_C = hexc("b8903c")
 SPIRIT, SPIRIT_L = hexc("5a6e8a"), hexc("8ee0ff")
 
 
@@ -705,6 +706,73 @@ def airship(c):
     c.line(52, 28, 52, 37, 2, WOOD_D)
 
 
+def carpentry_urn(c):
+    urn_sprite(c, hexc("9e7a4c"), hexc("6a5030"), hexc("f0d8a0"))
+
+
+def gear_urn(c):
+    urn_sprite(c, hexc("80424c"), hexc("562a30"), hexc("f0b0b8"))
+
+
+def vehicle_urn(c):
+    urn_sprite(c, hexc("6a808e"), hexc("44545e"), hexc("c8e8f8"))
+
+
+def iron_dagger(c):
+    """A short blade, 20 x 40."""
+    c.poly([(7, 26), (7, 6), (10, 0), (13, 6), (13, 26)], IRON)
+    c.line(10, 3, 10, 25, 1, IRON_L)
+    c.rect(4, 26, 16, 28, WOOD_D)
+    handle(c, 8, 29, 37, 4)
+    c.rect(7, 37, 13, 39, WOOD_D)
+
+
+def rapier(c):
+    """A long thin blade and a swept guard, 20 x 60."""
+    c.poly([(9, 44), (9, 4), (10, 0), (11, 4), (11, 44)], STEEL)
+    c.line(10, 2, 10, 43, 1, STEEL_L)
+    c.rect(3, 44, 17, 46, BRASS_C)
+    c.line(4, 46, 6, 54, 1, BRASS_C)
+    c.line(6, 54, 13, 57, 1, BRASS_C)
+    handle(c, 8, 47, 56, 4)
+    c.rect(8, 56, 12, 59, BRASS_C)
+
+
+def makeshift_pistol(c):
+    """A crude pistol, 40 x 20: iron barrel strapped to a wooden grip."""
+    c.rect(4, 4, 34, 8, IRON)
+    c.rect(34, 3, 37, 9, mul(IRON, 0.7))
+    c.poly([(6, 8), (16, 8), (14, 18), (6, 18)], WOOD)
+    c.rect(10, 5, 13, 9, CORD)
+    c.rect(22, 5, 25, 9, CORD)
+    c.line(16, 9, 18, 13, 1, IRON)
+
+
+def rifle(c):
+    """A long rifle standing up, 20 x 80: barrel on top, stock at the bottom."""
+    c.rect(9, 0, 11, 48, IRON)
+    c.rect(7, 30, 13, 56, WOOD)
+    c.rect(8, 44, 12, 47, BRASS_C)
+    c.poly([(7, 56), (13, 56), (15, 78), (5, 78)], WOOD_D)
+    c.line(13, 50, 16, 54, 1, IRON)
+
+
+def iron_helm(c):
+    c.poly([(5, 28), (6, 12), (12, 5), (20, 3), (28, 5), (34, 12), (35, 28), (30, 34), (26, 28), (14, 28), (10, 34)], IRON)
+    c.line(20, 4, 20, 26, 1, IRON_L)
+    c.rect(4, 24, 36, 28, mul(IRON, 0.75))
+    for x in (8, 32):
+        c.dot(x, 26, IRON_L)
+
+
+def iron_mail(c):
+    c.poly([(9, 3), (16, 3), (20, 10), (24, 3), (31, 3), (35, 12), (34, 57), (6, 57), (5, 12)], IRON)
+    for y in range(12, 56, 3):
+        for x in range(7 + (y // 3) % 2, 34, 2):
+            c.dot(x, y, IRON_L if (x + y) % 4 == 0 else mul(IRON, 0.8))
+    c.rect(6, 50, 34, 53, HIDE_D)
+
+
 DRAW = {f.__name__: f for f in [
     stone_pickaxe, stone_axe, stone_shovel, flint_spear, iron_sword, steel_sword, spirit_sword, torch, marsh_berries, swamp_reed, smoked_fish, bread, peat_stew,
     cured_meat, feast_platter, ember_herb, stick, plant_fiber, cordage, coal, raw_iron, flint, hide, fur, linen_shirt,
@@ -714,6 +782,7 @@ DRAW = {f.__name__: f for f in [
     iron_pickaxe, iron_axe, iron_shovel, steel_pickaxe, steel_axe, spirit_pickaxe, spirit_axe,
     levitation_draught, light_draught, warmth_draught, focus_tonic,
     tool_urn, hearth_urn, star_urn, golem_urn, portable_bedroll, portable_tent, airship,
+    carpentry_urn, gear_urn, vehicle_urn, iron_dagger, rapier, makeshift_pistol, rifle, iron_helm, iron_mail,
 ]}
 
 

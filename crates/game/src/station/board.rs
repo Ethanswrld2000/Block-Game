@@ -52,6 +52,13 @@ pub(super) fn board_name(kind: StationKind) -> Option<&'static str> {
         StationKind::SharpeningStone => Some("sharpening_stone"),
         StationKind::MagicalLens => Some("magical_lens"),
         StationKind::Cauldron => Some("cauldron"),
+        StationKind::JoinersTable => Some("joiners_table"),
+        StationKind::DoorFrame => Some("door_frame"),
+        StationKind::GlassKiln => Some("glass_kiln"),
+        StationKind::SewingTable => Some("sewing_table"),
+        StationKind::ArmorStand => Some("armor_stand"),
+        StationKind::BladesmithBench => Some("bladesmith_bench"),
+        StationKind::GunsmithBench => Some("gunsmith_bench"),
         _ => None,
     }
 }
@@ -441,7 +448,7 @@ const CAULDRON: Layout = Layout {
 };
 
 pub(super) fn layout(kind: StationKind) -> &'static Layout {
-    match kind {
+    match kind.base() {
         StationKind::CampMat => &CAMP_MAT,
         StationKind::CarpentryBench => &CARPENTRY_BENCH,
         StationKind::CarpentryTable => &CARPENTRY_TABLE,
@@ -990,6 +997,9 @@ pub(super) fn board_click(
 /// What a go at each bench throws about.
 fn burst_of(kind: StationKind) -> BurstKind {
     match kind {
+        StationKind::SewingTable | StationKind::ArmorStand => BurstKind::Bits,
+        StationKind::GlassKiln => BurstKind::Sparks,
+        k if k.base() != k => burst_of(k.base()),
         StationKind::IronAnvil | StationKind::SharpeningStone | StationKind::MachinationTable => BurstKind::Sparks,
         StationKind::CarpentryBench | StationKind::CarpentryTable => BurstKind::Sawdust,
         StationKind::CuttingBoard => BurstKind::Bits,
@@ -1953,6 +1963,13 @@ mod tests {
             StationKind::SharpeningStone,
             StationKind::MagicalLens,
             StationKind::Cauldron,
+            StationKind::JoinersTable,
+            StationKind::DoorFrame,
+            StationKind::GlassKiln,
+            StationKind::SewingTable,
+            StationKind::ArmorStand,
+            StationKind::BladesmithBench,
+            StationKind::GunsmithBench,
         ] {
             let t = models::tool(kind).unwrap();
             let l = layout(kind);
@@ -1978,6 +1995,13 @@ mod tests {
             StationKind::SharpeningStone,
             StationKind::MagicalLens,
             StationKind::Cauldron,
+            StationKind::JoinersTable,
+            StationKind::DoorFrame,
+            StationKind::GlassKiln,
+            StationKind::SewingTable,
+            StationKind::ArmorStand,
+            StationKind::BladesmithBench,
+            StationKind::GunsmithBench,
         ] {
             for s in slots_of(board_name(kind).unwrap()) {
                 assert!(layout(kind).slots.iter().any(|l| l.0 == s.name), "{kind:?} {}", s.name);

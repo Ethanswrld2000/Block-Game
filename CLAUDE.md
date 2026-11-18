@@ -199,7 +199,8 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `station::urns`): each urn has a tree of steps in tiers 1-3; a step takes specific items (`needs`, put in a few at
   a time, `Progress.offer` fills open steps in tree order and passes leftovers on) and `gives` a `Station("kind")`
   placed by the urn, an `Upgrade` (code asks `Urns::has("step")`; models change), `Recipes` (benches.ron recipes
-  with that `unlock`) or another `Urn("name")` as an item (`tool_urn`, `hearth_urn`, `star_urn`, `golem_urn`).
+  with that `unlock`) or another `Urn("name")` as an item (`tool_urn`, `carpentry_urn`, `gear_urn`, `vehicle_urn`,
+  `hearth_urn`, `star_urn`, `golem_urn`).
   `later: true` steps fill and place their model but their use isn't built yet. The ancestral urn (sleeping station)
   stands by the bedroll; carried urns are set down with right click on the ground and picked up by crouching and
   right clicking with an empty hand. Hold an item + right click an urn to put one in (Shift: all it wants); empty hand
@@ -295,7 +296,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   radius 50-260, tops at y -140..240) float past the coast with the same climate, biomes and underside, and no
   water. `Column` has `land` (Void/Main/Outer), `bottom` and `water`; villages and barrows are main island only.
   Rootstone no longer generates. `game::lod` draws undersides and leaves the void empty.
-- Machination table (tool urn, tier 2, after the carpentry table): `StationKind::MachinationTable`, a board like the
+- Machination table (vehicle urn, tier 1): `StationKind::MachinationTable`, a board like the
   other benches (slots keel / rigging / envelope / engine, the drive wheel is a `ToolUse::Turn` tool). It builds
   machines: items of kind `Machine("name")` in items.ron, numbers in `assets/data/machines.ron`. Only the airship so
   far (8 planks, 6 cordage, 4 hide, 6 raw iron). `game::airship`: right click open ground with it to set it down
@@ -304,6 +305,16 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   stops on solid blocks one axis at a time). While aboard `player::walk` is off (`airship::not_aboard`) and the
   player stands at the helm. Ships and who is aboard save to `airships.ron`. You can't walk on the deck (the ship
   isn't a collider) and it can't be picked back up yet.
+- Urn split (Legacy prompts 2-4): the tool urn keeps only the tool bench and the anvils. Carpentry urn
+  (`carpentry_urn`): carpentry bench, carpentry table, Joiner's Table (`chair`, `table`), tier 2 Door Frame
+  (`wooden_door`) and Glass Kiln (`glass`, `window`; sand and glass need heat). Vehicle urn (`vehicle_urn`): the
+  machination table. Gear urn (`gear_urn`): Sewing Table (the clothes that were on the Tab list), Armor Stand (bark
+  and hide armor; iron helm and mail after the tier 3 `metal_armor` step), tier 2 Bladesmith Bench (`iron_dagger`,
+  `iron_sword`, moved off the iron anvil; `rapier` after the `rapier` step) and the Sharpening Stone, tier 3 Gunsmith
+  Bench (`later: true`: `makeshift_pistol` and `rifle` can be made, not fired). The ancestral urn gives the three new
+  urns (carpentry after the tool urn, gear and vehicle after carpentry). New benches reuse an older bench's board
+  (`StationKind::base`: layout, slots, tool, size) and add a few parts of their own in `models::parts`. Chairs,
+  tables and doors are plain cube blocks for now (doors don't open); glass and windows are see-through blocks.
 - Warded dungeons: `worldgen::dungeons` (pure). One per 1024-block cell (chance 0.7, 700+ blocks from spawn) plus a home
   dungeon 170-290 blocks from spawn, away from the home village. A stone gatehouse with one doorway, a stair 20-27 down,
   then 7-10 large rooms (13-23 wide, 6-9 high) on a 30-block grid in the dungeon's own frame, joined by 3-wide corridors

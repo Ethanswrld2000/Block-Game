@@ -194,6 +194,10 @@ pub fn slots_of(station: &str) -> &'static [SlotDef] {
         "sharpening_stone" => &SHARPENING_SLOTS,
         "magical_lens" => &LENS_SLOTS,
         "cauldron" => &CAULDRON_SLOTS,
+        // Benches that work like the carpentry table, the smoking rack or the anvil.
+        "joiners_table" | "door_frame" | "sewing_table" | "armor_stand" => &CARPENTRY_TABLE_SLOTS,
+        "glass_kiln" => &SMOKING_RACK_SLOTS,
+        "bladesmith_bench" | "gunsmith_bench" => &ANVIL_SLOTS,
         _ => &[],
     }
 }

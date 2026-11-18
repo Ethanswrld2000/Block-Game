@@ -272,6 +272,13 @@ pub enum StationKind {
     Bedframe,
     /// The golem once its heart is in: it walks (`golem`).
     Golem,
+    JoinersTable,
+    DoorFrame,
+    GlassKiln,
+    SewingTable,
+    ArmorStand,
+    BladesmithBench,
+    GunsmithBench,
 }
 
 impl StationKind {
@@ -294,6 +301,13 @@ impl StationKind {
             "magical_lens" => Self::MagicalLens,
             "cauldron" => Self::Cauldron,
             "golem_frame" => Self::GolemFrame,
+            "joiners_table" => Self::JoinersTable,
+            "door_frame" => Self::DoorFrame,
+            "glass_kiln" => Self::GlassKiln,
+            "sewing_table" => Self::SewingTable,
+            "armor_stand" => Self::ArmorStand,
+            "bladesmith_bench" => Self::BladesmithBench,
+            "gunsmith_bench" => Self::GunsmithBench,
             _ => return None,
         })
     }
@@ -319,6 +333,25 @@ impl StationKind {
             Self::GolemFrame => "Golem Frame",
             Self::Bedframe => "Bedframe",
             Self::Golem => "Golem",
+            Self::JoinersTable => "Joiner's Table",
+            Self::DoorFrame => "Door Frame",
+            Self::GlassKiln => "Glass Kiln",
+            Self::SewingTable => "Sewing Table",
+            Self::ArmorStand => "Armor Stand",
+            Self::BladesmithBench => "Bladesmith Bench",
+            Self::GunsmithBench => "Gunsmith Bench",
+        }
+    }
+
+    /// Newer benches that work like an older one: they share its board
+    /// layout, slots, tool and size, and add a few parts of their own
+    /// (`models::parts`).
+    pub fn base(self) -> Self {
+        match self {
+            Self::JoinersTable | Self::DoorFrame | Self::SewingTable | Self::ArmorStand => Self::CarpentryTable,
+            Self::GlassKiln => Self::SmokingRack,
+            Self::BladesmithBench | Self::GunsmithBench => Self::IronAnvil,
+            k => k,
         }
     }
 
@@ -343,6 +376,13 @@ impl StationKind {
             Self::GolemFrame => "golem_frame",
             Self::Bedframe => "bedframe",
             Self::Golem => "golem_heart",
+            Self::JoinersTable => "joiners_table",
+            Self::DoorFrame => "door_frame",
+            Self::GlassKiln => "glass_kiln",
+            Self::SewingTable => "sewing_table",
+            Self::ArmorStand => "armor_stand",
+            Self::BladesmithBench => "bladesmith_bench",
+            Self::GunsmithBench => "gunsmith_bench",
             Self::Urn => return None,
         })
     }

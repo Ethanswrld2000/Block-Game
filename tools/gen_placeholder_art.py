@@ -363,6 +363,61 @@ def thatch(s):
     return img
 
 
+def chair(s):
+    # A chair seen from the side: seat, back and legs over a dark gap.
+    img = noisy(s, [(40, 30, 20), (52, 38, 26)], (8, 2))
+    wood = noisy(s + 1, [(132, 96, 56), (164, 122, 74)], (16, 2))
+    ys, xs = np.mgrid[0:T, 0:T]
+    part = ((ys >= 16) & (ys < 20)) | ((xs >= 4) & (xs < 8)) | ((xs >= 24) & (xs < 28) & (ys >= 16)) | ((xs < 8) & (ys < 16) & (xs >= 4))
+    img[part] = wood[part]
+    img[(ys < 16) & (xs >= 4) & (xs < 28) & (ys % 5 == 0)] = wood[(ys < 16) & (xs >= 4) & (xs < 28) & (ys % 5 == 0)]
+    return img
+
+
+def table(s):
+    # A thick table top over four legs.
+    img = noisy(s, [(40, 30, 20), (52, 38, 26)], (8, 2))
+    wood = noisy(s + 1, [(138, 100, 60), (170, 128, 78)], (16, 2))
+    ys, xs = np.mgrid[0:T, 0:T]
+    part = (ys < 7) | (((xs < 5) | (xs > 26)) & (ys >= 7))
+    img[part] = wood[part]
+    img[ys == 6, :3] *= 0.6
+    return img
+
+
+def wooden_door(s):
+    # Upright planks with two cross boards and an iron latch.
+    img = noisy(s, [(120, 86, 50), (150, 110, 66)], (16, 2))
+    ys, xs = np.mgrid[0:T, 0:T]
+    img[(xs % 8) == 7, :3] *= 0.6
+    brace = ((ys >= 6) & (ys < 10)) | ((ys >= 22) & (ys < 26))
+    img[brace, :3] *= 0.75
+    img[(xs >= 24) & (xs < 27) & (ys >= 14) & (ys < 18), :3] = (60, 60, 64)
+    return img
+
+
+def glass(s):
+    # Pale see-through glass with a bright rim and a glint.
+    img = noisy(s, [(190, 220, 230), (210, 236, 244)], (16, 8))
+    img[..., 3] = 90
+    ys, xs = np.mgrid[0:T, 0:T]
+    rim = (xs < 1) | (xs > 30) | (ys < 1) | (ys > 30)
+    img[rim, 3] = 220
+    glint = (np.abs((xs - ys) - 6) < 2) & (xs > 6) & (xs < 16)
+    img[glint] = (250, 254, 255, 200)
+    return img
+
+
+def window(s):
+    # Four glass panes in a wooden frame.
+    img = glass(s)
+    wood = noisy(s + 1, [(108, 76, 44), (136, 98, 58)], (8, 2))
+    ys, xs = np.mgrid[0:T, 0:T]
+    frame = (xs < 3) | (xs > 28) | (ys < 3) | (ys > 28) | ((xs >= 15) & (xs < 17)) | ((ys >= 15) & (ys < 17))
+    img[frame] = wood[frame]
+    return img
+
+
 TILES = [
     ("grass_top", grass_top), ("grass_side", grass_side), ("dirt", dirt), ("stone", stone),
     ("cobblestone", cobble), ("sand", sand), ("mud", mud), ("moss", moss),
@@ -381,6 +436,7 @@ TILES = [
     ("rootstone", rootstone),
     ("vine", vine),
     ("floorboards", floorboards), ("timber_wall", timber_wall), ("wattle_wall", wattle_wall), ("thatch", thatch),
+    ("chair", chair), ("table", table), ("wooden_door", wooden_door), ("glass", glass), ("window", window),
 ]
 
 

@@ -56,5 +56,12 @@
         "warmth_draught": (86, 250, 20, 40),
         "focus_tonic": (108, 250, 20, 40),
         "airship": (130, 272, 60, 40),
+        "iron_helm": (0, 252, 40, 40),
+        "iron_mail": (192, 278, 40, 60),
+        "makeshift_pistol": (42, 292, 40, 20),
+        "rifle": (234, 278, 20, 80),
+        "carpentry_urn": (84, 292, 40, 40),
+        "gear_urn": (0, 294, 40, 40),
+        "vehicle_urn": (42, 314, 40, 40),
     },
 )

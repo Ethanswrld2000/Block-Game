@@ -1,5 +1,5 @@
 // Crafting recipes, shown in the inventory screen (Tab). Tools, planks, sticks,
-// chests and food are made by hand at the benches instead (benches.ron); what's left
+// chests, food, clothes and armor are made by hand at the benches instead (benches.ron); what's left
 // here moves to its own station as those are built.
 //   makes:  (item, count)
 //   needs:  [(item, count), ...] used up when you craft
@@ -8,16 +8,6 @@
     (makes: ("cordage", 1), needs: [("plant_fiber", 3)]),
     (makes: ("torch", 4), needs: [("stick", 1), ("coal", 1)]),
     (makes: ("torch", 2), needs: [("stick", 1), ("peat", 1)]),
-    (makes: ("reed_hat", 1), needs: [("plant_fiber", 6)]),
-    (makes: ("reed_cloak", 1), needs: [("cordage", 3), ("plant_fiber", 10)]),
-    (makes: ("bark_helm", 1), needs: [("log", 2), ("cordage", 2)]),
-    (makes: ("bark_vest", 1), needs: [("log", 4), ("cordage", 3)]),
-    // Hide and fur come from creatures.
-    (makes: ("hide_boots", 1), needs: [("hide", 1), ("cordage", 1)]),
-    (makes: ("hide_leggings", 1), needs: [("hide", 2), ("cordage", 1)]),
-    (makes: ("hide_jerkin", 1), needs: [("hide", 3), ("cordage", 2)]),
-    (makes: ("fur_hood", 1), needs: [("fur", 1), ("cordage", 1)]),
-    (makes: ("fur_coat", 1), needs: [("fur", 3), ("hide", 1), ("cordage", 2)]),
     // Spirit work happens at camp. Cooking moved to the cooking pot and cutting board (benches.ron).
     (makes: ("ember_herb", 1), needs: [("spirit_ember", 3), ("plant_fiber", 2)], at: Camp),
 ]
