@@ -426,10 +426,16 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   forge) is shared with encounters (`Place(name, r)` now spawns at the place). Prisoners: Liora waits in a hall on depth
   2 and Messler in the depth 3 boss room (`story::PRISON_POST`, gone with the floor) until C08/C09 set `liora_found`/
   `messler_found` and they follow you. Flags from the game: `fed_messler` (Messler's feed service), `used_telescope`.
-  J opens the journal (clue texts in story.ron `clues`; `BLOCKGAME_JOURNAL=1`). New NPC kinds `sporrow_elder` and `aunt`
-  (the aunt isn't placed in the world yet). The raid: C11 (night after C10, at camp) ends in encounter `raid_camp`
+  J opens the journal (clue texts in story.ron `clues`; `BLOCKGAME_JOURNAL=1`). New NPC kinds `sporrow_elder` and `aunt`. The raid: C11 (night after C10, at camp) ends in encounter `raid_camp`
   (5 `court_soldier`s from an airship: rifle bolts at range, a cut within `close`, the new foes.ron field), then C12
   removes Bram, places a `grave` block at camp and swaps Sporrow's mushroom blocks for `burnt_stem`/`burnt_cap`.
+- The aunt's island: `worldgen::landmarks::AuntIsland` (`WorldGen::aunt_island`, once per world): a sky island of its
+  own (radius 34, base `SKY_MIN` + 40, so above every cloud layer) 700-1300 blocks from spawn over the main island, kept
+  clear of the grid's sky islands; `islands_near` includes it, so `island_top`/`island_span`, the LOD and the island XP
+  see it. Drawn in `islands::place` (`draw_aunt_island`): a 7x7 stone cottage with a plank roof, a hearth (torch) under
+  a chimney on the back wall, a stone path with steps from the door to a broken arch (one pillar whole with a stub of
+  the span, the other snapped low, fallen stones). No trees round them (`keeps_clear`). `game::cast` places the aunt
+  outside her door once (`cast.ron`), so the C16 beat can fire; the position is logged at startup. No smoke effect yet.
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen

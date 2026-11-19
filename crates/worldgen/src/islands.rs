@@ -8,17 +8,19 @@ use crate::util::{hash2, unit};
 use crate::{TreeKind, WorldGen, SKY_MIN};
 
 const CELL: i32 = 192;
-const MAX_RADIUS: i32 = 58;
+pub(crate) const MAX_RADIUS: i32 = 58;
 
 #[derive(Clone, Copy, Debug)]
-struct Island {
-    x: i32,
-    y: i32,
-    z: i32,
-    radius: f32,
+pub(crate) struct Island {
+    pub(crate) x: i32,
+    pub(crate) y: i32,
+    pub(crate) z: i32,
+    pub(crate) radius: f32,
+    /// The aunt's island (`landmarks::AuntIsland`), not one of the grid's.
+    pub(crate) aunt: bool,
 }
 
-fn island_in_cell(wg: &WorldGen, cx: i32, cz: i32) -> Option<Island> {
+pub(crate) fn island_in_cell(wg: &WorldGen, cx: i32, cz: i32) -> Option<Island> {
     let h = hash2(wg.seed ^ 0x15_1A_4D, cx, cz);
     if unit(h) > 0.55 {
         return None;
@@ -29,6 +31,7 @@ fn island_in_cell(wg: &WorldGen, cx: i32, cz: i32) -> Option<Island> {
         z: cz * CELL + 32 + (j(23) * (CELL - 64) as f32) as i32,
         y: SKY_MIN + 40 + (j(37) * 180.0) as i32,
         radius: 16.0 + j(49) * (MAX_RADIUS - 16) as f32,
+        aunt: false,
     })
 }
 
@@ -41,11 +44,18 @@ fn islands_near(wg: &WorldGen, x0: i32, z0: i32, x1: i32, z1: i32) -> Vec<Island
             }
         }
     }
+    if let Some(a) = wg.aunt_island() {
+        let i = a.island();
+        let r = i.radius as i32 + 1;
+        if i.x + r >= x0 && i.x - r <= x1 && i.z + r >= z0 && i.z - r <= z1 {
+            out.push(i);
+        }
+    }
     out
 }
 
 /// (bottom, top) of an island's column at (x, z), if the island covers it.
-fn span(wg: &WorldGen, isl: &Island, x: i32, z: i32) -> Option<(i32, i32)> {
+pub(crate) fn span(wg: &WorldGen, isl: &Island, x: i32, z: i32) -> Option<(i32, i32)> {
     let (dx, dz) = ((x - isl.x) as f32, (z - isl.z) as f32);
     let n = wg.island_shape.get_noise_2d(x as f32, z as f32);
     let dist = (dx * dx + dz * dz).sqrt() + n * isl.radius * 0.22;
@@ -99,12 +109,26 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) -> bool
                 }
                 // Trees on the island top (their canopy may spill into this chunk).
                 let h = hash2(wg.seed ^ 0x15_7EE5, x, z);
-                if unit(h) < sky.tree_chance && top - bottom > 4 {
+                let clear = isl.aunt && wg.aunt_island().is_some_and(|a| a.keeps_clear(x, z));
+                if unit(h) < sky.tree_chance && top - bottom > 4 && !clear {
                     draw(wg, &mut c, TreeKind::Oak, x, top, z, h);
                     any = true;
                 }
             }
         }
+    }
+    // The aunt's cottage and the broken arch.
+    if let Some(a) = wg.aunt_island()
+        && islands.iter().any(|i| i.aunt)
+        && a.bounds.min[0] <= x1
+        && a.bounds.max[0] >= o.x
+        && a.bounds.min[2] <= z1
+        && a.bounds.max[2] >= o.z
+        && a.bounds.min[1] < o.y + CHUNK_SIZE_I32
+        && a.bounds.max[1] >= o.y
+    {
+        crate::landmarks::draw_aunt_island(wg, &mut c, a);
+        any = true;
     }
     let _ = ids.cloud_moss;
     any

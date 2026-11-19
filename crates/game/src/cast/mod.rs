@@ -1,8 +1,8 @@
 //! The cast in the world: who stands where, and what they do for you.
 //!
 //! - Brindlespheimer stands at the Rotting Gate (respawned there, not saved).
-//! - Gilm turns up at his hut outside Sporrow and Orrin on the castle tower, once per
-//!   world (`cast.ron` remembers it; from then on `npc::people` saves them).
+//! - Gilm turns up at his hut outside Sporrow, Orrin on the castle tower and the aunt
+//!   outside her cottage on her island above the clouds, once per world (`cast.ron` remembers it; from then on `npc::people` saves them).
 //! - The Star Urn is set on the castle tower once per world.
 //! - `services`: Orrin's weather reading, Messler's lessons and cooking remarks,
 //!   Gilm's and Liora's commissions, Wren's trades.
@@ -70,6 +70,9 @@ fn load(mut commands: Commands, dir: Res<SaveDir>, generator: Option<Res<Generat
     if let Some(k) = g.0.castle() {
         info!("castle at {:?}, tower roof at {:?}", k.center, [k.tower.0, k.roof, k.tower.1]);
     }
+    if let Some(a) = g.0.aunt_island() {
+        info!("the aunt's island at {:?}, her cottage at {:?}", a.center, a.cottage);
+    }
 }
 
 /// The Star Urn stands on the castle tower until you take it.
@@ -82,7 +85,8 @@ fn set_star_urn(mut cast: ResMut<Cast>, mut urns: ResMut<crate::station::Urns>, 
     urns.placed.insert("star".into(), crate::station::Placed { pos: (x, y, z), along_x: true, back: 1.0 });
 }
 
-/// Gilm at his hut, Orrin on the castle tower: once each, when you first come near.
+/// Gilm at his hut, Orrin on the castle tower, the aunt at her cottage: once each,
+/// when you first come near.
 #[allow(clippy::too_many_arguments)]
 fn place_cast(
     time: Res<Time>,
@@ -108,6 +112,10 @@ fn place_cast(
     }
     if let Some(k) = g.0.castle() {
         spots.push(("orrin", Vec3::from_array(k.orrin), Vec3::from_array(k.urn), false));
+    }
+    if let Some(a) = g.0.aunt_island() {
+        let arch = Vec3::new(a.arch[0] as f32 + 0.5, a.arch[1] as f32, a.arch[2] as f32 + 0.5);
+        spots.push(("aunt", Vec3::from_array(a.stand), arch, false));
     }
     for (who, at, look, wander) in spots {
         if cast.placed.contains(who) || Vec2::new(at.x - player.pos.x, at.z - player.pos.z).length() > NEAR {

@@ -33,7 +33,7 @@ pub use biome::{Biome, Biomes, TreeKind};
 pub use dungeons::{Aabb, Dungeon, Room, RoomKind, SpawnKind, SpawnPoint, Veil};
 pub use floating::{Land, MAIN_RADIUS};
 pub use rotting::{floor as rotting_floor, in_pocket, Floor, FloorKind, FloorRoom, RottingGate, DEPTHS, POCKET};
-pub use landmarks::{Castle, Forge, SPORROW_RADIUS};
+pub use landmarks::{AuntIsland, Castle, Forge, AUNT_RADIUS, SPORROW_RADIUS};
 pub use structures::{person_name, Barrow, Folk, Hut, Village, VILLAGE_RADIUS};
 
 use std::sync::Arc;
@@ -165,6 +165,7 @@ struct Landmarks {
     sporrow: Option<Arc<Village>>,
     forge: Option<landmarks::Forge>,
     castle: Option<landmarks::Castle>,
+    aunt: Option<landmarks::AuntIsland>,
 }
 
 impl WorldGen {
@@ -236,6 +237,7 @@ impl WorldGen {
             wg.landmarks.forge = Some(f);
         }
         wg.landmarks.castle = wg.search_castle();
+        wg.landmarks.aunt = wg.search_aunt_island();
         Ok(wg)
     }
 

@@ -8,6 +8,8 @@
 //! - **The castle**: an abandoned castle high in the mountains, a walled
 //!   court on a stone plinth with a tower in one corner. A stair winds up
 //!   inside the tower to its roof, where the Star Urn stands.
+//! - **The aunt's island**: a sky island of its own above the cloud line, with
+//!   her stone cottage (chimney on the back wall) and a broken arch facing its door.
 
 use crate::dungeons::Aabb;
 use crate::structures::{Folk, Hut, Village};
@@ -47,6 +49,48 @@ pub struct Castle {
     pub bounds: Aabb,
 }
 
+/// The aunt's island, high above the clouds over the main island.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AuntIsland {
+    /// Centre of the island and the height its top is shaped around.
+    pub center: [i32; 3],
+    pub radius: f32,
+    /// Centre of the cottage's footprint, floor level (feet height inside).
+    pub cottage: [i32; 3],
+    /// Which way the cottage door faces (a unit step in x or z).
+    pub door: (i32, i32),
+    /// Middle of the broken arch, on the ground in front of the door.
+    pub arch: [i32; 3],
+    /// Where the aunt stands at first (feet), just outside her door.
+    pub stand: [f32; 3],
+    pub bounds: Aabb,
+}
+
+/// The aunt's island: this radius, its base this far above `SKY_MIN`, this far from spawn.
+pub const AUNT_RADIUS: f32 = 34.0;
+const AUNT_BASE: i32 = 40;
+const AUNT_FROM_SPAWN: (f32, f32) = (700.0, 1300.0);
+/// The cottage is 7 x 7, walls this tall.
+const COTTAGE_HALF: i32 = 3;
+const COTTAGE_WALL: i32 = 4;
+/// The arch stands this far in front of the door.
+const ARCH_AHEAD: i32 = 13;
+
+impl AuntIsland {
+    pub(crate) fn island(&self) -> crate::islands::Island {
+        crate::islands::Island { x: self.center[0], y: self.center[1], z: self.center[2], radius: self.radius, aunt: true }
+    }
+
+    /// No trees here: round the cottage, the path and the arch.
+    pub(crate) fn keeps_clear(&self, x: i32, z: i32) -> bool {
+        let near = |p: [i32; 3], r: i32| (x - p[0]).pow(2) + (z - p[2]).pow(2) <= r * r;
+        let (dx, dz) = (x - self.cottage[0], z - self.cottage[2]);
+        let along = dx * self.door.0 + dz * self.door.1;
+        let across = (dx * self.door.1 - dz * self.door.0).abs();
+        near(self.cottage, 9) || near(self.arch, 6) || ((0..=ARCH_AHEAD).contains(&along) && across <= 3)
+    }
+}
+
 /// Half the castle's walled court.
 const COURT: i32 = 10;
 /// The tower: 7 x 7, this tall above the court floor.
@@ -70,6 +114,60 @@ impl WorldGen {
     /// The abandoned castle in the mountains (one per world).
     pub fn castle(&self) -> Option<&Castle> {
         self.landmarks.castle.as_ref()
+    }
+
+    /// The aunt's island (one per world).
+    pub fn aunt_island(&self) -> Option<&AuntIsland> {
+        self.landmarks.aunt.as_ref()
+    }
+
+    /// A spot above the main island, clear of the other sky islands.
+    pub(crate) fn search_aunt_island(&self) -> Option<AuntIsland> {
+        let [sx, _, sz] = self.spawn;
+        let room = AUNT_RADIUS as i32 + crate::islands::MAX_RADIUS + 24;
+        for k in 0..96u64 {
+            let h = hash2(self.seed ^ 0xA0_47, k as i32, 7);
+            let a = unit(h) * std::f32::consts::TAU;
+            let r = AUNT_FROM_SPAWN.0 + unit(h.rotate_left(17)) * (AUNT_FROM_SPAWN.1 - AUNT_FROM_SPAWN.0);
+            let (x, z) = (sx + (a.cos() * r) as i32, sz + (a.sin() * r) as i32);
+            let cells = (x - room).div_euclid(192)..=(x + room).div_euclid(192);
+            let crowded = cells.clone().any(|cx| {
+                ((z - room).div_euclid(192)..=(z + room).div_euclid(192)).any(|cz| {
+                    crate::islands::island_in_cell(self, cx, cz).is_some_and(|i| {
+                        let d = (((i.x - x) as f32).powi(2) + ((i.z - z) as f32).powi(2)).sqrt();
+                        d < AUNT_RADIUS + i.radius + 24.0
+                    })
+                })
+            });
+            if !crowded {
+                return Some(self.build_aunt_island(x, z));
+            }
+        }
+        None
+    }
+
+    fn build_aunt_island(&self, x: i32, z: i32) -> AuntIsland {
+        let center = [x, crate::SKY_MIN + AUNT_BASE, z];
+        let isl = crate::islands::Island { x, y: center[1], z, radius: AUNT_RADIUS, aunt: true };
+        // The door faces back towards spawn; the cottage sits a little behind the middle.
+        let (tx, tz) = (self.spawn[0] - x, self.spawn[2] - z);
+        let door = if tx.abs() > tz.abs() { (tx.signum(), 0) } else { (0, tz.signum()) };
+        let (cx, cz) = (x - door.0 * 6, z - door.1 * 6);
+        let top = |px: i32, pz: i32| crate::islands::span(self, &isl, px, pz).map_or(center[1], |s| s.1);
+        let mut hi = i32::MIN;
+        for dz in -COTTAGE_HALF..=COTTAGE_HALF {
+            for dx in -COTTAGE_HALF..=COTTAGE_HALF {
+                hi = hi.max(top(cx + dx, cz + dz));
+            }
+        }
+        let floor = hi + 1;
+        let (ax, az) = (cx + door.0 * ARCH_AHEAD, cz + door.1 * ARCH_AHEAD);
+        let arch = [ax, top(ax, az) + 1, az];
+        let (fx, fz) = (cx + door.0 * (COTTAGE_HALF + 2), cz + door.1 * (COTTAGE_HALF + 2));
+        let stand = [fx as f32 + 0.5, (top(fx, fz) + 1).max(floor - 1) as f32, fz as f32 + 0.5];
+        let r = AUNT_RADIUS as i32;
+        let bounds = b_box((x - r, x + r), (center[1] - 2 * r, floor + COTTAGE_WALL + 8), (z - r, z + r));
+        AuntIsland { center, radius: AUNT_RADIUS, cottage: [cx, floor, cz], door, arch, stand, bounds }
     }
 
     pub(crate) fn search_sporrow(&self) -> Option<(Village, Forge)> {
@@ -313,6 +411,88 @@ pub(crate) fn draw_forge(wg: &WorldGen, c: &mut Canvas, f: &Forge) {
     }
 }
 
+/// The aunt's cottage (stone, a plank roof, a chimney on the back wall, a lit hearth)
+/// and the broken arch in front of it.
+pub(crate) fn draw_aunt_island(wg: &WorldGen, c: &mut Canvas, a: &AuntIsland) {
+    let ids = &wg.ids;
+    let isl = a.island();
+    let top = |x: i32, z: i32| crate::islands::span(wg, &isl, x, z).map(|s| s.1);
+    let [x, fl, z] = a.cottage;
+    let (d, back) = (a.door, (-a.door.0, -a.door.1));
+    let n = COTTAGE_HALF;
+    for dz in -n..=n {
+        for dx in -n..=n {
+            let (px, pz) = (x + dx, z + dz);
+            // Foundation down to the island's top.
+            let g = top(px, pz).unwrap_or(fl - 1);
+            for y in g + 1..fl {
+                c.put(px, y, pz, ids.cobblestone);
+            }
+            c.put(px, fl - 1, pz, ids.planks);
+            let edge = dx.abs() == n || dz.abs() == n;
+            for y in fl..fl + COTTAGE_WALL {
+                let door = (dx, dz) == (d.0 * n, d.1 * n) && y <= fl + 1;
+                let window = (dx == 0 || dz == 0) && y == fl + 1 && !door && (dx, dz) != (back.0 * n, back.1 * n);
+                let b = if edge && !door && !window { ids.cobblestone } else { BlockId::AIR };
+                c.put(px, y, pz, b);
+            }
+            // Roof: one layer of planks, a second smaller one on top.
+            c.put(px, fl + COTTAGE_WALL, pz, ids.planks);
+            if dx.abs() < n && dz.abs() < n {
+                c.put(px, fl + COTTAGE_WALL + 1, pz, ids.planks);
+            }
+            for y in fl + COTTAGE_WALL + 2..fl + COTTAGE_WALL + 4 {
+                c.put(px, y, pz, BlockId::AIR);
+            }
+        }
+    }
+    // Hearth against the back wall under the chimney, with a torch for its fire.
+    let (hx, hz) = (x + back.0 * (n - 1), z + back.1 * (n - 1));
+    c.put(hx, fl, hz, ids.cobblestone);
+    c.put(hx, fl + 1, hz, ids.torch);
+    let (kx, kz) = (x + back.0 * n, z + back.1 * n);
+    for y in fl + COTTAGE_WALL..fl + COTTAGE_WALL + 4 {
+        c.put(kx, y, kz, ids.cobblestone);
+    }
+    // A stone path from the door to the arch, with steps up to the door.
+    for s in n + 1..ARCH_AHEAD {
+        let (px, pz) = (x + d.0 * s, z + d.1 * s);
+        if let Some(g) = top(px, pz) {
+            let step = g.max(fl - 1 - (s - n - 1));
+            for y in g..=step {
+                c.put(px, y, pz, ids.cobblestone);
+            }
+            for y in step + 1..step + 4 {
+                c.put(px, y, pz, BlockId::AIR);
+            }
+        }
+    }
+    // The broken arch: across the path, one pillar whole with a stub of the span,
+    // the other snapped off low.
+    let side = (d.1, d.0);
+    let [ax, ay, az] = a.arch;
+    let stone = |px: i32, py: i32, pz: i32| if hash2(wg.seed ^ 0xA4C4, px * 31 + py, pz).is_multiple_of(5) { ids.moss } else { ids.cobblestone };
+    for (s, height) in [(-3, 7), (3, 3)] {
+        let (px, pz) = (ax + side.0 * s, az + side.1 * s);
+        let g = top(px, pz).unwrap_or(ay - 1);
+        for y in g + 1..ay + height {
+            c.put(px, y, pz, stone(px, y, pz));
+        }
+    }
+    for s in -3..=0 {
+        let (px, pz) = (ax + side.0 * s, az + side.1 * s);
+        let y = ay + 7 - (s + 3) / 3;
+        c.put(px, y, pz, stone(px, y, pz));
+    }
+    // Fallen pieces of the span on the ground.
+    for (s, f) in [(2, 1), (1, 2)] {
+        let (px, pz) = (ax + side.0 * s + d.0 * f, az + side.1 * s + d.1 * f);
+        if let Some(g) = top(px, pz) {
+            c.put(px, g + 1, pz, stone(px, g + 1, pz));
+        }
+    }
+}
+
 /// The castle: a plinth, a ruined wall round the court with a gateway, the tower.
 pub(crate) fn draw_castle(wg: &WorldGen, c: &mut Canvas, k: &Castle) {
     let ids = &wg.ids;
@@ -436,6 +616,42 @@ mod tests {
             let wg = WorldGen::new(seed, &reg, include_str!("../../../assets/data/biomes.ron")).unwrap();
             assert!(wg.sporrow().is_some() && wg.gilm_forge().is_some(), "seed {seed}: no Sporrow");
             assert!(wg.castle().is_some(), "seed {seed}: no castle");
+            assert!(wg.aunt_island().is_some(), "seed {seed}: no aunt's island");
         }
+    }
+
+    #[test]
+    fn the_aunt_lives_above_the_clouds_by_a_broken_arch() {
+        let wg = crate::tests::wg();
+        let a = wg.aunt_island().expect("the aunt's island");
+        assert!(a.cottage[1] > 300 + 40, "above the highest clouds (floor {})", a.cottage[1]);
+        let d = (((a.center[0] - wg.spawn[0]).pow(2) + (a.center[2] - wg.spawn[2]).pow(2)) as f32).sqrt();
+        assert!((AUNT_FROM_SPAWN.0 - 1.0..AUNT_FROM_SPAWN.1 + 1.0).contains(&d), "{d} blocks from spawn");
+        // Its own island: the sky island there is this one.
+        assert_eq!(wg.island_top(a.center[0], a.center[2]), crate::islands::span(&wg, &a.island(), a.center[0], a.center[2]).map(|s| s.1));
+        let at = |x: i32, y: i32, z: i32| {
+            let p = voxel::BlockPos::new(x, y, z);
+            let chunk = wg.generate(p.chunk());
+            let o = p.chunk().origin();
+            chunk.get((x - o.x) as usize, (y - o.y) as usize, (z - o.z) as usize)
+        };
+        let [x, fl, z] = a.cottage;
+        assert_eq!(at(x, fl - 1, z), wg.ids.planks, "floor");
+        assert!(at(x, fl, z).is_air() && at(x, fl + 1, z).is_air(), "room to stand inside");
+        let (dx, dz) = (x + a.door.0 * COTTAGE_HALF, z + a.door.1 * COTTAGE_HALF);
+        assert!(at(dx, fl, dz).is_air() && at(dx, fl + 1, dz).is_air(), "a doorway");
+        assert_eq!(at(x + a.door.0 * (COTTAGE_HALF + 1), fl + 1, z + a.door.1 * (COTTAGE_HALF + 1)), BlockId::AIR);
+        // The chimney stands over the back wall, above the roof.
+        let (kx, kz) = (x - a.door.0 * COTTAGE_HALF, z - a.door.1 * COTTAGE_HALF);
+        assert!(!at(kx, fl + COTTAGE_WALL + 3, kz).is_air(), "chimney");
+        // The arch: one pillar standing tall, the other broken off low.
+        let side = (a.door.1, a.door.0);
+        let [ax, ay, az] = a.arch;
+        assert!(!at(ax - side.0 * 3, ay + 6, az - side.1 * 3).is_air(), "the whole pillar");
+        assert!(at(ax + side.0 * 3, ay + 4, az + side.1 * 3).is_air(), "the broken one");
+        assert!(at(ax, ay + 1, az).is_air(), "the way through");
+        // Where the aunt stands is on the ground in front of her door.
+        let s = a.stand.map(|v| v.floor() as i32);
+        assert!(at(s[0], s[1], s[2]).is_air() && !at(s[0], s[1] - 1, s[2]).is_air(), "she has ground to stand on");
     }
 }

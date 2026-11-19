@@ -230,7 +230,7 @@
         ),
     ),
     (
-        // Nayphen's aunt (C16). Not placed in the world yet: her island comes later.
+        // Nayphen's aunt (C16). Placed once outside her cottage on her island (`game::cast`).
         name: "The Aunt",
         title: "Who Ran Before",
         dialogue: "aunt",
