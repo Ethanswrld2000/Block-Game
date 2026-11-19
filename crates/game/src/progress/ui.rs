@@ -1,14 +1,16 @@
-//! The XP bar and focus meter on the HUD, and the skill tree screen (K): a
-//! map you drag to pan and scroll to zoom. Click a node to learn it.
+//! The XP bar and focus meter on the HUD, and the skill tree: a map you drag
+//! to pan and scroll to zoom; click a node to learn it. The tree lives on the
+//! inventory's Abilities tab (K opens it there): it is drawn over the area
+//! that tab leaves for it (`inventory::ui::TreeArea`).
 
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
 use bevy::prelude::*;
-use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
+use bevy::window::PrimaryWindow;
 
 use super::skills::{Node as SkillNode, Perks, Tree};
 use super::xp::Progression;
 use super::{Progress, Spells};
-use crate::camera::Menus;
+use crate::inventory::ui::{InvScreen, Tab, TreeArea};
 use crate::theme::{self, colors, sizes, Theme};
 
 pub struct ProgressUiPlugin;
@@ -157,18 +159,21 @@ fn update_hud(
 #[derive(Resource)]
 struct TreeView {
     open: bool,
+    /// Where the tree is drawn, in window points.
+    area: Rect,
+    /// A drag that started on the tree.
+    dragging: bool,
     /// Map point at the centre of the screen.
     pan: Vec2,
     zoom: f32,
     hover: Option<SkillNode>,
     dragged: f32,
     message: String,
-    built: bool,
 }
 
 impl Default for TreeView {
     fn default() -> Self {
-        Self { open: false, pan: Vec2::new(0.0, -170.0), zoom: 0.6, hover: None, dragged: 0.0, message: String::new(), built: false }
+        Self { open: false, area: Rect::default(), dragging: false, pan: Vec2::new(0.0, -170.0), zoom: 0.6, hover: None, dragged: 0.0, message: String::new() }
     }
 }
 
@@ -200,7 +205,7 @@ fn spawn_screen(mut commands: Commands, tree: Res<Tree>, theme: Res<Theme>) {
             Screen,
             Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), overflow: Overflow::clip(), ..default() },
             BackgroundColor(Color::srgb(0.03, 0.04, 0.06)),
-            GlobalZIndex(20),
+            GlobalZIndex(25),
             Visibility::Hidden,
         ))
         .with_children(|s| {
@@ -262,45 +267,46 @@ fn spawn_screen(mut commands: Commands, tree: Res<Tree>, theme: Res<Theme>) {
         });
 }
 
+/// Show the tree over the Abilities tab's area while that tab is open.
 fn open_close(
-    keys: Res<ButtonInput<KeyCode>>,
+    screen: Res<InvScreen>,
     mut view: ResMut<TreeView>,
-    mut menus: ResMut<Menus>,
-    mut screen: Query<&mut Visibility, With<Screen>>,
-    mut cursor: Single<&mut CursorOptions, With<PrimaryWindow>>,
+    area: Query<(&ComputedNode, &UiGlobalTransform), With<TreeArea>>,
+    mut node: Query<(&mut Node, &mut Visibility), With<Screen>>,
 ) {
-    let forced = std::env::var_os("BLOCKGAME_SKILLTREE").is_some();
-    let mut want = view.open;
-    if keys.just_pressed(KeyCode::KeyK) {
-        want = !view.open;
-    } else if view.open && keys.just_pressed(KeyCode::Escape) {
-        want = false;
+    let rect = area.iter().next().map(|(c, tf)| {
+        let k = c.inverse_scale_factor();
+        Rect::from_center_size(tf.translation * k, c.size() * k)
+    });
+    // Inside the frame's border.
+    let rect = rect.map(|r| r.inflate(-6.0)).filter(|r| r.width() > 10.0);
+    let want = screen.open && screen.tab == Tab::Abilities && rect.is_some();
+    if let Some(r) = rect {
+        view.area = r;
     }
-    if forced && !view.built {
-        want = true;
+    for (mut n, mut v) in &mut node {
+        let vis = if want { Visibility::Inherited } else { Visibility::Hidden };
+        if *v != vis {
+            *v = vis;
+        }
+        if want {
+            let r = view.area;
+            n.left = Val::Px(r.min.x);
+            n.top = Val::Px(r.min.y);
+            n.width = Val::Px(r.width());
+            n.height = Val::Px(r.height());
+        }
     }
-    view.built = true;
-    // Another screen (the inventory) is up.
-    if want && !view.open && menus.open {
-        return;
-    }
-    if want == view.open {
-        return;
+    if view.open && !want {
+        view.message.clear();
+        view.dragging = false;
     }
     view.open = want;
-    menus.open = want;
-    for mut v in &mut screen {
-        *v = if want { Visibility::Inherited } else { Visibility::Hidden };
-    }
-    if !want {
-        view.message.clear();
-        cursor.grab_mode = CursorGrabMode::Locked;
-        cursor.visible = false;
-    }
 }
 
-fn to_screen(view: &TreeView, size: Vec2, p: (f32, f32)) -> Vec2 {
-    size * 0.5 + (Vec2::new(p.0, p.1) - view.pan) * view.zoom
+/// A map point in window points.
+fn to_screen(view: &TreeView, p: (f32, f32)) -> Vec2 {
+    view.area.center() + (Vec2::new(p.0, p.1) - view.pan) * view.zoom
 }
 
 fn pan_zoom(
@@ -314,26 +320,31 @@ fn pan_zoom(
     if !view.open {
         return;
     }
+    let cursor = window.cursor_position().filter(|c| view.area.contains(*c));
     if mouse.just_pressed(MouseButton::Left) {
         view.dragged = 0.0;
+        view.dragging = cursor.is_some();
     }
-    if mouse.pressed(MouseButton::Left) && motion.delta != Vec2::ZERO {
+    if !mouse.pressed(MouseButton::Left) {
+        view.dragging = false;
+    }
+    if view.dragging && motion.delta != Vec2::ZERO {
         let z = view.zoom;
         view.pan -= motion.delta / z;
         view.dragged += motion.delta.length();
     }
-    let size = window.size();
-    if scroll.delta.y != 0.0 {
+    let mid = view.area.center();
+    if scroll.delta.y != 0.0
+        && let Some(cursor) = cursor
+    {
         // Zoom about the cursor.
-        let cursor = window.cursor_position().unwrap_or(size * 0.5);
-        let before = view.pan + (cursor - size * 0.5) / view.zoom;
+        let before = view.pan + (cursor - mid) / view.zoom;
         view.zoom = (view.zoom * (1.0 + scroll.delta.y.signum() * 0.12)).clamp(0.35, 2.5);
-        view.pan = before - (cursor - size * 0.5) / view.zoom;
+        view.pan = before - (cursor - mid) / view.zoom;
     }
-    let cursor = window.cursor_position();
     view.hover = cursor.and_then(|c| {
         tree.nodes()
-            .map(|n| (n, to_screen(&view, size, tree.pos(n)).distance(c)))
+            .map(|n| (n, to_screen(&view, tree.pos(n)).distance(c)))
             .filter(|(n, d)| *d < radius(*n, view.zoom) + 3.0)
             .min_by(|a, b| a.1.total_cmp(&b.1))
             .map(|(n, _)| n)
@@ -345,7 +356,7 @@ fn radius(n: SkillNode, zoom: f32) -> f32 {
 }
 
 fn click(mouse: Res<ButtonInput<MouseButton>>, tree: Res<Tree>, mut view: ResMut<TreeView>, mut progress: ResMut<Progress>) {
-    if !view.open || !mouse.just_released(MouseButton::Left) || view.dragged > 6.0 {
+    if !view.open || !mouse.just_released(MouseButton::Left) || view.dragged > 6.0 || view.hover.is_none() {
         return;
     }
     let Some(n) = view.hover else { return };
@@ -357,7 +368,6 @@ fn click(mouse: Res<ButtonInput<MouseButton>>, tree: Res<Tree>, mut view: ResMut
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn layout(
-    window: Single<&Window, With<PrimaryWindow>>,
     tree: Res<Tree>,
     view: Res<TreeView>,
     progress: Res<Progress>,
@@ -370,9 +380,9 @@ fn layout(
     if !view.open {
         return;
     }
-    let size = window.size();
     let learned = &progress.learned;
-    let at = |n: SkillNode| to_screen(&view, size, tree.pos(n));
+    // Positions inside the tree's own node.
+    let at = |n: SkillNode| to_screen(&view, tree.pos(n)) - view.area.min;
     for (m, mut node, mut img) in &mut nodes {
         let r = radius(m.0, view.zoom);
         let c = at(m.0);
@@ -439,7 +449,7 @@ fn layout(
             t.0 = info.clone();
         }
     }
-    let header = format!("Skills: level {}, {} point{} to spend   (K or Esc to close)", progress.level.level, learned.points, if learned.points == 1 { "" } else { "s" });
+    let header = format!("Skill tree: {} point{} to spend", learned.points, if learned.points == 1 { "" } else { "s" });
     for mut t in &mut texts.p1() {
         if t.0 != header {
             t.0 = header.clone();

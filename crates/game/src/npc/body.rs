@@ -75,6 +75,22 @@ impl Rig {
     pub fn facing(&self) -> f32 {
         self.yaw.x
     }
+
+    /// The joints clothes and armor hang from (`inventory::preview::dress`).
+    pub fn anchors(&self) -> Anchors {
+        Anchors { head: self.head, torso: self.torso, legs: self.legs, knees: self.knees, shoulders: self.shoulders }
+    }
+}
+
+/// Joints of a body, for things worn on it. Positions on them are in the
+/// same frame as `build`'s parts (blocks; the model faces -Z; [left, right]).
+#[derive(Debug, Clone, Copy)]
+pub struct Anchors {
+    pub head: Entity,
+    pub torso: Entity,
+    pub legs: [Entity; 2],
+    pub knees: [Entity; 2],
+    pub shoulders: [Entity; 2],
 }
 
 /// Where the parts sit (blocks, from the feet; the model faces -Z). Left is -X.
