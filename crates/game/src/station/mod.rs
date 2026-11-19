@@ -67,6 +67,7 @@ impl Plugin for StationPlugin {
             .add_message::<StepDone>()
             .add_message::<particles::Burst>()
             .add_message::<board::Cooked>()
+            .add_message::<board::Crafted>()
             .add_plugins(MaterialPlugin::<forge::GlintMaterial>::default())
             .add_systems(
                 crate::menu::GameStartup,

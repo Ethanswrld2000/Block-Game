@@ -749,6 +749,10 @@ pub(super) fn board_keys(
 }
 
 /// What came of stirring the cooking pot (Messler has something to say about it).
+/// Something was made at a bench (its item name), for cutscene triggers.
+#[derive(Message, Debug, Clone)]
+pub struct Crafted(pub String);
+
 #[derive(Message, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Cooked {
     /// It made something.
@@ -773,7 +777,7 @@ pub(super) fn board_click(
     mut at: ResMut<AtBench>,
     mut inv: ResMut<Inventory>,
     (mut spill, mut sound, mut toast, mut gain): (MessageWriter<Spill>, MessageWriter<PlaySound>, MessageWriter<Toast>, MessageWriter<crate::progress::GainXp>),
-    (prog, mut bursts, mut cooked): (Option<Res<crate::progress::xp::Progression>>, MessageWriter<Burst>, MessageWriter<Cooked>),
+    (prog, mut bursts, mut cooked, mut crafted): (Option<Res<crate::progress::xp::Progression>>, MessageWriter<Burst>, MessageWriter<Cooked>, MessageWriter<Crafted>),
     (mut urns, mut edges): (ResMut<Urns>, ResMut<Edges>),
     (recipes, drops, blocks): (Option<Res<crate::inventory::crafting::Recipes>>, Option<Res<crate::inventory::drops::Drops>>, Res<crate::blocks::Blocks>),
 ) {
@@ -856,6 +860,7 @@ pub(super) fn board_click(
                 if st.kind == StationKind::CookingPot {
                     cooked.write(Cooked::Made);
                 }
+                crafted.write(Crafted(items.get(s.item).name.clone()));
                 sound.write(PlaySound::new(layout(st.kind).sound).gain(0.9));
                 // The parts come together into it (`forge`), which lays the board out again.
                 let used: Vec<(String, usize)> = before

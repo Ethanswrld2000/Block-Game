@@ -56,8 +56,8 @@ struct Brought {
 
 /// The gate's saved state and the run in progress.
 #[derive(Resource, Default)]
-struct Below {
-    delve: Delve,
+pub(crate) struct Below {
+    pub(crate) delve: Delve,
     run: Option<Run>,
     floor: Option<Arc<Floor>>,
     filled: HashSet<usize>,

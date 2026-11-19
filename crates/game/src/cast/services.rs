@@ -49,17 +49,9 @@ impl Plugin for ServicesPlugin {
 #[derive(Resource, Deserialize, Debug, Clone)]
 pub struct Services {
     pub messler_teaches: Vec<String>,
-    pub messler_lines: CookLines,
+    pub messler_hearing: f32,
     /// By dialogue tree key.
     pub commissions: HashMap<String, Commissions>,
-}
-
-#[derive(Deserialize, Debug, Clone)]
-pub struct CookLines {
-    pub hearing: f32,
-    pub made: Vec<String>,
-    pub failed: Vec<String>,
-    pub burnt: Vec<String>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -300,33 +292,27 @@ fn serve(
     talk.go_to(node);
 }
 
-/// Messler, near you, has something to say about your cooking.
+/// Messler, near you, has something to say about your cooking (his barks in lines.ron).
 fn messler_remarks(
     mut cooked: MessageReader<Cooked>,
     data: Res<Services>,
     book: Res<NpcBook>,
     npcs: Query<(&Transform, &Npc)>,
     player: Res<Player>,
-    mut toast: MessageWriter<Toast>,
-    mut turn: Local<usize>,
+    mut bark: MessageWriter<crate::lines::Bark>,
 ) {
     for c in cooked.read() {
-        let near = npcs.iter().any(|(tf, n)| {
-            book.kinds.get(n.kind).is_some_and(|k| k.dialogue == "messler") && tf.translation.distance(player.pos) <= data.messler_lines.hearing
-        });
-        if !near {
+        let Some((tf, _)) = npcs.iter().find(|(tf, n)| {
+            book.kinds.get(n.kind).is_some_and(|k| k.dialogue == "messler") && tf.translation.distance(player.pos) <= data.messler_hearing
+        }) else {
             continue;
-        }
-        let lines = match c {
-            Cooked::Made => &data.messler_lines.made,
-            Cooked::Failed => &data.messler_lines.failed,
-            Cooked::Burnt => &data.messler_lines.burnt,
         };
-        if lines.is_empty() {
-            continue;
-        }
-        *turn += 1;
-        toast.write(Toast(format!("Messler: \"{}\"", lines[*turn % lines.len()])));
+        let trigger = match c {
+            Cooked::Made => "recipe_made",
+            Cooked::Failed => "recipe_failed",
+            Cooked::Burnt => "food_burnt",
+        };
+        bark.write(crate::lines::Bark { speaker: "messler".into(), trigger: trigger.into(), at: Some(tf.translation + Vec3::Y) });
     }
 }
 

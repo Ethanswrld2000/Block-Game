@@ -401,6 +401,21 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   into the learned set) and remarks on `board::Cooked` (made/failed/burnt), Gilm and Liora `commission:<n>` (Gilm only what
   you can't make yet: `knows:<item>`), Wren `trade:<id>` (`stock:<id>` per day). `cast::wren`: on even days Wren lands a small
   flying machine by the vehicle urn and stays (`WREN_POST`, not saved); the next day she flies off.
+- Voice lines, cutscenes, encounters (Legacy prompts 13-15): `assets/data/lines.ron` holds every voiced line (id, speaker,
+  text, `trigger` for barks, `direction`); dialogue.ron `say` lists line ids. `game::lines`: a line plays
+  `assets/voice/<id>.ogg` if it exists, else the `npc::voice` babble; the subtitle always shows. `lines::Bark { speaker,
+  trigger, at }` says a random bark (Messler's cooking remarks use it). `game::cutscene` (`assets/data/cutscenes.ron`; pure
+  runner and triggers in `cutscene::script`): triggers Near (NPC + line of sight), Area (place: camp, gate, sporrow, castle,
+  forge), Cleared (encounter), Boss (depth), Made (bench item, `board::Crafted`), Placed (block), TimeAfter (flag + hours);
+  actors are NPC dialogue keys, brought in (spawned, placed or walked to their mark via `Npc.cue`/`face`) before the steps:
+  Say, Camera, CameraMove, Walk, Face, Wait, Fade, Encounter, Flag, Clue, Give, Swap, Place. Draws through the talk's bars
+  (`Talk.scene`), locks input, hides the HUD, world keeps running; click ends a line, hold Esc skips (lasting steps still
+  apply). Once per world: `Story { flags, clues, played, made, placed }` saved to `story.ron`. Authored: C02 (Bram, no
+  trigger), C03 (near Brindlespheimer), C15 (airship made; Wren and Liora). `game::encounter` (`assets/data/encounters.ron`,
+  pure rules in `encounter::rules`): foes + counts, `from` Around(r) / Place(name, r) / Airship(r) (a red drop ship comes
+  down, they drop), `then` flag / cutscene. Started by a cutscene's Encounter step or `StartEncounter`; dying resets it
+  (foes go, all return when you're back within 48 blocks); the one running saves to `encounter.ron` and starts over on load.
+  Screenshots: `BLOCKGAME_CUTSCENE=C02`, `BLOCKGAME_ENCOUNTER=bog_ambush`.
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen

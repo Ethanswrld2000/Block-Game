@@ -82,6 +82,9 @@ pub struct Talk {
     hidden: Vec<(Entity, Visibility)>,
     /// A reply asked the NPC to cast the spirit spell (`dungeon::spirit` takes it).
     cast: bool,
+    /// The line id being said, and whether it has a recording (else babble).
+    line_id: String,
+    recorded: bool,
     /// A reply asked for a service (`game::cast` takes it and picks the next node).
     service: Option<String>,
     /// `{key}` in a line is replaced by `vars[key]` (set by services).
@@ -89,6 +92,18 @@ pub struct Talk {
     /// Flags that count for this talk's replies besides the NPC's own (what you can
     /// make, what's in stock today), kept up to date by `game::cast`.
     pub extra: std::collections::HashSet<String>,
+    /// A cutscene (`game::cutscene`) is drawing through the talk's bars and subtitle.
+    pub scene: Option<SceneView>,
+}
+
+/// What a cutscene shows in the talk's bars: how far in they are (0..1), and the
+/// speaker's name, title and the part of the line shown so far.
+#[derive(Default, Clone, Debug)]
+pub struct SceneView {
+    pub bars: f32,
+    pub name: String,
+    pub title: String,
+    pub text: String,
 }
 
 impl Talk {
@@ -124,6 +139,10 @@ impl Talk {
 
 #[derive(Component)]
 struct TalkUi;
+
+/// A root UI node the talk (and cutscenes) leave showing when they hide the HUD.
+#[derive(Component)]
+pub struct KeepShown;
 #[derive(Component)]
 struct TopBar;
 #[derive(Component)]
@@ -298,7 +317,10 @@ fn begin_node(talk: &mut Talk, book: &NpcBook, npc: &Npc, node: String) {
 fn begin_line(talk: &mut Talk, book: &NpcBook, npc: &Npc, t: f32) {
     let Some(kind) = book.kinds.get(npc.kind) else { return };
     let Some(node) = book.trees.get(&kind.dialogue).and_then(|tr| tr.nodes.get(&talk.node)) else { return };
-    talk.text = fill(node.say.get(talk.line).map_or("", |s| s.as_str()), &talk.vars);
+    let id = node.say.get(talk.line).map_or("", |s| s.as_str());
+    talk.text = fill(book.lines.text(id), &talk.vars);
+    talk.recorded = crate::lines::voice(id) != crate::lines::Voice::Babble;
+    talk.line_id = id.to_string();
     talk.mood = node.mood;
     talk.speech = voice::speak(&talk.text, kind.voice.rate);
     talk.t = t;
@@ -462,6 +484,7 @@ fn run(
     cam: Single<&Transform, With<FlyCamera>>,
     mut sounds: MessageWriter<PlaySound>,
     mut cursor: Single<&mut CursorOptions, With<PrimaryWindow>>,
+    (mut commands, server, settings): (Commands, Res<AssetServer>, Option<Res<crate::settings::Settings>>),
 ) {
     let dt = real.delta_secs().min(0.05);
     let Some(e) = talk.with else { return };
@@ -516,7 +539,12 @@ fn run(
     let before = talk.t;
     talk.t += dt;
     let pitch = book.kinds.get(npc.kind).map_or(1.0, |k| k.voice.pitch);
-    for s in talk.speech.starting(before, talk.t) {
+    if talk.recorded && before < 0.0 && talk.t >= 0.0 {
+        let volume = settings.as_ref().map_or(1.0, |s| s.volume);
+        crate::lines::play_recording(&mut commands, &server, &talk.line_id, volume, Some(tf.translation + Vec3::Y * EYES));
+    }
+    let recorded = talk.recorded;
+    for s in talk.speech.starting(before, talk.t).filter(|_| !recorded) {
         // A little pitch movement per syllable, like speech has.
         let lilt = 1.0 + 0.07 * ((s.start * 7.3).sin() + 0.5 * (s.start * 2.1).cos());
         sounds.write(PlaySound { at: Some(tf.translation + Vec3::Y * EYES), ..PlaySound::new(format!("voice_{}", s.vowel)).speed(pitch * lilt) });
@@ -564,11 +592,11 @@ fn camera(real: Res<Time<Real>>, mut talk: ResMut<Talk>, npcs: Query<&Transform,
 #[allow(clippy::type_complexity)]
 fn hide_hud(
     mut talk: ResMut<Talk>,
-    mut roots: Query<(Entity, &mut Visibility), (With<Node>, Without<ChildOf>, Without<TalkUi>, Without<Prompt>)>,
+    mut roots: Query<(Entity, &mut Visibility), (With<Node>, Without<ChildOf>, Without<TalkUi>, Without<Prompt>, Without<KeepShown>)>,
     mut hands: Query<&mut Visibility, (With<crate::hands::HandRoot>, Without<Node>)>,
     mut ui: Single<&mut Visibility, (With<TalkUi>, Without<crate::hands::HandRoot>, Without<Prompt>)>,
 ) {
-    let on = talk.active();
+    let on = talk.active() || talk.scene.is_some();
     let want = if on { Visibility::Inherited } else { Visibility::Hidden };
     if **ui != want {
         **ui = want;
@@ -614,16 +642,43 @@ fn draw(
     )>,
     mut rows: Query<(&Reply, &mut Node, &mut BackgroundColor), (Without<TopBar>, Without<BottomBar>)>,
 ) {
-    let Some(e) = talk.with else { return };
-    let bars = talk.bars.x.clamp(0.0, 1.0);
-    top.height = Val::Percent(TOP_BAR * bars);
-    bottom.height = Val::Percent(BOTTOM_BAR * bars);
-    let Some(kind) = npcs.get(e).ok().and_then(|n| book.kinds.get(n.kind)) else { return };
     let set = |t: &mut Text, s: &str| {
         if t.0 != s {
             t.0 = s.to_string();
         }
     };
+    let Some(e) = talk.with else {
+        // A cutscene: bars and the subtitle, no replies.
+        let v = talk.scene.clone().unwrap_or_default();
+        let bars = v.bars.clamp(0.0, 1.0);
+        top.height = Val::Percent(TOP_BAR * bars);
+        bottom.height = Val::Percent(BOTTOM_BAR * bars);
+        if talk.scene.is_none() {
+            return;
+        }
+        for mut t in &mut texts.p0() {
+            set(&mut t, &v.name);
+        }
+        for mut t in &mut texts.p1() {
+            set(&mut t, &v.title);
+        }
+        for mut t in &mut texts.p2() {
+            set(&mut t, &v.text);
+        }
+        for mut t in &mut texts.p3() {
+            set(&mut t, "Click   next line      Hold Esc   skip");
+        }
+        for (_, mut node, _) in &mut rows {
+            if node.display != Display::None {
+                node.display = Display::None;
+            }
+        }
+        return;
+    };
+    let bars = talk.bars.x.clamp(0.0, 1.0);
+    top.height = Val::Percent(TOP_BAR * bars);
+    bottom.height = Val::Percent(BOTTOM_BAR * bars);
+    let Some(kind) = npcs.get(e).ok().and_then(|n| book.kinds.get(n.kind)) else { return };
     for mut t in &mut texts.p0() {
         set(&mut t, &kind.name);
     }

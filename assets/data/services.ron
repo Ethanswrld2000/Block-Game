@@ -3,27 +3,10 @@
     // Messler: hand him food (what you hold, else the first food in your pockets) and he teaches
     // the next of these cooking recipes: benches.ron recipes with that `unlock`.
     messler_teaches: ["messler:berry_roast", "messler:fish_broth", "messler:hearty_stew", "messler:ember_platter"],
-    // What Messler says when you cook at a pot within `hearing` blocks of him.
-    // made: the pot made something; failed: nothing cooked (no recipe, or the fire too low);
-    // burnt: stirred over a lit fire with nothing in it that makes anything.
-    messler_lines: (
-        hearing: 16.0,
-        made: [
-            "Hm. Edible. Barely.",
-            "Not bad. For someone without whiskers.",
-            "You stirred it the right way round for once.",
-        ],
-        failed: [
-            "That's not a recipe, that's a mess in a pot.",
-            "More fire. Food doesn't cook itself by being looked at.",
-            "No. Just no.",
-        ],
-        burnt: [
-            "Smell that? That's burning. That's what you did.",
-            "You've scorched it. One hundred and thirty years and I've never scorched anything.",
-            "Black on the bottom. Lovely. Very crunchy.",
-        ],
-    ),
+    // Messler remarks on your cooking within this many blocks: his barks in lines.ron
+    // (food_burnt: stirred over a lit fire with nothing that makes anything; recipe_failed: nothing
+    // cooked, no recipe or the fire too low; recipe_made).
+    messler_hearing: 16.0,
     // Things people make for you: hand over `needs` and they give you `makes`.
     // only_unknown: offered only while no recipe you've learned makes it.
     commissions: {

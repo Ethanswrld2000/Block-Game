@@ -1,0 +1,81 @@
+// Cutscenes, played in the world with the real NPCs as actors (`game::cutscene`).
+//
+// id, title, trigger (None = only started by a story beat, an encounter's `then`, or
+// BLOCKGAME_CUTSCENE), needs (flags), actors (NPC dialogue key -> the mark it starts on
+// if it isn't nearby), steps. Each plays once per world.
+//
+// Marks: (from: Player, offset: (right, up, ahead)) of where you faced at the start;
+// (from: Actor("bram"), offset: (x, y, z)); (from: Place("gate"), offset: (x, y, z)).
+// Places: camp, gate, sporrow, castle, forge.
+// Targets: Player, Actor("bram"), Mark((from: .., offset: ..)).
+// Steps: Say(actor, line id) ("player" = you), Camera(target, secs),
+// CameraMove(mark, target, secs), Walk(actor, mark), Face(actor, target), Wait(secs),
+// Fade(to 0..1, secs), Encounter(id), Flag(name), Clue(name), Give(item, count),
+// Swap(at: mark, radius: n, from: block, to: block), Place(mark, block).
+[
+    (
+        id: "C02",
+        title: "Smoke on the swamp",
+        actors: {
+            "bram": (from: Player, offset: (3.0, 0.0, 9.0)),
+        },
+        steps: [
+            Camera(Actor("bram"), 1.2),
+            Walk("bram", (from: Player, offset: (0.5, 0.0, 2.6))),
+            Face("bram", Player),
+            Say("bram", "C02_01"),
+            Say("player", "C02_02"),
+            Say("bram", "C02_03"),
+            Say("player", "C02_04"),
+            Say("bram", "C02_05"),
+            Say("player", "C02_06"),
+            Say("bram", "C02_07"),
+            Say("bram", "C02_08"),
+            Flag("met_bram"),
+            Clue("rotting_gate_east"),
+        ],
+    ),
+    (
+        id: "C03",
+        title: "The gatekeeper",
+        trigger: Near(npc: "brindlespheimer", within: 8.0, sight: true),
+        actors: {
+            "brindlespheimer": (from: Place("gate"), offset: (2.0, 0.0, 2.0)),
+        },
+        steps: [
+            Face("brindlespheimer", Player),
+            Say("brindlespheimer", "C03_01"),
+            Say("player", "C03_02"),
+            Say("brindlespheimer", "C03_03"),
+            Say("brindlespheimer", "C03_04"),
+            Wait(1.5),
+            Say("brindlespheimer", "C03_05"),
+            Say("player", "C03_06"),
+            Say("brindlespheimer", "C03_07"),
+            Wait(1.0),
+            Say("brindlespheimer", "C03_08"),
+            Flag("met_brindlespheimer"),
+        ],
+    ),
+    (
+        id: "C15",
+        title: "A crate with ambitions",
+        trigger: Made("airship"),
+        actors: {
+            "wren": (from: Player, offset: (4.0, 0.0, 6.0)),
+            "liora": (from: Player, offset: (-4.0, 0.0, 6.0)),
+        },
+        steps: [
+            Walk("wren", (from: Player, offset: (1.6, 0.0, 2.8))),
+            Walk("liora", (from: Player, offset: (-1.6, 0.0, 2.8))),
+            Face("wren", Player),
+            Face("liora", Player),
+            Say("wren", "C15_01"),
+            Say("player", "C15_02"),
+            Say("wren", "C15_03"),
+            Face("wren", Actor("liora")),
+            Say("liora", "C15_04"),
+            Flag("airship_built"),
+        ],
+    ),
+]

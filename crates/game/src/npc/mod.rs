@@ -41,7 +41,7 @@ impl Plugin for NpcPlugin {
     fn build(&self, app: &mut App) {
         let kinds = data::load(include_str!("../../../../assets/data/npcs.ron")).unwrap_or_else(|e| panic!("npcs.ron: {e}"));
         let trees = dialogue::load(include_str!("../../../../assets/data/dialogue.ron")).unwrap_or_else(|e| panic!("dialogue.ron: {e}"));
-        app.insert_resource(NpcBook { kinds, trees })
+        app.insert_resource(NpcBook { kinds, trees, lines: crate::lines::load() })
             .insert_resource(NpcDice(Rng(0x0DD_BA11_5EED)))
             .add_systems(
                 crate::menu::GameUpdate,
@@ -59,6 +59,8 @@ pub struct NpcSet;
 pub struct NpcBook {
     pub kinds: Vec<data::Kind>,
     pub trees: HashMap<String, Tree>,
+    /// What every line id says (`lines.ron`).
+    pub lines: crate::lines::Lines,
 }
 
 #[derive(Resource)]
@@ -110,6 +112,9 @@ pub struct Npc {
     pub talking: bool,
     /// The place it keeps watch over (a dungeon's id for the gate guides).
     pub post: Option<u64>,
+    /// A cutscene's direction (`game::cutscene`): walk here, then face that way.
+    pub cue: Option<Vec3>,
+    pub face: Option<Vec3>,
 }
 
 impl Npc {
@@ -131,9 +136,14 @@ impl Npc {
             mood: Mood::Neutral,
             talking: false,
             post: None,
+            cue: None,
+            face: None,
         }
     }
 }
+
+/// A cutscene's walking NPC is there within this many blocks.
+pub const CUE_NEAR: f32 = 0.5;
 
 /// The yaw that faces along `d` (models face -Z).
 pub fn yaw_of(d: Vec3) -> f32 {
@@ -258,6 +268,22 @@ fn think(time: Res<Time>, player: Res<Player>, book: Res<NpcBook>, mut dice: Res
         to_player.y = 0.0;
         let dist = to_player.length();
         npc.want = Vec3::ZERO;
+        // A cutscene directs it: walk to the mark, then face where it's told.
+        if let Some(c) = npc.cue {
+            let d = Vec3::new(c.x - pos.x, 0.0, c.z - pos.z);
+            if d.length() > CUE_NEAR {
+                npc.want = d.normalize() * walk;
+                npc.yaw = yaw_of(d);
+                continue;
+            }
+        }
+        if let Some(f) = npc.face {
+            npc.yaw = yaw_of(f - pos);
+            continue;
+        }
+        if npc.cue.is_some() {
+            continue;
+        }
         if npc.talking {
             npc.yaw = yaw_of(to_player);
             continue;
