@@ -800,4 +800,24 @@
             ),
         },
     ),
+    "sporrow_elder": (
+        start: "greet",
+        nodes: {
+            "greet": (
+                mood: Angry,
+                say: ["C04_01"],
+                choices: [(text: "Goodbye.", end: true)],
+            ),
+        },
+    ),
+    "aunt": (
+        start: "greet",
+        nodes: {
+            "greet": (
+                mood: Neutral,
+                say: ["C16_01"],
+                choices: [(text: "Goodbye.", end: true)],
+            ),
+        },
+    ),
 }

@@ -24,7 +24,7 @@ pub struct Def {
 pub enum From {
     /// In a ring this many blocks around where it starts (you, or a cutscene's mark).
     Around(f32),
-    /// Around a named place (`cutscene::Place` names: camp, gate, sporrow, castle, forge, spawn).
+    /// Around a named place (`cutscene::Places`: camp, gate, sporrow, castle, forge).
     Place(String, f32),
     /// An airship comes down over the spot and drops them (ring radius).
     Airship(f32),

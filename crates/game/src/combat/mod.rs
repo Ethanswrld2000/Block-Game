@@ -500,9 +500,10 @@ fn think(
         };
         let lands = foe.brain.step(&senses, &t, &mut dice.0, dt);
 
-        // A shooter looses its bolt at your chest instead of cutting.
+        // A shooter looses its bolt at your chest instead of cutting (unless it also cuts and you're close).
+        let melee_reach = k.close.unwrap_or(k.reach);
         if lands
-            && let Some(r) = k.ranged
+            && let Some(r) = k.ranged.filter(|_| k.close.is_none_or(|c| dist > c))
         {
             if fightable && sees {
                 let from = pos + Vec3::Y * 1.45;
@@ -513,7 +514,7 @@ fn think(
             }
         } else if lands
             && fightable
-            && dist <= k.reach + 0.35
+            && dist <= melee_reach + 0.35
             && to.y.abs() < 2.0
             && ahead_of(Vec3::new(-foe.yaw.sin(), 0.0, -foe.yaw.cos()), to, 60.0)
         {

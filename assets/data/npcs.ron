@@ -207,4 +207,43 @@
             ],
         ),
     ),
+    (
+        // The elder of Sporrow (C04). One block tall, like the mushroom folk.
+        name: "Sporrow Elder",
+        title: "Elder of Sporrow",
+        dialogue: "sporrow_elder",
+        voice: (pitch: 0.9, rate: 4.2),
+        walk: 1.4,
+        looks: (
+            skin: (0.88, 0.84, 0.72),
+            hair: (0.80, 0.78, 0.70),
+            shirt: (0.60, 0.54, 0.40),
+            scarf: (0.46, 0.36, 0.24),
+            trousers: (0.56, 0.50, 0.38),
+            boots: (0.30, 0.24, 0.16),
+            iris: (0.20, 0.18, 0.12),
+            scale: 0.55,
+            extras: [
+                (on: Head, size: (0.90, 0.24, 0.86), at: (0.0, 0.54, 0.0), color: (0.48, 0.40, 0.30)),
+                (on: Head, size: (0.70, 0.10, 0.66), at: (0.0, 0.71, 0.0), color: (0.48, 0.40, 0.30)),
+            ],
+        ),
+    ),
+    (
+        // Nayphen's aunt (C16). Not placed in the world yet: her island comes later.
+        name: "The Aunt",
+        title: "Who Ran Before",
+        dialogue: "aunt",
+        voice: (pitch: 1.05, rate: 5.2),
+        walk: 2.2,
+        looks: (
+            skin: (0.80, 0.64, 0.52),
+            hair: (0.30, 0.22, 0.18),
+            shirt: (0.30, 0.34, 0.44),
+            scarf: (0.66, 0.58, 0.40),
+            trousers: (0.24, 0.24, 0.30),
+            boots: (0.18, 0.14, 0.10),
+            iris: (0.28, 0.40, 0.30),
+        ),
+    ),
 ]

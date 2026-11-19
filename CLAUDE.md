@@ -416,6 +416,20 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   down, they drop), `then` flag / cutscene. Started by a cutscene's Encounter step or `StartEncounter`; dying resets it
   (foes go, all return when you're back within 48 blocks); the one running saves to `encounter.ron` and starts over on load.
   Screenshots: `BLOCKGAME_CUTSCENE=C02`, `BLOCKGAME_ENCOUNTER=bog_ambush`.
+- Story beats, journal, the raid (Legacy prompts 16-17): `game::story` (`assets/data/story.ron`; pure rules in
+  `story::beats`): a beat lists conditions (NewWorld, Day, Hours, AtCamp, Urn, Step, Depth, Met, Recruited, Flag, Played,
+  DayAfter(`flag:`/`played:`/`step:` key, dates in `Story.when`), Near, Area, Made, Placed) and starts one cutscene; it fires
+  once (when that cutscene has played). C01-C16 are all wired (C06b and C08b are the second halves of C06 and C08).
+  `cutscene::Story` also keeps `met`, `when`, clues in order found, and `edits` (Swap/Place steps wait there until their
+  area is loaded: `apply_edits`). New cutscene steps `Follow(actor)` and `Remove(actor)`. Cutscene start requests queue
+  while one plays (`Playing::busy`). `cutscene::Places` (camp = bedroll, else the ancestral urn; gate, sporrow, castle,
+  forge) is shared with encounters (`Place(name, r)` now spawns at the place). Prisoners: Liora waits in a hall on depth
+  2 and Messler in the depth 3 boss room (`story::PRISON_POST`, gone with the floor) until C08/C09 set `liora_found`/
+  `messler_found` and they follow you. Flags from the game: `fed_messler` (Messler's feed service), `used_telescope`.
+  J opens the journal (clue texts in story.ron `clues`; `BLOCKGAME_JOURNAL=1`). New NPC kinds `sporrow_elder` and `aunt`
+  (the aunt isn't placed in the world yet). The raid: C11 (night after C10, at camp) ends in encounter `raid_camp`
+  (5 `court_soldier`s from an airship: rifle bolts at range, a cut within `close`, the new foes.ron field), then C12
+  removes Bram, places a `grave` block at camp and swaps Sporrow's mushroom blocks for `burnt_stem`/`burnt_cap`.
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen

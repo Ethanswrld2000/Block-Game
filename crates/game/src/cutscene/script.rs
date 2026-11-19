@@ -77,6 +77,10 @@ pub enum Step {
     Swap { at: Mark, radius: i32, from: String, to: String },
     /// Put a block at a mark.
     Place(Mark, String),
+    /// An actor follows you from now on (rescued, recruited).
+    Follow(String),
+    /// An actor leaves the world for good.
+    Remove(String),
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
@@ -102,7 +106,7 @@ pub fn load(text: &str) -> Result<Vec<Cutscene>, String> {
     for c in &list {
         for s in &c.steps {
             let who = match s {
-                Step::Say(a, _) | Step::Walk(a, _) | Step::Face(a, _) => Some(a),
+                Step::Say(a, _) | Step::Walk(a, _) | Step::Face(a, _) | Step::Follow(a) | Step::Remove(a) => Some(a),
                 _ => None,
             };
             if let Some(a) = who
@@ -171,6 +175,11 @@ pub fn clear_line(from: Vec3, to: Vec3, solid: impl Fn(IVec3) -> bool) -> bool {
 
 // ---- The runner ----
 
+/// A step whose effect stays when the cutscene is skipped.
+pub fn lasts(s: &Step) -> bool {
+    matches!(s, Step::Flag(_) | Step::Clue(_) | Step::Give(..) | Step::Swap { .. } | Step::Place(..) | Step::Encounter(_) | Step::Follow(_) | Step::Remove(_))
+}
+
 /// How a step ends.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Until {
@@ -191,7 +200,7 @@ pub fn until(s: &Step) -> Until {
         Step::Camera(_, t) | Step::CameraMove(_, _, t) | Step::Wait(t) | Step::Fade(_, t) => Until::Seconds(*t),
         Step::Walk(..) => Until::Arrived,
         Step::Encounter(_) => Until::Cleared,
-        Step::Face(..) | Step::Flag(_) | Step::Clue(_) | Step::Give(..) | Step::Swap { .. } | Step::Place(..) => Until::Now,
+        Step::Face(..) | Step::Flag(_) | Step::Clue(_) | Step::Give(..) | Step::Swap { .. } | Step::Place(..) | Step::Follow(_) | Step::Remove(_) => Until::Now,
     }
 }
 
@@ -252,7 +261,7 @@ impl Runner {
         let from = if self.started { self.at + 1 } else { self.at };
         self.at = steps.len();
         (from..steps.len())
-            .filter(|&i| matches!(steps[i], Step::Flag(_) | Step::Clue(_) | Step::Give(..) | Step::Swap { .. } | Step::Place(..) | Step::Encounter(_)))
+            .filter(|&i| lasts(&steps[i]))
             .collect()
     }
 }

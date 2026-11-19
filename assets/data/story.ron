@@ -1,0 +1,53 @@
+// Story beats (game::story): each only checks conditions and starts a cutscene (cutscenes.ron).
+// A beat fires once: when its cutscene has played, it never fires again. The first beat that
+// holds wins; beats aren't checked while a cutscene, talk or menu is up.
+//
+// Conditions (all must hold):
+//   NewWorld; Day(n) (0 = the first day); Hours(from, to) (wraps past midnight);
+//   AtCamp(blocks) (the bedroll, else the ancestral urn); Urn("carpentry") (carried, set down or growing);
+//   Step("carpentry_bench") (urn step done); Depth(n) (Rotting Gate boss beaten at depth n);
+//   Met("bram") (talked to); Recruited("orrin") (settled by its urn); Flag("x"); Played("C10");
+//   DayAfter("flag:x" | "played:C10" | "step:carpentry_bench") (a later day than it first came true);
+//   Near(npc: "gilm", within: 6.0, sight: true); Area(place: "sporrow", within: 30.0);
+//   Made("airship") (made at a bench); Placed("grave") (a block you placed).
+//
+// clues: what the journal (J) says for each clue a cutscene adds.
+(
+    beats: [
+        (id: "crash", play: "C01", when: [NewWorld]),
+        (id: "bram_arrives", play: "C02", when: [Day(1), Hours(5.0, 12.0), AtCamp(16.0)]),
+        (id: "the_gate", play: "C03", when: [Near(npc: "brindlespheimer", within: 8.0, sight: true)]),
+        (id: "sporrow", play: "C04", when: [Area(place: "sporrow", within: 26.0)]),
+        (id: "gilm", play: "C05", when: [Near(npc: "gilm", within: 6.0, sight: true)]),
+        (id: "first_urn", play: "C06", when: [Depth(1)]),
+        (id: "first_urn_bram", play: "C06b", when: [Played("C06"), Near(npc: "bram", within: 6.0, sight: true)]),
+        (id: "wren", play: "C07", when: [DayAfter("step:carpentry_bench"), AtCamp(16.0)]),
+        (id: "liora", play: "C08", when: [Near(npc: "liora", within: 5.0, sight: true)]),
+        (id: "liora_at_camp", play: "C08b", when: [Played("C08"), AtCamp(12.0), Near(npc: "liora", within: 10.0, sight: false)]),
+        (id: "messler", play: "C09", when: [Depth(3), Near(npc: "messler", within: 8.0, sight: true)]),
+        (id: "messler_story", play: "C10", when: [Flag("fed_messler")]),
+        (id: "the_raid", play: "C11", when: [Played("C10"), Hours(20.0, 4.0), AtCamp(16.0)]),
+        (id: "orrin", play: "C13", when: [Near(npc: "orrin", within: 6.0, sight: true)]),
+        (id: "telescope", play: "C14", when: [Flag("used_telescope"), Recruited("orrin")]),
+        (id: "airship", play: "C15", when: [Made("airship")]),
+        (id: "the_aunt", play: "C16", when: [Near(npc: "aunt", within: 8.0, sight: true)]),
+    ],
+    clues: {
+        "rotting_gate_east": (
+            title: "The old gate",
+            text: "Bram says there's an old gate east of camp. Things come out of it, things worth having.",
+        ),
+        "aunt_was_looking": (
+            title: "She was looking for something",
+            text: "Liora knew my aunt at court. She didn't run blind. There was a rat she used to feed: if anyone saw what she was after, it was him.",
+        ),
+        "tower_in_mountains": (
+            title: "A tower in the mountains",
+            text: "Messler says she spent her nights in the old archive with maps and star charts, and left for somewhere the wind can't find her: mountains, an old tower.",
+        ),
+        "broken_arch_island": (
+            title: "The island with the broken arch",
+            text: "Through Orrin's telescope: an island past the cloud line with a broken arch, and smoke. My aunt watched it every night.",
+        ),
+    },
+)

@@ -215,7 +215,7 @@ fn serve(
     (mut inv, wielded, benches, mut urns): (ResMut<Inventory>, Res<Wielded>, Res<Benches>, ResMut<Urns>),
     (weather, kinds, clock): (Res<WeatherState>, Res<WeatherKinds>, Res<WorldClock>),
     player: Res<Player>,
-    (mut spill, mut toast): (MessageWriter<Spill>, MessageWriter<Toast>),
+    (mut spill, mut toast, mut story): (MessageWriter<Spill>, MessageWriter<Toast>, Option<ResMut<crate::cutscene::Story>>),
 ) {
     let Some(service) = talk.take_service() else { return };
     let Some(npc) = talk.with().and_then(|e| npcs.get(e).ok()) else { return };
@@ -241,6 +241,10 @@ fn serve(
                 None => ("no_food", HashMap::new()),
                 Some(f) => {
                     inv.take(f, 1);
+                    // The story notes the first feeding (C10).
+                    if let Some(st) = story.as_mut() {
+                        st.flags.insert("fed_messler".to_string());
+                    }
                     match next_lesson(&data.messler_teaches, &urns.taught).map(str::to_string) {
                         None => ("fed_all", HashMap::new()),
                         Some(key) => {

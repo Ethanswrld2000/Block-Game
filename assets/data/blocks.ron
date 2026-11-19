@@ -71,4 +71,7 @@
     // Sporrow's houses (worldgen::landmarks): giant mushrooms.
     (name: "mushroom_stem", top: "mushroom_stem", hardness: 1.2, material: "wood"),
     (name: "mushroom_cap", top: "mushroom_cap", bottom: "mushroom_gills", hardness: 0.8, material: "wood"),
+    (name: "burnt_stem", top: "burnt_stem", hardness: 0.8, material: "wood"),
+    (name: "burnt_cap", top: "burnt_cap", hardness: 0.6, material: "wood"),
+    (name: "grave", top: "grave", hardness: 3.0, material: "stone"),
 ]

@@ -81,7 +81,7 @@ fn load(mut enc: ResMut<Encounters>, dir: Res<SaveDir>) {
     }
 }
 
-fn start(mut msgs: MessageReader<StartEncounter>, book: Res<EncounterBook>, mut enc: ResMut<Encounters>, player: Res<Player>, mut auto: Local<bool>) {
+fn start(mut msgs: MessageReader<StartEncounter>, book: Res<EncounterBook>, mut enc: ResMut<Encounters>, player: Res<Player>, places: Res<crate::cutscene::Places>, mut auto: Local<bool>) {
     // `BLOCKGAME_ENCOUNTER=bog_ambush` starts one round you once the world is in (testing).
     let forced = (!*auto && player.ready).then(|| std::env::var("BLOCKGAME_ENCOUNTER").ok()).flatten().map(|id| StartEncounter { id, at: player.pos });
     if player.ready {
@@ -96,8 +96,19 @@ fn start(mut msgs: MessageReader<StartEncounter>, book: Res<EncounterBook>, mut 
             warn!("encounter `{}` asked for while another runs", m.id);
             continue;
         }
+        // At a named place, if it says so.
+        let at = match &def.from {
+            From::Place(name, _) => match places.0.get(name) {
+                Some(p) => *p,
+                None => {
+                    warn!("encounter `{}`: no place `{name}`", m.id);
+                    m.at
+                }
+            },
+            _ => m.at,
+        };
         info!("encounter {} starts", m.id);
-        enc.running = Some(Running::start(def, m.at.to_array()));
+        enc.running = Some(Running::start(def, at.to_array()));
     }
 }
 

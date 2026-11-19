@@ -442,6 +442,31 @@ def mushroom_gills(s):
     return img
 
 
+def burnt_stem(s):
+    img = noisy(s, [(40, 34, 30), (66, 56, 48)], (8, 2))
+    xs = np.mgrid[0:T, 0:T][1]
+    img[(xs % 7) == 3, :3] *= 0.7
+    return img
+
+
+def burnt_cap(s):
+    img = noisy(s, [(28, 22, 20), (58, 40, 34)], (8, 2))
+    rng = np.random.default_rng(s)
+    for _ in range(4):
+        cx, cy = rng.integers(2, T - 2), rng.integers(2, T - 2)
+        img[cy, cx, :3] = (196, 84, 30)
+    return img
+
+
+def grave(s):
+    # A rough stone marker with a carved line.
+    img = noisy(s, [(96, 96, 100), (128, 128, 132)], (8, 4))
+    ys, xs = np.mgrid[0:T, 0:T]
+    img[(ys >= 8) & (ys < 10) & (xs >= 8) & (xs < 24), :3] = (60, 60, 64)
+    img[(xs >= 15) & (xs < 17) & (ys >= 4) & (ys < 20), :3] = (60, 60, 64)
+    return img
+
+
 TILES = [
     ("grass_top", grass_top), ("grass_side", grass_side), ("dirt", dirt), ("stone", stone),
     ("cobblestone", cobble), ("sand", sand), ("mud", mud), ("moss", moss),
@@ -462,6 +487,7 @@ TILES = [
     ("floorboards", floorboards), ("timber_wall", timber_wall), ("wattle_wall", wattle_wall), ("thatch", thatch),
     ("chair", chair), ("table", table), ("wooden_door", wooden_door), ("glass", glass), ("window", window),
     ("mushroom_stem", mushroom_stem), ("mushroom_cap", mushroom_cap), ("mushroom_gills", mushroom_gills),
+    ("burnt_stem", burnt_stem), ("burnt_cap", burnt_cap), ("grave", grave),
 ]
 
 

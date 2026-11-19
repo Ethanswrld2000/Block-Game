@@ -63,6 +63,9 @@ pub struct FoeKind {
     /// Shoots instead of cutting.
     #[serde(default)]
     pub ranged: Option<Ranged>,
+    /// A shooter that cuts instead when you are this close (court soldiers).
+    #[serde(default)]
+    pub close: Option<f32>,
 }
 
 pub fn load(text: &str) -> Result<Vec<FoeKind>, String> {

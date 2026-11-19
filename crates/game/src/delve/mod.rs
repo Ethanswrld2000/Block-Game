@@ -59,7 +59,7 @@ struct Brought {
 pub(crate) struct Below {
     pub(crate) delve: Delve,
     run: Option<Run>,
-    floor: Option<Arc<Floor>>,
+    pub(crate) floor: Option<Arc<Floor>>,
     filled: HashSet<usize>,
     brought: Brought,
     /// Seconds before the gate takes you again (after coming back up).

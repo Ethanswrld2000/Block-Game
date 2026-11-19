@@ -45,10 +45,11 @@ impl Plugin for CutscenePlugin {
         app.insert_resource(CutsceneBook(list))
             .init_resource::<Story>()
             .init_resource::<Playing>()
+            .init_resource::<Places>()
             .add_message::<StartCutscene>()
             .add_systems(crate::menu::GameStartup, spawn_fade)
             .add_systems(crate::menu::GamePostStartup, load)
-            .add_systems(crate::menu::GameUpdate, (record, begin, direct, camera, show).chain().after(crate::npc::talk::TalkSet))
+            .add_systems(crate::menu::GameUpdate, (refresh_places, record, begin, direct, camera, show, apply_edits).chain().after(crate::npc::talk::TalkSet))
             .add_systems(crate::menu::GameUpdate, save_now_and_then)
             .add_systems(Last, save_on_exit.run_if(crate::menu::in_game));
     }
@@ -76,8 +77,9 @@ pub struct CutsceneBook(pub Vec<Cutscene>);
 pub struct Story {
     #[serde(default)]
     pub flags: BTreeSet<String>,
+    /// Clues for the journal, in the order found.
     #[serde(default)]
-    pub clues: BTreeSet<String>,
+    pub clues: Vec<String>,
     /// Cutscenes played (once per world).
     #[serde(default)]
     pub played: BTreeSet<String>,
@@ -86,7 +88,28 @@ pub struct Story {
     pub made: BTreeSet<String>,
     #[serde(default)]
     pub placed: BTreeSet<String>,
+    /// NPCs you have talked to (dialogue keys).
+    #[serde(default)]
+    pub met: BTreeSet<String>,
+    /// The day each thing first came true (`flag:x`, `played:x`, `step:x`), for `DayAfter` beats.
+    #[serde(default)]
+    pub when: std::collections::BTreeMap<String, u32>,
+    /// Block changes from cutscenes waiting for their area to be loaded.
+    #[serde(default)]
+    pub edits: Vec<Edit>,
 }
+
+/// A cutscene's change to the world's blocks, kept until it can be made.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum Edit {
+    Swap { at: [i32; 3], radius: i32, from: String, to: String },
+    Place { at: [i32; 3], block: String },
+}
+
+/// Named places for marks and `Area` triggers: camp (the bedroll, else the ancestral urn),
+/// gate, sporrow, castle, forge. Kept up to date each frame.
+#[derive(Resource, Default)]
+pub struct Places(pub HashMap<String, Vec3>);
 
 /// Play a cutscene by id (from a story beat or an encounter's `then`).
 #[derive(Message, Debug, Clone)]
@@ -94,11 +117,16 @@ pub struct StartCutscene(pub String);
 
 /// The cutscene playing.
 #[derive(Resource, Default)]
-pub struct Playing(Option<Scene>);
+pub struct Playing(Option<Scene>, Vec<String>);
 
 impl Playing {
     pub fn active(&self) -> bool {
         self.0.is_some()
+    }
+
+    /// Playing, or one waiting to start.
+    pub fn busy(&self) -> bool {
+        self.0.is_some() || !self.1.is_empty()
     }
 }
 
@@ -222,14 +250,23 @@ fn record(mut story: ResMut<Story>, mut made: MessageReader<crate::station::boar
     }
 }
 
-/// Named places for marks and `Area` triggers.
-fn places(generator: Option<&Generator>, camp: &crate::survival::camp::Camp) -> HashMap<String, Vec3> {
-    let mut m = HashMap::new();
+fn refresh_places(mut out: ResMut<Places>, generator: Option<Res<Generator>>, camp: Res<crate::survival::camp::Camp>, urns: Res<crate::station::Urns>) {
+    let m = &mut out.0;
     let v = |p: [i32; 3]| Vec3::new(p[0] as f32 + 0.5, p[1] as f32, p[2] as f32 + 0.5);
-    if let Some(b) = &camp.bedroll {
-        m.insert("camp".into(), b.center());
+    match (&camp.bedroll, urns.placed.get("ancestral")) {
+        (Some(b), _) => {
+            m.insert("camp".into(), b.center());
+        }
+        (None, Some(u)) => {
+            m.insert("camp".into(), Vec3::new(u.pos.0, u.pos.1, u.pos.2));
+        }
+        (None, None) => {
+            m.remove("camp");
+        }
     }
-    if let Some(g) = generator {
+    if !m.contains_key("gate")
+        && let Some(g) = generator
+    {
         if let Some(gate) = g.0.rotting_gate() {
             m.insert("gate".into(), Vec3::from_array(gate.outside));
         }
@@ -243,7 +280,6 @@ fn places(generator: Option<&Generator>, camp: &crate::survival::camp::Camp) -> 
             m.insert("forge".into(), v(f.pos));
         }
     }
-    m
 }
 
 fn key_of<'a>(book: &'a NpcBook, npc: &Npc) -> Option<&'a str> {
@@ -252,8 +288,7 @@ fn key_of<'a>(book: &'a NpcBook, npc: &Npc) -> Option<&'a str> {
 
 #[derive(SystemParam)]
 struct Triggers<'w> {
-    generator: Option<Res<'w, Generator>>,
-    camp: Res<'w, crate::survival::camp::Camp>,
+    places: Res<'w, Places>,
     below: Option<Res<'w, crate::delve::Below>>,
     encounters: Res<'w, Encounters>,
     clock: Res<'w, crate::clock::WorldClock>,
@@ -292,32 +327,31 @@ fn begin(
             want.push(id);
         }
     }
+    for w in want {
+        if !playing.1.contains(&w) {
+            playing.1.push(w);
+        }
+    }
     if playing.active() || !player.ready || talk.active() || t.survival.dead_for.is_some() {
         return;
     }
     let start = |id: &str| book.0.iter().position(|c| c.id == id);
-    let mut pick = want.iter().find_map(|id| start(id).or_else(|| {
-        warn!("no cutscene `{id}`");
-        None
-    }));
+    let mut pick = None;
+    while pick.is_none() && !playing.1.is_empty() {
+        let id = playing.1.remove(0);
+        pick = start(&id);
+        if pick.is_none() {
+            warn!("no cutscene `{id}`");
+        }
+    }
     *timer -= time.delta_secs();
     if pick.is_none() && *timer <= 0.0 && !menus.open {
         *timer = CHECK_EVERY;
-        let eye = player.pos + Vec3::Y * player.eye;
-        let solid = |c: IVec3| t.world.block(BlockPos::new(c.x, c.y, c.z)).is_some_and(|id| t.blocks.registry.get(id).solid);
-        let seen: Vec<(String, Vec3, bool)> = npcs
-            .iter()
-            .filter(|(tf, _)| tf.translation.distance(player.pos) < 48.0)
-            .filter_map(|(tf, n)| {
-                let k = key_of(&npc_book, n)?;
-                let head = tf.translation + Vec3::Y * (EYES - 0.1);
-                Some((k.to_string(), tf.translation, script::clear_line(eye, head, solid)))
-            })
-            .collect();
+        let seen = sight(&player, &npc_book, npcs.iter(), &t.world, &t.blocks);
         let facts = Facts {
             player: player.pos,
             npcs: seen,
-            places: places(t.generator.as_deref(), &t.camp),
+            places: t.places.0.clone(),
             cleared: Some(&t.encounters.cleared),
             boss: t.below.as_ref().map_or(0, |b| b.delve.cleared),
             made: Some(&story.made),
@@ -332,12 +366,25 @@ fn begin(
     playing.0 = Some(Scene::new(def, player.pos, cam.forward().as_vec3()));
 }
 
+/// NPCs near you by dialogue key: where they stand, and whether you can see them.
+pub(crate) fn sight<'a>(player: &Player, book: &NpcBook, npcs: impl Iterator<Item = (&'a Transform, &'a Npc)>, world: &World, blocks: &Blocks) -> Vec<(String, Vec3, bool)> {
+    let eye = player.pos + Vec3::Y * player.eye;
+    let solid = |c: IVec3| world.block(BlockPos::new(c.x, c.y, c.z)).is_some_and(|id| blocks.registry.get(id).solid);
+    npcs.filter(|(tf, _)| tf.translation.distance(player.pos) < 48.0)
+        .filter_map(|(tf, n)| {
+            let k = key_of(book, n)?;
+            let head = tf.translation + Vec3::Y * (EYES - 0.1);
+            Some((k.to_string(), tf.translation, script::clear_line(eye, head, solid)))
+        })
+        .collect()
+}
+
 #[derive(SystemParam)]
 struct Effects<'w> {
     story: ResMut<'w, Story>,
     inv: ResMut<'w, Inventory>,
     items: Res<'w, Items>,
-    world: ResMut<'w, World>,
+    world: Res<'w, World>,
     blocks: Res<'w, Blocks>,
     spill: MessageWriter<'w, Spill>,
     encounter: MessageWriter<'w, StartEncounter>,
@@ -351,7 +398,9 @@ impl Effects<'_> {
                 self.story.flags.insert(f.clone());
             }
             Step::Clue(c) => {
-                self.story.clues.insert(c.clone());
+                if !self.story.clues.contains(c) {
+                    self.story.clues.push(c.clone());
+                }
             }
             Step::Give(name, n) => match self.items.id(name) {
                 Some(id) => {
@@ -361,32 +410,15 @@ impl Effects<'_> {
                 }
                 None => warn!("cutscene gives unknown item `{name}`"),
             },
-            Step::Swap { at: m, radius, from, to } => {
-                let (Some(c), Some(a), Some(b)) = (at(m), self.blocks.registry.id(from), self.blocks.registry.id(to)) else {
-                    warn!("cutscene swap: no spot or block `{from}`/`{to}`");
-                    return;
-                };
-                let c = c.floor().as_ivec3();
-                let r = *radius;
-                for x in -r..=r {
-                    for y in -r..=r {
-                        for z in -r..=r {
-                            let p = BlockPos::new(c.x + x, c.y + y, c.z + z);
-                            if self.world.block(p) == Some(a) {
-                                self.world.set_block(p, b);
-                            }
-                        }
-                    }
-                }
-            }
-            Step::Place(m, block) => {
-                let (Some(c), Some(id)) = (at(m), self.blocks.registry.id(block)) else {
-                    warn!("cutscene place: no spot or block `{block}`");
-                    return;
-                };
-                let c = c.floor().as_ivec3();
-                self.world.set_block(BlockPos::new(c.x, c.y, c.z), id);
-            }
+            // Block changes wait (saved) until their area is loaded: `apply_edits`.
+            Step::Swap { at: m, radius, from, to } => match at(m) {
+                Some(c) => self.story.edits.push(Edit::Swap { at: c.floor().as_ivec3().to_array(), radius: *radius, from: from.clone(), to: to.clone() }),
+                None => warn!("cutscene swap: no spot"),
+            },
+            Step::Place(m, block) => match at(m) {
+                Some(c) => self.story.edits.push(Edit::Place { at: c.floor().as_ivec3().to_array(), block: block.clone() }),
+                None => warn!("cutscene place: no spot"),
+            },
             Step::Encounter(id) => {
                 self.encounter.write(StartEncounter { id: id.clone(), at: player });
             }
@@ -406,7 +438,7 @@ fn direct(
     mut npcs: Query<(Entity, &mut Transform, &mut Npc), Without<FlyCamera>>,
     mut cursor: Single<&mut CursorOptions, With<PrimaryWindow>>,
     (mut spawn, mut sounds, mut cleared): (MessageWriter<SpawnNpc>, MessageWriter<PlaySound>, MessageReader<EncounterCleared>),
-    (mut commands, server, settings, generator, camp): (Commands, Res<AssetServer>, Option<Res<crate::settings::Settings>>, Option<Res<Generator>>, Res<crate::survival::camp::Camp>),
+    (mut commands, server, settings, places): (Commands, Res<AssetServer>, Option<Res<crate::settings::Settings>>, Res<Places>),
     mut fx: Effects,
 ) {
     let dt = time.delta_secs().min(0.05);
@@ -414,7 +446,7 @@ fn direct(
     let Some(scene) = playing.0.as_mut() else { return };
     let def = &book.0[scene.def];
     let steps = &def.steps;
-    let place_at = places(generator.as_deref(), &camp);
+    let place_at = &places.0;
     let mut where_is: HashMap<String, Vec3> = HashMap::new();
     for (e, tf, _) in &npcs {
         if let Some((k, _)) = scene.actors.iter().find(|(_, a)| **a == e) {
@@ -523,7 +555,9 @@ fn direct(
     if !scene.ending {
         if scene.esc >= SKIP_HOLD {
             for i in scene.runner.skip(steps) {
-                fx.apply(&steps[i], player_pos, &|m| resolve(m, &where_is));
+                if !cast(&steps[i], &scene.actors, &mut npcs, &mut commands) {
+                    fx.apply(&steps[i], player_pos, &|m| resolve(m, &where_is));
+                }
             }
             scene.ending = true;
         } else {
@@ -592,6 +626,9 @@ fn direct(
                 fx.apply(step, player_pos, &|m| resolve(m, &where_is));
             }
             Step::Wait(_) => {}
+            Step::Follow(_) | Step::Remove(_) => {
+                cast(step, &scene.actors, &mut npcs, &mut commands);
+            }
             _ => fx.apply(step, player_pos, &|m| resolve(m, &where_is)),
         }
     }
@@ -659,6 +696,29 @@ fn direct(
     }
 }
 
+/// Steps that change an actor for good: follow you, or leave the world. False for other steps.
+fn cast(step: &Step, actors: &HashMap<String, Entity>, npcs: &mut Query<(Entity, &mut Transform, &mut Npc), Without<FlyCamera>>, commands: &mut Commands) -> bool {
+    match step {
+        Step::Follow(a) => {
+            if let Some(e) = actors.get(a)
+                && let Ok((_, _, mut npc)) = npcs.get_mut(*e)
+            {
+                npc.order = Order::Follow;
+                npc.post = None;
+                npc.flags.insert(crate::npc::dialogue::FOLLOWING.to_string());
+            }
+            true
+        }
+        Step::Remove(a) => {
+            if let Some(e) = actors.get(a) {
+                commands.entity(*e).despawn();
+            }
+            true
+        }
+        _ => false,
+    }
+}
+
 fn capitalised(s: &str) -> String {
     let mut c = s.chars();
     c.next().map_or(String::new(), |f| f.to_uppercase().chain(c).collect())
@@ -678,8 +738,7 @@ fn camera(
     player: Res<Player>,
     npcs: Query<&Transform, (With<Npc>, Without<FlyCamera>)>,
     cam: Single<(&mut Transform, &mut FlyCamera)>,
-    generator: Option<Res<Generator>>,
-    camp: Res<crate::survival::camp::Camp>,
+    places: Res<Places>,
 ) {
     let Some(scene) = playing.0.as_mut() else { return };
     if scene.gathering.is_some() && scene.look.is_none() || scene.fighting(&book.0[scene.def].steps) {
@@ -692,7 +751,7 @@ fn camera(
         tf.translation = a.lerp(b, smooth(t / s));
     }
     let at = |key: &str| scene.actors.get(key).and_then(|e| npcs.get(*e).ok()).map(|t| t.translation);
-    let place_at = places(generator.as_deref(), &camp);
+    let place_at = &places.0;
     let point = match &scene.look {
         None => return,
         Some(Target::Player) => Some(player.pos + Vec3::Y * 1.4),
@@ -743,6 +802,61 @@ fn show(time: Res<Time<Real>>, book: Res<CutsceneBook>, mut playing: ResMut<Play
         None => Default::default(),
     };
     talk.scene = Some(SceneView { bars, name, title, text });
+}
+
+/// Makes the cutscenes' block changes once their area is loaded (they wait in `Story.edits`, saved).
+fn apply_edits(time: Res<Time<Real>>, mut timer: Local<f32>, mut story: ResMut<Story>, mut world: ResMut<World>, blocks: Res<Blocks>) {
+    *timer -= time.delta_secs();
+    if *timer > 0.0 || story.edits.is_empty() {
+        return;
+    }
+    *timer = 0.5;
+    let reg = &blocks.registry;
+    story.edits.retain(|e| match e {
+        Edit::Swap { at, radius, from, to } => {
+            let (Some(a), Some(b)) = (reg.id(from), reg.id(to)) else {
+                warn!("cutscene swap: no block `{from}` or `{to}`");
+                return false;
+            };
+            let r = *radius;
+            let c = IVec3::from_array(*at);
+            // Every chunk in the box must be there.
+            let step = voxel::CHUNK_SIZE as i32;
+            let span = |lo: i32, hi: i32| (lo..=hi).step_by(step as usize).chain(std::iter::once(hi));
+            for x in span(c.x - r, c.x + r) {
+                for y in span(c.y - r, c.y + r) {
+                    for z in span(c.z - r, c.z + r) {
+                        if world.block(BlockPos::new(x, y, z)).is_none() {
+                            return true;
+                        }
+                    }
+                }
+            }
+            for x in -r..=r {
+                for y in -r..=r {
+                    for z in -r..=r {
+                        let p = BlockPos::new(c.x + x, c.y + y, c.z + z);
+                        if world.block(p) == Some(a) {
+                            world.set_block(p, b);
+                        }
+                    }
+                }
+            }
+            false
+        }
+        Edit::Place { at, block } => {
+            let Some(id) = reg.id(block) else {
+                warn!("cutscene place: no block `{block}`");
+                return false;
+            };
+            let p = BlockPos::new(at[0], at[1], at[2]);
+            if world.block(p).is_none() {
+                return true;
+            }
+            world.set_block(p, id);
+            false
+        }
+    });
 }
 
 fn store(dir: &SaveDir, story: &Story) {
