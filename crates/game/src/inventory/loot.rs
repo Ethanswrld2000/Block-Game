@@ -27,15 +27,24 @@ impl Loot {
     }
 
     /// Fill a chest from a table. `rand` gives numbers in 0..1.
-    pub fn fill(&self, table: &str, items: &Items, grid: &mut Grid, mut rand: impl FnMut() -> f32) {
+    pub fn fill(&self, table: &str, items: &Items, grid: &mut Grid, rand: impl FnMut() -> f32) {
+        for stack in self.roll(table, rand) {
+            // Whatever doesn't fit is simply not there.
+            let _ = grid.add(items, stack);
+        }
+    }
+
+    /// Roll a table: the stacks it gives this time. `rand` gives numbers in 0..1.
+    pub fn roll(&self, table: &str, mut rand: impl FnMut() -> f32) -> Vec<Stack> {
+        let mut out = Vec::new();
         for (item, lo, hi, p) in self.tables.get(table).into_iter().flatten() {
             if rand() >= *p {
                 continue;
             }
             let n = lo + ((rand() * (hi - lo + 1) as f32) as u16).min(hi - lo);
-            // Whatever doesn't fit is simply not there.
-            let _ = grid.add(items, Stack::new(*item, n));
+            out.push(Stack::new(*item, n));
         }
+        out
     }
 }
 

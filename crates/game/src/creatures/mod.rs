@@ -322,7 +322,7 @@ pub fn spawn_creature(commands: &mut Commands, kinds: &Kinds, assets: &CreatureA
 }
 
 /// Which creature is under the crosshair, within reach.
-fn aim(cam: Single<&Transform, With<FlyCamera>>, kinds: Option<Res<Kinds>>, mode: Res<MoveMode>, q: Query<(Entity, &Transform, &Creature)>, mut aimed: ResMut<Aimed>) {
+pub(crate) fn aim(cam: Single<&Transform, With<FlyCamera>>, kinds: Option<Res<Kinds>>, mode: Res<MoveMode>, q: Query<(Entity, &Transform, &Creature)>, mut aimed: ResMut<Aimed>) {
     let Some(kinds) = kinds else { return };
     let origin = cam.translation;
     let dir = cam.forward().as_vec3();
@@ -434,7 +434,8 @@ fn spawn_around(
 ) {
     let (Some(kinds), Some(assets), Some(generator)) = (kinds, assets, generator) else { return };
     *timer -= time.delta_secs();
-    if *timer > 0.0 || !(player.ready || *mode == MoveMode::Fly) {
+    // Nothing wanders into the Rotting Gate's floors.
+    if *timer > 0.0 || !(player.ready || *mode == MoveMode::Fly) || worldgen::in_pocket(player.pos.x as i32, player.pos.z as i32) {
         return;
     }
     *timer = 1.5;

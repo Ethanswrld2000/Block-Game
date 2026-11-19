@@ -48,7 +48,9 @@ impl Plugin for SurvivalPlugin {
             .insert_resource(exposure)
             .init_resource::<Survival>()
             .init_resource::<Camp>()
+            .init_resource::<RespawnAt>()
             .add_message::<Toast>()
+            .add_message::<Ate>()
             .add_systems(crate::menu::GamePostStartup, (remember_spawn, load_player).chain().after(crate::world::setup_generator))
             .add_systems(
                 crate::menu::GameUpdate,
@@ -132,6 +134,11 @@ fn take_hits(mut hits: MessageReader<Damage>, inv: Res<Inventory>, items: Res<It
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Something was eaten or drunk (cauldron draughts act on it in `progress`).
+#[derive(Message, Debug, Clone, Copy)]
+pub struct Ate(pub crate::items::ItemId);
+
+#[allow(clippy::too_many_arguments)]
 fn eat(
     time: Res<Time>,
     mouse: Res<ButtonInput<MouseButton>>,
@@ -144,6 +151,7 @@ fn eat(
     mut anim: ResMut<HandAnim>,
     mut s: ResMut<Survival>,
     mut toast: MessageWriter<Toast>,
+    mut ate: MessageWriter<Ate>,
 ) {
     let held = wielded.0;
     let food = held.and_then(|i| match items.get(i).kind {
@@ -167,7 +175,9 @@ fn eat(
             return;
         }
         s.vitals.eat(t, satiety);
-        toast.write(Toast(format!("Ate {} ({})", items.get(id).title, t.title)));
+        let verb = if tier == 0 { "Drank" } else { "Ate" };
+        toast.write(Toast(format!("{verb} {} ({})", items.get(id).title, t.title)));
+        ate.write(Ate(id));
     }
 }
 
@@ -242,7 +252,7 @@ fn tick_body(
     let weather = kinds.list.get(weather.current).map_or("", |k| k.title.as_str());
     let raw = feels_like(&climate, &conditions, weather, sun, player.in_water, eye, &torches, holding_torch, &mut parts);
     let underwater = player.head_in_water;
-    let mut air = if underwater { 0.0 } else { vitals::air_at(eye.y) * conditions.air };
+    let mut air = if underwater { 0.0 } else { vitals::air_at(if worldgen::in_pocket(eye.x as i32, eye.z as i32) { 0.0 } else { eye.y }) * conditions.air };
     let dressed = vitals::clothed(raw, inv.insulation(&items));
     parts.push(("Clothes".into(), dressed - raw));
     let mut feels = perks.feel(dressed, vitals::COMFORT_LOW + 6.0);
@@ -323,11 +333,17 @@ fn warning_text(stage: &str) -> String {
     }
 }
 
+/// Where the next respawn puts you instead of the camp (set by whoever knows
+/// better, e.g. dying below the Rotting Gate); used once.
+#[derive(Resource, Default)]
+pub struct RespawnAt(pub Option<Vec3>);
+
 #[allow(clippy::too_many_arguments)]
 fn die_and_respawn(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
     spawn: Option<Res<SpawnPoint>>,
+    mut here: ResMut<RespawnAt>,
     camp: Res<Camp>,
     mut s: ResMut<Survival>,
     mut player: ResMut<Player>,
@@ -343,7 +359,8 @@ fn die_and_respawn(
     if *t < 2.0 || !(keys.just_pressed(KeyCode::Space) || keys.just_pressed(KeyCode::Enter)) {
         return;
     }
-    let to = camp.respawn().or(spawn.map(|p| p.0)).unwrap_or(player.pos);
+    let override_at = here.0.take();
+    let to = override_at.or(camp.respawn()).or(spawn.map(|p| p.0)).unwrap_or(player.pos);
     s.vitals = Vitals { satiety: 60.0, ..Default::default() };
     s.dead_for = None;
     *player = Player::default();
@@ -351,7 +368,7 @@ fn die_and_respawn(
     for mut tf in &mut cam {
         tf.translation = to + Vec3::Y * crate::player::EYE;
     }
-    toast.write(Toast(if camp.bedroll.is_some() { "You wake at your camp".into() } else { "You wake at the edge of the swamp".into() }));
+    toast.write(Toast(if override_at.is_some() { "You wake outside the Rotting Gate".into() } else if camp.bedroll.is_some() { "You wake at your camp".into() } else { "You wake at the edge of the swamp".into() }));
 }
 
 /// The Warmth spell takes the edge off the cold (but never makes you hot).

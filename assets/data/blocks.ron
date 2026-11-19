@@ -58,4 +58,20 @@
     (name: "twig_east", top: "log_side", solid: false, opaque: false, hardness: 0.0, material: "plant", shape: twig, attach: east),
     (name: "twig_west", top: "log_side", solid: false, opaque: false, hardness: 0.0, material: "plant", shape: twig, attach: west),
     (name: "pebble", top: "cobblestone", solid: false, opaque: false, hardness: 0.0, material: "stone", shape: pebble),
+    // Building supplies from the carpentry table (benches.ron).
+    (name: "floorboards", top: "floorboards", hardness: 2.0, material: "wood"),
+    (name: "timber_wall", top: "timber_wall", hardness: 2.5, material: "wood"),
+    (name: "wattle_wall", top: "wattle_wall", hardness: 1.5, material: "wood"),
+    (name: "thatch", top: "thatch", hardness: 0.8, material: "plant"),
+    (name: "chair", top: "chair", hardness: 1.5, material: "wood"),
+    (name: "table", top: "table", hardness: 2.0, material: "wood"),
+    (name: "wooden_door", top: "wooden_door", hardness: 2.0, material: "wood"),
+    (name: "glass", top: "glass", opaque: false, translucent: true, hardness: 0.5, material: "stone"),
+    (name: "window", top: "window", opaque: false, translucent: true, hardness: 1.0, material: "wood"),
+    // Sporrow's houses (worldgen::landmarks): giant mushrooms.
+    (name: "mushroom_stem", top: "mushroom_stem", hardness: 1.2, material: "wood"),
+    (name: "mushroom_cap", top: "mushroom_cap", bottom: "mushroom_gills", hardness: 0.8, material: "wood"),
+    (name: "burnt_stem", top: "burnt_stem", hardness: 0.8, material: "wood"),
+    (name: "burnt_cap", top: "burnt_cap", hardness: 0.6, material: "wood"),
+    (name: "grave", top: "grave", hardness: 3.0, material: "stone"),
 ]

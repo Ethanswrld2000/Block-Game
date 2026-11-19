@@ -1,0 +1,31 @@
+// What the cast do for you (game::cast::services).
+(
+    // Messler: hand him food (what you hold, else the first food in your pockets) and he teaches
+    // the next of these cooking recipes: benches.ron recipes with that `unlock`.
+    messler_teaches: ["messler:berry_roast", "messler:fish_broth", "messler:hearty_stew", "messler:ember_platter"],
+    // Messler remarks on your cooking within this many blocks: his barks in lines.ron
+    // (food_burnt: stirred over a lit fire with nothing that makes anything; recipe_failed: nothing
+    // cooked, no recipe or the fire too low; recipe_made).
+    messler_hearing: 16.0,
+    // Things people make for you: hand over `needs` and they give you `makes`.
+    // only_unknown: offered only while no recipe you've learned makes it.
+    commissions: {
+        // Gilm: tools you can't make yet.
+        "gilm": (only_unknown: true, list: [
+            (makes: "steel_pickaxe", needs: {"raw_iron": 4, "coal": 3, "stick": 1}),
+            (makes: "steel_axe", needs: {"raw_iron": 3, "coal": 3, "stick": 1}),
+            (makes: "steel_sword", needs: {"raw_iron": 5, "coal": 3, "stick": 1}),
+            (makes: "spirit_pickaxe", needs: {"raw_iron": 4, "spirit_ember": 3, "stick": 1}),
+            (makes: "spirit_axe", needs: {"raw_iron": 3, "spirit_ember": 3, "stick": 1}),
+        ]),
+        // Liora: clothes and armor.
+        "liora": (only_unknown: false, list: [
+            (makes: "reed_cloak", needs: {"plant_fiber": 10, "cordage": 3}),
+            (makes: "fur_coat", needs: {"fur": 4, "cordage": 2}),
+            (makes: "hide_leggings", needs: {"hide": 3, "cordage": 1}),
+            (makes: "hide_jerkin", needs: {"hide": 4, "cordage": 2}),
+            (makes: "iron_helm", needs: {"raw_iron": 4, "hide": 1}),
+            (makes: "iron_mail", needs: {"raw_iron": 7, "hide": 2}),
+        ]),
+    },
+)

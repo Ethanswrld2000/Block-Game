@@ -4,12 +4,34 @@
 //            camp_mat:        "base" (what lies on the mat, up to 8), "tie" (what binds it, up to 8)
 //            tool_bench:      "handle" (the long groove, 1), "material" (the hollow, up to 4)
 //            carpentry_bench: "bed" (logs and boards, up to 8), "vise" (up to 4)
-//   work:    how many times to work the bench's tool (knock the stone, saw)
+//            carpentry_table: "top" (the wood to join, up to 8), "joint" (pegs, cord, mud, up to 4)
+//            machination_table: "keel" (up to 8), "rigging" (up to 8), "envelope" (up to 4), "engine" (up to 8)
+//            cutting_board:   "board" (up to 4)
+//            smoking_rack:    "rack" (up to 4), and the fire (see `heat`)
+//            iron_anvil:      "anvil" (metal, up to 4), "flux" (the tray, up to 2), "handle" (1)
+//            joiners_table, door_frame, sewing_table, armor_stand: like carpentry_table ("top", "joint")
+//            glass_kiln:      like smoking_rack ("rack" and the fire)
+//            bladesmith_bench, gunsmith_bench: like iron_anvil ("anvil", "flux", "handle")
+//   mix:     cooking_pot and cauldron: what goes into the pot, [(item, count), ...] in any
+//            order (pot: up to 4 kinds, 6 of each; cauldron: 3 kinds, 4 of each); nothing
+//            else may be in it
+//   heat:    cooking_pot, smoking_rack, cauldron: how much heat the fuel in the fire must
+//            give (see `fuel`); the fuel it takes burns up, the rest stays in the fire
+//   work:    how many times to work the bench's tool (knock the stone, saw, stir, cut)
 //   makes:   what lies on the board afterwards, (item, count)
 //   unlock:  an urn step (urns.ron, `gives: Recipes`) that must be done before the bench
-//            knows this recipe
+//            knows this recipe; "lens:item" = that item studied under the magical lens;
+//            "a+b" = both
+// The sharpening stone and the magical lens need no recipes: any tool goes on the
+// stone (`sharpen`), anything under the lens (`study`).
 // When several recipes match, the one that uses the most wins (2 or 3 cobblestone).
 (
+    // What burns in the cooking pot's fire, and the heat one of it gives.
+    fuel: { "plant_fiber": 1, "stick": 1, "planks": 2, "peat": 3, "log": 4, "swamp_log": 4, "coal": 6 },
+    // Turns of the wheel; a sharpened tool works `speed` times as fast for `seconds` of play.
+    sharpen: Some((work: 4, seconds: 600.0, speed: 1.6)),
+    // Turns of the lens's focusing dial to study something.
+    study: Some((work: 3)),
     recipes: [
         // Camp mat (sleeping station): the first axe, then gear for sleeping away from home.
         (station: "camp_mat", slots: {"base": ("small_rock", 2), "tie": ("stick", 1)}, work: 3, makes: ("rough_axe", 1)),
@@ -23,10 +45,101 @@
         (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("cobblestone", 2)}, work: 4, makes: ("stone_axe", 1), unlock: "improved_tool_bench"),
         (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("flint", 2)}, work: 4, makes: ("flint_spear", 1), unlock: "improved_tool_bench"),
 
-        // Carpentry bench (tool station): saw logs into planks, planks into sticks, and build.
+        // Carpentry bench (carpentry station): saw logs into planks, planks into sticks, and build.
         (station: "carpentry_bench", slots: {"bed": ("log", 1)}, work: 4, makes: ("planks", 4)),
         (station: "carpentry_bench", slots: {"bed": ("swamp_log", 1)}, work: 4, makes: ("planks", 4)),
         (station: "carpentry_bench", slots: {"bed": ("planks", 2)}, work: 2, makes: ("stick", 4)),
         (station: "carpentry_bench", slots: {"bed": ("planks", 8)}, work: 6, makes: ("chest", 1)),
+
+        // Carpentry table (carpentry station): building supplies, knocked together with the mallet.
+        (station: "carpentry_table", slots: {"top": ("planks", 4), "joint": ("stick", 2)}, work: 4, makes: ("floorboards", 4)),
+        (station: "carpentry_table", slots: {"top": ("planks", 4), "joint": ("log", 1)}, work: 5, makes: ("timber_wall", 4)),
+        (station: "carpentry_table", slots: {"top": ("stick", 6), "joint": ("mud", 2)}, work: 4, makes: ("wattle_wall", 4)),
+        (station: "carpentry_table", slots: {"top": ("plant_fiber", 6), "joint": ("stick", 2)}, work: 3, makes: ("thatch", 4)),
+
+        // Joiner's table (carpentry station): furniture.
+        (station: "joiners_table", slots: {"top": ("planks", 4), "joint": ("stick", 4)}, work: 5, makes: ("chair", 1)),
+        (station: "joiners_table", slots: {"top": ("planks", 6), "joint": ("stick", 4)}, work: 6, makes: ("table", 1)),
+        // Door frame (carpentry station): doors.
+        (station: "door_frame", slots: {"top": ("planks", 6), "joint": ("stick", 2)}, work: 6, makes: ("wooden_door", 1)),
+        // Glass kiln (carpentry station): sand melts into glass, glass sets into windows.
+        (station: "glass_kiln", slots: {"rack": ("sand", 4)}, heat: 6, work: 4, makes: ("glass", 2)),
+        (station: "glass_kiln", slots: {"rack": ("glass", 2)}, heat: 3, work: 3, makes: ("window", 2)),
+
+        // Sewing table (gear station): clothes, moved here from the Tab list.
+        (station: "sewing_table", slots: {"top": ("plant_fiber", 6)}, work: 3, makes: ("reed_hat", 1)),
+        (station: "sewing_table", slots: {"top": ("plant_fiber", 8), "joint": ("cordage", 3)}, work: 5, makes: ("reed_cloak", 1)),
+        (station: "sewing_table", slots: {"top": ("hide", 1), "joint": ("cordage", 1)}, work: 3, makes: ("hide_boots", 1)),
+        (station: "sewing_table", slots: {"top": ("hide", 2), "joint": ("cordage", 1)}, work: 4, makes: ("hide_leggings", 1)),
+        (station: "sewing_table", slots: {"top": ("fur", 1), "joint": ("cordage", 1)}, work: 3, makes: ("fur_hood", 1)),
+        (station: "sewing_table", slots: {"top": ("fur", 3), "joint": ("cordage", 2)}, work: 5, makes: ("fur_coat", 1)),
+        // Armor stand (gear station): bark and leather armor; iron once taught.
+        (station: "armor_stand", slots: {"top": ("log", 2), "joint": ("cordage", 2)}, work: 4, makes: ("bark_helm", 1)),
+        (station: "armor_stand", slots: {"top": ("log", 4), "joint": ("cordage", 3)}, work: 5, makes: ("bark_vest", 1)),
+        (station: "armor_stand", slots: {"top": ("hide", 3), "joint": ("cordage", 2)}, work: 5, makes: ("hide_jerkin", 1)),
+        (station: "armor_stand", slots: {"top": ("raw_iron", 3), "joint": ("hide", 1)}, work: 6, makes: ("iron_helm", 1), unlock: "metal_armor"),
+        (station: "armor_stand", slots: {"top": ("raw_iron", 6), "joint": ("hide", 2)}, work: 8, makes: ("iron_mail", 1), unlock: "metal_armor"),
+        // Bladesmith bench (gear station): daggers and swords; the rapier once taught.
+        (station: "bladesmith_bench", slots: {"handle": ("stick", 1), "anvil": ("raw_iron", 2)}, work: 5, makes: ("iron_dagger", 1)),
+        (station: "bladesmith_bench", slots: {"handle": ("stick", 1), "anvil": ("raw_iron", 4)}, work: 7, makes: ("iron_sword", 1)),
+        (station: "bladesmith_bench", slots: {"handle": ("stick", 1), "anvil": ("raw_iron", 3), "flux": ("coal", 1)}, work: 8, makes: ("rapier", 1), unlock: "rapier"),
+        // Gunsmith bench (gear station): guns that can't be fired yet.
+        (station: "gunsmith_bench", slots: {"handle": ("planks", 1), "anvil": ("raw_iron", 3), "flux": ("coal", 2)}, work: 8, makes: ("makeshift_pistol", 1)),
+        (station: "gunsmith_bench", slots: {"handle": ("planks", 1), "anvil": ("raw_iron", 4), "flux": ("coal", 2)}, work: 10, makes: ("rifle", 1)),
+
+        // Machination table (vehicle station): machines, set down in the world (machines.ron).
+        (station: "machination_table", slots: {"keel": ("planks", 8), "rigging": ("cordage", 6), "envelope": ("hide", 4), "engine": ("raw_iron", 6)}, work: 10, makes: ("airship", 1)),
+
+        // Cutting board (cooking station): cut things up first, and they go further in the pot.
+        (station: "cutting_board", slots: {"board": ("raw_meat", 1)}, work: 3, makes: ("meat_strips", 3)),
+        (station: "cutting_board", slots: {"board": ("swamp_reed", 1)}, work: 2, makes: ("chopped_reeds", 2)),
+        (station: "cutting_board", slots: {"board": ("smoked_fish", 1)}, work: 3, makes: ("fish_flakes", 3)),
+        (station: "cutting_board", slots: {"board": ("roast_meat", 1)}, work: 2, makes: ("roast_slices", 2)),
+
+        // Cooking pot (cooking station): put things in the pot, fuel in the fire, and stir.
+        (station: "cooking_pot", mix: [("raw_meat", 1)], heat: 2, work: 3, makes: ("roast_meat", 1)),
+        (station: "cooking_pot", mix: [("meat_strips", 3)], heat: 2, work: 3, makes: ("roast_meat", 2)),
+        (station: "cooking_pot", mix: [("chopped_reeds", 3), ("marsh_berries", 2)], heat: 2, work: 4, makes: ("reed_broth", 2)),
+        (station: "cooking_pot", mix: [("swamp_reed", 3), ("marsh_berries", 2), ("smoked_fish", 1)], heat: 3, work: 5, makes: ("peat_stew", 1)),
+        (station: "cooking_pot", mix: [("chopped_reeds", 2), ("marsh_berries", 1), ("fish_flakes", 3)], heat: 3, work: 5, makes: ("peat_stew", 2)),
+        (station: "cooking_pot", mix: [("meat_strips", 3), ("chopped_reeds", 2), ("marsh_berries", 1)], heat: 3, work: 5, makes: ("bog_stew", 2)),
+        // Seasoned with what dries on the herb rack: a tier up.
+        (station: "cooking_pot", mix: [("chopped_reeds", 3), ("marsh_berries", 3)], heat: 3, work: 5, makes: ("bog_stew", 1), unlock: "herb_rack"),
+        (station: "cooking_pot", mix: [("roast_slices", 4), ("chopped_reeds", 3), ("marsh_berries", 3), ("ember_herb", 1)], heat: 4, work: 6, makes: ("feast_platter", 1), unlock: "herb_rack"),
+
+        // Taught by Messler when you feed him (services.ron `messler_teaches`).
+        (station: "cooking_pot", mix: [("raw_meat", 1), ("marsh_berries", 2)], heat: 2, work: 4, makes: ("roast_meat", 2), unlock: "messler:berry_roast"),
+        (station: "cooking_pot", mix: [("fish_flakes", 2), ("chopped_reeds", 2)], heat: 2, work: 4, makes: ("reed_broth", 3), unlock: "messler:fish_broth"),
+        (station: "cooking_pot", mix: [("meat_strips", 2), ("fish_flakes", 2), ("chopped_reeds", 2)], heat: 3, work: 5, makes: ("bog_stew", 3), unlock: "messler:hearty_stew"),
+        (station: "cooking_pot", mix: [("roast_slices", 3), ("marsh_berries", 2), ("ember_herb", 1)], heat: 4, work: 6, makes: ("feast_platter", 1), unlock: "messler:ember_platter"),
+
+        // Smoking rack (cooking station): meat hangs in peat smoke and keeps.
+        (station: "smoking_rack", slots: {"rack": ("raw_meat", 1)}, heat: 2, work: 4, makes: ("cured_meat", 1)),
+        (station: "smoking_rack", slots: {"rack": ("raw_meat", 2)}, heat: 3, work: 5, makes: ("cured_meat", 2)),
+        (station: "smoking_rack", slots: {"rack": ("meat_strips", 4)}, heat: 2, work: 4, makes: ("cured_meat", 2)),
+        (station: "smoking_rack", slots: {"rack": ("fish_flakes", 4)}, heat: 2, work: 4, makes: ("smoked_fish", 1)),
+
+        // Iron anvil (tool station): a handle and hammered iron. Coal in the flux tray makes steel,
+        // spirit embers etch the spirit tools.
+        (station: "iron_anvil", slots: {"handle": ("stick", 1), "anvil": ("raw_iron", 3)}, work: 6, makes: ("iron_pickaxe", 1)),
+        (station: "iron_anvil", slots: {"handle": ("stick", 1), "anvil": ("raw_iron", 2)}, work: 5, makes: ("iron_axe", 1)),
+        (station: "iron_anvil", slots: {"handle": ("stick", 1), "anvil": ("raw_iron", 1)}, work: 4, makes: ("iron_shovel", 1)),
+        (station: "iron_anvil", slots: {"handle": ("stick", 1), "anvil": ("raw_iron", 4), "flux": ("coal", 2)}, work: 9, makes: ("steel_sword", 1), unlock: "steel_anvil"),
+        (station: "iron_anvil", slots: {"handle": ("stick", 1), "anvil": ("raw_iron", 4), "flux": ("spirit_ember", 2)}, work: 9, makes: ("spirit_sword", 1), unlock: "alchemical_anvil"),
+        (station: "iron_anvil", slots: {"handle": ("stick", 1), "anvil": ("raw_iron", 3), "flux": ("coal", 2)}, work: 8, makes: ("steel_pickaxe", 1), unlock: "steel_anvil"),
+        (station: "iron_anvil", slots: {"handle": ("stick", 1), "anvil": ("raw_iron", 2), "flux": ("coal", 2)}, work: 7, makes: ("steel_axe", 1), unlock: "steel_anvil"),
+        (station: "iron_anvil", slots: {"handle": ("stick", 1), "anvil": ("raw_iron", 3), "flux": ("spirit_ember", 2)}, work: 8, makes: ("spirit_pickaxe", 1), unlock: "alchemical_anvil"),
+        (station: "iron_anvil", slots: {"handle": ("stick", 1), "anvil": ("raw_iron", 2), "flux": ("spirit_ember", 2)}, work: 7, makes: ("spirit_axe", 1), unlock: "alchemical_anvil"),
+
+        // Cauldron (astronomy station): draughts, each once its main part has been studied
+        // under the magical lens. The steel cauldron brews two at a time.
+        (station: "cauldron", mix: [("cloud_moss", 2), ("spirit_ember", 1)], heat: 3, work: 5, makes: ("levitation_draught", 1), unlock: "lens:cloud_moss"),
+        (station: "cauldron", mix: [("moss", 2), ("spirit_ember", 1)], heat: 2, work: 4, makes: ("light_draught", 1), unlock: "lens:spirit_ember"),
+        (station: "cauldron", mix: [("ember_herb", 1), ("marsh_berries", 2)], heat: 2, work: 4, makes: ("warmth_draught", 1), unlock: "lens:ember_herb"),
+        (station: "cauldron", mix: [("swamp_reed", 2), ("marsh_berries", 1), ("spirit_ember", 1)], heat: 2, work: 4, makes: ("focus_tonic", 1), unlock: "lens:swamp_reed"),
+        (station: "cauldron", mix: [("cloud_moss", 2), ("spirit_ember", 1)], heat: 3, work: 5, makes: ("levitation_draught", 2), unlock: "lens:cloud_moss+steel_cauldron"),
+        (station: "cauldron", mix: [("moss", 2), ("spirit_ember", 1)], heat: 2, work: 4, makes: ("light_draught", 2), unlock: "lens:spirit_ember+steel_cauldron"),
+        (station: "cauldron", mix: [("ember_herb", 1), ("marsh_berries", 2)], heat: 2, work: 4, makes: ("warmth_draught", 2), unlock: "lens:ember_herb+steel_cauldron"),
+        (station: "cauldron", mix: [("swamp_reed", 2), ("marsh_berries", 1), ("spirit_ember", 1)], heat: 2, work: 4, makes: ("focus_tonic", 2), unlock: "lens:swamp_reed+steel_cauldron"),
     ],
 )

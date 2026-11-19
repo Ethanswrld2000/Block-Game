@@ -317,6 +317,156 @@ def bog_bloom(s):
     return img
 
 
+def floorboards(s):
+    # Long narrow boards running one way, with peg holes at their ends.
+    img = noisy(s, [(138, 100, 60), (170, 128, 78)], (16, 2))
+    ys, xs = np.mgrid[0:T, 0:T]
+    img[(xs % 6) == 5, :3] *= 0.55
+    ends = ((ys + (xs // 6) * 13) % 32) == 0
+    img[ends & ((xs % 6) != 5), :3] *= 0.6
+    img[((ys + (xs // 6) * 13) % 32 == 3) & ((xs % 6) == 2), :3] = (70, 50, 30)
+    return img
+
+
+def timber_wall(s):
+    # Pale plank infill inside a dark beam frame with a cross brace.
+    img = noisy(s, [(170, 140, 96), (196, 166, 118)], (16, 2))
+    ys, xs = np.mgrid[0:T, 0:T]
+    img[(ys % 8) == 7, :3] *= 0.75
+    beam = noisy(s + 1, [(66, 46, 28), (88, 62, 38)], (8, 2))
+    frame = (xs < 4) | (xs > 27) | (ys < 4) | (ys > 27) | (np.abs(xs - ys) < 3)
+    img[frame] = beam[frame]
+    return img
+
+
+def wattle_wall(s):
+    # Sticks woven over and under upright stakes, mud packed between.
+    img = noisy(s, [(84, 64, 44), (106, 82, 56)], (8, 2))
+    ys, xs = np.mgrid[0:T, 0:T]
+    stick = noisy(s + 2, [(120, 92, 58), (150, 116, 74)], (8, 2))
+    row = ys // 4
+    weave = ((ys % 4) != 3) & (((xs // 8 + row) % 2 == 0) | ((ys % 4) == 1))
+    img[weave] = stick[weave]
+    stakes = (xs % 8) == 0
+    img[stakes, :3] = (70, 52, 34)
+    return img
+
+
+def thatch(s):
+    # Bundles of dry reed laid in overlapping rows, tips hanging down.
+    img = noisy(s, [(150, 128, 70), (190, 164, 92)], (2, 1))
+    ys, xs = np.mgrid[0:T, 0:T]
+    streak = (np.sin(xs * 2.1 + value_noise(4, s) * 6) + 1) / 2
+    img[..., :3] *= (0.8 + 0.2 * streak)[..., None]
+    img[(ys % 8) == 0, :3] *= 0.6
+    img[(ys % 8) == 1, :3] *= 0.8
+    return img
+
+
+def chair(s):
+    # A chair seen from the side: seat, back and legs over a dark gap.
+    img = noisy(s, [(40, 30, 20), (52, 38, 26)], (8, 2))
+    wood = noisy(s + 1, [(132, 96, 56), (164, 122, 74)], (16, 2))
+    ys, xs = np.mgrid[0:T, 0:T]
+    part = ((ys >= 16) & (ys < 20)) | ((xs >= 4) & (xs < 8)) | ((xs >= 24) & (xs < 28) & (ys >= 16)) | ((xs < 8) & (ys < 16) & (xs >= 4))
+    img[part] = wood[part]
+    img[(ys < 16) & (xs >= 4) & (xs < 28) & (ys % 5 == 0)] = wood[(ys < 16) & (xs >= 4) & (xs < 28) & (ys % 5 == 0)]
+    return img
+
+
+def table(s):
+    # A thick table top over four legs.
+    img = noisy(s, [(40, 30, 20), (52, 38, 26)], (8, 2))
+    wood = noisy(s + 1, [(138, 100, 60), (170, 128, 78)], (16, 2))
+    ys, xs = np.mgrid[0:T, 0:T]
+    part = (ys < 7) | (((xs < 5) | (xs > 26)) & (ys >= 7))
+    img[part] = wood[part]
+    img[ys == 6, :3] *= 0.6
+    return img
+
+
+def wooden_door(s):
+    # Upright planks with two cross boards and an iron latch.
+    img = noisy(s, [(120, 86, 50), (150, 110, 66)], (16, 2))
+    ys, xs = np.mgrid[0:T, 0:T]
+    img[(xs % 8) == 7, :3] *= 0.6
+    brace = ((ys >= 6) & (ys < 10)) | ((ys >= 22) & (ys < 26))
+    img[brace, :3] *= 0.75
+    img[(xs >= 24) & (xs < 27) & (ys >= 14) & (ys < 18), :3] = (60, 60, 64)
+    return img
+
+
+def glass(s):
+    # Pale see-through glass with a bright rim and a glint.
+    img = noisy(s, [(190, 220, 230), (210, 236, 244)], (16, 8))
+    img[..., 3] = 90
+    ys, xs = np.mgrid[0:T, 0:T]
+    rim = (xs < 1) | (xs > 30) | (ys < 1) | (ys > 30)
+    img[rim, 3] = 220
+    glint = (np.abs((xs - ys) - 6) < 2) & (xs > 6) & (xs < 16)
+    img[glint] = (250, 254, 255, 200)
+    return img
+
+
+def window(s):
+    # Four glass panes in a wooden frame.
+    img = glass(s)
+    wood = noisy(s + 1, [(108, 76, 44), (136, 98, 58)], (8, 2))
+    ys, xs = np.mgrid[0:T, 0:T]
+    frame = (xs < 3) | (xs > 28) | (ys < 3) | (ys > 28) | ((xs >= 15) & (xs < 17)) | ((ys >= 15) & (ys < 17))
+    img[frame] = wood[frame]
+    return img
+
+
+def mushroom_stem(s):
+    img = noisy(s, [(206, 196, 170), (226, 218, 196)], (8, 2))
+    xs = np.mgrid[0:T, 0:T][1]
+    img[(xs % 7) == 3, :3] *= 0.9
+    return img
+
+
+def mushroom_cap(s):
+    img = noisy(s, [(150, 44, 34), (178, 60, 44)], (8, 2))
+    rng = np.random.default_rng(s)
+    for _ in range(5):
+        cx, cy, r = rng.integers(3, T - 3), rng.integers(3, T - 3), rng.integers(2, 4)
+        ys, xs = np.mgrid[0:T, 0:T]
+        img[(xs - cx) ** 2 + (ys - cy) ** 2 <= r * r, :3] = (236, 226, 204)
+    return img
+
+
+def mushroom_gills(s):
+    img = noisy(s, [(196, 170, 140), (222, 200, 170)], (4, 2))
+    xs = np.mgrid[0:T, 0:T][1]
+    img[(xs % 3) == 0, :3] *= 0.8
+    return img
+
+
+def burnt_stem(s):
+    img = noisy(s, [(40, 34, 30), (66, 56, 48)], (8, 2))
+    xs = np.mgrid[0:T, 0:T][1]
+    img[(xs % 7) == 3, :3] *= 0.7
+    return img
+
+
+def burnt_cap(s):
+    img = noisy(s, [(28, 22, 20), (58, 40, 34)], (8, 2))
+    rng = np.random.default_rng(s)
+    for _ in range(4):
+        cx, cy = rng.integers(2, T - 2), rng.integers(2, T - 2)
+        img[cy, cx, :3] = (196, 84, 30)
+    return img
+
+
+def grave(s):
+    # A rough stone marker with a carved line.
+    img = noisy(s, [(96, 96, 100), (128, 128, 132)], (8, 4))
+    ys, xs = np.mgrid[0:T, 0:T]
+    img[(ys >= 8) & (ys < 10) & (xs >= 8) & (xs < 24), :3] = (60, 60, 64)
+    img[(xs >= 15) & (xs < 17) & (ys >= 4) & (ys < 20), :3] = (60, 60, 64)
+    return img
+
+
 TILES = [
     ("grass_top", grass_top), ("grass_side", grass_side), ("dirt", dirt), ("stone", stone),
     ("cobblestone", cobble), ("sand", sand), ("mud", mud), ("moss", moss),
@@ -334,6 +484,10 @@ TILES = [
     ("tall_grass", tall_grass), ("fern", fern), ("bog_bloom", bog_bloom),
     ("rootstone", rootstone),
     ("vine", vine),
+    ("floorboards", floorboards), ("timber_wall", timber_wall), ("wattle_wall", wattle_wall), ("thatch", thatch),
+    ("chair", chair), ("table", table), ("wooden_door", wooden_door), ("glass", glass), ("window", window),
+    ("mushroom_stem", mushroom_stem), ("mushroom_cap", mushroom_cap), ("mushroom_gills", mushroom_gills),
+    ("burnt_stem", burnt_stem), ("burnt_cap", burnt_cap), ("grave", grave),
 ]
 
 

@@ -42,7 +42,7 @@ impl Plugin for PlayerPlugin {
                 crate::menu::GameUpdate,
                 (
                     toggle_mode,
-                    walk.run_if(resource_equals(MoveMode::Walk)),
+                    walk.run_if(resource_equals(MoveMode::Walk)).run_if(crate::airship::not_aboard),
                     ride_camera.run_if(resource_equals(MoveMode::Walk)),
                     follow_fly_camera.run_if(resource_equals(MoveMode::Fly)),
                 )
@@ -383,6 +383,14 @@ fn walk(
     if p.pos.y > top {
         p.pos.y = top;
         p.vel.y = p.vel.y.min(0.0);
+    }
+
+    // Fell off the island into the void: that's the end.
+    let floor = worldgen::WORLD_FLOOR as f32;
+    if p.pos.y < floor {
+        p.pos.y = floor;
+        p.vel = Vec3::ZERO;
+        damage.write(Damage { amount: 1000.0, cause: DamageCause::HeavyFall });
     }
 
     // Still standing on something?

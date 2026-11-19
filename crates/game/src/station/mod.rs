@@ -11,14 +11,23 @@
 //! another urn. Marks around each urn's belly light up as its next step fills.
 //!
 //! The stations are models, not blocks. Benches with a board (camp mat, tool
-//! bench, carpentry bench) are worked by hand (`board`); personal storage
-//! opens like a chest; the rest show what they will do.
+//! bench, carpentry bench, carpentry table, machination table, cooking pot, cutting board, smoking rack, iron anvil,
+//! sharpening stone, magical lens, cauldron) are worked by hand (`board`);
+//! personal storage and the stone fridge open like chests; the telescope is
+//! looked through at night (`telescope`); the golem wakes and walks (`golem`);
+//! the bedframe and double bed change how you sleep (`survival::camp::Bed`).
 //! F9 opens the dev menu (`dev`) to hand out urns and skip steps.
 
 pub mod bench;
 pub mod board;
+mod book;
+mod float;
+mod forge;
+pub mod particles;
 mod dev;
+pub mod golem;
 pub mod models;
+pub mod telescope;
 mod tree;
 pub mod urns;
 
@@ -28,6 +37,7 @@ use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 use serde::{Deserialize, Serialize};
+use voxel::room::{find_room, Cell, NotRoom, Room, MAX_ROOM};
 use voxel::BlockPos;
 
 use crate::blocks::Blocks;
@@ -53,8 +63,30 @@ impl Plugin for StationPlugin {
             .init_resource::<board::AtBench>()
             .init_resource::<tree::TreeUi>()
             .init_resource::<dev::DevMenu>()
+            .init_resource::<telescope::Scope>()
             .add_message::<StepDone>()
-            .add_systems(crate::menu::GameStartup, (load_urns, spawn_label, board::spawn_board_ui, board::load_benches, tree::spawn_tree_ui, dev::spawn_dev_ui).chain())
+            .add_message::<particles::Burst>()
+            .add_message::<board::Cooked>()
+            .add_message::<board::Crafted>()
+            .add_plugins(MaterialPlugin::<forge::GlintMaterial>::default())
+            .add_systems(
+                crate::menu::GameStartup,
+                (
+                    load_urns,
+                    load_edges,
+                    golem::load_golem,
+                    telescope::load_constellations,
+                    spawn_label,
+                    board::spawn_board_ui,
+                    book::spawn_book,
+                    board::load_benches,
+                    tree::spawn_tree_ui,
+                    telescope::spawn_scope_ui,
+                    dev::spawn_dev_ui,
+                    particles::setup_pixels,
+                )
+                    .chain(),
+            )
             .add_systems(
                 crate::menu::GameUpdate,
                 (
@@ -71,20 +103,34 @@ impl Plugin for StationPlugin {
                     dev::dev_keys,
                     dev::dev_click,
                     dev::dev_build,
-                    board::board_for_screenshot,
-                    board::board_keys,
-                    board::board_camera,
-                    board::board_hides,
-                    board::board_click,
-                    board::board_models,
-                    board::board_ui,
+                    (
+                        board::board_for_screenshot,
+                        board::board_keys,
+                        board::board_camera,
+                        board::board_hides,
+                        board::board_tool,
+                        board::board_click,
+                        board::board_models,
+                        forge::forge,
+                        board::board_ui,
+                        book::board_book,
+                    )
+                        .chain(),
                 )
                     .chain()
                     .before(crate::interact::InteractSet)
                     .after(crate::player::PlayerSet),
             )
-            .add_systems(crate::menu::GameUpdate, (save_urns, urns_for_screenshot))
-            .add_systems(Last, save_urns_on_exit.run_if(crate::menu::in_game));
+            .add_systems(
+                crate::menu::GameUpdate,
+                (sync_bed, dull_edges, golem::golem_rebuild, golem::golem_walk, telescope::scope_view, telescope::draw_constellations)
+                    .chain()
+                    .after(board::board_ui)
+                    .before(crate::interact::InteractSet)
+                    .after(crate::player::PlayerSet),
+            )
+            .add_systems(crate::menu::GameUpdate, (save_urns, urns_for_screenshot, (particles::spawn_bubbles, particles::move_particles, particles::spawn_bursts).chain()))
+            .add_systems(Last, (save_urns_on_exit, save_edges_on_exit, golem::save_golem_on_exit).run_if(crate::menu::in_game));
     }
 }
 
@@ -110,6 +156,80 @@ pub struct Urns {
     pub progress: BTreeMap<String, Progress>,
     #[serde(default)]
     pub placed: BTreeMap<String, Placed>,
+    /// Items studied under the magical lens (item names): they teach the cauldron.
+    #[serde(default)]
+    pub studied: std::collections::BTreeSet<String>,
+    /// Constellations charted through the telescope.
+    #[serde(default)]
+    pub charted: std::collections::BTreeSet<String>,
+    /// Recipe keys people taught you (`messler:...`; benches.ron `unlock`).
+    #[serde(default)]
+    pub taught: std::collections::BTreeSet<String>,
+}
+
+/// Tools sharpened at the sharpening stone: item name -> seconds of edge left,
+/// and how much faster a sharp tool works. Saved to `edges.ron`.
+#[derive(Resource, Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Edges {
+    pub left: BTreeMap<String, f32>,
+    #[serde(default)]
+    pub speed: f32,
+}
+
+impl Edges {
+    /// How much faster what's in hand works.
+    pub fn speed(&self, items: &Items, held: Option<crate::items::ItemId>) -> f32 {
+        held.filter(|i| self.left.get(&items.get(*i).name).is_some_and(|s| *s > 0.0)).map_or(1.0, |_| self.speed.max(1.0))
+    }
+
+    /// Time passes: edges dull. Returns the tools that just went dull.
+    pub fn wear(&mut self, dt: f32) -> Vec<String> {
+        let mut dull = Vec::new();
+        self.left.retain(|name, s| {
+            *s -= dt;
+            if *s <= 0.0 {
+                dull.push(name.clone());
+            }
+            *s > 0.0
+        });
+        dull
+    }
+}
+
+fn load_edges(mut commands: Commands, dir: Res<SaveDir>) {
+    let e = if screenshot_run() { None } else { std::fs::read_to_string(dir.file("edges.ron")).ok().and_then(|t| ron::from_str::<Edges>(&t).ok()) };
+    commands.insert_resource(e.unwrap_or_default());
+}
+
+fn save_edges_on_exit(mut exit: MessageReader<AppExit>, dir: Res<SaveDir>, edges: Res<Edges>) {
+    if exit.read().next().is_some() && !screenshot_run() {
+        match ron::ser::to_string_pretty(&*edges, ron::ser::PrettyConfig::default()) {
+            Ok(text) => {
+                if let Err(e) = std::fs::write(dir.file("edges.ron"), text) {
+                    warn!("saving edges.ron: {e}");
+                }
+            }
+            Err(e) => warn!("edges.ron: {e}"),
+        }
+    }
+}
+
+fn dull_edges(time: Res<Time>, items: Res<Items>, mut edges: ResMut<Edges>, mut toast: MessageWriter<Toast>) {
+    if edges.left.is_empty() {
+        return;
+    }
+    for name in edges.wear(time.delta_secs()) {
+        let title = items.id(&name).map_or(name.clone(), |i| items.get(i).title.clone());
+        toast.write(Toast(format!("Your {title} has gone dull: sharpen it again at the sharpening stone")));
+    }
+}
+
+/// The camp sleeps in whatever bed the sleeping station has built.
+fn sync_bed(urns: Res<Urns>, mut camp: ResMut<Camp>) {
+    let bed = crate::survival::camp::Bed { frame: urns.has("bedframe"), double: urns.has("double_bed") };
+    if camp.bed != bed {
+        camp.bed = bed;
+    }
 }
 
 static NOTHING_YET: Progress = Progress { done: Vec::new(), given: BTreeMap::new() };
@@ -140,6 +260,8 @@ pub enum StationKind {
     CampMat,
     ToolBench,
     CarpentryBench,
+    CarpentryTable,
+    MachinationTable,
     PersonalStorage,
     SharpeningStone,
     IronAnvil,
@@ -153,6 +275,15 @@ pub enum StationKind {
     GolemFrame,
     /// Drawn around the bedroll once the ancestral urn's bedframe is done.
     Bedframe,
+    /// The golem once its heart is in: it walks (`golem`).
+    Golem,
+    JoinersTable,
+    DoorFrame,
+    GlassKiln,
+    SewingTable,
+    ArmorStand,
+    BladesmithBench,
+    GunsmithBench,
 }
 
 impl StationKind {
@@ -162,6 +293,8 @@ impl StationKind {
             "camp_mat" => Self::CampMat,
             "tool_bench" => Self::ToolBench,
             "carpentry_bench" => Self::CarpentryBench,
+            "carpentry_table" => Self::CarpentryTable,
+            "machination_table" => Self::MachinationTable,
             "personal_storage" => Self::PersonalStorage,
             "sharpening_stone" => Self::SharpeningStone,
             "iron_anvil" => Self::IronAnvil,
@@ -173,6 +306,13 @@ impl StationKind {
             "magical_lens" => Self::MagicalLens,
             "cauldron" => Self::Cauldron,
             "golem_frame" => Self::GolemFrame,
+            "joiners_table" => Self::JoinersTable,
+            "door_frame" => Self::DoorFrame,
+            "glass_kiln" => Self::GlassKiln,
+            "sewing_table" => Self::SewingTable,
+            "armor_stand" => Self::ArmorStand,
+            "bladesmith_bench" => Self::BladesmithBench,
+            "gunsmith_bench" => Self::GunsmithBench,
             _ => return None,
         })
     }
@@ -183,6 +323,8 @@ impl StationKind {
             Self::CampMat => "Camp Mat",
             Self::ToolBench => "Tool Bench",
             Self::CarpentryBench => "Carpentry Bench",
+            Self::CarpentryTable => "Carpentry Table",
+            Self::MachinationTable => "Machination Table",
             Self::PersonalStorage => "Personal Storage",
             Self::SharpeningStone => "Sharpening Stone",
             Self::IronAnvil => "Iron Anvil",
@@ -195,6 +337,26 @@ impl StationKind {
             Self::Cauldron => "Cauldron",
             Self::GolemFrame => "Golem Frame",
             Self::Bedframe => "Bedframe",
+            Self::Golem => "Golem",
+            Self::JoinersTable => "Joiner's Table",
+            Self::DoorFrame => "Door Frame",
+            Self::GlassKiln => "Glass Kiln",
+            Self::SewingTable => "Sewing Table",
+            Self::ArmorStand => "Armor Stand",
+            Self::BladesmithBench => "Bladesmith Bench",
+            Self::GunsmithBench => "Gunsmith Bench",
+        }
+    }
+
+    /// Newer benches that work like an older one: they share its board
+    /// layout, slots, tool and size, and add a few parts of their own
+    /// (`models::parts`).
+    pub fn base(self) -> Self {
+        match self {
+            Self::JoinersTable | Self::DoorFrame | Self::SewingTable | Self::ArmorStand => Self::CarpentryTable,
+            Self::GlassKiln => Self::SmokingRack,
+            Self::BladesmithBench | Self::GunsmithBench => Self::IronAnvil,
+            k => k,
         }
     }
 
@@ -204,6 +366,8 @@ impl StationKind {
             Self::CampMat => "camp_mat",
             Self::ToolBench => "tool_bench",
             Self::CarpentryBench => "carpentry_bench",
+            Self::CarpentryTable => "carpentry_table",
+            Self::MachinationTable => "machination_table",
             Self::PersonalStorage => "personal_storage",
             Self::SharpeningStone => "sharpening_stone",
             Self::IronAnvil => "iron_anvil",
@@ -216,6 +380,14 @@ impl StationKind {
             Self::Cauldron => "cauldron",
             Self::GolemFrame => "golem_frame",
             Self::Bedframe => "bedframe",
+            Self::Golem => "golem_heart",
+            Self::JoinersTable => "joiners_table",
+            Self::DoorFrame => "door_frame",
+            Self::GlassKiln => "glass_kiln",
+            Self::SewingTable => "sewing_table",
+            Self::ArmorStand => "armor_stand",
+            Self::BladesmithBench => "bladesmith_bench",
+            Self::GunsmithBench => "gunsmith_bench",
             Self::Urn => return None,
         })
     }
@@ -373,7 +545,9 @@ fn layout(camp: &Camp, world: &World, blocks: &Blocks, urns: &Urns, book: &UrnDa
             let spots = vec![urn_at + along * 1.7, urn_at - along * 2.0, urn_at - side * 1.6, urn_at - side * 1.6 + along * 1.8];
             (urn_at, spots, !b.along_x)
         } else {
-            let Some(p) = urns.placed.get(&def.name) else { continue };
+            let Some(p) = urns.placed.get(&def.name) else {
+                continue;
+            };
             let (along, side) = if p.along_x { (Vec3::X, Vec3::Z * p.back) } else { (Vec3::Z, Vec3::X * p.back) };
             let urn_at = Vec3::new(p.pos.0, p.pos.1, p.pos.2);
             let spots = vec![
@@ -445,23 +619,46 @@ fn place_stations(
         let rot = if st.turned { Quat::from_rotation_y(std::f32::consts::FRAC_PI_2) } else { Quat::IDENTITY };
         let parts = models::parts(st.kind, &has, lit[st.urn]);
         commands.spawn((StationModels, st, Transform::from_translation(st.pos).with_rotation(rot), Visibility::default())).with_children(|c| {
-            for p in parts {
-                let mat = cache
+            let mut mat_for = |materials: &mut Assets<StandardMaterial>, p: models::Part| {
+                cache
                     .entry((st.urn, p.mat as u8))
                     .or_insert_with(|| {
                         let (base, glow) = p.mat.look(color);
                         let lin = base.to_linear();
+                        let alpha = p.mat.alpha();
                         materials.add(StandardMaterial {
-                            base_color: base,
+                            base_color: base.with_alpha(alpha.unwrap_or(1.0)),
                             emissive: LinearRgba::rgb(lin.red * glow, lin.green * glow, lin.blue * glow),
-                            perceptual_roughness: if matches!(p.mat, Mat::Steel | Mat::Brass | Mat::Iron) { 0.5 } else { 0.95 },
+                            perceptual_roughness: if alpha.is_some() {
+                                0.08
+                            } else if matches!(p.mat, Mat::Steel | Mat::Brass | Mat::Iron) {
+                                0.5
+                            } else {
+                                0.95
+                            },
+                            reflectance: if alpha.is_some() { 0.6 } else { 0.5 },
+                            alpha_mode: if alpha.is_some() { AlphaMode::Blend } else { AlphaMode::Opaque },
                             ..default()
                         })
                     })
-                    .clone();
+                    .clone()
+            };
+            for p in parts {
+                let mat = mat_for(&mut materials, p);
                 let key = [p.size.x.to_bits(), p.size.y.to_bits(), p.size.z.to_bits()];
                 let mesh = cubes.entry(key).or_insert_with(|| meshes.add(Cuboid::new(p.size.x, p.size.y, p.size.z))).clone();
                 c.spawn((Mesh3d(mesh), MeshMaterial3d(mat), Transform::from_translation(p.at).with_rotation(Quat::from_rotation_z(p.tilt)), NotShadowCaster));
+            }
+            // The bench's tool is its own thing, so it can be lifted or turned (`board`).
+            if let Some(tool) = models::tool(st.kind) {
+                c.spawn((board::BenchTool { rest: tool.rest, rest_turn: tool.rest_turn, how: tool.how }, Transform::from_translation(tool.rest).with_rotation(tool.rest_turn), Visibility::default())).with_children(|t| {
+                    for p in tool.parts {
+                        let mat = mat_for(&mut materials, p);
+                        let key = [p.size.x.to_bits(), p.size.y.to_bits(), p.size.z.to_bits()];
+                        let mesh = cubes.entry(key).or_insert_with(|| meshes.add(Cuboid::new(p.size.x, p.size.y, p.size.z))).clone();
+                        t.spawn((Mesh3d(mesh), MeshMaterial3d(mat), Transform::from_translation(p.at).with_rotation(Quat::from_rotation_z(p.tilt)), NotShadowCaster));
+                    }
+                });
             }
         });
     }
@@ -481,7 +678,17 @@ fn aim(cam: Single<&Transform, With<FlyCamera>>, stations: Query<&Station>, mut 
     aimed.1 = best.map(|(s, _)| s);
 }
 
-/// Right click the ground with an urn in hand: set it down there.
+/// The closed room around a cell, if there is one (`voxel::room`).
+pub fn room_at(world: &World, blocks: &Blocks, at: BlockPos) -> Result<Room, NotRoom> {
+    find_room(at, |p| match world.block(p) {
+        None => Cell::Unknown,
+        Some(b) if blocks.registry.get(b).is_wall() => Cell::Wall,
+        Some(_) => Cell::Open,
+    })
+}
+
+/// Right click the ground with an urn in hand: set it down there, if it
+/// stands in a closed room that has no other urn.
 #[allow(clippy::too_many_arguments)]
 fn place_urn(
     mouse: Res<ButtonInput<MouseButton>>,
@@ -491,7 +698,7 @@ fn place_urn(
     target: Res<crate::interact::Target>,
     cam: Single<&Transform, With<FlyCamera>>,
     (book, items, wielded): (Option<Res<UrnBook>>, Res<Items>, Res<Wielded>),
-    (world, blocks): (Res<World>, Res<Blocks>),
+    (world, blocks, camp): (Res<World>, Res<Blocks>, Res<Camp>),
     mut inv: ResMut<Inventory>,
     mut urns: ResMut<Urns>,
     mut toast: MessageWriter<Toast>,
@@ -499,8 +706,12 @@ fn place_urn(
     if !mouse.just_pressed(MouseButton::Right) || cursor.grab_mode == CursorGrabMode::None || menus.open {
         return;
     }
-    let (Some(book), Some(item), Some(hit)) = (book, wielded.0, target.hit) else { return };
-    let Some(def) = book.0.urn_of_item(&items.get(item).name) else { return };
+    let (Some(book), Some(item), Some(hit)) = (book, wielded.0, target.hit) else {
+        return;
+    };
+    let Some(def) = book.0.urn_of_item(&items.get(item).name) else {
+        return;
+    };
     if aimed.0.is_some() {
         return;
     }
@@ -509,7 +720,27 @@ fn place_urn(
         return;
     }
     let free = world.block(hit.before).is_none_or(|b| !blocks.registry.get(b).solid);
-    if !free || !inv.take(item, 1) {
+    if !free {
+        return;
+    }
+    // A station needs a closed room of its own.
+    let room = match room_at(&world, &blocks, hit.before) {
+        Ok(room) => room,
+        Err(NotRoom::Unknown) => return,
+        Err(_) => {
+            toast.write(Toast(format!("The {} needs a closed room: walls, floor and roof all round (at most {} blocks inside)", def.title, MAX_ROOM)));
+            return;
+        }
+    };
+    let me = book.0.urns.iter().position(|u| u.name == def.name);
+    let taken = layout(&camp, &world, &blocks, &urns, &book.0)
+        .into_iter()
+        .find(|s| s.kind == StationKind::Urn && Some(s.urn) != me && room.contains(BlockPos::from_world(s.pos.to_array())));
+    if let Some(other) = taken {
+        toast.write(Toast(format!("This room already has the {}. One station per room", book.0.urns[other.urn].title)));
+        return;
+    }
+    if !inv.take(item, 1) {
         return;
     }
     let at = Vec3::new(hit.before.x as f32 + 0.5, hit.before.y as f32, hit.before.z as f32 + 0.5);
@@ -531,11 +762,14 @@ fn use_station(
     (book, wielded, items): (Option<Res<UrnBook>>, Res<Wielded>, Res<Items>),
     (mut inv, mut chests, mut urns, mut tree): (ResMut<Inventory>, ResMut<Chests>, ResMut<Urns>, ResMut<tree::TreeUi>),
     (mut toast, mut done, mut open_chest, mut spill): (MessageWriter<Toast>, MessageWriter<StepDone>, MessageWriter<crate::interact::OpenChest>, MessageWriter<Spill>),
+    (mut scope, mut golem, clock, conditions): (ResMut<telescope::Scope>, ResMut<golem::Golem>, Res<crate::clock::WorldClock>, Res<crate::weather::Conditions>),
 ) {
     if !mouse.just_pressed(MouseButton::Right) || cursor.grab_mode == CursorGrabMode::None || menus.open {
         return;
     }
-    let (Some((kind, dist)), Some(st)) = (aimed.0, aimed.1) else { return };
+    let (Some((kind, dist)), Some(st)) = (aimed.0, aimed.1) else {
+        return;
+    };
     // A block in front of the station takes the click instead.
     if let Some(hit) = target.hit {
         let min = Vec3::new(hit.block.x as f32, hit.block.y as f32, hit.block.z as f32);
@@ -591,7 +825,7 @@ fn use_station(
                 done.write(StepDone(s));
             }
         }
-        StationKind::CampMat | StationKind::ToolBench | StationKind::CarpentryBench => {
+        k if board::board_name(k).is_some() => {
             if *mode == crate::player::MoveMode::Fly {
                 toast.write(Toast("Land to work at the bench".into()));
                 return;
@@ -599,6 +833,34 @@ fn use_station(
             at_bench.enter(st, player.pos + Vec3::Y * player.eye);
             menus.open = true;
             menus.still = true;
+        }
+        StationKind::StoneFridge => {
+            let at = BlockPos::new(crate::inventory::FRIDGE_AT.0, crate::inventory::FRIDGE_AT.1, crate::inventory::FRIDGE_AT.2);
+            chests.map.entry(at).or_insert_with(|| Grid::new(crate::inventory::CHEST.0, crate::inventory::CHEST.1));
+            open_chest.write(crate::interact::OpenChest(at));
+        }
+        StationKind::Telescope => {
+            if *mode == crate::player::MoveMode::Fly {
+                toast.write(Toast("Land to look through the telescope".into()));
+                return;
+            }
+            telescope::look_through(&mut scope, &mut menus, clock.hour(), conditions.clouds, &mut toast);
+        }
+        StationKind::GolemFrame => {
+            let line = if urns.has("golem_heart") { "The frame stands empty: its golem is up and about" } else { "A stone body waiting for a heart: put the golem heart into the golem urn" };
+            toast.write(Toast(line.into()));
+        }
+        StationKind::Golem => {
+            if player.crouching && urns.has("golem_hands") {
+                let at = BlockPos::new(crate::inventory::GOLEM_PACK_AT.0, crate::inventory::GOLEM_PACK_AT.1, crate::inventory::GOLEM_PACK_AT.2);
+                let size = crate::inventory::GOLEM_PACK;
+                chests.map.entry(at).or_insert_with(|| Grid::new(size.0, size.1));
+                open_chest.write(crate::interact::OpenChest(at));
+            } else {
+                golem.follow = !golem.follow;
+                let line = if golem.follow { "The golem follows you" } else { "The golem stays here" };
+                toast.write(Toast(line.into()));
+            }
         }
         StationKind::PersonalStorage => {
             let at = BlockPos::new(crate::inventory::STORAGE_AT.0, crate::inventory::STORAGE_AT.1, crate::inventory::STORAGE_AT.2);
@@ -650,17 +912,21 @@ fn steps_done(
 ) {
     let Some(book) = book else { return };
     for StepDone(name) in done.read() {
-        let Some((urn, step)) = book.0.step(name) else { continue };
+        let Some((urn, step)) = book.0.step(name) else {
+            continue;
+        };
         let line = match &step.gives {
             Gives::Station(_) => format!("The {} places a {} beside it", urn.title, step.title),
             Gives::Upgrade => format!("{} done", step.title),
             Gives::Recipes => {
                 let taught: Vec<String> =
-                    benches.0.recipes.iter().filter(|r| r.unlock.as_deref() == Some(name.as_str())).map(|r| items.get(r.makes.item).title.clone()).collect();
+                    benches.0.recipes.iter().filter(|r| r.taught_by(name)).map(|r| items.get(r.makes.item).title.clone()).collect();
                 if taught.is_empty() { format!("{} done", step.title) } else { format!("{}: you can now make {}", step.title, taught.join(", ")) }
             }
             Gives::Urn(other) => {
-                let Some(def) = book.0.urn(other) else { continue };
+                let Some(def) = book.0.urn(other) else {
+                    continue;
+                };
                 if let Some(it) = def.item.as_deref().and_then(|n| items.id(n))
                     && let Some(rest) = inv.add(&items, Stack::new(it, 1))
                 {
@@ -679,7 +945,10 @@ fn sync_learned(urns: Res<Urns>, mut benches: ResMut<board::Benches>) {
     if !urns.is_changed() && !benches.is_added() {
         return;
     }
-    let learned: std::collections::BTreeSet<String> = urns.progress.values().flat_map(|p| p.done.iter().cloned()).collect();
+    let learned: std::collections::BTreeSet<String> =
+        urns.progress.values().flat_map(|p| p.done.iter().cloned()).chain(urns.studied.iter().map(|i| format!("lens:{i}")))
+            .chain(urns.taught.iter().cloned())
+            .collect();
     if benches.0.learned != learned {
         benches.0.learned = learned;
     }
@@ -713,7 +982,9 @@ fn show_label(
     children: Query<&Children>,
     mut texts: Query<&mut Text>,
 ) {
-    let Ok((mut vis, kids)) = label.single_mut() else { return };
+    let Ok((mut vis, kids)) = label.single_mut() else {
+        return;
+    };
     let Some(book) = book else { return };
     let (title, line) = match aimed.1 {
         Some(st) if !menus.open => {
@@ -727,8 +998,13 @@ fn show_label(
                     };
                     (format!("{} · {}", def.title, def.station), format!("{next}\nHold an item and right click to put it in · empty hand: see the tree"))
                 }
-                StationKind::CampMat | StationKind::ToolBench | StationKind::CarpentryBench => (st.kind.title().to_string(), "Right click to work it with your hands".into()),
-                StationKind::PersonalStorage => (st.kind.title().to_string(), "Right click to open".into()),
+                k if board::board_name(k).is_some() => (k.title().to_string(), "Right click to work it with your hands".into()),
+                StationKind::PersonalStorage | StationKind::StoneFridge => (st.kind.title().to_string(), "Right click to open".into()),
+                StationKind::Telescope => (st.kind.title().to_string(), "Right click to look through it on a clear night".into()),
+                StationKind::Golem => {
+                    let what = if urns.has("golem_hands") { "Right click: follow / stay · crouch + right click: its pack" } else { "Right click: follow / stay" };
+                    (st.kind.title().to_string(), what.into())
+                }
                 k => {
                     let desc = k.step().and_then(|s| book.0.step(s)).map_or(String::new(), |(_, s)| s.desc.clone());
                     (k.title().to_string(), desc)
@@ -746,7 +1022,9 @@ fn show_label(
         *vis = Visibility::Inherited;
     }
     let Some(panel) = kids.first() else { return };
-    let Ok(lines) = children.get(*panel) else { return };
+    let Ok(lines) = children.get(*panel) else {
+        return;
+    };
     for (e, s) in lines.iter().zip([title, line]) {
         if let Ok(mut t) = texts.get_mut(e)
             && t.0 != s

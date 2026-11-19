@@ -1,0 +1,20 @@
+// Wren Calloway's stock (game::cast::wren). She lands by the vehicle urn on even days and flies
+// off the next; each visit she offers `per_visit` of these, picked by the day.
+// gives: what you get; wants: what you hand over.
+(
+    per_visit: 4,
+    trades: [
+        (id: "rope", gives: ("cordage", 4), wants: {"plant_fiber": 6}),
+        (id: "iron", gives: ("raw_iron", 3), wants: {"hide": 2}),
+        (id: "coal", gives: ("coal", 6), wants: {"log": 4}),
+        (id: "embers", gives: ("spirit_ember", 2), wants: {"old_coin": 1}),
+        (id: "skystone", gives: ("skystone", 3), wants: {"raw_iron": 2}),
+        (id: "furs", gives: ("fur", 2), wants: {"cordage": 3}),
+        (id: "glass", gives: ("glass", 4), wants: {"cobblestone": 8}),
+        (id: "herbs", gives: ("ember_herb", 2), wants: {"marsh_berries": 6}),
+        (id: "fish", gives: ("smoked_fish", 3), wants: {"flint": 2}),
+        (id: "planks", gives: ("planks", 12), wants: {"raw_meat": 2}),
+        (id: "mold", gives: ("mold_bloom", 1), wants: {"raw_iron": 4}),
+        (id: "hide", gives: ("hide", 3), wants: {"coal": 4}),
+    ],
+)

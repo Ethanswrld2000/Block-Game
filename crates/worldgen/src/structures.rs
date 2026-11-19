@@ -51,6 +51,26 @@ pub struct Village {
     pub center: [i32; 3],
     pub radius: i32,
     pub huts: Vec<Hut>,
+    /// Who lives here and what their houses look like.
+    pub folk: Folk,
+}
+
+/// Stilt huts of the marsh folk, or Sporrow's mushroom houses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Folk {
+    Marsh,
+    Mushroom,
+}
+
+impl Village {
+    /// Under the spirit ward: the plaza, the huts and the ground they stand on.
+    pub fn warded(&self, x: i32, y: i32, z: i32) -> bool {
+        let r = self.radius + 4;
+        let (dx, dz) = (x - self.center[0], z - self.center[2]);
+        let bottom = self.huts.iter().map(|h| h.ground).min().unwrap_or(self.center[1]).min(self.center[1]) - 3;
+        let top = self.huts.iter().map(|h| h.floor + 7).max().unwrap_or(self.center[1]).max(self.center[1] + 5);
+        dx * dx + dz * dz <= r * r && (bottom..=top).contains(&y)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -70,6 +90,11 @@ impl Barrow {
     pub fn contains(&self, x: i32, y: i32, z: i32) -> bool {
         (self.min[0]..=self.max[0]).contains(&x) && (self.min[1]..=self.max[1]).contains(&y) && (self.min[2]..=self.max[2]).contains(&z)
     }
+
+    /// Under the spirit ward: the whole barrow, its ring of stones and the mound over it.
+    pub fn warded(&self, x: i32, y: i32, z: i32) -> bool {
+        (self.min[0] - 5..=self.max[0]).contains(&x) && (self.min[1]..=self.max[1] + 3).contains(&y) && (self.min[2]..=self.max[2]).contains(&z)
+    }
 }
 
 type CellCache<T> = Mutex<HashMap<(i32, i32), Option<Arc<T>>>>;
@@ -79,9 +104,10 @@ type CellCache<T> = Mutex<HashMap<(i32, i32), Option<Arc<T>>>>;
 pub(crate) struct Cache {
     villages: CellCache<Village>,
     barrows: CellCache<Barrow>,
+    pub(crate) dungeons: CellCache<crate::dungeons::Dungeon>,
 }
 
-fn cached<T>(map: &CellCache<T>, key: (i32, i32), make: impl FnOnce() -> Option<T>) -> Option<Arc<T>> {
+pub(crate) fn cached<T>(map: &CellCache<T>, key: (i32, i32), make: impl FnOnce() -> Option<T>) -> Option<Arc<T>> {
     if let Some(v) = map.lock().unwrap().get(&key) {
         return v.clone();
     }
@@ -97,12 +123,12 @@ fn cached<T>(map: &CellCache<T>, key: (i32, i32), make: impl FnOnce() -> Option<
 const VILLAGE_FIRST: [&str; 14] =
     ["Reed", "Mire", "Fen", "Moss", "Heron", "Bog", "Willow", "Peat", "Sedge", "Otter", "Alder", "Rush", "Cran", "Teal"];
 const VILLAGE_LAST: [&str; 12] = ["mere", "wick", "holm", "stead", "ford", "by", "watch", "hollow", "marsh", "well", "stilts", "landing"];
-const BARROW_KIN: [&str; 10] = ["Ama", "Brannoc", "Cael", "Dunmora", "Elsa", "Fenwyr", "Gorran", "Hild", "Ithel", "Morwen"];
+pub(crate) const BARROW_KIN: [&str; 10] = ["Ama", "Brannoc", "Cael", "Dunmora", "Elsa", "Fenwyr", "Gorran", "Hild", "Ithel", "Morwen"];
 const BARROW_KIND: [&str; 6] = ["Barrow of", "Sleep of", "Long House of", "Hollow of", "Mound of", "Rest of"];
 const PERSON_FIRST: [&str; 12] = ["Ae", "Bra", "Cor", "Dun", "El", "Fen", "Gor", "Hal", "Ith", "Mor", "Ny", "Os"];
 const PERSON_LAST: [&str; 10] = ["wyn", "dric", "ga", "mund", "ra", "thel", "wen", "ric", "la", "dan"];
 
-fn pick<'a>(list: &[&'a str], h: u64) -> &'a str {
+pub(crate) fn pick<'a>(list: &[&'a str], h: u64) -> &'a str {
     list[(h % list.len() as u64) as usize]
 }
 
@@ -125,6 +151,13 @@ impl WorldGen {
                 if let Some(v) = cached(&self.structures.villages, (cx, cz), || self.build_village(cx, cz, x, z)) {
                     out.push(v);
                 }
+            }
+        }
+        if let Some(v) = &self.landmarks.sporrow {
+            let r = v.radius + 2;
+            let [x, _, z] = v.center;
+            if x + r >= x0 && x - r <= x1 && z + r >= z0 && z - r <= z1 {
+                out.push(v.clone());
             }
         }
         out
@@ -180,7 +213,7 @@ impl WorldGen {
     fn build_village(&self, cx: i32, cz: i32, x: i32, z: i32) -> Option<Village> {
         let col = self.column(x, z);
         let biome = &self.biomes.get(col.biome).name;
-        if col.height < SEA_LEVEL - 2 || col.climate.overhang > 0.02 || matches!(biome.as_str(), "deep_sea" | "frost_peaks" | "highlands" | "skyreach") {
+        if col.land != crate::Land::Main || col.height < SEA_LEVEL - 2 || col.climate.overhang > 0.02 || matches!(biome.as_str(), "deep_sea" | "frost_peaks" | "highlands" | "skyreach") {
             return None;
         }
         let h = hash2(self.seed ^ 0x7112, cx, cz);
@@ -196,7 +229,8 @@ impl WorldGen {
             let mut low = i32::MAX;
             for dz in -2..=2 {
                 for dx in -2..=2 {
-                    let g = self.column(hx + dx, hz + dz).height;
+                    let c = self.column(hx + dx, hz + dz);
+                    let g = if c.land == crate::Land::Main { c.height } else { i32::MIN / 2 };
                     ground = ground.max(g);
                     low = low.min(g);
                 }
@@ -215,27 +249,37 @@ impl WorldGen {
         if huts.len() < 3 {
             return None;
         }
-        Some(Village { id: h, name, center: [x, col.height.max(SEA_LEVEL), z], radius: VILLAGE_RADIUS, huts })
+        Some(Village { id: h, name, center: [x, col.height.max(SEA_LEVEL), z], radius: VILLAGE_RADIUS, huts, folk: Folk::Marsh })
     }
 
     fn build_barrow(&self, h: u64, x: i32, z: i32) -> Option<Barrow> {
         let col = self.column(x, z);
-        if col.height < SEA_LEVEL + 1 || col.climate.overhang > 0.02 {
+        if col.land != crate::Land::Main || col.height < SEA_LEVEL + 1 || col.climate.overhang > 0.02 {
             return None;
         }
         let depth = 14 + (h >> 40) as i32 % 8;
         let surface = col.height;
         // The stair runs +x from the entrance, one step down per block.
         let hall = [x + depth + 7, surface - depth, z];
+        // The far end of the hall must still be under the island, not out over the void.
+        if self.column(hall[0] + 14, z).land != crate::Land::Main {
+            return None;
+        }
         let name = format!("The {} {}", pick(&BARROW_KIND, h >> 11), pick(&BARROW_KIN, h >> 23));
-        Some(Barrow {
+        let barrow = Barrow {
             id: h,
             name,
             entrance: [x, surface + 1, z],
             hall,
             min: [x - 1, hall[1] - 1, z - 14],
             max: [hall[0] + 14, surface + 1, z + 14],
-        })
+        };
+        // Keep out of dungeons.
+        let area = crate::dungeons::Aabb { min: [barrow.min[0] - 6, barrow.min[1] - 2, barrow.min[2] - 2], max: [barrow.max[0] + 2, barrow.max[1] + 4, barrow.max[2] + 2] };
+        if self.dungeons_in(area.min[0], area.min[2], area.max[0], area.max[2]).iter().any(|d| d.bounds.intersects(&area)) {
+            return None;
+        }
+        Some(barrow)
     }
 }
 
@@ -251,13 +295,41 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) {
         if top < lo || bottom > hi {
             continue;
         }
-        draw_village(wg, &mut canvas, &v);
+        match v.folk {
+            Folk::Marsh => draw_village(wg, &mut canvas, &v),
+            Folk::Mushroom => crate::landmarks::draw_sporrow(wg, &mut canvas, &v),
+        }
     }
     for b in wg.barrows_in(x0, z0, x1, z1) {
         if b.max[1] + 2 < lo || b.min[1] > hi {
             continue;
         }
         draw_barrow(wg, &mut canvas, &b);
+    }
+    for d in wg.dungeons_in(x0, z0, x1, z1) {
+        if d.bounds.max[1] < lo || d.bounds.min[1] > hi {
+            continue;
+        }
+        crate::dungeons::draw(wg, &mut canvas, &d);
+    }
+    if let Some(g) = wg.rotting_gate()
+        && g.bounds.min[0] - 4 <= x1
+        && g.bounds.max[0] + 4 >= x0
+        && g.bounds.min[2] - 4 <= z1
+        && g.bounds.max[2] + 4 >= z0
+        && g.bounds.max[1] + 2 >= lo
+        && g.bounds.min[1] - 40 <= hi
+    {
+        crate::rotting::draw_gate(wg, &mut canvas, g);
+    }
+    let near = |b: &crate::dungeons::Aabb| {
+        b.min[0] - 4 <= x1 && b.max[0] + 4 >= x0 && b.min[2] - 4 <= z1 && b.max[2] + 4 >= z0 && b.max[1] + 2 >= lo && b.min[1] - 40 <= hi
+    };
+    if let Some(f) = wg.gilm_forge().filter(|f| near(&f.bounds)) {
+        crate::landmarks::draw_forge(wg, &mut canvas, f);
+    }
+    if let Some(k) = wg.castle().filter(|k| near(&k.bounds)) {
+        crate::landmarks::draw_castle(wg, &mut canvas, k);
     }
 }
 
@@ -448,10 +520,13 @@ mod tests {
     #[test]
     fn villages_and_barrows_are_scattered() {
         let g = wg();
-        let villages = g.villages_in(-4000, -4000, 4000, 4000);
-        let barrows = g.barrows_in(-4000, -4000, 4000, 4000);
-        assert!(villages.len() >= 10, "{} villages", villages.len());
-        assert!(barrows.len() >= 20, "{} barrows", barrows.len());
+        // Only the main island has them.
+        let (cx, cz) = g.island_center();
+        let r = crate::MAIN_RADIUS as i32 + 400;
+        let villages = g.villages_in(cx - r, cz - r, cx + r, cz + r);
+        let barrows = g.barrows_in(cx - r, cz - r, cx + r, cz + r);
+        assert!(villages.len() >= 4, "{} villages", villages.len());
+        assert!(barrows.len() >= 6, "{} barrows", barrows.len());
         let mut names: Vec<_> = villages.iter().map(|v| v.name.clone()).collect();
         names.sort();
         names.dedup();

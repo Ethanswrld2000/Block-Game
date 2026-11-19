@@ -1,0 +1,823 @@
+// Dialogue trees (game::npc::dialogue), one per NPC kind (npcs.ron names it).
+//
+// A node: `say` = lines spoken one after another (click, Space or E moves on),
+// `mood` = Neutral | Happy | Curious | Worried | Sad | Angry | Surprised (face and hands),
+// `sets` = flags set on entering, `choices` = your replies, `then` = go straight on
+// when there are no replies.
+// A reply: `text`, optional `tone` tag, `goto` a node, `end: true` to finish,
+// `act: Follow | Stay | Wander` to give an order, `once: true` = gone after picking,
+// `needs` / `without` flags to show it, `sets` flags. The flag `following` is on while
+// the NPC follows you.
+// `start` opens the first talk; `again` opens later ones (flag `met`).
+{
+    "mossa": (
+        start: "greet",
+        again: "again",
+        nodes: {
+            "greet": (
+                mood: Surprised,
+                say: [
+                    "MOSSA_GREET_01",
+                    "MOSSA_GREET_02",
+                    "MOSSA_GREET_03",
+                ],
+                choices: [
+                    (text: "What do you trade?", tone: "Ask", goto: "trade"),
+                    (text: "Tell me about this swamp.", tone: "Ask", goto: "swamp"),
+                    (text: "Walk with me a while.", tone: "Kind", goto: "follow"),
+                    (text: "I have to go.", end: true),
+                ],
+            ),
+            "again": (
+                mood: Happy,
+                say: ["MOSSA_AGAIN_01"],
+                choices: [
+                    (text: "What do you trade?", tone: "Ask", goto: "trade"),
+                    (text: "Tell me about this swamp.", tone: "Ask", goto: "swamp"),
+                    (text: "Walk with me a while.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "Go on, wander as you like.", goto: "wander", needs: ["following"]),
+                    (text: "Goodbye, Mossa.", end: true),
+                ],
+            ),
+            "hub": (
+                mood: Neutral,
+                say: ["MOSSA_HUB_01"],
+                choices: [
+                    (text: "What do you trade?", tone: "Ask", goto: "trade"),
+                    (text: "Tell me about this swamp.", tone: "Ask", goto: "swamp"),
+                    (text: "Walk with me a while.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "That's all for now.", end: true),
+                ],
+            ),
+            "trade": (
+                mood: Happy,
+                say: [
+                    "MOSSA_TRADE_01",
+                    "MOSSA_TRADE_02",
+                ],
+                choices: [
+                    (text: "A cracked lens? Who'd buy that?", tone: "Blunt", goto: "lens", once: true),
+                    (text: "Maybe later.", goto: "hub"),
+                ],
+            ),
+            "lens": (
+                mood: Curious,
+                say: [
+                    "MOSSA_LENS_01",
+                    "MOSSA_LENS_02",
+                ],
+                then: "hub",
+            ),
+            "swamp": (
+                mood: Worried,
+                say: [
+                    "MOSSA_SWAMP_01",
+                    "MOSSA_SWAMP_02",
+                ],
+                choices: [
+                    (text: "What things?", tone: "Ask", goto: "things"),
+                    (text: "I'm not afraid of the dark.", tone: "Bold", goto: "brave"),
+                    (text: "Thanks for the warning.", goto: "hub"),
+                ],
+            ),
+            "things": (
+                mood: Worried,
+                say: [
+                    "MOSSA_THINGS_01",
+                    "MOSSA_THINGS_02",
+                ],
+                choices: [(text: "I'll be careful.", goto: "hub")],
+            ),
+            "brave": (
+                mood: Angry,
+                say: ["MOSSA_BRAVE_01"],
+                choices: [(text: "Fine. A torch.", tone: "Kind", goto: "hub")],
+            ),
+            "follow": (
+                mood: Happy,
+                say: ["MOSSA_FOLLOW_01"],
+                choices: [(text: "Let's go.", act: Follow, end: true)],
+            ),
+            "stay": (
+                mood: Neutral,
+                say: ["MOSSA_STAY_01"],
+                choices: [(text: "I won't be long.", act: Stay, end: true)],
+            ),
+            "wander": (
+                mood: Happy,
+                say: ["MOSSA_WANDER_01"],
+                choices: [(text: "See you around.", act: Wander, end: true)],
+            ),
+        },
+    ),
+    // The guide at every dungeon gate. `act: Spirit` casts the spirit spell:
+    // only a spirit passes the veil, and a spirit that falls inside wakes back here.
+    "warden": (
+        start: "greet",
+        again: "again",
+        nodes: {
+            "greet": (
+                mood: Curious,
+                say: [
+                    "WARDEN_GREET_01",
+                    "WARDEN_GREET_02",
+                    "WARDEN_GREET_03",
+                ],
+                choices: [
+                    (text: "Then how does anyone get in?", tone: "Ask", goto: "how"),
+                    (text: "What is down there?", tone: "Ask", goto: "below"),
+                    (text: "I'll leave it be.", end: true),
+                ],
+            ),
+            "again": (
+                mood: Neutral,
+                say: ["WARDEN_AGAIN_01"],
+                choices: [
+                    (text: "Make me a spirit. I'm going in.", tone: "Ready", goto: "cast"),
+                    (text: "Remind me how this works.", tone: "Ask", goto: "how"),
+                    (text: "What is down there?", tone: "Ask", goto: "below"),
+                    (text: "Not today.", end: true),
+                ],
+            ),
+            "how": (
+                mood: Neutral,
+                say: [
+                    "WARDEN_HOW_01",
+                    "WARDEN_HOW_02",
+                    "WARDEN_HOW_03",
+                ],
+                choices: [
+                    (text: "And if I win?", tone: "Ask", goto: "win"),
+                    (text: "Do it. Make me a spirit.", tone: "Ready", goto: "cast"),
+                    (text: "I need to think.", end: true),
+                ],
+            ),
+            "win": (
+                mood: Happy,
+                say: [
+                    "WARDEN_WIN_01",
+                    "WARDEN_WIN_02",
+                ],
+                choices: [
+                    (text: "Make me a spirit.", tone: "Ready", goto: "cast"),
+                    (text: "Later.", end: true),
+                ],
+            ),
+            "below": (
+                mood: Worried,
+                say: [
+                    "WARDEN_BELOW_01",
+                    "WARDEN_BELOW_02",
+                ],
+                choices: [
+                    (text: "How do I get in?", tone: "Ask", goto: "how"),
+                    (text: "Make me a spirit.", tone: "Ready", goto: "cast"),
+                    (text: "I'll leave it be.", end: true),
+                ],
+            ),
+            "cast": (
+                mood: Happy,
+                say: [
+                    "WARDEN_CAST_01",
+                ],
+                choices: [
+                    (text: "Ready.", act: Spirit, end: true),
+                    (text: "Wait, not yet.", goto: "again"),
+                ],
+            ),
+        },
+    ),
+    // Bram Holloway, the guide. Settles by the ancestral urn (by your bedroll).
+    "bram": (
+        start: "greet",
+        again: "again",
+        nodes: {
+            "greet": (
+                mood: Curious,
+                say: [
+                    "BRAM_GREET_01",
+                    "BRAM_GREET_02",
+                    "BRAM_GREET_03",
+                ],
+                choices: [
+                    (text: "What should I do first?", tone: "Ask", goto: "first"),
+                    (text: "Why help me?", tone: "Ask", goto: "why"),
+                    (text: "Where's worth exploring?", tone: "Ask", goto: "explore"),
+                    (text: "Come back to camp with me.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "See you, Bram.", end: true),
+                ],
+            ),
+            "again": (
+                mood: Neutral,
+                say: ["BRAM_AGAIN_01"],
+                choices: [
+                    (text: "What should I do first?", tone: "Ask", goto: "first"),
+                    (text: "Why help me?", tone: "Ask", goto: "why"),
+                    (text: "Where's worth exploring?", tone: "Ask", goto: "explore"),
+                    (text: "Come back to camp with me.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "See you, Bram.", end: true),
+                ],
+            ),
+            "hub": (
+                mood: Neutral,
+                say: ["BRAM_HUB_01"],
+                choices: [
+                    (text: "What should I do first?", tone: "Ask", goto: "first"),
+                    (text: "Why help me?", tone: "Ask", goto: "why"),
+                    (text: "Where's worth exploring?", tone: "Ask", goto: "explore"),
+                    (text: "Come back to camp with me.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "That's all.", end: true),
+                ],
+            ),
+            "first": (
+                mood: Neutral,
+                say: [
+                    "BRAM_FIRST_01",
+                    "BRAM_FIRST_02",
+                ],
+                then: "hub",
+            ),
+            "why": (
+                mood: Angry,
+                say: [
+                    "BRAM_WHY_01",
+                    "BRAM_WHY_02",
+                ],
+                then: "hub",
+            ),
+            "explore": (
+                mood: Worried,
+                say: [
+                    "BRAM_EXPLORE_01",
+                    "BRAM_EXPLORE_02",
+                ],
+                then: "hub",
+            ),
+            "follow": (
+                mood: Happy,
+                say: ["BRAM_FOLLOW_01"],
+                choices: [(text: "Come on, then.", act: Follow, end: true)],
+            ),
+            "stay": (
+                mood: Neutral,
+                say: ["BRAM_STAY_01"],
+                choices: [(text: "I'll be back.", act: Stay, end: true)],
+            ),
+        },
+    ),
+    // Gilm, the mushroom blacksmith, one block tall. Settles by the tool urn.
+    "gilm": (
+        start: "greet",
+        again: "again",
+        nodes: {
+            "greet": (
+                mood: Angry,
+                say: [
+                    "GILM_GREET_01",
+                    "GILM_GREET_02",
+                    "GILM_GREET_03",
+                ],
+                choices: [
+                    (text: "You make tools?", tone: "Ask", goto: "tools"),
+                    (text: "Why did Sporrow cast you out?", tone: "Ask", goto: "sporrow"),
+                    (text: "Make me something.", tone: "Ask", goto: "commission"),
+                    (text: "I have a forge you could use. Come with me.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "Later, Gilm.", end: true),
+                ],
+            ),
+            "again": (
+                mood: Neutral,
+                say: ["GILM_AGAIN_01"],
+                choices: [
+                    (text: "You make tools?", tone: "Ask", goto: "tools"),
+                    (text: "Why did Sporrow cast you out?", tone: "Ask", goto: "sporrow"),
+                    (text: "Make me something.", tone: "Ask", goto: "commission"),
+                    (text: "I have a forge you could use. Come with me.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "Later, Gilm.", end: true),
+                ],
+            ),
+            "hub": (
+                mood: Neutral,
+                say: ["GILM_HUB_01"],
+                choices: [
+                    (text: "You make tools?", tone: "Ask", goto: "tools"),
+                    (text: "Why did Sporrow cast you out?", tone: "Ask", goto: "sporrow"),
+                    (text: "Make me something.", tone: "Ask", goto: "commission"),
+                    (text: "I have a forge you could use. Come with me.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "That's all.", end: true),
+                ],
+            ),
+            "tools": (
+                mood: Happy,
+                say: [
+                    "GILM_TOOLS_01",
+                    "GILM_TOOLS_02",
+                ],
+                then: "hub",
+            ),
+            "sporrow": (
+                mood: Sad,
+                say: [
+                    "GILM_SPORROW_01",
+                    "GILM_SPORROW_02",
+                ],
+                then: "hub",
+            ),
+            "follow": (
+                mood: Happy,
+                say: ["GILM_FOLLOW_01"],
+                choices: [(text: "Come on, then.", act: Follow, end: true)],
+            ),
+            "stay": (
+                mood: Neutral,
+                say: ["GILM_STAY_01"],
+                choices: [(text: "I'll be back.", act: Stay, end: true)],
+            ),
+            // Gilm's commissions: the choices come from services.ron (only tools you can't make yet).
+            "commission": (
+                mood: Neutral,
+                say: ["GILM_COMMISSION_01"],
+                choices: [(text: "Never mind.", goto: "hub")],
+            ),
+            "commission_done": (
+                mood: Happy,
+                say: ["GILM_COMMISSION_DONE_01"],
+                then: "hub",
+            ),
+            "commission_short": (
+                mood: Angry,
+                say: ["GILM_COMMISSION_SHORT_01"],
+                then: "hub",
+            ),
+        },
+    ),
+    // Wren Calloway, the barterer with her own flying machine. Settles by the vehicle urn.
+    "wren": (
+        start: "greet",
+        again: "again",
+        nodes: {
+            "greet": (
+                mood: Happy,
+                say: [
+                    "WREN_GREET_01",
+                    "WREN_GREET_02",
+                    "WREN_GREET_03",
+                ],
+                choices: [
+                    (text: "What do you sell?", tone: "Ask", goto: "sell"),
+                    (text: "Let's trade.", tone: "Ask", goto: "trade"),
+                    (text: "Where do you fly?", tone: "Ask", goto: "fly"),
+                    (text: "Land by my camp. There's room for a machine.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "Safe skies, Wren.", end: true),
+                ],
+            ),
+            "again": (
+                mood: Neutral,
+                say: ["WREN_AGAIN_01"],
+                choices: [
+                    (text: "What do you sell?", tone: "Ask", goto: "sell"),
+                    (text: "Let's trade.", tone: "Ask", goto: "trade"),
+                    (text: "Where do you fly?", tone: "Ask", goto: "fly"),
+                    (text: "Land by my camp. There's room for a machine.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "Safe skies, Wren.", end: true),
+                ],
+            ),
+            "hub": (
+                mood: Neutral,
+                say: ["WREN_HUB_01"],
+                choices: [
+                    (text: "What do you sell?", tone: "Ask", goto: "sell"),
+                    (text: "Let's trade.", tone: "Ask", goto: "trade"),
+                    (text: "Where do you fly?", tone: "Ask", goto: "fly"),
+                    (text: "Land by my camp. There's room for a machine.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "That's all.", end: true),
+                ],
+            ),
+            "sell": (
+                mood: Happy,
+                say: [
+                    "WREN_SELL_01",
+                    "WREN_SELL_02",
+                ],
+                then: "hub",
+            ),
+            "fly": (
+                mood: Curious,
+                say: [
+                    "WREN_FLY_01",
+                    "WREN_FLY_02",
+                ],
+                then: "hub",
+            ),
+            "follow": (
+                mood: Happy,
+                say: ["WREN_FOLLOW_01"],
+                choices: [(text: "Come on, then.", act: Follow, end: true)],
+            ),
+            "stay": (
+                mood: Neutral,
+                say: ["WREN_STAY_01"],
+                choices: [(text: "I'll be back.", act: Stay, end: true)],
+            ),
+            // Wren's trades: the choices come from trades.ron, a few each visit.
+            "trade": (
+                mood: Happy,
+                say: ["WREN_TRADE_01"],
+                choices: [(text: "Not today.", goto: "hub")],
+            ),
+            "trade_done": (
+                mood: Happy,
+                say: ["WREN_TRADE_DONE_01"],
+                then: "trade",
+            ),
+            "trade_short": (
+                mood: Neutral,
+                say: ["WREN_TRADE_SHORT_01"],
+                then: "trade",
+            ),
+        },
+    ),
+    // Liora Vance, once a courtesan of the court. Sews clothes and armor. Settles by the gear urn.
+    "liora": (
+        start: "greet",
+        again: "again",
+        nodes: {
+            "greet": (
+                mood: Curious,
+                say: [
+                    "LIORA_GREET_01",
+                    "LIORA_GREET_02",
+                    "LIORA_GREET_03",
+                ],
+                choices: [
+                    (text: "What did you do at court?", tone: "Ask", goto: "court"),
+                    (text: "Can you sew?", tone: "Ask", goto: "sew"),
+                    (text: "Could you make me something to wear?", tone: "Ask", goto: "commission"),
+                    (text: "You could stay at my camp.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "Goodbye, Liora.", end: true),
+                ],
+            ),
+            "again": (
+                mood: Neutral,
+                say: ["LIORA_AGAIN_01"],
+                choices: [
+                    (text: "What did you do at court?", tone: "Ask", goto: "court"),
+                    (text: "Can you sew?", tone: "Ask", goto: "sew"),
+                    (text: "Could you make me something to wear?", tone: "Ask", goto: "commission"),
+                    (text: "You could stay at my camp.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "Goodbye, Liora.", end: true),
+                ],
+            ),
+            "hub": (
+                mood: Neutral,
+                say: ["LIORA_HUB_01"],
+                choices: [
+                    (text: "What did you do at court?", tone: "Ask", goto: "court"),
+                    (text: "Can you sew?", tone: "Ask", goto: "sew"),
+                    (text: "Could you make me something to wear?", tone: "Ask", goto: "commission"),
+                    (text: "You could stay at my camp.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "That's all.", end: true),
+                ],
+            ),
+            "court": (
+                mood: Neutral,
+                say: [
+                    "LIORA_COURT_01",
+                    "LIORA_COURT_02",
+                ],
+                choices: [
+                    (text: "Who holds the court now?", tone: "Ask", goto: "court_lords"),
+                    (text: "Do they talk about me?", tone: "Ask", goto: "court_heir"),
+                    (text: "Something else.", goto: "hub"),
+                ],
+            ),
+            "sew": (
+                mood: Happy,
+                say: [
+                    "LIORA_SEW_01",
+                    "LIORA_SEW_02",
+                ],
+                then: "hub",
+            ),
+            "follow": (
+                mood: Happy,
+                say: ["LIORA_FOLLOW_01"],
+                choices: [(text: "Come on, then.", act: Follow, end: true)],
+            ),
+            "stay": (
+                mood: Neutral,
+                say: ["LIORA_STAY_01"],
+                choices: [(text: "I'll be back.", act: Stay, end: true)],
+            ),
+            "court_lords": (
+                mood: Worried,
+                say: [
+                    "LIORA_COURT_LORDS_01",
+                    "LIORA_COURT_LORDS_02",
+                    "LIORA_COURT_LORDS_03",
+                ],
+                then: "court",
+            ),
+            "court_heir": (
+                mood: Curious,
+                say: [
+                    "LIORA_COURT_HEIR_01",
+                    "LIORA_COURT_HEIR_02",
+                    "LIORA_COURT_HEIR_03",
+                ],
+                then: "court",
+            ),
+            // Liora's tailoring: the choices come from services.ron.
+            "commission": (
+                mood: Happy,
+                say: ["LIORA_COMMISSION_01"],
+                choices: [(text: "Never mind.", goto: "hub")],
+            ),
+            "commission_done": (
+                mood: Happy,
+                say: ["LIORA_COMMISSION_DONE_01"],
+                then: "hub",
+            ),
+            "commission_short": (
+                mood: Neutral,
+                say: ["LIORA_COMMISSION_SHORT_01"],
+                then: "hub",
+            ),
+        },
+    ),
+    // Messler, a rat one block tall and 130 years old, made to think by a court wizard. Settles by the hearth urn.
+    "messler": (
+        start: "greet",
+        again: "again",
+        nodes: {
+            "greet": (
+                mood: Angry,
+                say: [
+                    "MESSLER_GREET_01",
+                    "MESSLER_GREET_02",
+                    "MESSLER_GREET_03",
+                ],
+                choices: [
+                    (text: "Who made you like this?", tone: "Ask", goto: "wizard"),
+                    (text: "Can you cook?", tone: "Ask", goto: "cook"),
+                    (text: "Here, have something to eat.", tone: "Kind", service: "feed"),
+                    (text: "There's a cooking fire at my camp.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "Bye, Messler.", end: true),
+                ],
+            ),
+            "again": (
+                mood: Neutral,
+                say: ["MESSLER_AGAIN_01"],
+                choices: [
+                    (text: "Who made you like this?", tone: "Ask", goto: "wizard"),
+                    (text: "Can you cook?", tone: "Ask", goto: "cook"),
+                    (text: "Here, have something to eat.", tone: "Kind", service: "feed"),
+                    (text: "There's a cooking fire at my camp.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "Bye, Messler.", end: true),
+                ],
+            ),
+            "hub": (
+                mood: Neutral,
+                say: ["MESSLER_HUB_01"],
+                choices: [
+                    (text: "Who made you like this?", tone: "Ask", goto: "wizard"),
+                    (text: "Can you cook?", tone: "Ask", goto: "cook"),
+                    (text: "Here, have something to eat.", tone: "Kind", service: "feed"),
+                    (text: "There's a cooking fire at my camp.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "That's all.", end: true),
+                ],
+            ),
+            "wizard": (
+                mood: Sad,
+                say: [
+                    "MESSLER_WIZARD_01",
+                    "MESSLER_WIZARD_02",
+                ],
+                then: "hub",
+            ),
+            "cook": (
+                mood: Happy,
+                say: [
+                    "MESSLER_COOK_01",
+                    "MESSLER_COOK_02",
+                ],
+                then: "hub",
+            ),
+            "follow": (
+                mood: Happy,
+                say: ["MESSLER_FOLLOW_01"],
+                choices: [(text: "Come on, then.", act: Follow, end: true)],
+            ),
+            "stay": (
+                mood: Neutral,
+                say: ["MESSLER_STAY_01"],
+                choices: [(text: "I'll be back.", act: Stay, end: true)],
+            ),
+            // Feeding Messler (services.ron `messler_teaches`).
+            "fed": (
+                mood: Happy,
+                say: ["MESSLER_FED_01", "MESSLER_FED_02"],
+                then: "hub",
+            ),
+            "fed_all": (
+                mood: Happy,
+                say: ["MESSLER_FED_ALL_01"],
+                then: "hub",
+            ),
+            "no_food": (
+                mood: Angry,
+                say: ["MESSLER_NO_FOOD_01"],
+                then: "hub",
+            ),
+        },
+    ),
+    // Orrin Vale, the weather keeper in the mountain castle. Settles by the star urn.
+    "orrin": (
+        start: "greet",
+        again: "again",
+        nodes: {
+            "greet": (
+                mood: Curious,
+                say: [
+                    "ORRIN_GREET_01",
+                    "ORRIN_GREET_02",
+                    "ORRIN_GREET_03",
+                ],
+                choices: [
+                    (text: "What do the clouds say?", tone: "Ask", goto: "clouds"),
+                    (text: "What weather is coming?", tone: "Ask", service: "weather"),
+                    (text: "Why live up here alone?", tone: "Ask", goto: "alone"),
+                    (text: "Come watch the sky from my camp.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "Goodbye, Orrin.", end: true),
+                ],
+            ),
+            "again": (
+                mood: Neutral,
+                say: ["ORRIN_AGAIN_01"],
+                choices: [
+                    (text: "What do the clouds say?", tone: "Ask", goto: "clouds"),
+                    (text: "What weather is coming?", tone: "Ask", service: "weather"),
+                    (text: "Why live up here alone?", tone: "Ask", goto: "alone"),
+                    (text: "Come watch the sky from my camp.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "Goodbye, Orrin.", end: true),
+                ],
+            ),
+            "hub": (
+                mood: Neutral,
+                say: ["ORRIN_HUB_01"],
+                choices: [
+                    (text: "What do the clouds say?", tone: "Ask", goto: "clouds"),
+                    (text: "What weather is coming?", tone: "Ask", service: "weather"),
+                    (text: "Why live up here alone?", tone: "Ask", goto: "alone"),
+                    (text: "Come watch the sky from my camp.", tone: "Kind", goto: "follow", without: ["following"]),
+                    (text: "Wait here for me.", goto: "stay", needs: ["following"]),
+                    (text: "That's all.", end: true),
+                ],
+            ),
+            "clouds": (
+                mood: Curious,
+                say: [
+                    "ORRIN_CLOUDS_01",
+                    "ORRIN_CLOUDS_02",
+                ],
+                then: "hub",
+            ),
+            "alone": (
+                mood: Neutral,
+                say: [
+                    "ORRIN_ALONE_01",
+                    "ORRIN_ALONE_02",
+                ],
+                then: "hub",
+            ),
+            "follow": (
+                mood: Happy,
+                say: ["ORRIN_FOLLOW_01"],
+                choices: [(text: "Come on, then.", act: Follow, end: true)],
+            ),
+            "stay": (
+                mood: Neutral,
+                say: ["ORRIN_STAY_01"],
+                choices: [(text: "I'll be back.", act: Stay, end: true)],
+            ),
+            // Orrin reads the sky: {now}, {clears} and {next} come from the weather.
+            "weather": (
+                mood: Curious,
+                say: ["ORRIN_WEATHER_01", "ORRIN_WEATHER_02"],
+                then: "hub",
+            ),
+            "weather_still": (
+                mood: Curious,
+                say: ["ORRIN_WEATHER_STILL_01"],
+                then: "hub",
+            ),
+        },
+    ),
+    // Brindlespheimer, the moldy wizard at the Rotting Gate. Blank face, slow speech; never follows.
+    "brindlespheimer": (
+        start: "greet",
+        again: "again",
+        nodes: {
+            "greet": (
+                mood: Neutral,
+                say: [
+                    "BRINDLESPHEIMER_GREET_01",
+                    "BRINDLESPHEIMER_GREET_02",
+                    "BRINDLESPHEIMER_GREET_03",
+                    "BRINDLESPHEIMER_GREET_04",
+                ],
+                choices: [
+                    (text: "What is this gate?", tone: "Ask", goto: "gate"),
+                    (text: "Are you all right?", tone: "Ask", goto: "well"),
+                    (text: "Take me out of my body.", tone: "Ask", goto: "help"),
+                    (text: "Goodbye.", end: true),
+                ],
+            ),
+            "again": (
+                mood: Neutral,
+                say: ["BRINDLESPHEIMER_AGAIN_01", "BRINDLESPHEIMER_AGAIN_02"],
+                choices: [
+                    (text: "What is this gate?", tone: "Ask", goto: "gate"),
+                    (text: "Are you all right?", tone: "Ask", goto: "well"),
+                    (text: "Take me out of my body.", tone: "Ask", goto: "help"),
+                    (text: "Goodbye.", end: true),
+                ],
+            ),
+            "hub": (
+                mood: Neutral,
+                say: ["BRINDLESPHEIMER_HUB_01"],
+                choices: [
+                    (text: "What is this gate?", tone: "Ask", goto: "gate"),
+                    (text: "Are you all right?", tone: "Ask", goto: "well"),
+                    (text: "Take me out of my body.", tone: "Ask", goto: "help"),
+                    (text: "That's all.", end: true),
+                ],
+            ),
+            "gate": (
+                mood: Neutral,
+                say: [
+                    "BRINDLESPHEIMER_GATE_01",
+                    "BRINDLESPHEIMER_GATE_02",
+                ],
+                then: "hub",
+            ),
+            "well": (
+                mood: Neutral,
+                say: [
+                    "BRINDLESPHEIMER_WELL_01",
+                    "BRINDLESPHEIMER_WELL_02",
+                ],
+                then: "hub",
+            ),
+            "help": (
+                mood: Neutral,
+                say: [
+                    "BRINDLESPHEIMER_HELP_01",
+                    "BRINDLESPHEIMER_HELP_02",
+                    "BRINDLESPHEIMER_HELP_03",
+                    "BRINDLESPHEIMER_HELP_04",
+                ],
+                then: "hub",
+            ),
+        },
+    ),
+    "sporrow_elder": (
+        start: "greet",
+        nodes: {
+            "greet": (
+                mood: Angry,
+                say: ["C04_01"],
+                choices: [(text: "Goodbye.", end: true)],
+            ),
+        },
+    ),
+    "aunt": (
+        start: "greet",
+        nodes: {
+            "greet": (
+                mood: Neutral,
+                say: ["C16_01"],
+                choices: [(text: "Goodbye.", end: true)],
+            ),
+        },
+    ),
+}

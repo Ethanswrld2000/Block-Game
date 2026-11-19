@@ -25,6 +25,7 @@ impl Plugin for WorldPlugin {
         app.insert_resource(ViewDistance { chunks: 12, vertical: 5 })
             .init_resource::<World>()
             .init_resource::<WorldStats>()
+            .init_resource::<PocketFloor>()
             .add_systems(crate::menu::GamePostStartup, setup_generator)
             .add_systems(
                 crate::menu::GameUpdate,
@@ -65,6 +66,16 @@ pub struct ViewDistance {
 
 #[derive(Resource, Clone)]
 pub struct Generator(pub Arc<WorldGen>);
+
+/// The Rotting Gate floor being played, if any: chunks in the pocket
+/// (`worldgen::in_pocket`) are built from it instead of the terrain, and never saved.
+#[derive(Resource, Default, Clone)]
+pub struct PocketFloor(pub Option<Arc<worldgen::Floor>>);
+
+fn in_pocket(p: ChunkPos) -> bool {
+    let o = p.origin();
+    worldgen::in_pocket(o.x, o.z)
+}
 
 struct LoadedChunk {
     data: Arc<Chunk>,
@@ -183,11 +194,29 @@ impl World {
         self.chunks.get(&pos).is_some_and(|c| c.meshed_version != Some(c.version))
     }
 
+    /// Drop every loaded or loading chunk in the pocket, so they are built
+    /// again from the new floor. Returns the entities to despawn.
+    pub fn forget_pocket(&mut self) -> Vec<Entity> {
+        let gone: Vec<ChunkPos> = self.chunks.keys().filter(|p| in_pocket(**p)).copied().collect();
+        let mut out = Vec::new();
+        for p in gone {
+            if let Some(c) = self.chunks.remove(&p) {
+                out.extend(c.entities);
+            }
+            self.mesh_tasks.remove(&p);
+        }
+        self.gen_tasks.retain(|p, _| !in_pocket(*p));
+        self.finished_meshes.retain(|(p, _, _)| !in_pocket(*p));
+        self.queue_key = None;
+        out
+    }
+
     /// Chunks edited since they were last saved, and mark them saved.
+    /// (Pocket chunks are never saved: each run builds its floor fresh.)
     pub fn take_modified(&mut self) -> Vec<(ChunkPos, Arc<Chunk>)> {
         self.chunks
             .iter_mut()
-            .filter(|(_, c)| c.modified)
+            .filter(|(p, c)| c.modified && !in_pocket(**p))
             .map(|(p, c)| {
                 c.modified = false;
                 (*p, c.data.clone())
@@ -328,6 +357,7 @@ fn schedule_generation(
     blocks: Res<Blocks>,
     save: Res<SaveDir>,
     view: Res<ViewDistance>,
+    pocket: Res<PocketFloor>,
     cam: Single<&Transform, With<FlyCamera>>,
 ) {
     let center = camera_chunk(&cam);
@@ -367,6 +397,11 @@ fn schedule_generation(
             continue;
         }
         let (g, reg, dir) = (generator.0.clone(), blocks.registry.clone(), save.clone());
+        if in_pocket(p) {
+            let floor = pocket.0.clone();
+            world.gen_tasks.insert(p, pool.spawn(async move { floor.map_or_else(|| Chunk::filled(voxel::BlockId::AIR), |f| g.generate_pocket(p, &f)) }));
+            continue;
+        }
         // A saved chunk (one the player changed) wins over a freshly generated one.
         world.gen_tasks.insert(p, pool.spawn(async move { dir.load(p, &reg).unwrap_or_else(|| g.generate(p)) }));
     }
@@ -536,7 +571,7 @@ pub fn unload_far(
             for e in c.entities {
                 commands.entity(e).despawn();
             }
-            if c.modified {
+            if c.modified && !in_pocket(p) {
                 save.store(p, &c.data, &blocks.registry);
             }
         }

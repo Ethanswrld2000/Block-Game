@@ -1,0 +1,28 @@
+// Encounters (game::encounter): fights the story starts, from a cutscene step or a story beat.
+//   foes:  foes.ron kinds and how many of each.
+//   from:  Around(radius): in a ring round where it starts (you, or the cutscene's mark);
+//          Place("camp" | "gate" | "sporrow" | "castle" | "forge", radius);
+//          Airship(radius): an airship comes down over the spot and drops them.
+//   then:  what beating them all does: (flag: "name", cutscene: "C12").
+// If you die, it resets and all its foes come back when you return.
+[
+    (
+        id: "bog_ambush",
+        foes: [("rot_brute", 1), ("mire_skitter", 2)],
+        from: Around(8.0),
+        then: (flag: "bog_ambush_beaten"),
+    ),
+    (
+        id: "airship_drop",
+        foes: [("sporecaster", 1), ("rot_brute", 2)],
+        from: Airship(3.0),
+        then: (flag: "airship_drop_beaten"),
+    ),
+    (
+        // The raid (C11 -> this -> C12): court soldiers dropped from an airship over the camp.
+        id: "raid_camp",
+        foes: [("court_soldier", 5)],
+        from: Airship(5.0),
+        then: (flag: "raid_beaten", cutscene: "C12"),
+    ),
+]

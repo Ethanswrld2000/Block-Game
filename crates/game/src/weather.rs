@@ -229,7 +229,8 @@ fn sample_climate(
         let col = g.0.column(p.x, p.z);
         let season = seasons.blended(seasons.at(&clock), |s| s.temperature);
         // Colder with height above the ground too (sky islands, mountain air).
-        let altitude = ((p.y - col.height.max(0)) as f32 / 400.0).max(0.0);
+        // (Not in the Rotting Gate's floors, which are built high in the sky.)
+        let altitude = if worldgen::in_pocket(p.x, p.z) { 0.0 } else { ((p.y - col.height.max(0)) as f32 / 400.0).max(0.0) };
         climate.target = (Vec3::from(biome.fog), biome.haze, [biome.temperature.min(col.climate.temperature), season, -altitude]);
         if climate.biome_title != biome.title {
             climate.biome_title = biome.title.clone();

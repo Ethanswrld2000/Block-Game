@@ -30,6 +30,10 @@ const FADE_OUT: f32 = 1.4;
 const SETTLE: f32 = 3.0;
 /// The same place doesn't announce itself again within this many seconds.
 const AGAIN: f64 = 90.0;
+/// Title cards for villages, barrows, dungeons and regions are off for now
+/// (Ethan found them too big and distracting; they need work before they
+/// come back). Finds still count and give XP. Other cards (`ShowCard`) still show.
+const PLACE_CARDS: bool = false;
 
 /// Put a title card on screen.
 #[derive(Message, Debug, Clone)]
@@ -42,6 +46,7 @@ pub struct ShowCard {
 enum Place {
     Village(u64),
     Barrow(u64),
+    Dungeon(u64),
     Wild,
 }
 
@@ -153,7 +158,10 @@ fn notice(
         let (dx, dz) = (x - v.center[0], z - v.center[2]);
         dx * dx + dz * dz <= v.radius * v.radius && (y - v.center[1]).abs() < 24
     });
-    let (place, card) = if let Some(b) = barrow {
+    let dungeon = wg.dungeons_in(x, z, x, z).into_iter().find(|d| d.inside(player.pos.to_array()));
+    let (place, card) = if let Some(d) = dungeon {
+        (Place::Dungeon(d.id), Some((format!("dungeon:{}", d.id), d.name.clone(), "A warded dungeon".to_string())))
+    } else if let Some(b) = barrow {
         (Place::Barrow(b.id), Some((format!("barrow:{}", b.id), b.name.clone(), "A barrow of the old dead".to_string())))
     } else if let Some(v) = village {
         (Place::Village(v.id), Some((format!("village:{}", v.id), v.name.clone(), format!("A village of {}", lower_the(&biome.title)))))
@@ -166,11 +174,13 @@ fn notice(
             && here.shown.get(&key).is_none_or(|t| now - t > AGAIN)
         {
             if progress.found.insert(key.clone()) {
-                let xp = if key.starts_with("barrow") { prog.xp.barrow } else { prog.xp.village };
+                let xp = if key.starts_with("barrow") || key.starts_with("dungeon") { prog.xp.barrow } else { prog.xp.village };
                 gain.write(crate::progress::GainXp { xp, why: format!("Found {title}") });
             }
             here.shown.insert(key, now);
-            cards.write(ShowCard { title, subtitle });
+            if PLACE_CARDS {
+                cards.write(ShowCard { title, subtitle });
+            }
             // Arriving in a village counts as arriving in its region too.
             here.biome = Some(biome.name.clone());
         }
@@ -196,7 +206,9 @@ fn notice(
             here.shown.insert(key, now);
             let sp = seasons.at(&clock);
             let season = &seasons.list[sp.current].title;
-            cards.write(ShowCard { title: biome.title.clone(), subtitle: format!("{season}, day {}", sp.day_in_season + 1) });
+            if PLACE_CARDS {
+                cards.write(ShowCard { title: biome.title.clone(), subtitle: format!("{season}, day {}", sp.day_in_season + 1) });
+            }
         }
     }
 }

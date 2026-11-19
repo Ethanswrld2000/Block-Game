@@ -187,9 +187,9 @@ fn open_close(
         ui.dirty = true;
     }
     // Walked away from the chest, or it was broken: stop showing it.
-    // (Personal storage isn't in the world: it stays open until you close it.)
+    // (Personal storage, the fridge and the golem's pack aren't in the world: they stay open until you close them.)
     if let Some(c) = ui.chest
-        && (c.x, c.y, c.z) != super::STORAGE_AT
+        && !super::virtual_chest(c)
         && (Vec3::new(c.x as f32 + 0.5, c.y as f32 + 0.5, c.z as f32 + 0.5).distance(player.pos + Vec3::Y) > 6.0 || !chests.map.contains_key(&c))
     {
         ui.chest = None;
@@ -663,6 +663,7 @@ fn describe(items: &Items, id: crate::items::ItemId) -> (String, String) {
         ItemKind::Block(_) => s.push_str("\nRight click to place"),
         ItemKind::Torch => s.push_str("\nGives light; right click to place"),
         ItemKind::Material => s.push_str("\nCrafting material"),
+        ItemKind::Machine(_) => s.push_str("\nA machine; right click open ground to set it down"),
     }
     if it.damage > 1.0 {
         s.push_str(&format!("\nHits for {:.0}", it.damage));

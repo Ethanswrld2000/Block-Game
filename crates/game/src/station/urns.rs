@@ -247,9 +247,12 @@ mod tests {
         let d = data();
         assert_eq!(d.urns[0].name, "ancestral");
         assert!(d.urns[0].item.is_none(), "the ancestral urn comes with the bedroll");
+        // The Rotting Gate's bosses drop these (game::delve::rules::urn_for); the Star Urn
+        // stands in the mountain castle (game::cast).
+        let from_bosses = ["carpentry", "gear", "hearth", "vehicle", "star"];
         for u in &d.urns[1..] {
             let giver = d.urns.iter().flat_map(|x| &x.steps).find(|s| s.gives == Gives::Urn(u.name.clone()));
-            assert!(giver.is_some(), "nothing gives the {}", u.title);
+            assert_eq!(giver.is_some(), !from_bosses.contains(&u.name.as_str()), "what gives the {}", u.title);
         }
     }
 
@@ -290,12 +293,40 @@ mod tests {
         let tool = d.urn("tool").unwrap();
         let mut p = Progress::default();
         p.finish("tool_bench");
-        // Planks... no: cordage fits only the improved bench; flint fits the
-        // carpentry bench (2) and the improved bench (3).
-        assert_eq!(p.wants(tool, "flint"), 5);
+        // Flint fits only the improved bench (3); put in with it named, the
+        // rest stays with you.
+        assert_eq!(p.wants(tool, "flint"), 3);
         let (n, _) = p.offer(tool, "flint", 5, Some("improved_tool_bench"));
         assert_eq!(n, 3);
-        assert_eq!(p.given("carpentry_bench", "flint"), 0);
+        assert_eq!(p.given("improved_tool_bench", "flint"), 3);
+    }
+
+    #[test]
+    fn stations_sit_in_their_own_urns() {
+        let d = data();
+        let in_urn = |urn: &str, step: &str| d.urn(urn).unwrap().step(step).is_some();
+        assert!(in_urn("vehicle", "machination_table"));
+        for s in ["carpentry_bench", "carpentry_table", "joiners_table", "door_frame", "glass_kiln"] {
+            assert!(in_urn("carpentry", s), "{s}");
+        }
+        for s in ["sewing_table", "armor_stand", "bladesmith_bench", "sharpening_stone", "rapier", "metal_armor", "gunsmith_bench"] {
+            assert!(in_urn("gear", s), "{s}");
+        }
+        for s in ["carpentry_bench", "carpentry_table", "machination_table", "sharpening_stone"] {
+            assert!(!in_urn("tool", s), "{s} left the tool urn");
+        }
+        assert!(d.urn("gear").unwrap().step("gunsmith_bench").unwrap().later);
+        // Every item an urn asks for or is carried as exists.
+        let (_, items) = crate::items::tests::load();
+        assert!(UrnData::from_ron(include_str!("../../../../assets/data/urns.ron"), |n| items.id(n).is_some()).is_ok());
+        // Every station step names a station the game knows.
+        for u in &d.urns {
+            for s in &u.steps {
+                if let Gives::Station(k) = &s.gives {
+                    assert!(super::super::StationKind::from_name(k).is_some(), "{k}");
+                }
+            }
+        }
     }
 
     #[test]

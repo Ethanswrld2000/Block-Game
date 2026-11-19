@@ -1,6 +1,8 @@
 //! Game client entry point. Each system lives in its own plugin.
 
+mod airship;
 mod atmosphere;
+mod avatar;
 mod autoshot;
 mod bench;
 mod blocks;
@@ -8,21 +10,30 @@ mod camera;
 mod chunk_mesh;
 mod clock;
 mod clouds;
+mod combat;
 mod creatures;
 mod lod;
 mod menu;
+mod npc;
 mod places;
 mod player;
 mod precipitation;
 mod progress;
 mod debug;
+mod delve;
+mod dungeon;
 mod hands;
 mod hud;
+mod cast;
 mod chop;
 mod interact;
 mod inventory;
 mod item_art;
 mod items;
+mod lines;
+mod cutscene;
+mod story;
+mod encounter;
 mod save;
 mod settings;
 mod sky;
@@ -85,6 +96,7 @@ fn main() {
             survival::SurvivalPlugin,
             inventory::InventoryPlugin,
         ))
-        .add_plugins((creatures::CreaturesPlugin, places::PlacesPlugin, progress::ProgressPlugin, station::StationPlugin, settings::SettingsPlugin, sound::SoundPlugin, bench::BenchPlugin))
+        .add_plugins((creatures::CreaturesPlugin, places::PlacesPlugin, progress::ProgressPlugin, station::StationPlugin, airship::AirshipPlugin, settings::SettingsPlugin, sound::SoundPlugin, bench::BenchPlugin, npc::NpcPlugin, avatar::AvatarPlugin, combat::CombatPlugin, dungeon::DungeonPlugin))
+        .add_plugins((delve::DelvePlugin, cast::CastPlugin, lines::LinesPlugin, encounter::EncounterPlugin, cutscene::CutscenePlugin, story::StoryPlugin))
         .run();
 }

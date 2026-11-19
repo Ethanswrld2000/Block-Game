@@ -1,0 +1,10 @@
+// What drinking a cauldron draught (items.ron, food tier 0) does.
+//   spell:   runs that spell (Levitation, Light, Warmth) without burning focus, even if
+//            you haven't learned it, for `seconds`
+//   focus:   focus given back at once
+{
+    "levitation_draught": (spell: Some(Levitation), seconds: 90.0),
+    "light_draught": (spell: Some(Light), seconds: 300.0),
+    "warmth_draught": (spell: Some(Warmth), seconds: 300.0),
+    "focus_tonic": (focus: 100.0),
+}

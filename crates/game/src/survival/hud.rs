@@ -595,7 +595,7 @@ fn overlays(
     s: Res<Survival>,
     rules: Res<Exposure>,
     sleep: Res<Sleep>,
-    camp: Res<Camp>,
+    (camp, respawn): (Res<Camp>, Res<super::RespawnAt>),
     mut dizzy: Query<&mut BackgroundColor, (With<Dizzy>, Without<SleepFade>)>,
     mut fade: Query<&mut BackgroundColor, (With<SleepFade>, Without<Dizzy>)>,
     mut death: Query<&mut Visibility, With<DeathScreen>>,
@@ -613,7 +613,9 @@ fn overlays(
     }
     if dead && let Ok(mut t) = hint.single_mut() {
         let wait = s.dead_for.unwrap_or(0.0) < 2.0;
-        let place = if camp.bedroll.is_some() { "at your camp" } else { "at the edge of the swamp" };
+        let place = if respawn.0.is_some() {
+            "outside the Rotting Gate"
+        } else if camp.bedroll.is_some() { "at your camp" } else { "at the edge of the swamp" };
         t.0 = if wait { String::new() } else { format!("Press Space to wake {place}") };
     }
 }

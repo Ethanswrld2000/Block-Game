@@ -41,9 +41,28 @@ pub const STORAGE_AT: (i32, i32, i32) = (0, -1_000_000, 0);
 /// Its size with the extra shelf (`station` shrinks it to `CHEST` without one).
 pub const STORAGE_BIG: (u8, u8) = (8, 7);
 
+/// The stone fridge (cooking station) is another chest that isn't in the world.
+pub const FRIDGE_AT: (i32, i32, i32) = (1, -1_000_000, 0);
+/// So is the pack the golem carries once it has working hands.
+pub const GOLEM_PACK_AT: (i32, i32, i32) = (2, -1_000_000, 0);
+/// The golem's pack: smaller than a chest.
+pub const GOLEM_PACK: (u8, u8) = (6, 4);
+
+/// A chest that lives with a station, not in the world: it stays open
+/// until you close it.
+pub fn virtual_chest(p: BlockPos) -> bool {
+    p.y == STORAGE_AT.1
+}
+
 /// The size a chest is loaded at.
 pub fn chest_size(p: BlockPos) -> (u8, u8) {
-    if (p.x, p.y, p.z) == STORAGE_AT { STORAGE_BIG } else { CHEST }
+    if (p.x, p.y, p.z) == STORAGE_AT {
+        STORAGE_BIG
+    } else if (p.x, p.y, p.z) == GOLEM_PACK_AT {
+        GOLEM_PACK
+    } else {
+        CHEST
+    }
 }
 /// Armor can keep at most this share of a blow off a bar.
 pub const MAX_PROTECTION: f32 = 0.75;

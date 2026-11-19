@@ -1,6 +1,8 @@
 // What a chest holds the first time it is opened: table -> [(item, min, max, chance 0..1)].
 // "village" fills chests found in village huts, "barrow" those underground in barrows.
 // Chests you place yourself start empty.
+// "rotting" is rolled for every foe that falls below the Rotting Gate, "rotting_warden" for its
+// wardens (game::delve): the only source of the dungeon materials.
 {
     "village": [
         ("smoked_fish", 1, 3, 0.7),
@@ -22,5 +24,14 @@
         ("fur_hood", 1, 1, 0.2),
         ("raw_iron", 1, 4, 0.5),
         ("cured_meat", 1, 2, 0.35),
+    ],
+    "rotting": [
+        ("mold_bloom", 1, 3, 0.7),
+        ("deepstone_shard", 1, 2, 0.35),
+    ],
+    "rotting_warden": [
+        ("warden_sigil", 1, 1, 1.0),
+        ("deepstone_shard", 3, 6, 1.0),
+        ("mold_bloom", 4, 8, 1.0),
     ],
 }

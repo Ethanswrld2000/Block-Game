@@ -31,9 +31,9 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   WESL (`import bevy_pbr::render::...`, `@group(constants::MATERIAL_BIND_GROUP)`); check compiler
   hints and the 0.20.1 example shaders on GitHub before assuming older API.
 - Content (blocks, items, foods, biomes, skill nodes) goes in RON data files, not code.
-- Chunks are 32^3 (`voxel::CHUNK_SIZE`). Chunks stack vertically. The world runs from unbreakable
-  `rootstone` at y -300 (`worldgen::WORLD_FLOOR`, top a little bumpy) to a ceiling at y 1000
-  (`worldgen::WORLD_CEILING`: nothing generates or can be placed there, movement stops under it).
+- Chunks are 32^3 (`voxel::CHUNK_SIZE`). Chunks stack vertically. The world floats (`worldgen::floating`):
+  nothing generates below `worldgen::WORLD_FLOOR` (y -520, the void; falling past it kills) and there is a
+  ceiling at y 1000 (`worldgen::WORLD_CEILING`: nothing generates or can be placed there, movement stops under it).
 - Heavy work (generation, lighting, meshing) runs on `AsyncComputeTaskPool`, never the main thread.
 - Pixel art is sampled nearest-neighbour (`ImagePlugin::default_nearest()`).
 - Target: 60 fps at 16-chunk view distance on Ethan's MacBook (Apple Silicon, Metal).
@@ -199,7 +199,8 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `station::urns`): each urn has a tree of steps in tiers 1-3; a step takes specific items (`needs`, put in a few at
   a time, `Progress.offer` fills open steps in tree order and passes leftovers on) and `gives` a `Station("kind")`
   placed by the urn, an `Upgrade` (code asks `Urns::has("step")`; models change), `Recipes` (benches.ron recipes
-  with that `unlock`) or another `Urn("name")` as an item (`tool_urn`, `hearth_urn`, `star_urn`, `golem_urn`).
+  with that `unlock`) or another `Urn("name")` as an item (`tool_urn`, `carpentry_urn`, `gear_urn`, `vehicle_urn`,
+  `hearth_urn`, `star_urn`, `golem_urn`).
   `later: true` steps fill and place their model but their use isn't built yet. The ancestral urn (sleeping station)
   stands by the bedroll; carried urns are set down with right click on the ground and picked up by crouching and
   right clicking with an empty hand. Hold an item + right click an urn to put one in (Shift: all it wants); empty hand
@@ -219,7 +220,8 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   base + tie, knapping stone (2 small rocks + stick = `rough_axe`, the first axe; portable bedroll and tent once
   taught). Tool bench: handle + material (stick + 3 small rocks = stone pickaxe, cobblestone tools; stone axe and
   flint spear after the improved tool bench). Carpentry bench: bed + vise, saw (logs -> planks, planks -> sticks,
-  chest). recipes.ron (Tab) keeps only what has no station yet. `Menus.still` stops walking at a bench.
+  chest). Carpentry table (tool urn, after the carpentry bench): top + joint tray, mallet; building supplies
+  (`floorboards`, `timber_wall`, `wattle_wall`, `thatch`: plain cube blocks). recipes.ron (Tab) keeps only what has no station yet. `Menus.still` stops walking at a bench.
   `BLOCKGAME_BOARD=stick,small_rock*2[,made]` (or `carpentry:log`, `mat:small_rock*2,stick`) opens a bench with
   those laid out (`-` skips a slot; the bench must stand, see above).
 - Chopping: an axe blow (`swing: Chop`) that lands on a log sends `chop::Chop`, which shakes the
@@ -237,8 +239,204 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   instead of Bevy's `Startup`/`Update` (entering `Screen::Game` runs the startup three once, then
   `GameUpdate` runs inside `Update`); systems in `First`/`PreUpdate`/`Last` need `.run_if(menu::in_game)`.
   No "quit to title" yet (game state isn't reset), so Save and quit closes the game.
-- Next: hands-on use for the `later: true` stations (cooking pot and cutting board first, then retire the Tab
-  crafting list), portable bedroll/tent use, upgrade effects (bedframe sleep, sharpening), twig regrowth.
+- Every station works now (no `later: true` steps left). Boards (`station::board`, rules in `station::bench`)
+  also cover the cooking pot (`SlotKind::Mix` slots fill in any order, recipes list a `mix`; a `Fire` slot burns
+  `fuel` from benches.ron for a recipe's `heat`; stirring swirls the pot), cutting board, smoking rack, iron anvil
+  (steel/alchemical anvil steps teach steel and spirit tools), sharpening stone (any tool: `Special::Sharpen`,
+  `station::Edges` speeds mining, saved to `edges.ron`), magical lens (anything: `Special::Study` shows what it's
+  made of and adds `lens:item` to the learned set; `Urns.studied`) and cauldron (draughts, unlocked by
+  `lens:item`, `a+b` unlocks need both; drinking one (`survival::Ate`, `assets/data/potions.ron`, food tier 0)
+  runs a spell free via `Spells.brewed` or gives focus). Herb rack teaches seasoned pot recipes. Stone fridge and
+  the golem's pack are chests not in the world (`inventory::virtual_chest`). Bedframe/double bed: `camp::Bed::rest`.
+  Telescope (`station::telescope`, `assets/data/constellations.ron`): on a clear night, look through it (zoomed
+  view, gizmo stars) and hold a constellation in the middle to chart it (`Urns.charted`, XP); improved telescope /
+  diamond lens show tier 2 / 3. Golem (`station::golem`): `golem_heart` wakes it (a walking `StationKind::Golem`,
+  right click follow/stay), `golem_hands` gives it a pack (crouch + right click) and it strikes hostile creatures
+  near it; saved to `golem.ron`. Cooking moved out of the Tab list (roast meat, peat stew).
+  `BLOCKGAME_BOARD=<station name>:...` opens any bench for screenshots (`pot:`, `cut:` short forms).
+- Bench tools are their own models (`models::tool`, `board::BenchTool` children of the station): click the tool
+  to lift it, it follows the cursor; click to swing it down (hammerstones, anvil hammer, knife, fan; one go when it
+  lands, `board::swing_pose`; the tool bench's hammer hangs on a rack, the knife drops edge-down), hold the button and
+  stir round the pot (ladle, paddle: a full turn = one stir) or saw back and forth (`board::Gesture`, `SAW_STROKE`). The sharpening wheel and the lens's
+  focusing dial (now on a stand beside the plate) turn in place when clicked. Benches can have several views
+  (`Layout.views`: pot and fire, cauldron and fire, rack and fire): W / S or the buttons under the title. The cooking
+  pot and cauldron are open with see-through broth/brew (`Mat::alpha`, `models::liquid`). What's in them floats upright
+  (`station::float`, pure: the ladle pushes things, they bump each other and the walls, tip when shoved and right
+  themselves). `station::particles`: pixel-art camera-facing sprites (bubbles that pop, and a `Burst` message of chips,
+  sparks, sawdust, bits, smoke, splashes, sparkles per go, `board::burst_of`). `station::forge`: when a recipe makes
+  something, the parts used fly together with a holographic glint (`GlintMaterial`, `assets/shaders/glint.wesl`)
+  flashing stronger, then pop (`craft_shimmer`/`craft_pop` sounds) into the made thing. `station::book`: a floating
+  recipe book at the left shows each recipe as pictures. The strip of your things pages (arrows or wheel), usable
+  first. The sharpening stone lays tools head to the wheel (`Layout.flip`). The telescope view is a round eyepiece
+  with cross hairs (`telescope::lens_image`) and hides the HUD. Screenshots: `BLOCKGAME_BOARDVIEW=1` (second view),
+  `BLOCKGAME_BOARDTOOL=lift|down|0.3`, `BLOCKGAME_SCOPE=1`, `BLOCKGAME_FORGE=0.8` (works the board and holds the
+  craft coming together that many seconds in).
+- NPCs: `game::npc` (kinds in `assets/data/npcs.ron`: name, title, looks colours, voice pitch/rate, walk speed,
+  dialogue tree key). Ctrl+Shift+N (Cmd+Shift+N) spawns the first kind ahead of you, following you. Pure parts:
+  `npc::motion` (critically damped `Spring` on every joint, `walk`/`idle`/`gesture` poses, `Gaze`: head on a slow
+  spring, pupils lead on a fast one, idle glances, blinks), `npc::voice` (`speak`: text -> timed syllables; mouth,
+  voice sounds `voice_0..3` and the typed subtitle all follow it), `npc::dialogue` (trees in `assets/data/dialogue.ron`,
+  `goto: "node"` works without `Some`; flags, `needs`/`without`, `once`, tone tags, `again` opening, acts
+  Follow/Stay/Wander). `npc::body`: jointed box model (hips, knees, torso, shoulders, elbows, neck, head) with eye
+  whites, iris + pupil that move, blinking lids, mood brows and a rectangular mouth with upper and lower teeth;
+  animates on real time. `npc::talk`: look at an NPC and press E: black bars, `Time<Virtual>` paused (so autoshot
+  uses real time), HUD and arms hidden, camera eases to frame the speaker; click/Space/E/Enter continue, replies by
+  mouse, 1-8 or W/S + Enter, Esc leaves. Not saved yet; no combat yet (room left in `npc::Order`).
+  Screenshots: `BLOCKGAME_NPC=3` spawns one 3 blocks ahead, `BLOCKGAME_TALK=1` talks to it (`=replies` jumps to the replies).
+- Rooms: `voxel::room::find_room` (pure) fills outward from a cell through open cells; walls (`BlockDef::is_wall`:
+  solid full cubes that aren't `plant` material; leaves, plants, water, torches are holes) stop it. Closed within
+  `MAX_ROOM` (4096) cells = a `Room` (`cells`, `shell`); otherwise `NotRoom::Open`/`InWall`/`Unknown` (unloaded).
+  `station::room_at` runs it on the world. A carried urn can only be set down inside a closed room with no other
+  urn in it (the ancestral urn by the bedroll is exempt but takes up its room). Insulation tiers, doors and the
+  shelter panel from the house plan aren't built yet.
+- Floating world: `worldgen::floating`. The land is one island, `MAIN_RADIUS` 2000 blocks (about 2.5 miles across,
+  coastline wobbles with `coast` noise), centred on spawn (`WorldGen::island_center`); the normal terrain is cut to it
+  and its rim is lifted above sea level so seas stay inside. Underside: a rounded bowl ~300 blocks deep at the
+  middle, hung with rounded lobes and stalactite drips (`underside`). Outer islands (jittered 520-block grid,
+  radius 50-260, tops at y -140..240) float past the coast with the same climate, biomes and underside, and no
+  water. `Column` has `land` (Void/Main/Outer), `bottom` and `water`; villages and barrows are main island only.
+  Rootstone no longer generates. `game::lod` draws undersides and leaves the void empty.
+- Machination table (vehicle urn, tier 1): `StationKind::MachinationTable`, a board like the
+  other benches (slots keel / rigging / envelope / engine, the drive wheel is a `ToolUse::Turn` tool). It builds
+  machines: items of kind `Machine("name")` in items.ron, numbers in `assets/data/machines.ron`. Only the airship so
+  far (8 planks, 6 cordage, 4 hide, 6 raw iron). `game::airship`: right click open ground with it to set it down
+  (bow the way you look; needs ~4 x 9 x 7 clear), right click or E to board, W/S ahead/astern, A/D turn, Space/Ctrl
+  rise/sink, E steps off over the rail. Pure flight rules in `airship::flight` (eased speed, oriented footprint,
+  stops on solid blocks one axis at a time). While aboard `player::walk` is off (`airship::not_aboard`) and the
+  player stands at the helm. Ships and who is aboard save to `airships.ron`. You can't walk on the deck (the ship
+  isn't a collider) and it can't be picked back up yet.
+- Urn split (Legacy prompts 2-4): the tool urn keeps only the tool bench and the anvils. Carpentry urn
+  (`carpentry_urn`): carpentry bench, carpentry table, Joiner's Table (`chair`, `table`), tier 2 Door Frame
+  (`wooden_door`) and Glass Kiln (`glass`, `window`; sand and glass need heat). Vehicle urn (`vehicle_urn`): the
+  machination table. Gear urn (`gear_urn`): Sewing Table (the clothes that were on the Tab list), Armor Stand (bark
+  and hide armor; iron helm and mail after the tier 3 `metal_armor` step), tier 2 Bladesmith Bench (`iron_dagger`,
+  `iron_sword`, moved off the iron anvil; `rapier` after the `rapier` step) and the Sharpening Stone, tier 3 Gunsmith
+  Bench (`later: true`: `makeshift_pistol` and `rifle` can be made, not fired). The ancestral urn gives the three new
+  urns (carpentry after the tool urn, gear and vehicle after carpentry). New benches reuse an older bench's board
+  (`StationKind::base`: layout, slots, tool, size) and add a few parts of their own in `models::parts`. Chairs,
+  tables and doors are plain cube blocks for now (doors don't open); glass and windows are see-through blocks.
+- Warded dungeons: `worldgen::dungeons` (pure). One per 1024-block cell (chance 0.7, 700+ blocks from spawn) plus a home
+  dungeon 170-290 blocks from spawn, away from the home village. A stone gatehouse with one doorway, a stair 20-27 down,
+  then 7-10 large rooms (13-23 wide, 6-9 high) on a 30-block grid in the dungeon's own frame, joined by 3-wide corridors
+  (a few loops); the furthest room is the warden's hall (25x25, boss). `Dungeon` has `rooms`, `links`, `spaces` (open
+  boxes past the veil: `inside(p)`), `spawns` (`SpawnPoint` pos/kind Guard|Pack|Boss/room: hooks for enemies, nothing
+  spawns them yet), `bounds`, `outside` (path spot), `guide`, `veil`. Spirit ward: `WorldGen::warded(x, y, z)` covers
+  dungeons, barrows and villages; `interact` won't break, place or pick in them ("A spirit ward holds this place").
+  `game::dungeon`: `Nearby` dungeons, a shimmering veil in each doorway, a guide NPC (`warden` kind in npcs.ron and
+  dialogue.ron, `Npc.post` = dungeon id) by each path. Dialogue `act: Spirit` (`Talk::take_cast`) starts
+  `dungeon::spirit`: a 5.6 s cinematic (bars, view tips down, two arms rise and drain to see-through glowing blue with
+  sparkles, turn over, drop). As a spirit: arm materials tinted blue, faint blue screen wash, health starts full and the
+  body's health waits (`Spirit.body`). Non-spirits inside a dungeon are put back on the path. A spirit that falls is cast
+  out to the path with its body's health back (no death); walking out 14+ blocks from the gate ends the spirit form.
+  `EnteredRoom` (first time per run) and `LeftDungeon { fell }` drive `dungeon::foes`: entering a room spawns the foes
+  (`combat::SpawnFoe`) of it and the rooms its corridors lead to, from the dungeon's spawn points (guards hollows, packs
+  mixed hollows and shades, boss a shade: `foes::kind_for`); the run ending despawns every foe whose home is inside that
+  dungeon. Spirit form isn't saved.
+  Screenshots: `BLOCKGAME_DUNGEON=1` starts on the home dungeon's path facing the door (its position is logged),
+  `BLOCKGAME_SPIRIT=cast` runs the cinematic, `=1` starts as a spirit.
+- Player body and third person: `game::avatar` builds your body with `npc::body::build` (the NPC rig; looks in
+  `assets/data/player.ron`, also used for the first-person arm) and moves it with `npc::body::drive` (shared with NPCs).
+  P toggles `camera::View` third person: the camera is pulled back 4 blocks (less if a wall is in the way) only for
+  drawing (`PostUpdate`), and put back at the eyes in `PreUpdate`, so aiming and every other system still use the eyes.
+  Off at benches and in talks (`Menus.still`). The body's right fist (`Rig.hands`) carries a `hands::Held`, so it holds
+  what you hold. Swings: `swing::Swing::limbs` gives the body's arms on the same keys as the first-person `pose`
+  (axe = flat horizontal swing with a bite and hold; pick = high overhead, straight down). `BLOCKGAME_VIEW=third` for screenshots.
+  Movement feel: the walk cycle advances by distance over `motion::stride(pace)` (about two unhurried strides a second
+  at walking speed) and goes on top of the sprung stance unfiltered; no up-and-down bob (Ethan found it too much); hips
+  sway sideways over the planted foot (`Pose.shift`), the chest's twist lags the hips (`Rig.chest` springs), arms
+  and forearms trail the legs; the body turns Minecraft-style while moving
+  (`motion::moving_facing`: toward the way you go, at most 75° from the head, forwards when backing up; standing it
+  turns once the head is 50° off) and leans into speeding up, stopping and turns (`Drive.sway`, from `avatar`).
+- Combat: `game::combat`. Swords (`swing: Slash` in items.ron: `iron_sword`, `steel_sword`, `spirit_sword`, made at
+  the iron anvil) cut on left click and never mine: the cut lands at `Swing::contact` as `interact::Swung`, hitting every
+  foe in a 55° sweep within `SWORD_REACH` (and the creature you aim at). Hold right click to block (`combat::Guard`,
+  `swing::guard_pose` / `Limbs::guard`); a block raised under `ai::PARRY_WINDOW` before a cut lands parries it (the foe
+  reels). Q shoves every foe close in front back and off balance (2 s cooldown). Foes: kinds in `assets/data/foes.ron`
+  (NPC rig looks, weapon item held via `hands::Held::holding`, damage, reach, swing time, sight/forget/leash, style:
+  aggression, caution, guard, poise). Pure mind in `combat::ai` (`Brain`: Idle, Return, Approach, Circle, Press, Attack,
+  Recover, Guard, Backoff, Stagger; at most `PRESSERS` press you at once, the rest circle; gives up past `forget` or
+  `leash` from home and walks back; guards when it sees your cut coming, guard breaks after `poise` blocks; hits
+  interrupt its swing; fury when hurt). Pure A* in `combat::path` (steps up one block, drops up to 3, no corner cutting,
+  budgeted; goes as near as it can when there's no way). Ghosts (`ghost: true`): own materials made blue and see-through,
+  shimmering per part, a faint light, `BurstKind::Wisp` particles trailing (and a burst on death). Sound `clash`.
+  Dev keys: Ctrl+Shift+J (Cmd on a Mac) spawns a Hollow Warden, Ctrl+Shift+H a Fen Shade, 6 blocks ahead; either gives
+  you an iron sword on the hotbar if you have no sword. Foes are not saved and don't despawn.
+- Rotting Gate (Legacy prompts 5-7): `worldgen::rotting` (pure). The gate is a mossy cobblestone arch placed once on the
+  main island 300-600 blocks from spawn (`WorldGen::rotting_gate`, warded, position logged). `rotting_floor(seed, run, depth)`
+  lays out a fresh floor per run on a 28-block grid: start room (way out in its west wall), halls, boss room with the stair;
+  `DEPTHS` = 4, each deeper floor has more rooms and spawns. Floors are built in the pocket (`POCKET`, x/z 60000, y 780,
+  `in_pocket`): `world::PocketFloor` makes chunk generation use `generate_pocket` there, pocket chunks are never saved and
+  `World::forget_pocket` drops them when the floor changes; no height cold or thin air there, no creatures or critters.
+  `game::delve`: walk into the gate to start a run at the deepest unlocked depth; rooms spawn foes as you reach them
+  (`combat::SpawnFoe` with `boost` per depth and a `tag`; each depth's boss is its own kind, see below); the boss's
+  `FoeSlain` opens the stair; the stair goes down a depth (after depth 4 it brings you back up); the start room's west
+  doorway leads back to the gate. Pure rules in `delve::rules` (`Delve { runs, deepest, cleared }`, saved to `delve.ron`;
+  clearing a depth's boss lets the next run start one deeper; `lost_on_death`). Dying below loses what you picked up or put
+  on during the run and wakes you outside the gate (`survival::RespawnAt`). Dungeon foes in foes.ron: `sporecaster`
+  (ranged: `ranged: Some((speed, color))` shoots bolts a raised guard blocks), `rot_brute` (slow, heavy), `mire_skitter`
+  (fast). Place name banners are off (`places::PLACE_CARDS`). Screenshots: `BLOCKGAME_GATE=1` starts facing the gate,
+  `BLOCKGAME_DELVE=n` starts a run at depth n.
+- Boss urns and the cast (Legacy prompts 8-9): each Rotting Gate depth has its own boss in foes.ron (`bog_warden`,
+  `spore_matron` (ranged), `gloam_stalker` (fast), `rotting_king`; `delve::rules::boss_for`). The first time each falls it
+  drops its urn (depth 1 carpentry, 2 gear, 3 hearth, 4 vehicle; `Delve.urns`, once per world); the ancestral urn no longer
+  gives those four. Foes below roll loot.ron `rotting`, bosses `rotting_warden` (`Loot::roll`): dungeon-only `mold_bloom`
+  (tier 2 urn steps need 3), `deepstone_shard` and `warden_sigil` (tier 3 steps need 4 + 1). The cast in npcs.ron and
+  dialogue.ron: Bram Holloway, Gilm, Wren Calloway, Liora Vance, Messler, Orrin Vale, Brindlespheimer. NPC looks have
+  `scale` (Gilm and Messler 0.55 = one block tall), `extras` (boxes on Head/Torso/Hips: caps, ears, hats, robes) and
+  `blank` (no expression). Kinds with `urn: Some(..)` are recruited by asking them to follow and leading them within
+  `npc::SETTLE` (5) blocks of that urn: they wander round it from then on (flag `recruited`). `npc::people` saves every
+  NPC but the gate guides to `people.ron` (order, flags, place). Nothing places the cast in the world yet: Ctrl+Shift+N
+  spawns the next kind each press; `BLOCKGAME_NPC=3 BLOCKGAME_NPC_KIND=gilm` for screenshots.
+- Landmarks and cast services (Legacy prompts 10-12): `worldgen::landmarks` (pure, once per world): Sporrow, a village of
+  giant mushroom houses (`mushroom_stem`/`mushroom_cap` blocks) 60-110 blocks from the Rotting Gate, a `Village` with
+  `folk: Folk::Mushroom` (so `villages_in`, warding and villagers include it; its villagers are the `mushroom_folk` creature,
+  wary lines in villagers.ron `mushroom`); Gilm's stone hut with a forge just outside it (`gilm_forge`); the castle
+  (`castle`): a walled court on a plinth on the highest level-enough mountain ground, a 7x7 tower 20 high with a stair round
+  the inside coming out on the roof. Positions are logged at startup. `game::cast`: Brindlespheimer stands by the gate
+  (`GATE_POST`, not saved); Gilm (at his hut) and Orrin (on the tower roof) are placed once per world, the Star Urn is set
+  on the tower once (`urns.placed["star"]`; the ancestral urn no longer gives it); `cast.ron` remembers what was placed.
+  `cast::services` (`assets/data/services.ron`, `trades.ron`): dialogue replies with `service:` are done between picking and
+  the next node (`npc::talk::{TalkInput, TalkRun}`, `Talk::take_service`/`go_to`, `{key}` vars, `Talk.extra` flags):
+  Orrin `weather` (WeatherState next/until), Messler `feed` (teaches the next `messler_teaches` recipe: `Urns.taught`, merged
+  into the learned set) and remarks on `board::Cooked` (made/failed/burnt), Gilm and Liora `commission:<n>` (Gilm only what
+  you can't make yet: `knows:<item>`), Wren `trade:<id>` (`stock:<id>` per day). `cast::wren`: on even days Wren lands a small
+  flying machine by the vehicle urn and stays (`WREN_POST`, not saved); the next day she flies off.
+- Voice lines, cutscenes, encounters (Legacy prompts 13-15): `assets/data/lines.ron` holds every voiced line (id, speaker,
+  text, `trigger` for barks, `direction`); dialogue.ron `say` lists line ids. `game::lines`: a line plays
+  `assets/voice/<id>.ogg` if it exists, else the `npc::voice` babble; the subtitle always shows. `lines::Bark { speaker,
+  trigger, at }` says a random bark (Messler's cooking remarks use it). `game::cutscene` (`assets/data/cutscenes.ron`; pure
+  runner and triggers in `cutscene::script`): triggers Near (NPC + line of sight), Area (place: camp, gate, sporrow, castle,
+  forge), Cleared (encounter), Boss (depth), Made (bench item, `board::Crafted`), Placed (block), TimeAfter (flag + hours);
+  actors are NPC dialogue keys, brought in (spawned, placed or walked to their mark via `Npc.cue`/`face`) before the steps:
+  Say, Camera, CameraMove, Walk, Face, Wait, Fade, Encounter, Flag, Clue, Give, Swap, Place. Draws through the talk's bars
+  (`Talk.scene`), locks input, hides the HUD, world keeps running; click ends a line, hold Esc skips (lasting steps still
+  apply). Once per world: `Story { flags, clues, played, made, placed }` saved to `story.ron`. Authored: C02 (Bram, no
+  trigger), C03 (near Brindlespheimer), C15 (airship made; Wren and Liora). `game::encounter` (`assets/data/encounters.ron`,
+  pure rules in `encounter::rules`): foes + counts, `from` Around(r) / Place(name, r) / Airship(r) (a red drop ship comes
+  down, they drop), `then` flag / cutscene. Started by a cutscene's Encounter step or `StartEncounter`; dying resets it
+  (foes go, all return when you're back within 48 blocks); the one running saves to `encounter.ron` and starts over on load.
+  Screenshots: `BLOCKGAME_CUTSCENE=C02`, `BLOCKGAME_ENCOUNTER=bog_ambush`.
+- Story beats, journal, the raid (Legacy prompts 16-17): `game::story` (`assets/data/story.ron`; pure rules in
+  `story::beats`): a beat lists conditions (NewWorld, Day, Hours, AtCamp, Urn, Step, Depth, Met, Recruited, Flag, Played,
+  DayAfter(`flag:`/`played:`/`step:` key, dates in `Story.when`), Near, Area, Made, Placed) and starts one cutscene; it fires
+  once (when that cutscene has played). C01-C16 are all wired (C06b and C08b are the second halves of C06 and C08).
+  `cutscene::Story` also keeps `met`, `when`, clues in order found, and `edits` (Swap/Place steps wait there until their
+  area is loaded: `apply_edits`). New cutscene steps `Follow(actor)` and `Remove(actor)`. Cutscene start requests queue
+  while one plays (`Playing::busy`). `cutscene::Places` (camp = bedroll, else the ancestral urn; gate, sporrow, castle,
+  forge) is shared with encounters (`Place(name, r)` now spawns at the place). Prisoners: Liora waits in a hall on depth
+  2 and Messler in the depth 3 boss room (`story::PRISON_POST`, gone with the floor) until C08/C09 set `liora_found`/
+  `messler_found` and they follow you. Flags from the game: `fed_messler` (Messler's feed service), `used_telescope`.
+  J opens the journal (clue texts in story.ron `clues`; `BLOCKGAME_JOURNAL=1`). New NPC kinds `sporrow_elder` and `aunt`. The raid: C11 (night after C10, at camp) ends in encounter `raid_camp`
+  (5 `court_soldier`s from an airship: rifle bolts at range, a cut within `close`, the new foes.ron field), then C12
+  removes Bram, places a `grave` block at camp and swaps Sporrow's mushroom blocks for `burnt_stem`/`burnt_cap`.
+- The aunt's island: `worldgen::landmarks::AuntIsland` (`WorldGen::aunt_island`, once per world): a sky island of its
+  own (radius 34, base `SKY_MIN` + 40, so above every cloud layer) 700-1300 blocks from spawn over the main island, kept
+  clear of the grid's sky islands; `islands_near` includes it, so `island_top`/`island_span`, the LOD and the island XP
+  see it. Drawn in `islands::place` (`draw_aunt_island`): a 7x7 stone cottage with a plank roof, a hearth (torch) under
+  a chimney on the back wall, a stone path with steps from the door to a broken arch (one pillar whole with a stub of
+  the span, the other snapped low, fallen stones). No trees round them (`keeps_clear`). `game::cast` places the aunt
+  outside her door once (`cast.ron`), so the C16 beat can fire; the position is logged at startup. No smoke effect yet.
+- Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen
 

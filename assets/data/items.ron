@@ -13,7 +13,8 @@
 //   stack:  how many share one cell (defaults: blocks and materials 32, torches 16, food 8, else 1)
 //   damage: how hard it hits a creature (defaults: tools 4, anything else 2, like a fist)
 //   swing:  Jab (default, a punch), Chop (axe: diagonal from the upper right) or
-//           Overhead (pick: straight down). Mining lands one blow per swing, when it connects.
+//           Overhead (pick: straight down) or Slash (sword: a fighting cut, never mines).
+//           Mining lands one blow per swing, when it connects.
 // Pictures: every item has a sprite in assets/textures/icons/ (items.png, weapons.png for
 // tools, blocks.png for blocks), 20 px per cell of its size. The same sprite is the held model.
 // After adding an item, run `python3 tools/gen_item_art.py` to give it a placeholder sprite.
@@ -46,6 +47,21 @@
         (name: "cobblestone", title: "Cobblestone", kind: Block("cobblestone"), mass: 2.0),
         (name: "log", title: "Log", kind: Block("log"), mass: 2.0),
         (name: "moss", title: "Moss", kind: Block("moss"), mass: 0.5),
+        // Building supplies, made at the carpentry table.
+        (name: "floorboards", title: "Floorboards", kind: Block("floorboards"), mass: 1.0),
+        (name: "timber_wall", title: "Timber Wall", kind: Block("timber_wall"), mass: 1.6),
+        (name: "wattle_wall", title: "Wattle Wall", kind: Block("wattle_wall"), mass: 1.2),
+        (name: "thatch", title: "Thatch", kind: Block("thatch"), mass: 0.4),
+        // Furniture, doors and glass from the carpentry urn's benches. Plain blocks for now.
+        (name: "chair", title: "Chair", kind: Block("chair"), mass: 2.0),
+        (name: "table", title: "Table", kind: Block("table"), mass: 4.0),
+        (name: "wooden_door", title: "Wooden Door", kind: Block("wooden_door"), mass: 3.0),
+        (name: "glass", title: "Glass", kind: Block("glass"), mass: 1.0),
+        (name: "window", title: "Window", kind: Block("window"), mass: 1.2),
+        (name: "mushroom_stem", title: "Mushroom Stem", kind: Block("mushroom_stem"), mass: 0.8),
+        (name: "mushroom_cap", title: "Mushroom Cap", kind: Block("mushroom_cap"), mass: 0.6),
+        // Machines, built at the machination table and set down in the world (machines.ron).
+        (name: "airship", title: "Airship", kind: Machine("airship"), mass: 12.0, size: (3, 2), stack: 1),
         // Food. Tier 1 is a quick buff, tier 4 can pull you back from a mortal wound.
         (name: "marsh_berries", title: "Marsh Berries", kind: Food(tier: 1, satiety: 6.0), mass: 0.2),
         (name: "swamp_reed", title: "Swamp Reed Hearts", kind: Food(tier: 1, satiety: 8.0), mass: 0.3),
@@ -108,22 +124,87 @@
             name: "hide_jerkin", title: "Hide Jerkin", mass: 3.0, size: (2, 3),
             kind: Wear(slot: BodyArmor, insulation: 2.0, protection: { Damage: 0.15, Blood: 0.3 }),
         ),
+        // Iron armor from the armor stand once the gear urn's metal armor step is done.
+        (
+            name: "iron_helm", title: "Iron Helm", mass: 3.0, size: (2, 2),
+            kind: Wear(slot: HeadArmor, protection: { Damage: 0.25, Injuries: 0.2 }),
+        ),
+        (
+            name: "iron_mail", title: "Iron Mail", mass: 9.0, size: (2, 3),
+            kind: Wear(slot: BodyArmor, protection: { Damage: 0.3, Blood: 0.35, Injuries: 0.15 }),
+        ),
         // Bags are worn on the back and hold a grid of their own.
         (name: "reed_satchel", title: "Reed Satchel", mass: 0.6, size: (3, 3), kind: Bag(grid: (5, 4))),
         (name: "hide_pack", title: "Hide Pack", mass: 1.5, size: (4, 4), kind: Bag(grid: (7, 6))),
         // From creatures.
         (name: "raw_meat", title: "Raw Meat", kind: Food(tier: 1, satiety: 6.0), mass: 0.5, stack: 6),
         (name: "roast_meat", title: "Roast Meat", kind: Food(tier: 2, satiety: 30.0), mass: 0.4, stack: 6),
+        // Cut at the cutting board, cooked in the cooking pot (benches.ron).
+        (name: "meat_strips", title: "Meat Strips", kind: Food(tier: 1, satiety: 3.0), mass: 0.15, stack: 12),
+        (name: "chopped_reeds", title: "Chopped Reed Hearts", kind: Food(tier: 1, satiety: 4.0), mass: 0.15, stack: 12),
+        (name: "fish_flakes", title: "Fish Flakes", kind: Food(tier: 1, satiety: 9.0), mass: 0.2, stack: 12),
+        (name: "roast_slices", title: "Roast Slices", kind: Food(tier: 2, satiety: 17.0), mass: 0.2, stack: 12),
+        (name: "reed_broth", title: "Reed Broth", kind: Food(tier: 2, satiety: 22.0), mass: 0.5, stack: 4),
+        (name: "bog_stew", title: "Bog Stew", kind: Food(tier: 3, satiety: 50.0), mass: 1.2, size: (1, 2), stack: 2),
+        // Brewed in the cauldron; drinking one runs a spell for free for a while (potions.ron).
+        (name: "levitation_draught", title: "Levitation Draught", kind: Food(tier: 0, satiety: 1.0), mass: 0.3, size: (1, 2), stack: 4),
+        (name: "light_draught", title: "Light Draught", kind: Food(tier: 0, satiety: 1.0), mass: 0.3, size: (1, 2), stack: 4),
+        (name: "warmth_draught", title: "Warmth Draught", kind: Food(tier: 0, satiety: 1.0), mass: 0.3, size: (1, 2), stack: 4),
+        (name: "focus_tonic", title: "Focus Tonic", kind: Food(tier: 0, satiety: 1.0), mass: 0.3, size: (1, 2), stack: 4),
         (name: "spirit_ember", title: "Spirit Ember", kind: Material, mass: 0.05, stack: 16),
         (name: "old_coin", title: "Old Coin", kind: Material, mass: 0.02, stack: 64),
+        // Only found below the Rotting Gate (loot.ron "rotting", "rotting_warden"); tier 2 and 3 urn steps need them.
+        (name: "mold_bloom", title: "Mold Bloom", kind: Material, mass: 0.05, stack: 32),
+        (name: "deepstone_shard", title: "Deepstone Shard", kind: Material, mass: 0.3, stack: 32),
+        (name: "warden_sigil", title: "Warden's Sigil", kind: Material, mass: 0.1, stack: 8),
         // A weapon.
+        // Hammered at the iron anvil (benches.ron); steel and spirit ones once it's upgraded.
+        (
+            name: "iron_pickaxe", title: "Iron Pickaxe", mass: 2.8, size: (2, 3), damage: 7.0, swing: Overhead,
+            kind: Tool(speeds: { "stone": 6.0, "ore": 5.5, "soil": 1.6 }),
+        ),
+        (
+            name: "iron_axe", title: "Iron Axe", mass: 2.2, size: (1, 3), damage: 9.0, swing: Chop,
+            kind: Tool(speeds: { "log": 6.0, "wood": 6.0, "plant": 4.0 }),
+        ),
+        (name: "iron_shovel", title: "Iron Shovel", mass: 2.0, size: (1, 3), damage: 5.0, kind: Tool(speeds: { "soil": 6.0 })),
+        (
+            name: "steel_pickaxe", title: "Steel Pickaxe", mass: 2.6, size: (2, 3), damage: 9.0, swing: Overhead,
+            kind: Tool(speeds: { "stone": 8.5, "ore": 8.0, "soil": 2.0 }),
+        ),
+        (
+            name: "steel_axe", title: "Steel Axe", mass: 2.0, size: (1, 3), damage: 11.0, swing: Chop,
+            kind: Tool(speeds: { "log": 8.5, "wood": 8.5, "plant": 5.0 }),
+        ),
+        (
+            name: "spirit_pickaxe", title: "Spirit-Etched Pickaxe", mass: 2.2, size: (2, 3), damage: 10.0, swing: Overhead,
+            kind: Tool(speeds: { "stone": 11.0, "ore": 10.5, "soil": 2.5 }),
+        ),
+        (
+            name: "spirit_axe", title: "Spirit-Etched Axe", mass: 1.8, size: (1, 3), damage: 14.0, swing: Chop,
+            kind: Tool(speeds: { "log": 11.0, "wood": 11.0, "plant": 6.0 }),
+        ),
+        // Swords: swung with a quick diagonal cut (left click, never mines); hold right click
+        // to block, a block just as the cut comes parries it. Hammered at the iron anvil.
+        (name: "iron_sword", title: "Iron Sword", mass: 1.6, size: (1, 3), damage: 9.0, swing: Slash, kind: Tool(speeds: {})),
+        (name: "steel_sword", title: "Steel Sword", mass: 1.4, size: (1, 3), damage: 12.0, swing: Slash, kind: Tool(speeds: {})),
+        (name: "spirit_sword", title: "Spirit-Etched Sword", mass: 1.2, size: (1, 3), damage: 15.0, swing: Slash, kind: Tool(speeds: {})),
         (name: "flint_spear", title: "Flint Spear", mass: 1.6, size: (1, 4), damage: 10.0, kind: Tool(speeds: {})),
+        // From the gear urn's bladesmith bench.
+        (name: "iron_dagger", title: "Iron Dagger", mass: 0.6, size: (1, 2), damage: 6.0, swing: Slash, kind: Tool(speeds: {})),
+        (name: "rapier", title: "Rapier", mass: 1.0, size: (1, 3), damage: 10.0, swing: Slash, kind: Tool(speeds: {})),
+        // From the gunsmith bench. They can't be fired yet (no ranged combat).
+        (name: "makeshift_pistol", title: "Makeshift Pistol", kind: Material, mass: 1.2, size: (2, 1), stack: 1),
+        (name: "rifle", title: "Rifle", kind: Material, mass: 3.5, size: (1, 4), stack: 1),
         // Urns: carry one and right click the ground to set it down; its station grows around it
         // (urns.ron). Crouch and right click an urn with an empty hand to pick it back up.
         (name: "tool_urn", title: "Tool Urn", kind: Material, mass: 6.0, size: (2, 2), stack: 1),
         (name: "hearth_urn", title: "Hearth Urn", kind: Material, mass: 6.0, size: (2, 2), stack: 1),
         (name: "star_urn", title: "Star Urn", kind: Material, mass: 6.0, size: (2, 2), stack: 1),
         (name: "golem_urn", title: "Golem Urn", kind: Material, mass: 6.0, size: (2, 2), stack: 1),
+        (name: "carpentry_urn", title: "Carpentry Urn", kind: Material, mass: 6.0, size: (2, 2), stack: 1),
+        (name: "gear_urn", title: "Gear Urn", kind: Material, mass: 6.0, size: (2, 2), stack: 1),
+        (name: "vehicle_urn", title: "Vehicle Urn", kind: Material, mass: 6.0, size: (2, 2), stack: 1),
         // Made on the camp mat once the ancestral urn teaches them; using them is still to come.
         (name: "portable_bedroll", title: "Portable Bedroll", kind: Material, mass: 2.5, size: (2, 1), stack: 1),
         (name: "portable_tent", title: "Portable Tent", kind: Material, mass: 5.0, size: (2, 2), stack: 1),

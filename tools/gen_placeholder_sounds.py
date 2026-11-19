@@ -100,9 +100,32 @@ def main():
     save("dig_plant", highpass(noise(0.15), 0.15) * env(int(RATE * 0.15), 0.005, 0.04))
     save("break", lowpass(noise(0.4), 0.15) * env(int(RATE * 0.4), 0.002, 0.12) + thud(0.4, 0.04, 0.1))
     save("place", thud(0.15, 0.1, 0.04, pitch=140))
+    # Cooking: a slosh of the ladle with a few bubbles, and a knife through food onto wood.
+    tt = t(0.45)
+    slosh = lowpass(noise(0.45), 0.06) * np.sin(np.pi * tt / 0.45) ** 2
+    bubbles = np.zeros_like(tt)
+    for k, (start, f) in enumerate([(0.08, 420), (0.17, 560), (0.26, 380), (0.33, 640)]):
+        seg = t(0.06)
+        i = int(RATE * start)
+        bubbles[i:i + len(seg)] += np.sin(2 * np.pi * (f + 900 * seg) * seg) * env(len(seg), 0.002, 0.015) * 0.5
+    save("stir", slosh + bubbles)
+    # A bench making something: a rising shimmer while the parts draw together, then a bright pop.
+    tt = t(1.1)
+    shimmer = sum(np.sin(2 * np.pi * (f + 500 * tt) * tt) for f in (880, 1320, 1760)) * (tt / 1.1) ** 2 * 0.25
+    shimmer *= 0.6 + 0.4 * np.sin(2 * np.pi * 18 * tt)
+    save("craft_shimmer", shimmer * np.minimum(1, (1.1 - tt) * 20))
+    tt = t(0.35)
+    pop = np.sin(2 * np.pi * (300 + 1400 * np.exp(-tt * 30)) * tt) * env(len(tt), 0.001, 0.05)
+    chime = sum(np.sin(2 * np.pi * f * tt) * env(len(tt), 0.002, 0.12) for f in (1046, 1568, 2093)) * 0.35
+    save("craft_pop", pop + chime + highpass(noise(0.35), 0.4) * env(len(tt), 0.001, 0.02) * 0.3)
+    save("knife", np.concatenate([highpass(noise(0.05), 0.3) * env(int(RATE * 0.05), 0.001, 0.015) * 0.5, thud(0.12, 0.18, 0.03, pitch=260)]))
     # Fighting.
     save("swing", highpass(noise(0.22), 0.1) * np.sin(np.pi * t(0.22) / 0.22) ** 2 * 0.6)
     save("hit", thud(0.2, 0.3, 0.05, pitch=110))
+    # Blades meeting: a bright, inharmonic ring with a sharp click.
+    tt = t(0.6)
+    ring = sum(np.sin(2 * np.pi * f * tt) * a for f, a in [(1180, 1.0), (1730, 0.7), (2610, 0.5), (3470, 0.3)]) * env(len(tt), 0.001, 0.12)
+    save("clash", ring * 0.5 + highpass(noise(0.6), 0.4) * env(len(tt), 0.001, 0.01) * 0.6)
     save("hurt", thud(0.3, 0.06, 0.09, pitch=70))
     save("creature_hurt", np.sin(2 * np.pi * (300 - 500 * t(0.25)) * t(0.25)) * env(int(RATE * 0.25), 0.01, 0.1) + 0.3 * thud(0.25, 0.2, 0.05))
     # Spirits: a breathy rising tone.
@@ -132,6 +155,7 @@ def main():
     save("thunder", lowpass(n, 0.004) * env(len(n), 0.02, 1.3) * 3 + highpass(n, 0.2) * env(len(n), 0.001, 0.08))
 
     critters()
+    voices()
 
 
 def sweep(seconds, f0, f1, decay=0.05, attack=0.004):
@@ -175,6 +199,25 @@ def critters():
         return sequence([burst] * bursts, 0.045)
     save("cricket_chirp_0", trill(3, 4400))
     save("cricket_chirp_1", trill(4, 4700))
+
+
+def voices():
+    # NPC speech: one short voiced syllable per file (a buzzy tone shaped by two
+    # vowel formants). The game plays one per syllable at the speaker's pitch.
+    def syllable(f1, f2, seconds=0.13, f0=150):
+        tt = t(seconds)
+        glide = f0 * (1 + 0.08 * np.sin(np.pi * tt / seconds))
+        phase = 2 * np.pi * np.cumsum(glide) / RATE
+        x = 0
+        for h in range(1, 30):
+            f = glide * h
+            w = np.exp(-((f - f1) / 120) ** 2) + 0.6 * np.exp(-((f - f2) / 200) ** 2) + 0.15 / h
+            x = x + np.sin(h * phase) * w
+        return x * np.sin(np.pi * tt / seconds) ** 0.6
+    save("voice_0", syllable(730, 1090))  # ah
+    save("voice_1", syllable(530, 1840))  # eh
+    save("voice_2", syllable(570, 840))   # oh
+    save("voice_3", syllable(300, 870, 0.1))  # oo
 
 
 if __name__ == "__main__":
