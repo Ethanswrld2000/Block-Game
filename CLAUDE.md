@@ -498,7 +498,8 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   tent wakes you warm); inside a pitched tent `find_cover` gives `Cover::Room`; crouch + empty hand right click packs it
   up. Home camp and respawn don't move. Snapped twigs grow back after `farming::regrow::REGROW_DAYS` (2) game days if the
   cell is empty and the trunk still stands (`twigs.ron`).
-- Next: retire the rest of the Tab crafting list.
+- The Tab crafting list is empty (recipes.ron kept for later): cordage, torches and ember herbs are made on the camp mat;
+  the Crafting side tab hides while the list is empty.
 
 ## Testing without a screen
 

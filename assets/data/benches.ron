@@ -36,6 +36,10 @@
         // Camp mat (sleeping station): the first axe, then gear for sleeping away from home.
         (station: "camp_mat", slots: {"base": ("small_rock", 2), "tie": ("stick", 1)}, work: 3, makes: ("rough_axe", 1)),
         (station: "camp_mat", slots: {"base": ("small_rock", 4), "tie": ("stick", 4)}, work: 3, makes: ("campfire", 1)),
+        (station: "camp_mat", slots: {"base": ("plant_fiber", 3)}, work: 2, makes: ("cordage", 1)),
+        (station: "camp_mat", slots: {"base": ("coal", 1), "tie": ("stick", 1)}, work: 1, makes: ("torch", 4)),
+        (station: "camp_mat", slots: {"base": ("peat", 1), "tie": ("stick", 1)}, work: 1, makes: ("torch", 2)),
+        (station: "camp_mat", slots: {"base": ("spirit_ember", 3), "tie": ("plant_fiber", 2)}, work: 3, makes: ("ember_herb", 1)),
         (station: "camp_mat", slots: {"base": ("hide", 2), "tie": ("cordage", 3)}, work: 4, makes: ("portable_bedroll", 1), unlock: "portable_bedroll"),
         (station: "camp_mat", slots: {"base": ("hide", 4), "tie": ("stick", 8)}, work: 6, makes: ("portable_tent", 1), unlock: "portable_tent"),
 
