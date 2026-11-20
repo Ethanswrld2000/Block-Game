@@ -275,13 +275,27 @@ pub mod tests {
         let axe = items.id("stone_axe");
         let hand = items.break_time(None, stone).unwrap();
         let picked = items.break_time(pick, stone).unwrap();
-        assert!(picked < 1.0 && hand > 8.0, "pick {picked}, hand {hand}");
+        assert!(picked < hand && hand > 8.0, "pick {picked}, hand {hand}");
         // Logs need an axe: not bare hands, not a pickaxe.
         assert!(items.break_time(axe, log).is_some_and(|t| t < 1.0));
         assert_eq!(items.break_time(pick, log), None);
         assert_eq!(items.break_time(None, log), None);
         // A torch in the hand mines like a bare hand.
         assert_eq!(items.break_time(items.id("torch"), stone), Some(hand));
+    }
+
+    #[test]
+    fn base_tools_take_about_eight_swings() {
+        use crate::swing::{blow_share, Swing};
+        let (blocks, items) = load();
+        let swings = |tool: &str, block: &str, swing: Swing| {
+            let t = items.break_time(items.id(tool), blocks.get(blocks.expect(block))).unwrap();
+            (1.0 / blow_share(swing, t) - 1e-4).ceil() as u32
+        };
+        assert_eq!(swings("rough_axe", "log", Swing::Chop), 8);
+        assert_eq!(swings("rough_axe", "swamp_log", Swing::Chop), 8);
+        assert_eq!(swings("stone_pickaxe", "stone", Swing::Overhead), 8);
+        assert_eq!(swings("stone_pickaxe", "cobblestone", Swing::Overhead), 8);
     }
 
     #[test]

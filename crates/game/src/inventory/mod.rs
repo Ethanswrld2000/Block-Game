@@ -266,13 +266,13 @@ fn setup_data(mut commands: Commands, items: Res<Items>, blocks: Res<crate::bloc
     commands.insert_resource(loot);
 }
 
-/// Mined blocks drop their items into your pockets, or onto the ground if full.
+/// Mined blocks (and snapped twigs, picked pebbles) drop their items on the
+/// ground, where you pick them up by walking over them.
 #[allow(clippy::too_many_arguments)]
 fn collect_mined(
     mut mined: MessageReader<Mined>,
     items: Res<Items>,
     drops: Option<Res<Drops>>,
-    mut inv: ResMut<Inventory>,
     mut chests: ResMut<Chests>,
     mut spill: MessageWriter<world_items::Spill>,
     mut roll: Local<u64>,
@@ -294,10 +294,8 @@ fn collect_mined(
         *roll += 1;
         got.extend(drops.roll(&items, m.block, m.pos, *roll));
         let at = Vec3::new(m.pos.x as f32 + 0.5, m.pos.y as f32 + 0.5, m.pos.z as f32 + 0.5);
-        for s in got {
-            if let Some(left) = inv.add(&items, s) {
-                spill.write(world_items::Spill { stack: left, at });
-            }
+        for stack in got {
+            spill.write(world_items::Spill { stack, at });
         }
     }
 }
