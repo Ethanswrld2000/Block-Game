@@ -466,6 +466,16 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   Campfire: block `campfire` (`shape: torch`, so `torches` tracks it: `Torches::fires()` gives `Fire::Torch|Campfire`;
   drawn as a stone ring, crossed sticks, a big flame and a brighter light), made on the camp mat (4 small rocks + 4 sticks);
   warms up to +24 °C close by, fading out at 10 blocks (`CAMPFIRE_MAX` 28 all told).
+- Map and waypoints: `game::map`. M opens a top-down map 2048 blocks across (`map::paint`, pure, on the
+  `AsyncComputeTaskPool`; biome colour shaded by height, blue water, dark void), repainted when opened over 512 blocks
+  from where it was painted. Red mark = you, gold = waypoints. On the map: click adds a waypoint, Space marks where you
+  stand, right click removes one. Waypoints within 60° of where you look show along the top of the screen with distance.
+  Saved to `waypoints.ron`. `BLOCKGAME_MAP=1` opens it for screenshots.
+- Farming: `game::farming` + `assets/data/crops.ron` (stages = plant blocks, `days` per stage, `wet` speed-up with water
+  within 4 blocks). Seeds are block items for stage 0 (`barley_seeds` from tall grass, `tuber_eye` from ferns); `interact`
+  only lets `shape: plant` blocks go on soil. `Fields` (saved to `crops.ron`) remembers each sown crop; every 2 s loaded
+  crops are set to the stage they've reached. Ripe barley drops `barley` (3 make `bread` in the cooking pot), ripe tubers
+  `mire_tuber` (food). Tiles `barley_0..2`, `tuber_0..2` in `gen_placeholder_art.py`.
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen

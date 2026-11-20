@@ -53,5 +53,11 @@
         "burnt_stem": 46,
         "burnt_cap": 47,
         "grave": 48,
+        "barley_0": 49,
+        "barley_1": 50,
+        "barley_2": 51,
+        "tuber_0": 52,
+        "tuber_1": 53,
+        "tuber_2": 54,
     },
 )

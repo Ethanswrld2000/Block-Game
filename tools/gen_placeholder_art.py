@@ -467,6 +467,52 @@ def grave(s):
     return img
 
 
+def barley(s, stage):
+    """Bog barley: short green shoots, then tall stalks, then golden heads."""
+    img = np.zeros((T, T, 4))
+    r = np.random.default_rng(s)
+    tall = (10, 20, 27)[stage]
+    for _ in range(10 + stage * 4):
+        x = int(r.integers(3, T - 3))
+        h = int(tall * (0.7 + 0.3 * r.random()))
+        lean = r.uniform(-0.15, 0.15)
+        for i in range(h):
+            xx = int(round(x + lean * i)) % T
+            if stage == 2:
+                g = np.array([176, 150, 70]) * (0.8 + 0.3 * i / h)
+            else:
+                g = np.array([84, 140, 52]) * (0.8 + 0.3 * i / h)
+            img[T - 1 - i, xx] = (*g, 255)
+        if stage == 2:
+            top = T - h
+            for dy in range(5):
+                for dx in (-1, 0, 1):
+                    yy, xx = top + dy, int(round(x + lean * h)) + dx
+                    if 0 <= yy < T and 0 <= xx < T and (dx == 0 or dy % 2 == 0):
+                        img[yy, xx] = (220, 186, 84, 255)
+    return img
+
+
+def tuber(s, stage):
+    """Mire tuber: a leafy rosette that grows; when ripe the tuber shows at the soil."""
+    img = np.zeros((T, T, 4))
+    r = np.random.default_rng(s)
+    reach = (6, 10, 13)[stage]
+    for k in range(5 + stage * 2):
+        ang = np.pi * (0.15 + 0.7 * k / (4 + stage * 2)) + r.uniform(-0.1, 0.1)
+        for i in range(reach):
+            x = int(round(15.5 + np.cos(ang) * i * 1.1))
+            y = int(round(T - 2 - np.sin(ang) * i))
+            for w in (-1, 0, 1):
+                if 0 <= y < T and 0 <= x + w < T:
+                    img[y, x + w] = (*(np.array([52, 112, 58]) * (0.8 + 0.3 * r.random())), 255)
+    if stage == 2:
+        ys, xs = np.mgrid[0:T, 0:T]
+        body = ((xs - 15.5) ** 2 / 30 + (ys - (T - 3)) ** 2 / 9) < 1
+        img[body] = (150, 96, 70, 255)
+    return img
+
+
 TILES = [
     ("grass_top", grass_top), ("grass_side", grass_side), ("dirt", dirt), ("stone", stone),
     ("cobblestone", cobble), ("sand", sand), ("mud", mud), ("moss", moss),
@@ -488,6 +534,8 @@ TILES = [
     ("chair", chair), ("table", table), ("wooden_door", wooden_door), ("glass", glass), ("window", window),
     ("mushroom_stem", mushroom_stem), ("mushroom_cap", mushroom_cap), ("mushroom_gills", mushroom_gills),
     ("burnt_stem", burnt_stem), ("burnt_cap", burnt_cap), ("grave", grave),
+    ("barley_0", lambda s: barley(s, 0)), ("barley_1", lambda s: barley(s, 1)), ("barley_2", lambda s: barley(s, 2)),
+    ("tuber_0", lambda s: tuber(s, 0)), ("tuber_1", lambda s: tuber(s, 1)), ("tuber_2", lambda s: tuber(s, 2)),
 ]
 
 

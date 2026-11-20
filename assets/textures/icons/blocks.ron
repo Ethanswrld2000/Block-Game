@@ -30,5 +30,7 @@
         "mushroom_stem": (86, 44, 20, 20),
         "mushroom_cap": (108, 44, 20, 20),
         "campfire": (130, 44, 40, 40),
+        "barley_seeds": (172, 44, 20, 20),
+        "tuber_eye": (194, 44, 20, 20),
     },
 )

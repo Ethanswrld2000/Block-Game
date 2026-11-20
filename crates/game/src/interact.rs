@@ -415,7 +415,7 @@ fn holds(world: &World, blocks: &Blocks, def: &voxel::BlockDef, p: BlockPos, o: 
 }
 
 /// Remesh the chunk holding `p` and any neighbour sharing a face, right away.
-fn remesh_around(world: &mut World, blocks: &Blocks, p: BlockPos) {
+pub(crate) fn remesh_around(world: &mut World, blocks: &Blocks, p: BlockPos) {
     let c = p.chunk();
     for d in [[0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]] {
         let n = ChunkPos::new(c.x + d[0], c.y + d[1], c.z + d[2]);
@@ -582,10 +582,16 @@ fn use_hands(
         let blocks_player = blocks.registry.get(place).solid && player.overlaps(into);
         // Nothing can be built at or above the world's ceiling.
         let under_ceiling = into.y < worldgen::WORLD_CEILING;
+        // Plants (sown crops) only go on soil.
+        let below = BlockPos::new(into.x, into.y - 1, into.z);
+        let rooted = blocks.registry.get(place).shape != voxel::Shape::Plant || world.block(below).is_some_and(|b| blocks.registry.get(b).material == "soil");
+        if free && !rooted && mouse.just_pressed(MouseButton::Right) {
+            toast.write(crate::survival::Toast("Sow it on soil: dirt, grass, mud or peat".into()));
+        }
         if free && mouse.just_pressed(MouseButton::Right) && warded(into) {
             ward_note(&mut toast);
         }
-        if free && !warded(into) && !blocks_player && under_ceiling && use_up(&mut inv) && world.set_block(into, place) {
+        if free && rooted && !warded(into) && !blocks_player && under_ceiling && use_up(&mut inv) && world.set_block(into, place) {
             placed.write(Placed { pos: into, block: place });
             remesh_around(&mut world, &blocks, into);
             anim.start(place_hand, place_item.map_or(Swing::Jab, |i| items.get(i).swing));

@@ -85,6 +85,11 @@
         // Crafting materials.
         (name: "stick", title: "Stick", kind: Material, mass: 0.1, size: (1, 2)),
         (name: "plant_fiber", title: "Plant Fiber", kind: Material, mass: 0.05),
+        // Farming (crops.ron): right click soil (dirt, grass, mud, peat) to sow.
+        (name: "barley_seeds", title: "Bog Barley Seeds", kind: Block("barley_0"), mass: 0.02),
+        (name: "barley", title: "Bog Barley", kind: Material, mass: 0.1),
+        (name: "tuber_eye", title: "Mire Tuber Eye", kind: Block("tuber_0"), mass: 0.05),
+        (name: "mire_tuber", title: "Mire Tuber", kind: Food(tier: 1, satiety: 12.0), mass: 0.4),
         (name: "cordage", title: "Cordage", kind: Material, mass: 0.1),
         (name: "coal", title: "Coal", kind: Material, mass: 0.3),
         (name: "raw_iron", title: "Raw Iron", kind: Material, mass: 0.8),

@@ -46,6 +46,13 @@
     (name: "reeds", top: "reed", solid: false, opaque: false, hardness: 0.05, material: "plant", shape: plant),
     (name: "fern", top: "fern", solid: false, opaque: false, foliage: true, hardness: 0.05, material: "plant", shape: plant),
     (name: "bog_bloom", top: "bog_bloom", solid: false, opaque: false, hardness: 0.05, material: "plant", shape: plant),
+    // Crops (crops.ron): each stage is its own plant block; `farming` swaps them as they grow.
+    (name: "barley_0", top: "barley_0", solid: false, opaque: false, foliage: true, hardness: 0.05, material: "plant", shape: plant),
+    (name: "barley_1", top: "barley_1", solid: false, opaque: false, foliage: true, hardness: 0.05, material: "plant", shape: plant),
+    (name: "barley_2", top: "barley_2", solid: false, opaque: false, hardness: 0.05, material: "plant", shape: plant),
+    (name: "tuber_0", top: "tuber_0", solid: false, opaque: false, foliage: true, hardness: 0.05, material: "plant", shape: plant),
+    (name: "tuber_1", top: "tuber_1", solid: false, opaque: false, foliage: true, hardness: 0.05, material: "plant", shape: plant),
+    (name: "tuber_2", top: "tuber_2", solid: false, opaque: false, hardness: 0.05, material: "plant", shape: plant),
     // The floor of the world (y -300): can't be mined.
     (name: "rootstone", top: "rootstone", hardness: -1.0, material: "stone"),
     // Tree details (worldgen::trees): vines hang against a side, twigs poke out of trunks
