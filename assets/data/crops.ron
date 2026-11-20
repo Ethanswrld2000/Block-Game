@@ -1,0 +1,10 @@
+// Crops. Sow by right clicking soil with the first stage's item (items.ron); each stage is
+// a plant block (blocks.ron) that `game::farming` swaps for the next as the crop grows.
+// What a stage gives when broken is in drops.ron.
+//   stages: block names, sown first, ripe last
+//   days:   game days (20 minutes each) from one stage to the next
+//   wet:    growth speeds up this much within 4 blocks of water (1 = no change)
+[
+    (name: "bog_barley", stages: ["barley_0", "barley_1", "barley_2"], days: 0.5, wet: 1.5),
+    (name: "mire_tuber", stages: ["tuber_0", "tuber_1", "tuber_2"], days: 0.75, wet: 1.5),
+]

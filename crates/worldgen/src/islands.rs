@@ -9,6 +9,8 @@ use crate::{TreeKind, WorldGen, SKY_MIN};
 
 const CELL: i32 = 192;
 pub(crate) const MAX_RADIUS: i32 = 58;
+/// Islands at least this wide keep a chest at their middle (`sky_island` in loot.ron).
+pub const CHEST_RADIUS: f32 = 24.0;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Island {
@@ -117,6 +119,15 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) -> bool
             }
         }
     }
+    // A chest at the middle of the bigger islands, over any tree there.
+    for isl in islands.iter().filter(|i| !i.aunt && i.radius >= CHEST_RADIUS) {
+        if let Some((_, top)) = span(wg, isl, isl.x, isl.z) {
+            for y in top + 1..=top + 3 {
+                c.put(isl.x, y, isl.z, if y == top + 1 { ids.chest } else { BlockId::AIR });
+            }
+            any = true;
+        }
+    }
     // The aunt's cottage and the broken arch.
     if let Some(a) = wg.aunt_island()
         && islands.iter().any(|i| i.aunt)
@@ -132,4 +143,34 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) -> bool
     }
     let _ = ids.cloud_moss;
     any
+}
+
+/// Where the chest on a grid island stands, if this island has one near (x, z).
+pub(crate) fn chest_near(wg: &WorldGen, x: i32, z: i32) -> Option<[i32; 3]> {
+    islands_near(wg, x, z, x, z).into_iter().filter(|i| !i.aunt && i.radius >= CHEST_RADIUS).find_map(|i| {
+        let (_, top) = span(wg, &i, i.x, i.z)?;
+        ((i.x - x).abs() <= 1 && (i.z - z).abs() <= 1).then_some([i.x, top + 1, i.z])
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use voxel::BlockPos;
+
+    #[test]
+    fn bigger_islands_keep_a_chest_in_the_middle() {
+        let wg = crate::tests::wg();
+        let isl = (-20..20)
+            .flat_map(|cz| (-20..20).map(move |cx| (cx, cz)))
+            .filter_map(|(cx, cz)| island_in_cell(&wg, cx, cz))
+            .find(|i| i.radius >= CHEST_RADIUS + 4.0)
+            .expect("an island big enough");
+        let [x, y, z] = chest_near(&wg, isl.x, isl.z).unwrap();
+        assert!(wg.island_chest(x, y, z));
+        let p = BlockPos::new(x, y, z);
+        let chunk = wg.generate(p.chunk());
+        let o = p.chunk().origin();
+        assert_eq!(chunk.get((x - o.x) as usize, (y - o.y) as usize, (z - o.z) as usize), wg.ids.chest);
+    }
 }

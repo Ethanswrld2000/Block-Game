@@ -1,10 +1,12 @@
 //! Items lying in the world: what didn't fit when you mined, what you threw
 //! away. They fall to the ground, turn slowly, and jump into your pockets
-//! when you walk over them with room to spare. Not saved yet: they vanish
-//! when you quit (and after ten minutes).
+//! when you walk over them with room to spare. They vanish after ten minutes
+//! lying there; until then they are saved to `ground_items.ron` (every 30 s
+//! and on exit) with how long they have lain.
 
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
+use serde::{Deserialize, Serialize};
 use voxel::BlockPos;
 
 use super::grid::Stack;
@@ -13,6 +15,7 @@ use crate::blocks::Blocks;
 use crate::item_art::ItemArt;
 use crate::items::{ItemKind, Items};
 use crate::player::{MoveMode, Player};
+use crate::save::{read_ron, screenshot_run, write_ron, SaveDir};
 use crate::world::World;
 
 const PICKUP_RANGE: f32 = 1.6;
@@ -22,7 +25,10 @@ pub struct WorldItemsPlugin;
 
 impl Plugin for WorldItemsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<Spill>().add_systems(crate::menu::GameUpdate, (spawn_spills, fall_and_spin, pick_up).chain());
+        app.add_message::<Spill>()
+            .add_systems(crate::menu::GamePostStartup, load)
+            .add_systems(crate::menu::GameUpdate, (spawn_spills, fall_and_spin, pick_up, save_now_and_then).chain())
+            .add_systems(Last, save_on_exit.run_if(crate::menu::in_game));
     }
 }
 
@@ -31,6 +37,62 @@ impl Plugin for WorldItemsPlugin {
 pub struct Spill {
     pub stack: Stack,
     pub at: Vec3,
+}
+
+/// Items back from the save, spawned with `spawn_spills` along with the spills.
+#[derive(Resource, Default)]
+struct Restored(Vec<(Stack, Vec3, f32)>);
+
+const FILE: &str = "ground_items.ron";
+
+/// One stack on the ground as saved.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct SavedItem {
+    /// Item name in items.ron.
+    item: String,
+    count: u16,
+    at: [f32; 3],
+    /// Seconds it has lain there.
+    age: f32,
+}
+
+fn load(mut commands: Commands, dir: Res<SaveDir>, items: Res<Items>) {
+    if screenshot_run() {
+        return;
+    }
+    let list: Vec<SavedItem> = read_ron(&dir, FILE).unwrap_or_default();
+    let restored = list
+        .into_iter()
+        .filter_map(|s| match items.id(&s.item) {
+            Some(id) => Some((Stack::new(id, s.count), Vec3::from_array(s.at), s.age)),
+            None => {
+                warn!("{FILE}: no item `{}`", s.item);
+                None
+            }
+        })
+        .collect();
+    commands.insert_resource(Restored(restored));
+}
+
+fn store(dir: &SaveDir, items: &Items, q: &Query<(&WorldItem, &Transform)>) {
+    let list: Vec<SavedItem> =
+        q.iter().map(|(wi, tf)| SavedItem { item: items.get(wi.stack.item).name.clone(), count: wi.stack.count, at: tf.translation.to_array(), age: wi.age }).collect();
+    write_ron(dir, FILE, &list);
+}
+
+fn save_now_and_then(time: Res<Time<Real>>, mut since: Local<f32>, dir: Res<SaveDir>, items: Res<Items>, q: Query<(&WorldItem, &Transform)>) {
+    *since += time.delta_secs();
+    if *since < 30.0 || screenshot_run() {
+        return;
+    }
+    *since = 0.0;
+    store(&dir, &items, &q);
+}
+
+fn save_on_exit(mut exit: MessageReader<AppExit>, dir: Res<SaveDir>, items: Res<Items>, q: Query<(&WorldItem, &Transform)>) {
+    if exit.read().next().is_some() && !screenshot_run() {
+        store(&dir, &items, &q);
+    }
 }
 
 #[derive(Component)]
@@ -44,6 +106,7 @@ struct WorldItem {
 fn spawn_spills(
     mut commands: Commands,
     mut spills: MessageReader<Spill>,
+    restored: Option<ResMut<Restored>>,
     items: Res<Items>,
     blocks: Res<Blocks>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -53,9 +116,12 @@ fn spawn_spills(
     mut grey: Local<Option<Handle<StandardMaterial>>>,
     mut block_cubes: Local<std::collections::HashMap<voxel::BlockId, Handle<Mesh>>>,
 ) {
-    for s in spills.read() {
+    let back = restored.map(|mut r| std::mem::take(&mut r.0)).unwrap_or_default();
+    let fresh = spills.read().map(|s| (s.stack, s.at, 0.0));
+    for (stack, at, age) in back.into_iter().chain(fresh) {
+        let s = Spill { stack, at };
         let item = items.get(s.stack.item);
-        let mut e = commands.spawn((WorldItem { stack: s.stack, vel: 0.0, age: 0.0 }, Transform::from_translation(s.at), NotShadowCaster));
+        let mut e = commands.spawn((WorldItem { stack: s.stack, vel: 0.0, age }, Transform::from_translation(s.at), NotShadowCaster));
         match (&item.kind, &blocks.material) {
             // A block looks like a small copy of itself, every face textured.
             (ItemKind::Block(b), Some(voxel_mat)) => {

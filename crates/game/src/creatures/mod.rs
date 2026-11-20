@@ -17,6 +17,7 @@
 pub mod brain;
 pub mod critters;
 pub mod data;
+pub mod saved;
 pub mod skin;
 mod villagers;
 
@@ -47,11 +48,13 @@ impl Plugin for CreaturesPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Dice(Rng(0x5EED_C0FF_EE15_u64)))
             .init_resource::<Barrows>()
-            .add_systems(crate::menu::GamePostStartup, setup)
+            .add_systems(crate::menu::GamePostStartup, (setup, saved::load).chain())
+            .add_systems(crate::menu::GameUpdate, saved::save_now_and_then)
+            .add_systems(Last, saved::save_on_exit.run_if(crate::menu::in_game))
             .add_systems(crate::menu::GameUpdate, aim.before(InteractSet).after(crate::player::PlayerSet))
             .add_systems(
                 crate::menu::GameUpdate,
-                (take_strikes, spawn_around, spawn_wights, think, spirits, walk, tint, despawn_far)
+                (take_strikes, spawn_around, spawn_wights, think, spirits, walk, animate, tint, despawn_far)
                     .chain()
                     .in_set(CreatureSet)
                     .after(InteractSet),
@@ -106,6 +109,12 @@ pub struct Creature {
     pub leaving: bool,
     /// Stay within this distance of a point (wights in their barrow, villagers in their village).
     pub leash: Option<(Vec3, f32)>,
+    /// The way found to where it's going (cells to stand in, next first).
+    pub way: Vec<IVec3>,
+    way_to: Option<IVec3>,
+    repath: f32,
+    /// Distance walked, in blocks: drives the legs.
+    pub stride: f32,
 }
 
 impl Creature {
@@ -126,6 +135,10 @@ impl Creature {
             fade: 0.0,
             leaving: false,
             leash: None,
+            way: Vec::new(),
+            way_to: None,
+            repath: 0.0,
+            stride: 0.0,
         }
     }
 }
@@ -554,6 +567,7 @@ fn think(
     mut hits: MessageWriter<Damage>,
     mut q: Query<(&Transform, &mut Creature), Without<Villager>>,
     mut dice: ResMut<Dice>,
+    (world, blocks): (Res<World>, Res<Blocks>),
 ) {
     let Some(kinds) = kinds else { return };
     let dt = time.delta_secs();
@@ -585,7 +599,7 @@ fn think(
         } else if hunting && let Some(to) = to {
             let reach = k.attack.map_or(1.5, |a| a.reach);
             c.want = if dist > reach * 0.7 && leashed(pos + flat(to).normalize_or_zero(), &c) {
-                flat(to).normalize_or_zero() * k.run
+                steer(&mut c, &world, &blocks, pos, pos + to, k.run, dt)
             } else {
                 Vec3::ZERO
             };
@@ -599,7 +613,86 @@ fn think(
             }
         } else {
             wander(&mut c, pos, k.speed, &mut dice.0);
+            // Find a way round walls and up steps to where it ambles.
+            if let Some(g) = c.goal {
+                c.want = steer(&mut c, &world, &blocks, pos, g, k.speed, dt);
+            }
         }
+    }
+}
+
+/// Seconds between new searches while chasing a moving target.
+const REPATH: f32 = 1.0;
+/// How far (blocks) a search may stray from where it starts.
+const PATH_RADIUS: i32 = 24;
+
+/// The wanted velocity to walk towards `goal` along a found way (A* from
+/// `combat::path`); straight at it while there's no way.
+fn steer(c: &mut Creature, world: &World, blocks: &Blocks, pos: Vec3, goal: Vec3, speed: f32, dt: f32) -> Vec3 {
+    let cell = |p: Vec3| IVec3::new(p.x.floor() as i32, (p.y + 0.01).floor() as i32, p.z.floor() as i32);
+    let (here, there) = (cell(pos), cell(goal));
+    c.repath -= dt;
+    let moved = c.way_to.is_none_or(|w| (w - there).abs().max_element() > 1);
+    if moved || (c.repath <= 0.0 && c.way.is_empty()) {
+        let solid = |x, y, z| world.block(BlockPos::new(x, y, z)).is_none_or(|b| blocks.registry.get(b).solid);
+        c.way = crate::combat::path::find(solid, here, there, PATH_RADIUS);
+        c.way_to = Some(there);
+        c.repath = REPATH;
+    }
+    while let Some(next) = c.way.first() {
+        let at = Vec3::new(next.x as f32 + 0.5, next.y as f32, next.z as f32 + 0.5);
+        if flat(at - pos).length() < 0.45 && (at.y - pos.y).abs() < 1.2 {
+            c.way.remove(0);
+        } else {
+            break;
+        }
+    }
+    let aim = c.way.first().map_or(goal, |n| Vec3::new(n.x as f32 + 0.5, n.y as f32, n.z as f32 + 0.5));
+    let d = flat(aim - pos);
+    if flat(goal - pos).length() < 0.8 {
+        c.goal = None;
+        c.way.clear();
+        return Vec3::ZERO;
+    }
+    if d.length() < 0.15 { Vec3::ZERO } else { d.normalize() * speed }
+}
+
+/// How far a leg or tail swings, and at which beat, from its box's name:
+/// legs swing in diagonal pairs (front right with back left), tails sway.
+/// `None` = the box doesn't move.
+pub fn limb_swing(name: &str, stride: f32, pace: f32, leg_len: f32) -> Option<Quat> {
+    let cycle = std::f32::consts::TAU * stride / (1.0 + leg_len * 2.0);
+    if name.starts_with("leg") {
+        let off = (name.contains("left") != name.contains("back")) as u8 as f32 * std::f32::consts::PI;
+        Some(Quat::from_rotation_x((cycle + off).sin() * 0.6 * pace))
+    } else if name.starts_with("tail") {
+        Some(Quat::from_rotation_y((cycle * 0.5).sin() * 0.35 * pace))
+    } else {
+        None
+    }
+}
+
+/// Walking creatures move their legs (from the top) and tails (from the body end).
+fn animate(kinds: Option<Res<Kinds>>, creatures: Query<&Creature>, mut parts: Query<(&ChildOf, &Part, &mut Transform)>) {
+    let Some(kinds) = kinds else { return };
+    for (parent, part, mut tf) in &mut parts {
+        let Ok(c) = creatures.get(parent.parent()) else { continue };
+        let k = kinds.get(c.kind);
+        if matches!(k.temper, Temper::Critter | Temper::Spirit) {
+            continue;
+        }
+        let b = &k.model[part.index];
+        let pace = (flat(c.vel).length() / 1.5).min(1.0);
+        let Some(rot) = limb_swing(&b.name, c.stride, pace, b.size.1) else { continue };
+        let offset = Vec3::new(b.offset.0, b.offset.1, b.offset.2);
+        // Legs hang from their top, tails from the end nearest the body.
+        let pivot = if b.name.starts_with("leg") {
+            offset + Vec3::Y * (b.size.1 * 0.5)
+        } else {
+            offset - Vec3::Z * (b.size.2 * 0.5 * offset.z.signum())
+        };
+        tf.translation = pivot + rot * (offset - pivot);
+        tf.rotation = rot;
     }
 }
 
@@ -769,6 +862,7 @@ fn walk(time: Res<Time>, kinds: Option<Res<Kinds>>, world: Res<World>, blocks: R
         if bumped && (c.on_ground || swimming) && c.want.length_squared() > 0.01 {
             c.vel.y = HOP;
         }
+        c.stride += flat(pos - tf.translation).length();
         tf.translation = pos;
         let face = flat(c.want);
         if face.length_squared() > 0.01 && c.angry <= 0.0 {
@@ -855,5 +949,20 @@ fn despawn_far(mut commands: Commands, player: Res<Player>, q: Query<(Entity, &T
         if flat(tf.translation - player.pos).length() > DESPAWN {
             commands.entity(e).despawn();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legs_swing_in_diagonal_pairs_and_rest_when_still() {
+        let a = |n: &str| limb_swing(n, 0.4, 1.0, 0.3).unwrap().to_euler(EulerRot::XYZ).0;
+        assert!((a("leg_front_right") - a("leg_back_left")).abs() < 1e-5);
+        assert!((a("leg_front_right") + a("leg_front_left")).abs() < 1e-5);
+        assert!((a("leg_right") + a("leg_left")).abs() < 1e-5);
+        assert!(limb_swing("leg_right", 0.4, 0.0, 0.3).unwrap().angle_between(Quat::IDENTITY) < 1e-5);
+        assert!(limb_swing("head", 0.4, 1.0, 0.3).is_none());
     }
 }

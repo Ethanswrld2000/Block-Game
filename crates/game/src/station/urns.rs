@@ -315,7 +315,8 @@ mod tests {
         for s in ["carpentry_bench", "carpentry_table", "machination_table", "sharpening_stone"] {
             assert!(!in_urn("tool", s), "{s} left the tool urn");
         }
-        assert!(d.urn("gear").unwrap().step("gunsmith_bench").unwrap().later);
+        // The gunsmith bench's guns fire now (`combat::guns`).
+        assert!(!d.urn("gear").unwrap().step("gunsmith_bench").unwrap().later);
         // Every item an urn asks for or is carried as exists.
         let (_, items) = crate::items::tests::load();
         assert!(UrnData::from_ron(include_str!("../../../../assets/data/urns.ron"), |n| items.id(n).is_some()).is_ok());

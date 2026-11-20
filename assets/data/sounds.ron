@@ -36,6 +36,7 @@
         "craft_shimmer": 0.45,
         "craft_pop": 0.7,
         "thunder": 0.9,
+        "gunshot": 0.8,
         "wind_loop": 0.5,
         "rain_loop": 0.5,
         "levitate_loop": 0.35,
@@ -44,5 +45,11 @@
         "frog": 0.5,
         "cricket": 0.3,
         "kite": 0.4,
+        // Music (also scaled by the music setting).
+        "music": 0.6,
     },
+    // Music tracks (assets/sounds/<name>.ogg), one now and then with quiet between:
+    // `day` tracks while the sun is up, `night` ones after dark. Placeholders from
+    // tools/gen_placeholder_sounds.py --only music_; replace them by name or add more.
+    music: (day: ["music_day_0", "music_day_1"], night: ["music_night_0"], gap: (150.0, 360.0), first: 45.0),
 )

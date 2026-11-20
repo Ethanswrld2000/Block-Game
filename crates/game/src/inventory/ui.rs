@@ -327,7 +327,14 @@ fn open_close(
             *seed = seed.wrapping_add(0x9E37_79B9_7F4A_7C15) ^ (p.x as u64).wrapping_mul(31) ^ (p.z as u64).wrapping_mul(1_000_003);
             let mut rng = crate::creatures::brain::Rng(*seed | 1);
             let grid = chests.grid(p);
-            loot.fill(if in_barrow { "barrow" } else { "village" }, &items, grid, || rng.unit());
+            let table = if generator.0.island_chest(p.x, p.y, p.z) {
+                "sky_island"
+            } else if in_barrow {
+                "barrow"
+            } else {
+                "village"
+            };
+            loot.fill(table, &items, grid, || rng.unit());
         }
         chests.grid(m.0);
         ui.dirty = true;
@@ -1338,8 +1345,9 @@ fn items_tab(c: &mut ChildSpawnerCommands, view: &SlotView, d: &Data, ui: &mut I
         row.spawn(Node { flex_direction: FlexDirection::Column, width: Val::Px(SIDE_W), ..default() }).with_children(|side| {
             let chest = ui.chest.and_then(|c| d.chests.map.get(&c).map(|g| (c, g)));
             side.spawn(Node { column_gap: Val::Px(6.0), margin: UiRect::bottom(Val::Px(8.0)), height: Val::Px(40.0), align_items: AlignItems::End, ..default() }).with_children(|tabs| {
+                let no_recipes = d.recipes.as_deref().is_none_or(|r| r.list.is_empty());
                 for t in [Side::Crafting, Side::Chest] {
-                    if t == Side::Chest && chest.is_none() {
+                    if (t == Side::Chest && chest.is_none()) || (t == Side::Crafting && no_recipes) {
                         continue;
                     }
                     let skin = if ui.side == t { "button_down" } else if hover == Some(Hover::Side(t)) { "button_hover" } else { "button" };
@@ -1353,6 +1361,9 @@ fn items_tab(c: &mut ChildSpawnerCommands, view: &SlotView, d: &Data, ui: &mut I
                     if let Some((c, g)) = chest {
                         grid_node(side, theme, g, GridRef::Chest(c), items, art, hover, held);
                     }
+                }
+                Side::Crafting if d.recipes.as_deref().is_none_or(|r| r.list.is_empty()) => {
+                    side.spawn(text("Things are made at the stations by your urns.", sizes::SMALL, colors::MUTED));
                 }
                 Side::Crafting => crafting_list(side, theme, items, art, d, ui),
             }

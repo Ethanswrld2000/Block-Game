@@ -1,6 +1,6 @@
 //! Settings (view distance, mouse, field of view, sound) and the pause menu.
 //!
-//! Esc opens the menu (Resume, Settings, Save and quit); settings are saved to
+//! Esc opens the menu (Resume, Settings, Save and quit to title); settings are saved to
 //! `settings.ron` next to the world folders, so every world shares them.
 
 use bevy::prelude::*;
@@ -47,6 +47,8 @@ pub struct Settings {
     pub volume: f32,
     /// 0..1, wind, rain and night sounds.
     pub ambience: f32,
+    /// 0..1, music.
+    pub music: f32,
     /// The F3 overlay at start.
     pub debug_overlay: bool,
     /// 0 off, 1 on (three layers).
@@ -55,7 +57,7 @@ pub struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { view_distance: 12, sensitivity: 1.0, fov: 70.0, volume: 0.8, ambience: 0.7, debug_overlay: true, clouds: 1 }
+        Self { view_distance: 12, sensitivity: 1.0, fov: 70.0, volume: 0.8, ambience: 0.7, music: 0.6, debug_overlay: true, clouds: 1 }
     }
 }
 
@@ -67,12 +69,13 @@ enum Knob {
     Fov,
     Volume,
     Ambience,
+    Music,
     Clouds,
     DebugOverlay,
 }
 
 impl Knob {
-    const ALL: [Knob; 7] = [Knob::ViewDistance, Knob::Sensitivity, Knob::Fov, Knob::Volume, Knob::Ambience, Knob::Clouds, Knob::DebugOverlay];
+    const ALL: [Knob; 8] = [Knob::ViewDistance, Knob::Sensitivity, Knob::Fov, Knob::Volume, Knob::Ambience, Knob::Music, Knob::Clouds, Knob::DebugOverlay];
 
     fn label(self) -> &'static str {
         match self {
@@ -81,6 +84,7 @@ impl Knob {
             Knob::Fov => "Field of view",
             Knob::Volume => "Volume",
             Knob::Ambience => "Ambience",
+            Knob::Music => "Music",
             Knob::Clouds => "Clouds",
             Knob::DebugOverlay => "Debug overlay (F3)",
         }
@@ -93,6 +97,7 @@ impl Knob {
             Knob::Fov => format!("{:.0}°", s.fov),
             Knob::Volume => format!("{:.0}%", s.volume * 100.0),
             Knob::Ambience => format!("{:.0}%", s.ambience * 100.0),
+            Knob::Music => format!("{:.0}%", s.music * 100.0),
             Knob::Clouds => if s.clouds > 0 { "on" } else { "off" }.into(),
             Knob::DebugOverlay => (if s.debug_overlay { "on" } else { "off" }).into(),
         }
@@ -105,6 +110,7 @@ impl Knob {
             Knob::Fov => s.fov = (s.fov + 5.0 * dir).clamp(50.0, 110.0),
             Knob::Volume => s.volume = (s.volume + 0.1 * dir).clamp(0.0, 1.0),
             Knob::Ambience => s.ambience = (s.ambience + 0.1 * dir).clamp(0.0, 1.0),
+            Knob::Music => s.music = (s.music + 0.1 * dir).clamp(0.0, 1.0),
             Knob::Clouds => s.clouds = (s.clouds as i32 + dir as i32).clamp(0, 1) as u8,
             Knob::DebugOverlay => s.debug_overlay = !s.debug_overlay,
         }
@@ -203,7 +209,7 @@ fn spawn_menu(mut commands: Commands, theme: Res<Theme>) {
                 p.spawn((Node { width: Val::Px(260.0), height: Val::Px(8.0), margin: UiRect::bottom(Val::Px(6.0)), ..default() }, theme.skin("divider")));
                 p.spawn(button(theme, Button::Resume, "Resume", 260.0));
                 p.spawn(button(theme, Button::Settings, "Settings", 260.0));
-                p.spawn(button(theme, Button::Quit, "Save and quit", 260.0));
+                p.spawn(button(theme, Button::Quit, "Save and quit to title", 260.0));
             });
             root.spawn((SettingsPage, page(Display::None), theme.skin("panel"))).with_children(|p| {
                 p.spawn((theme.bold(sizes::TITLE), Text::new("Settings"), TextColor(colors::HEADING)));
@@ -305,8 +311,10 @@ fn hover_and_click(
         }
         Some(Button::Settings) => pause.settings = true,
         Some(Button::Back) => pause.settings = false,
-        // Every system that saves on exit runs before the app closes.
+        // Every system that saves on exit runs before the app closes; then the
+        // game starts again on the title screen (`menu::relaunch_to_title`).
         Some(Button::Quit) => {
+            crate::menu::RETURN_TO_TITLE.store(true, std::sync::atomic::Ordering::Relaxed);
             exit.write(AppExit::Success);
         }
         Some(Button::Step(i, d)) => Knob::ALL[i].step(&mut settings, d as f32),
