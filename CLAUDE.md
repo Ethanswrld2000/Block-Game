@@ -116,8 +116,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   the skin red; spirits blend the PNG's alpha. `--features dev` hot-reloads PNGs (`bevy/file_watcher`).
   A PNG may be painted at 2x/4x as long as its shape matches (tested).
 - Known gaps: vertices are 40 bytes, not the packed 8-byte format (performance pass); no thunder
-  sound or snow cover yet; no block light propagation (torches are real point lights); items on the
-  ground and creatures are not saved; creatures walk straight at goals (no pathfinding, villagers
+  sound or snow cover yet; no block light propagation (torches are real point lights); creatures walk straight at goals (no pathfinding, villagers
   don't climb into huts: they vanish at the door at night); creature parts don't animate yet.
 - Phase 10 (UI overhaul): done. `game::theme`: UI sprite sheet `assets/textures/ui.png` + `ui.ron`
   (name -> rect and 9-slice borders, drawn at 2x; placeholder from `tools/gen_ui_art.py`, which
@@ -238,7 +237,8 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   opens: plugins add systems to `menu::GamePreStartup`/`GameStartup`/`GamePostStartup`/`GameUpdate`
   instead of Bevy's `Startup`/`Update` (entering `Screen::Game` runs the startup three once, then
   `GameUpdate` runs inside `Update`); systems in `First`/`PreUpdate`/`Last` need `.run_if(menu::in_game)`.
-  No "quit to title" yet (game state isn't reset), so Save and quit closes the game.
+  "Save and quit to title" (pause menu) exits through the usual save-on-exit path, then `menu::relaunch_to_title`
+  starts the game again on the title screen (a fresh process, so no state is left over).
 - Every station works now (no `later: true` steps left). Boards (`station::board`, rules in `station::bench`)
   also cover the cooking pot (`SlotKind::Mix` slots fill in any order, recipes list a `mix`; a `Fire` slot burns
   `fuel` from benches.ron for a recipe's `heat`; stirring swirls the pot), cutting board, smoking rack, iron anvil
@@ -331,7 +331,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `EnteredRoom` (first time per run) and `LeftDungeon { fell }` drive `dungeon::foes`: entering a room spawns the foes
   (`combat::SpawnFoe`) of it and the rooms its corridors lead to, from the dungeon's spawn points (guards hollows, packs
   mixed hollows and shades, boss a shade: `foes::kind_for`); the run ending despawns every foe whose home is inside that
-  dungeon. Spirit form isn't saved.
+  dungeon.
   Screenshots: `BLOCKGAME_DUNGEON=1` starts on the home dungeon's path facing the door (its position is logged),
   `BLOCKGAME_SPIRIT=cast` runs the cinematic, `=1` starts as a spirit.
 - Player body and third person: `game::avatar` builds your body with `npc::body::build` (the NPC rig; looks in
@@ -360,7 +360,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   budgeted; goes as near as it can when there's no way). Ghosts (`ghost: true`): own materials made blue and see-through,
   shimmering per part, a faint light, `BurstKind::Wisp` particles trailing (and a burst on death). Sound `clash`.
   Dev keys: Ctrl+Shift+J (Cmd on a Mac) spawns a Hollow Warden, Ctrl+Shift+H a Fen Shade, 6 blocks ahead; either gives
-  you an iron sword on the hotbar if you have no sword. Foes are not saved and don't despawn.
+  you an iron sword on the hotbar if you have no sword. Foes don't despawn.
 - Rotting Gate (Legacy prompts 5-7): `worldgen::rotting` (pure). The gate is a mossy cobblestone arch placed once on the
   main island 300-600 blocks from spawn (`WorldGen::rotting_gate`, warded, position logged). `rotting_floor(seed, run, depth)`
   lays out a fresh floor per run on a 28-block grid: start room (way out in its west wall), halls, boss room with the stair;
@@ -455,6 +455,17 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   slide, slots lift and settle (`ui::animate`), UI sounds `ui_*` (`gen_placeholder_sounds.py --only ui_`).
   Screenshots: `BLOCKGAME_INVENTORY=items|equipment|stats|abilities`, `BLOCKGAME_SKILLTREE=1` (= abilities),
   `BLOCKGAME_DRAWN=1` starts with the weapon drawn.
+- Saving what's in the world: `save::{read_ron, write_ron, screenshot_run}`. Items on the ground (`ground_items.ron`, with
+  their age), wild creatures and when barrows woke (`creatures.ron`; not villagers or critters), foes (`foes.ron`; not
+  tagged encounter/Rotting Gate foes or a dungeon run's foes, which start over), spirit form (`spirit.ron`: dungeon id and
+  the body's waiting health; the run's rooms refill), and what posted NPCs (gate guides, Brindlespheimer, Wren) remember
+  of your talks (`posts.ron`, by `Npc.post`, given back when they appear).
+- Shelter and campfire: `survival::shelter` (pure). `survival::find_cover` checks once a second: a wall block over your
+  head = `Cover::Roof` (half the weather's chill kept off), and if `station::room_at` finds a closed room where you stand,
+  `Cover::Room` (all the weather's chill and 60% of the night's cold). Shows as "Shelter" in the temperature breakdown.
+  Campfire: block `campfire` (`shape: torch`, so `torches` tracks it: `Torches::fires()` gives `Fire::Torch|Campfire`;
+  drawn as a stone ring, crossed sticks, a big flame and a brighter light), made on the camp mat (4 small rocks + 4 sticks);
+  warms up to +24 °C close by, fading out at 10 blocks (`CAMPFIRE_MAX` 28 all told).
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen
