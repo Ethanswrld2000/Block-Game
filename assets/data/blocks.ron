@@ -72,9 +72,12 @@
     (name: "timber_wall", top: "timber_wall", hardness: 2.5, material: "wood"),
     (name: "wattle_wall", top: "wattle_wall", hardness: 1.5, material: "wood"),
     (name: "thatch", top: "thatch", hardness: 0.8, material: "plant"),
-    (name: "chair", top: "chair", hardness: 1.5, material: "wood"),
-    (name: "table", top: "table", hardness: 2.0, material: "wood"),
-    (name: "wooden_door", top: "wooden_door", hardness: 2.0, material: "wood"),
+    // Furniture: `shape: model` draws a few boxes (`chunk_mesh::model_boxes`); facing comes from walls beside it.
+    // Right click a door to open or close it (with the door above or below it).
+    (name: "chair", top: "planks", opaque: false, hardness: 1.5, material: "wood", shape: model, model: chair),
+    (name: "table", top: "planks", opaque: false, hardness: 2.0, material: "wood", shape: model, model: table),
+    (name: "wooden_door", top: "wooden_door", opaque: false, hardness: 2.0, material: "wood", shape: model, model: door),
+    (name: "wooden_door_open", top: "wooden_door", solid: false, opaque: false, hardness: 2.0, material: "wood", shape: model, model: door_open),
     (name: "glass", top: "glass", opaque: false, translucent: true, hardness: 0.5, material: "stone"),
     (name: "window", top: "window", opaque: false, translucent: true, hardness: 1.0, material: "wood"),
     // Sporrow's houses (worldgen::landmarks): giant mushrooms.

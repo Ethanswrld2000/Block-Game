@@ -313,7 +313,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   Bench (`makeshift_pistol`, `rifle`, `iron_shot`; guns fire, see `combat::guns`). The ancestral urn gives the three new
   urns (carpentry after the tool urn, gear and vehicle after carpentry). New benches reuse an older bench's board
   (`StationKind::base`: layout, slots, tool, size) and add a few parts of their own in `models::parts`. Chairs,
-  tables and doors are plain cube blocks for now (doors don't open); glass and windows are see-through blocks.
+  tables and doors are box models (see Furniture below); glass and windows are see-through blocks.
 - Warded dungeons: `worldgen::dungeons` (pure). One per 1024-block cell (chance 0.7, 700+ blocks from spawn) plus a home
   dungeon 170-290 blocks from spawn, away from the home village. A stone gatehouse with one doorway, a stair 20-27 down,
   then 7-10 large rooms (13-23 wide, 6-9 high) on a 30-block grid in the dungeon's own frame, joined by 3-wide corridors
@@ -485,6 +485,12 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   gunsmith bench) per shot, `reload` seconds between, a straight shot from the eyes (`ray_hits_body`) hitting the nearest
   foe or creature before any solid block. Sound `gunshot`, smoke at the muzzle, chips where it hits a wall. `interact`
   never mines or strikes with a gun.
+- Furniture and doors: `voxel::Shape::Model` blocks with `model: chair|table|door|door_open` are meshed as a few
+  boxes into the chunk's detail mesh (`chunk_mesh::model_boxes`, textured with the block's side tile); facing comes from
+  wall blocks beside them (a door spans the gap between two walls; a chair's back goes against a wall). They collide as a
+  whole block if `solid`; `is_wall` counts solid models, so a shut door closes a room. Right click a door to swap
+  `wooden_door` <-> `wooden_door_open` (`interact::door_swap`), with the doors stacked above and below it; it won't shut
+  on you.
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen

@@ -298,6 +298,16 @@ pub mod tests {
     }
 
     #[test]
+    fn doors_open_and_close() {
+        let (blocks, _) = load();
+        let shut = blocks.id("wooden_door").unwrap();
+        let open = crate::interact::door_swap(&blocks, shut).expect("opens");
+        assert!(!blocks.get(open).solid);
+        assert_eq!(crate::interact::door_swap(&blocks, open), Some(shut));
+        assert_eq!(crate::interact::door_swap(&blocks, blocks.id("chair").unwrap()), None);
+    }
+
+    #[test]
     fn right_tool_is_faster() {
         let (blocks, items) = load();
         let stone = blocks.get(blocks.expect("stone"));

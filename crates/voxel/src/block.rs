@@ -44,6 +44,22 @@ struct BlockSpec {
     /// For vines and twigs: the side of the cell they cling to.
     #[serde(default)]
     attach: Option<Side>,
+    /// For `shape: model`: which box model it is drawn as.
+    #[serde(default)]
+    model: Option<Model>,
+}
+
+/// Small furniture drawn as a few boxes in the chunk's detail mesh
+/// (`shape: model`); their facing comes from the solid blocks beside them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Model {
+    Chair,
+    Table,
+    /// A door panel across the gap between two walls.
+    Door,
+    /// The same door swung open against its hinge side.
+    DoorOpen,
 }
 
 /// One of the four sides of a cell (north is -Z, east is +X).
@@ -99,6 +115,9 @@ pub enum Shape {
     Twig,
     /// A small stone lying on the block below.
     Pebble,
+    /// Furniture (`model`: chair, table, door): a few boxes meshed with the
+    /// details; it collides as a whole block if `solid`.
+    Model,
 }
 
 impl Shape {
@@ -132,13 +151,15 @@ pub struct BlockDef {
     pub shape: Shape,
     /// Vines and twigs: the side they cling to.
     pub attach: Option<Side>,
+    /// `shape: model`: which model.
+    pub model: Option<Model>,
 }
 
 impl BlockDef {
     /// Whether it can be part of a room's walls, floor or roof: a solid full
     /// cube that isn't foliage. Leaves, plants, water and torches are holes.
     pub fn is_wall(&self) -> bool {
-        self.solid && self.shape == Shape::Cube && self.material != "plant"
+        self.solid && matches!(self.shape, Shape::Cube | Shape::Model) && self.material != "plant"
     }
 
     /// Offsets to the blocks that can hold this one up (any one is enough):
@@ -221,6 +242,7 @@ impl BlockRegistry {
                 material: s.material,
                 shape: s.shape,
                 attach: s.attach,
+                model: s.model,
             });
         }
         Ok(Self { defs, by_name })

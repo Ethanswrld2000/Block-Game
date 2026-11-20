@@ -52,7 +52,7 @@
         (name: "timber_wall", title: "Timber Wall", kind: Block("timber_wall"), mass: 1.6),
         (name: "wattle_wall", title: "Wattle Wall", kind: Block("wattle_wall"), mass: 1.2),
         (name: "thatch", title: "Thatch", kind: Block("thatch"), mass: 0.4),
-        // Furniture, doors and glass from the carpentry urn's benches. Plain blocks for now.
+        // Furniture, doors and glass from the carpentry urn's benches (chairs, tables and doors are box models).
         (name: "chair", title: "Chair", kind: Block("chair"), mass: 2.0),
         (name: "table", title: "Table", kind: Block("table"), mass: 4.0),
         (name: "wooden_door", title: "Wooden Door", kind: Block("wooden_door"), mass: 3.0),

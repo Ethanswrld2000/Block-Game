@@ -414,6 +414,19 @@ fn holds(world: &World, blocks: &Blocks, def: &voxel::BlockDef, p: BlockPos, o: 
     }
 }
 
+/// What a door block turns into when used: open <-> closed (`model: door` / `door_open`).
+pub fn door_swap(registry: &voxel::BlockRegistry, b: BlockId) -> Option<BlockId> {
+    let want = match registry.get(b).model? {
+        voxel::Model::Door => voxel::Model::DoorOpen,
+        voxel::Model::DoorOpen => voxel::Model::Door,
+        _ => return None,
+    };
+    let name = &registry.get(b).name;
+    let base = name.strip_suffix("_open").unwrap_or(name);
+    let other = if want == voxel::Model::DoorOpen { format!("{base}_open") } else { base.to_string() };
+    registry.id(&other).filter(|o| registry.get(*o).model == Some(want))
+}
+
 /// Remesh the chunk holding `p` and any neighbour sharing a face, right away.
 pub(crate) fn remesh_around(world: &mut World, blocks: &Blocks, p: BlockPos) {
     let c = p.chunk();
@@ -532,6 +545,41 @@ fn use_hands(
         return;
     }
 
+    // Right click on a door: open or close it, and the door above or below it.
+    if mouse.just_pressed(MouseButton::Right)
+        && !at_station
+        && let Some(hit) = target.hit
+        && let Some(other) = world.block(hit.block).and_then(|b| door_swap(&blocks.registry, b))
+    {
+        if warded(hit.block) {
+            ward_note(&mut toast);
+            return;
+        }
+        let closing = blocks.registry.get(other).solid;
+        let mut cells = vec![hit.block];
+        for dy in [1, -1] {
+            let mut p = BlockPos::new(hit.block.x, hit.block.y + dy, hit.block.z);
+            while world.block(p).is_some_and(|b| door_swap(&blocks.registry, b).is_some()) {
+                cells.push(p);
+                p.y += dy;
+            }
+        }
+        // Never shut a door on yourself.
+        if closing && cells.iter().any(|c| player.overlaps(*c)) {
+            return;
+        }
+        for c in cells {
+            if let Some(to) = world.block(c).and_then(|b| door_swap(&blocks.registry, b))
+                && world.set_block(c, to)
+            {
+                remesh_around(&mut world, &blocks, c);
+            }
+        }
+        placed.write(Placed { pos: hit.block, block: other });
+        anim.start(hand, Swing::Jab);
+        return;
+    }
+
     // Right click on a twig or a pebble: snap it off or pick it up.
     if mouse.just_pressed(MouseButton::Right)
         && !at_station
@@ -585,7 +633,7 @@ fn use_hands(
         // Aiming at a plant puts the block in its place.
         let is_plant = |p: BlockPos| world.block(p).is_some_and(|b| blocks.registry.get(b).shape.is_detail());
         let into = if is_plant(hit.block) { hit.block } else { hit.before };
-        let free = world.block(into).is_some_and(|b| !blocks.registry.get(b).solid && blocks.registry.get(b).shape != voxel::Shape::Torch);
+        let free = world.block(into).is_some_and(|b| !blocks.registry.get(b).solid && !matches!(blocks.registry.get(b).shape, voxel::Shape::Torch | voxel::Shape::Model));
         // Never inside yourself (solid blocks only; a torch can go at your feet).
         let blocks_player = blocks.registry.get(place).solid && player.overlaps(into);
         // Nothing can be built at or above the world's ceiling.
