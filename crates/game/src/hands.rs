@@ -1,6 +1,7 @@
 //! Your hand on screen: an arm holding whatever you have selected (a tool, a
 //! block, a torch with its light). It swings when used and sways with your
-//! steps. Built per `Hand`, so an off-hand can be switched on later.
+//! steps. Both hands are built; the left arm shows only while the left-hand
+//! slot holds something.
 
 use bevy::asset::RenderAssetUsages;
 use bevy::light::NotShadowCaster;
@@ -10,7 +11,7 @@ use voxel::{BlockDef, Face};
 
 use crate::blocks::{Blocks, VoxelMaterial};
 use crate::camera::FlyCamera;
-use crate::interact::{Hand, HandAnim, Mining, Wielded};
+use crate::interact::{Hand, HandAnim, Mining, OffHand, Wielded};
 use crate::item_art::ItemArt;
 use crate::items::{ItemId, ItemKind, Items};
 use crate::player::{MoveMode, Player};
@@ -62,7 +63,6 @@ fn base_position(hand: Hand) -> Vec3 {
     }
 }
 
-#[allow(clippy::single_element_loop)] // one hand for now
 fn spawn_hands(
     mut commands: Commands,
     cam: Query<Entity, With<FlyCamera>>,
@@ -81,8 +81,7 @@ fn spawn_hands(
     let fist = meshes.add(Cuboid::new(0.075, 0.075, 0.075));
     let sleeve_mat = materials.add(StandardMaterial { base_color: rgb(looks.0.shirt), perceptual_roughness: 1.0, ..default() });
     let skin_mat = materials.add(StandardMaterial { base_color: rgb(looks.0.skin), perceptual_roughness: 0.9, ..default() });
-    // One hand for now; add Hand::Left here with the off-hand slot.
-    for hand in [Hand::Right] {
+    for hand in [Hand::Right, Hand::Left] {
         commands.entity(cam).with_children(|c| {
             c.spawn((HandRoot(hand), Transform::from_translation(base_position(hand)), Visibility::default())).with_children(|h| {
                 h.spawn((Mesh3d(sleeve.clone()), MeshMaterial3d(sleeve_mat.clone()), Transform::from_xyz(0.0, -0.015, 0.2), NotShadowCaster));
@@ -138,7 +137,7 @@ pub(crate) fn block_mesh(def: &BlockDef, size: f32) -> Mesh {
 #[allow(clippy::too_many_arguments)]
 fn update_held(
     mut commands: Commands,
-    wielded: Res<Wielded>,
+    (wielded, off): (Res<Wielded>, Res<OffHand>),
     items: Res<Items>,
     blocks: Res<Blocks>,
     art: Option<Res<ItemArt>>,
@@ -151,11 +150,10 @@ fn update_held(
         return;
     }
     for (e, mut h) in &mut held {
-        // One hand for now: the right hand holds what's wielded.
         let id = match h.fixed {
             Some(item) => Some(item),
             None if h.hand == Hand::Right => wielded.0,
-            None => None,
+            None => off.0,
         };
         if h.showing == Some(id) {
             continue;
@@ -218,7 +216,7 @@ fn pose_hands(
     mining: Res<Mining>,
     player: Res<Player>,
     mode: Res<MoveMode>,
-    wielded: Res<Wielded>,
+    (wielded, off): (Res<Wielded>, Res<OffHand>),
     items: Res<Items>,
     view: Res<crate::camera::View>,
     guard: Res<crate::combat::Guard>,
@@ -228,12 +226,14 @@ fn pose_hands(
     let walking = *mode == MoveMode::Walk;
     let frozen = *frozen.get_or_insert_with(frozen_swing);
     for (root, mut tf, mut vis) in &mut roots {
-        // In third person your body holds things instead.
-        let want = if view.pulled { Visibility::Hidden } else { Visibility::Inherited };
+        let hand = root.0;
+        // In third person your body holds things instead; the left arm only
+        // comes up while it holds something.
+        let shown = !view.pulled && (hand == Hand::Right || off.0.is_some());
+        let want = if shown { Visibility::Inherited } else { Visibility::Hidden };
         if *vis != want {
             *vis = want;
         }
-        let hand = root.0;
         let arm = anim.arm(hand);
         let (style, t) = match (frozen, hand) {
             (Some(t), Hand::Right) => (wielded.0.map_or(Swing::Jab, |i| items.get(i).swing), Some(t)),
@@ -255,7 +255,7 @@ fn pose_hands(
         let sway = Vec3::new((phase * 0.5).sin() * 0.018 * bob, -(phase.sin().abs()) * 0.02 * bob, 0.0);
         let lift = if mining.block.is_some() && mining.hand == hand { 0.02 } else { 0.0 };
         // Eating: bring the food up toward the mouth and bob while chewing.
-        let e = (anim.eat * 4.0).min(1.0);
+        let e = if anim.eat_hand == hand { (anim.eat * 4.0).min(1.0) } else { 0.0 };
         let chew = (anim.eat * 40.0).sin() * 0.012 * e;
         let to_mouth = Vec3::new(-side * 0.2, 0.12 + chew, 0.12) * e;
         tf.translation = base_position(hand) + sway + to_mouth + Vec3::Y * lift + swing_pos * mirror;

@@ -11,8 +11,12 @@
 //! the tool meets the block (`swing::Swing::contact`), and that blow does its
 //! share of the work and sends a `Blow` (the knock you hear).
 //!
-//! `Hands` already has a left slot, always empty for now, so an off-hand can
-//! be added later without reworking this.
+//! Two hands: the right holds the selected hotbar item, or the weapon from
+//! the weapon slot while it is drawn (R draws it and puts it away; 1-9 and
+//! the wheel put it away too). The left hand holds whatever is in the
+//! inventory's left-hand slot. Right click uses the right hand's item if it
+//! has a right-click use, else the left hand's (place a block or torch, eat):
+//! `right_click_hand`.
 
 use bevy::input::mouse::AccumulatedMouseScroll;
 use bevy::prelude::*;
@@ -36,11 +40,12 @@ impl Plugin for InteractPlugin {
             .init_resource::<Mining>()
             .init_resource::<HandAnim>()
             .init_resource::<Wielded>()
+            .init_resource::<OffHand>()
             .init_resource::<Aimed>()
             // `BLOCKGAME_SLOT=n` starts with hotbar slot n in hand (for screenshots).
             .insert_resource(Hands {
                 right: Some(std::env::var("BLOCKGAME_SLOT").ok().and_then(|s| s.parse::<usize>().ok()).map_or(0, |n| n.clamp(1, SLOTS) - 1)),
-                left: None,
+                drawn: std::env::var_os("BLOCKGAME_DRAWN").is_some(),
             })
             .insert_resource(Hotbar { slots: vec![None; SLOTS] })
             .add_message::<Mined>()
@@ -85,9 +90,34 @@ pub struct Hotbar {
     pub slots: Vec<Option<ItemId>>,
 }
 
-/// What the right hand actually holds: the selected slot's item, if you have any.
+/// What the right hand actually holds: the drawn weapon, or the selected
+/// slot's item if you have any.
 #[derive(Resource, Debug, Default, Clone, Copy, PartialEq)]
 pub struct Wielded(pub Option<ItemId>);
+
+/// What the left hand holds (the inventory's left-hand slot).
+#[derive(Resource, Debug, Default, Clone, Copy, PartialEq)]
+pub struct OffHand(pub Option<ItemId>);
+
+/// Does a right click do something with this item in hand? (Place a block
+/// or torch, eat, raise a sword to block.)
+pub fn right_click_use(items: &Items, item: Option<ItemId>) -> bool {
+    item.is_some_and(|i| {
+        let it = items.get(i);
+        matches!(it.kind, ItemKind::Block(_) | ItemKind::Torch | ItemKind::Food { .. }) || it.swing == Swing::Slash
+    })
+}
+
+/// Which hand a right click uses: the right if its item has a use, else the
+/// left if its item has one (Minecraft's off-hand rule).
+pub fn right_click_hand(items: &Items, right: Option<ItemId>, left: Option<ItemId>) -> Hand {
+    if !right_click_use(items, right) && right_click_use(items, left) { Hand::Left } else { Hand::Right }
+}
+
+/// Is either hand holding a torch?
+pub fn holding_torch(items: &Items, wielded: &Wielded, off: &OffHand) -> bool {
+    [wielded.0, off.0].into_iter().flatten().any(|i| matches!(items.get(i).kind, ItemKind::Torch))
+}
 
 /// A block was broken (by hand, not by world generation).
 #[derive(Message, Debug, Clone, Copy)]
@@ -158,26 +188,23 @@ pub fn ray_box(origin: Vec3, dir: Vec3, min: Vec3, max: Vec3) -> Option<f32> {
     (far >= near.max(0.0)).then_some(near.max(0.0))
 }
 
-/// What each hand holds: an index into the hotbar, or nothing. Only the
-/// right hand is used for now; `left` stays `None` until the off-hand slot.
+/// The right hand: an index into the hotbar, and whether the weapon slot's
+/// weapon is drawn instead. (The left hand is the inventory's `left` slot.)
 #[derive(Resource, Debug, Clone, Copy)]
 pub struct Hands {
     pub right: Option<usize>,
-    pub left: Option<usize>,
+    pub drawn: bool,
 }
 
 impl Hands {
-    pub fn slot(&self, hand: Hand) -> Option<usize> {
-        match hand {
-            Hand::Left => self.left,
-            Hand::Right => self.right,
-        }
-    }
-
-    pub fn item(&self, hand: Hand, hotbar: &Hotbar) -> Option<ItemId> {
-        self.slot(hand).and_then(|s| hotbar.slots.get(s).copied().flatten())
+    /// The selected hotbar slot's item.
+    pub fn hotbar_item(&self, hotbar: &Hotbar) -> Option<ItemId> {
+        self.right.and_then(|s| hotbar.slots.get(s).copied().flatten())
     }
 }
+
+/// Key that draws the weapon and puts it away.
+pub const DRAW_KEY: KeyCode = KeyCode::KeyR;
 
 #[derive(Resource, Default)]
 pub struct Target {
@@ -230,6 +257,8 @@ pub struct HandAnim {
     pub right: Arm,
     /// Eating progress, 0..1 (set by `survival`): the hand comes up to the mouth.
     pub eat: f32,
+    /// Which hand is eating.
+    pub eat_hand: Hand,
     place_cooldown: f32,
     strike_cooldown: f32,
 }
@@ -260,10 +289,20 @@ fn choose_items(
     scroll: Res<AccumulatedMouseScroll>,
     mode: Res<MoveMode>,
     menus: Res<crate::camera::Menus>,
+    inv: Res<Inventory>,
     mut hands: ResMut<Hands>,
+    mut sound: MessageWriter<crate::sound::PlaySound>,
 ) {
     if menus.open {
         return;
+    }
+    // R draws the weapon from the weapon slot, and puts it away again.
+    if keys.just_pressed(DRAW_KEY) && (hands.drawn || inv.weapon.is_some()) {
+        hands.drawn = !hands.drawn;
+        sound.write(crate::sound::PlaySound::new(if hands.drawn { "ui_draw" } else { "ui_sheathe" }));
+    }
+    if hands.drawn && inv.weapon.is_none() {
+        hands.drawn = false;
     }
     const DIGITS: [KeyCode; 9] = [
         KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4, KeyCode::Digit5,
@@ -271,22 +310,35 @@ fn choose_items(
     ];
     let n = SLOTS;
     for (i, k) in DIGITS.iter().enumerate() {
-        if keys.just_pressed(*k) && hands.right != Some(i) {
-            hands.right = Some(i);
+        if keys.just_pressed(*k) {
+            // Picking a hotbar slot puts the weapon away.
+            hands.drawn = false;
+            if hands.right != Some(i) {
+                hands.right = Some(i);
+            }
         }
     }
     // The wheel steps through the hotbar on foot (when flying it sets speed).
     if *mode == MoveMode::Walk && scroll.delta.y != 0.0 && n > 0 {
         let step = if scroll.delta.y > 0.0 { n - 1 } else { 1 };
         hands.right = Some((hands.right.unwrap_or(0) + step) % n);
+        hands.drawn = false;
     }
 }
 
-/// The selected hotbar item, if any is left in the inventory.
-fn wield(hands: Res<Hands>, hotbar: Res<Hotbar>, inv: Res<Inventory>, mut wielded: ResMut<Wielded>) {
-    let w = Wielded(hands.item(Hand::Right, &hotbar).filter(|i| inv.count(*i) > 0));
+/// The right hand: the drawn weapon, or the selected hotbar item if any is
+/// left in the inventory. The left hand: the left-hand slot.
+fn wield(hands: Res<Hands>, hotbar: Res<Hotbar>, inv: Res<Inventory>, mut wielded: ResMut<Wielded>, mut off: ResMut<OffHand>) {
+    let w = Wielded(match (hands.drawn, inv.weapon) {
+        (true, Some(weapon)) => Some(weapon),
+        _ => hands.hotbar_item(&hotbar).filter(|i| inv.count(*i) > 0),
+    });
     if *wielded != w {
         *wielded = w;
+    }
+    let o = OffHand(inv.left_item());
+    if *off != o {
+        *off = o;
     }
 }
 
@@ -379,7 +431,7 @@ fn use_hands(
     mouse: Res<ButtonInput<MouseButton>>,
     cursor: Single<&CursorOptions, With<PrimaryWindow>>,
     target: Res<Target>,
-    wielded: Res<Wielded>,
+    (wielded, off): (Res<Wielded>, Res<OffHand>),
     items: Res<Items>,
     mut inv: ResMut<Inventory>,
     (mut mined, mut blows, mut chops, mut open_chest, mut placed, mut strikes, mut use_creature, mut toast): (
@@ -430,7 +482,6 @@ fn use_hands(
         mining.block = None;
         return;
     }
-    let kind = item.map(|i| &items.get(i).kind);
     let style = item.map_or(Swing::Jab, |i| items.get(i).swing);
 
     // A creature in front of the block you aim at takes the click.
@@ -505,11 +556,18 @@ fn use_hands(
         return;
     }
 
-    // Right click: place the block or torch in your hand.
-    let place = match kind {
+    // Right click: place the block or torch in your hand (the left hand's
+    // when the right hand's item has no right-click use).
+    let place_hand = right_click_hand(&items, item, off.0);
+    let place_item = if place_hand == Hand::Left { off.0 } else { item };
+    let place = match place_item.map(|i| &items.get(i).kind) {
         Some(ItemKind::Block(b)) => Some(*b),
         Some(ItemKind::Torch) => blocks.registry.id("torch"),
         _ => None,
+    };
+    let use_up = |inv: &mut Inventory| match place_hand {
+        Hand::Left => inv.use_left(1),
+        Hand::Right => place_item.is_some_and(|i| inv.take(i, 1)),
     };
     if let (Some(place), Some(hit)) = (place, target.hit)
         && mouse.pressed(MouseButton::Right)
@@ -527,10 +585,10 @@ fn use_hands(
         if free && mouse.just_pressed(MouseButton::Right) && warded(into) {
             ward_note(&mut toast);
         }
-        if free && !warded(into) && !blocks_player && under_ceiling && item.is_some_and(|i| inv.take(i, 1)) && world.set_block(into, place) {
+        if free && !warded(into) && !blocks_player && under_ceiling && use_up(&mut inv) && world.set_block(into, place) {
             placed.write(Placed { pos: into, block: place });
             remesh_around(&mut world, &blocks, into);
-            anim.start(hand, style);
+            anim.start(place_hand, place_item.map_or(Swing::Jab, |i| items.get(i).swing));
             anim.place_cooldown = PLACE_REPEAT;
         }
     }

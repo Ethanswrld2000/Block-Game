@@ -80,6 +80,7 @@ pub enum WearSlot {
 }
 
 impl WearSlot {
+    #[allow(dead_code)] // tests walk every slot
     pub const ALL: [WearSlot; 7] =
         [WearSlot::Head, WearSlot::HeadArmor, WearSlot::Body, WearSlot::BodyArmor, WearSlot::Legs, WearSlot::Feet, WearSlot::Back];
 
@@ -140,6 +141,12 @@ impl Item {
             ItemKind::Bag { .. } => Some(WearSlot::Back),
             _ => None,
         }
+    }
+
+    /// A weapon for the weapon slot: a tool made only for hitting (swords,
+    /// daggers, the spear), not for working blocks.
+    pub fn is_weapon(&self) -> bool {
+        matches!(&self.kind, ItemKind::Tool { speeds } if speeds.is_empty()) && self.damage > FIST_DAMAGE
     }
 }
 

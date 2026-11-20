@@ -63,7 +63,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   crouch edge-guard, swimming, head-bob, landing dip, fall `Damage` messages; F toggles `MoveMode`
   Walk/Fly), `game::items` (`assets/data/items.ron`: tools with per-material speeds, block items,
   torch; break time = hardness / speed), `game::interact` (one hand for now: 1-9/wheel select,
-  hold LMB to mine, RMB places; `Hands.left` reserved for a later off-hand), `game::hands`
+  hold LMB to mine, RMB places; left hand and weapon slot: see "Inventory redesign"), `game::hands`
   (view-model arm and held item, built per `Hand`), `game::torches` (torch blocks
   are `shape: torch`, skipped by the chunk mesher and drawn as entities with point lights via
   `World::shape_events`), `game::hud` (hotbar, hurt flash). Blocks have `hardness`/`material`.
@@ -82,7 +82,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   via `ComputedNode::contains_point`, since `Interaction` is deprecated in 0.20). Items have `size`,
   `stack`, `color` and kinds `Wear`, `Bag`, `Material`. New characters get `assets/data/start_kit.ron`.
   The hotbar holds shortcuts (`interact::Hotbar`, `Wielded` = selected item if you have any);
-  `interact` writes `Mined`/`OpenChest` messages. Survival reads weight, clothes warmth
+  `interact` writes `Mined`/`OpenChest` messages (hand slots and tabs: see "Inventory redesign" below). Survival reads weight, clothes warmth
   (`vitals::clothed`) and armor from the inventory. `camera::Menus.open` frees the mouse.
   Saves: `inventory.ron`, `chests.ron`. `BLOCKGAME_INVENTORY=1` opens the screen for screenshots.
 - Phase 8 (living world): done. `worldgen::structures` (villages of stilt huts every ~640 blocks,
@@ -100,7 +100,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `assets/data/progression.ron`; pure `skills` tree from `assets/data/skills.ron`: majors with
   weighted links, rings of 8 minors, taking a minor closes its neighbours, `Perks` sums the
   rewards; `Spells` Levitation/Light/Warmth on G/X/V burn focus; `GainXp` message from mining,
-  kills, crafting, `places` finds and the first sky island; K opens the map screen in `progress::ui`;
+  kills, crafting, `places` finds and the first sky island; K opens the tree on the inventory's Abilities tab (`progress::ui`);
   saved to `progress.ron`), `player::Body.levitate/feather`, `game::sound` (placeholder oggs from
   `tools/gen_placeholder_sounds.py`, material sounds in `assets/data/sounds.ron`, loops follow
   weather/levitation; no night loop, Ethan asked for it removed), `game::settings` (Esc pause menu, `saves/settings.ron` shared by all
@@ -436,6 +436,25 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   a chimney on the back wall, a stone path with steps from the door to a broken arch (one pillar whole with a stub of
   the span, the other snapped low, fallen stones). No trees round them (`keeps_clear`). `game::cast` places the aunt
   outside her door once (`cast.ron`), so the C16 beat can fire; the position is logged at startup. No smoke effect yet.
+- Inventory redesign: `inventory::ui` is one window with folder tabs (Items, Equipment, Stats, Abilities; submodules
+  `ui/equipment.rs`, `ui/stats.rs`, `ui/abilities.rs`); `InvScreen { open, tab }` says which is up. Items: the pockets
+  grid with the weapon and hand slots over it, side panel Crafting / Chest. Equipment: a live picture of you
+  (`inventory::preview`: a second `npc::body` rig on render layer 3 filmed into `PreviewImage`; idles, looks towards the
+  cursor, drag turns it, shrugs when gear changes) with armor slots left, clothes (and the Back/bag slot) right, weapon and
+  hands under it, and a strip of carried gear. `preview::Dressed` bodies (the picture and your third-person body) wear a
+  box per worn piece in the colour of its sprite. Stats: cards with bars (health, body, gear, temperature, progress, skill
+  totals). Abilities: spell cards, and the skill tree drawn over `ui::TreeArea` (`progress::ui` follows the tab; K opens
+  the inventory on this tab; the tree no longer has its own screen). Hands: `Inventory.left` is a real left-hand slot (any
+  stack, out of the pockets, saved in inventory.ron); `Inventory.weapon` holds one `Item::is_weapon` (tool with no mining
+  speeds); `interact::Hands { right, drawn }`: R (`interact::DRAW_KEY`) draws the weapon into the right hand, R or 1-9
+  puts it away. `interact::OffHand` mirrors the left hand; right click uses the right item if it has a right-click use,
+  else the left (`interact::right_click_hand`: place, eat); a torch in either hand lights and warms (`holding_torch`).
+  Both first-person arms exist (`hands`); the left shows only while holding something. Look: new sprites in ui.png
+  (`tab`, `tab_active`, `tab_hover`, `slot_glow`, `card`, `plinth`, `sil_*` empty-slot silhouettes, `icon_bag/figure/star/sword`;
+  the sheet is now 256x192), slots that take what you hold glow and others dim, drag and drop, window scales in, tabs
+  slide, slots lift and settle (`ui::animate`), UI sounds `ui_*` (`gen_placeholder_sounds.py --only ui_`).
+  Screenshots: `BLOCKGAME_INVENTORY=items|equipment|stats|abilities`, `BLOCKGAME_SKILLTREE=1` (= abilities),
+  `BLOCKGAME_DRAWN=1` starts with the weapon drawn.
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen

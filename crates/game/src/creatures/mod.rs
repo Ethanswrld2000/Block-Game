@@ -31,7 +31,7 @@ use crate::camera::FlyCamera;
 use crate::clock::WorldClock;
 use crate::interact::{Aimed, InteractSet, Strike, Wielded};
 use crate::inventory::grid::Stack;
-use crate::items::{ItemKind, Items};
+use crate::items::Items;
 use crate::player::{Damage, MoveMode, Player};
 use crate::survival::Survival;
 use crate::torches::Torches;
@@ -405,9 +405,9 @@ pub fn ground_near(world: &World, blocks: &Blocks, x: i32, z: i32, from: i32, to
 
 /// Light sources a spirit keeps away from (and moths flutter round): placed torches,
 /// a torch in your hand, the Light spell.
-pub(crate) fn lights(torches: &Torches, player: &Player, wielded: &Wielded, items: &Items, spell: bool) -> Vec<Vec3> {
+pub(crate) fn lights(torches: &Torches, player: &Player, (wielded, off): (&Wielded, &crate::interact::OffHand), items: &Items, spell: bool) -> Vec<Vec3> {
     let mut l: Vec<Vec3> = torches.positions().map(|p| Vec3::new(p.x as f32 + 0.5, p.y as f32 + 0.5, p.z as f32 + 0.5)).collect();
-    if spell || wielded.0.is_some_and(|i| matches!(items.get(i).kind, ItemKind::Torch)) {
+    if spell || crate::interact::holding_torch(items, wielded, off) {
         l.push(player.pos + Vec3::Y);
     }
     l
@@ -426,7 +426,7 @@ fn spawn_around(
     clock: Res<WorldClock>,
     (player, mode): (Res<Player>, Res<MoveMode>),
     torches: Res<Torches>,
-    (wielded, spells): (Res<Wielded>, Res<crate::progress::Spells>),
+    (wielded, spells, off): (Res<Wielded>, Res<crate::progress::Spells>, Res<crate::interact::OffHand>),
     items: Res<Items>,
     q: Query<&Creature>,
     mut dice: ResMut<Dice>,
@@ -450,7 +450,7 @@ fn spawn_around(
             Temper::Villager | Temper::Critter => {}
         }
     }
-    let lights = lights(&torches, &player, &wielded, &items, spells.light);
+    let lights = lights(&torches, &player, (&wielded, &off), &items, spells.light);
     let rng = &mut dice.0;
     // A few tries per tick; many land on water or unloaded ground.
     for _ in 0..4 {
@@ -638,7 +638,7 @@ fn spirits(
     mode: Res<MoveMode>,
     s: Res<Survival>,
     torches: Res<Torches>,
-    (wielded, spells): (Res<Wielded>, Res<crate::progress::Spells>),
+    (wielded, spells, off): (Res<Wielded>, Res<crate::progress::Spells>, Res<crate::interact::OffHand>),
     items: Res<Items>,
     mut hits: MessageWriter<Damage>,
     mut q: Query<(Entity, &mut Transform, &mut Creature)>,
@@ -647,7 +647,7 @@ fn spirits(
     let Some(kinds) = kinds else { return };
     let dt = time.delta_secs();
     let night = brain::spirit_hours(clock.hour());
-    let lights = lights(&torches, &player, &wielded, &items, spells.light);
+    let lights = lights(&torches, &player, (&wielded, &off), &items, spells.light);
     let target = (*mode == MoveMode::Walk && s.dead_for.is_none() && player.ready).then_some(player.pos + Vec3::Y * 0.3);
     let t = time.elapsed_secs();
     for (e, mut tf, mut c) in &mut q {

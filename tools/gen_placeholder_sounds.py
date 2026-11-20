@@ -156,6 +156,7 @@ def main():
 
     critters()
     voices()
+    ui()
 
 
 def sweep(seconds, f0, f1, decay=0.05, attack=0.004):
@@ -218,6 +219,30 @@ def voices():
     save("voice_1", syllable(530, 1840))  # eh
     save("voice_2", syllable(570, 840))   # oh
     save("voice_3", syllable(300, 870, 0.1))  # oo
+
+
+def ui():
+    """Soft inventory clicks: wooden taps and a cloth rustle, kept short and quiet."""
+    def tap(f, decay=0.03, seconds=0.09):
+        tt = t(seconds)
+        body = np.sin(2 * np.pi * f * tt) * env(len(tt), 0.001, decay)
+        return body + lowpass(noise(seconds), 0.25) * env(len(tt), 0.001, 0.008) * 0.6
+    def rustle(seconds, k=0.3):
+        return highpass(lowpass(noise(seconds), k), 0.05) * np.sin(np.pi * t(seconds) / seconds) ** 2
+    save("ui_open", np.concatenate([rustle(0.12), np.zeros(int(RATE * 0.01))]) + np.pad(tap(420, 0.05, 0.12), (0, int(RATE * 0.01))) * 0.6)
+    save("ui_close", np.concatenate([tap(330, 0.04, 0.1) * 0.7, rustle(0.08, 0.2) * 0.5]))
+    save("ui_tab", tap(760, 0.02, 0.07))
+    save("ui_pick", tap(620, 0.025) + np.pad(rustle(0.05, 0.4) * 0.4, (0, int(RATE * 0.04))))
+    save("ui_drop", tap(380, 0.035, 0.1))
+    tt = t(0.22)
+    clasp = tap(520, 0.03, 0.22) * 0.7 + np.pad(tap(880, 0.04, 0.14), (int(RATE * 0.08), 0)) * 0.6
+    save("ui_equip", clasp + rustle(0.22, 0.3) * 0.3)
+    # Drawing a blade: a rising scrape and a ring; putting it away: a falling scrape and a knock.
+    tt = t(0.32)
+    scrape = highpass(noise(0.32), 0.3) * np.sin(np.pi * tt / 0.32) ** 2 * 0.5
+    ring = sum(np.sin(2 * np.pi * f * tt) for f in (1500, 2240)) * env(len(tt), 0.2, 0.15) * 0.25
+    save("ui_draw", scrape + ring)
+    save("ui_sheathe", scrape[::-1] * 0.8 + np.pad(tap(300, 0.04, 0.1), (int(RATE * 0.22), 0)))
 
 
 if __name__ == "__main__":

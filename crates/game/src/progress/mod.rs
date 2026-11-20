@@ -79,9 +79,9 @@ impl Progress {
 pub const BASE_FOCUS: f32 = 60.0;
 const BASE_REGEN: f32 = 2.0;
 /// Focus per second while levitating (before skills).
-const LEVITATE_DRAIN: f32 = 1.8;
-const LIGHT_DRAIN: f32 = 0.8;
-const WARMTH_DRAIN: f32 = 1.2;
+pub(crate) const LEVITATE_DRAIN: f32 = 1.8;
+pub(crate) const LIGHT_DRAIN: f32 = 0.8;
+pub(crate) const WARMTH_DRAIN: f32 = 1.2;
 /// How much warmer the Warmth spell makes cold feel.
 pub const WARMTH_SPELL: f32 = 14.0;
 /// Levitation: climbing and sinking speed, blocks/s.

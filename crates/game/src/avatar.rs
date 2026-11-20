@@ -68,7 +68,9 @@ fn spawn_body(
     }
     let (root, rig) = body::build(&mut commands, &mut meshes, &mut materials, &looks.0, player.pos, 0.0);
     commands.spawn((Held::new(Hand::Right), Transform::from_scale(Vec3::splat(HELD_SCALE)), Visibility::default(), ChildOf(rig.hands[1])));
-    commands.entity(root).insert((PlayerBody, Name::new("Player body"), rig, Visibility::Hidden));
+    commands.spawn((Held::new(Hand::Left), Transform::from_scale(Vec3::splat(HELD_SCALE)), Visibility::default(), ChildOf(rig.hands[0])));
+    let dressed = crate::inventory::preview::Dressed::new(rig.anchors());
+    commands.entity(root).insert((PlayerBody, Name::new("Player body"), rig, dressed, Visibility::Hidden));
 }
 
 #[allow(clippy::too_many_arguments)]

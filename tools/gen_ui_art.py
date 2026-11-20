@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate the placeholder UI sprite sheet.
 
-Writes assets/textures/ui.png (256 x 128) and assets/textures/ui.ron
+Writes assets/textures/ui.png (256 x 192) and assets/textures/ui.ron
 (sprite name -> rectangle in the sheet, plus where to cut it for stretching).
 
 Paint over ui.png in any pixel editor (Aseprite, Pixelorama, Photoshop with
@@ -24,7 +24,7 @@ first, or only run it when you want the placeholder back.
 import os
 from PIL import Image
 
-W, H = 256, 128
+W, H = 256, 192
 img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
 px = img.load()
 sprites = []  # (name, x, y, w, h, slice or None)
@@ -467,6 +467,62 @@ ICONS = {
         "kkkkkkkkkkkk",
         "............",
     ],
+    "bag": [  # the Items tab: a satchel
+        "....kkkk....",
+        "...kN..Nk...",
+        "...k....k...",
+        ".kkkkkkkkkk.",
+        "knnnnnnnnnnk",
+        "knNNNyyNNNnk",
+        "knnnnyynnnnk",
+        "knnnnnnnnnnk",
+        "knnnnnnnnnnk",
+        "kNnnnnnnnnNk",
+        ".kkkkkkkkkk.",
+        "............",
+    ],
+    "figure": [  # the Equipment tab: a person
+        "....kkkk....",
+        "...kttttk...",
+        "...kttttk...",
+        "....kkkk....",
+        "..kkbbbbkk..",
+        ".kbkbbbbkbk.",
+        ".kbkbbbbkbk.",
+        ".kk.kBBk.kk.",
+        "....kBBk....",
+        "...kBkkBk...",
+        "...kNk.kNk..",
+        "...kk...kk..",
+    ],
+    "star": [  # the Abilities tab: a gold star
+        ".....kk.....",
+        ".....ky.....",
+        "....kyyk....",
+        "kkkkkyykkkkk",
+        "kyyyywwyyyyk",
+        ".kyyyyyyyyk.",
+        "..kyyyyyyk..",
+        "..kyyYYyyk..",
+        ".kyyYkkYyyk.",
+        ".kyYk..kYyk.",
+        ".kkk....kkk.",
+        "............",
+    ],
+    "sword": [
+        "..........kk",
+        ".........kck",
+        "........kcsk",
+        ".......kcsk.",
+        "......kcsk..",
+        ".k...kcsk...",
+        ".kk.kcsk....",
+        "..kkcsk.....",
+        "...kYk......",
+        "..kYkkk.....",
+        ".kYk..k.....",
+        ".kk.........",
+    ],
 }
 
 y = 76
@@ -479,6 +535,246 @@ for i, (name, rows) in enumerate(ICONS.items()):
             if c is not None:
                 put(ix + k, iy + j, c)
     add("icon_" + name, ix, iy, 12, 12)
+
+
+# --- Inventory (y = 128): slot silhouettes, tabs, glow, cards, plinth -------
+# Silhouettes show what goes in an empty slot. Grey, so the game tints them faint.
+SIL = {
+    "helmet": [
+        "................",
+        ".....######.....",
+        "...##########...",
+        "..############..",
+        "..###++++++###..",
+        ".###+......+###.",
+        ".###+......+###.",
+        ".####......####.",
+        ".####.#..#.####.",
+        ".####.#..#.####.",
+        ".####.#..#.####.",
+        "..###......###..",
+        "..##........##..",
+        "................",
+        "................",
+        "................",
+    ],
+    "hat": [
+        "................",
+        "................",
+        "................",
+        "......####......",
+        ".....######.....",
+        ".....######.....",
+        ".....######.....",
+        ".....++++++.....",
+        ".....######.....",
+        "..############..",
+        ".##############.",
+        "..++++++++++++..",
+        "................",
+        "................",
+        "................",
+        "................",
+    ],
+    "chest": [  # body armor
+        "................",
+        "..###......###..",
+        ".#####....#####.",
+        ".######++######.",
+        ".##############.",
+        "..############..",
+        "..####+##+####..",
+        "..############..",
+        "..####+##+####..",
+        "..############..",
+        "...##########...",
+        "...####++####...",
+        "...##########...",
+        "....########....",
+        "................",
+        "................",
+    ],
+    "shirt": [
+        "................",
+        "....###..###....",
+        "..#####++#####..",
+        ".##############.",
+        "###############+",
+        "####.######.####",
+        ".##..######..##.",
+        ".....######.....",
+        ".....######.....",
+        ".....######.....",
+        ".....######.....",
+        ".....######.....",
+        ".....++++++.....",
+        "................",
+        "................",
+        "................",
+    ],
+    "trousers": [
+        "................",
+        "...##########...",
+        "...++++++++++...",
+        "...##########...",
+        "...##########...",
+        "...#####+####...",
+        "...####..####...",
+        "...####..####...",
+        "...####..####...",
+        "...####..####...",
+        "...####..####...",
+        "...####..####...",
+        "...####..####...",
+        "...++++..++++...",
+        "................",
+        "................",
+    ],
+    "boots": [
+        "................",
+        "................",
+        "................",
+        "...####...####..",
+        "...####...####..",
+        "...####...####..",
+        "...####...####..",
+        "...####...####..",
+        "...####...####..",
+        "..#####..#####..",
+        ".######.######..",
+        ".######.######..",
+        ".++++++.++++++..",
+        "................",
+        "................",
+        "................",
+    ],
+    "sword": [
+        "................",
+        "............###.",
+        "...........####.",
+        "..........####..",
+        ".........####...",
+        "........####....",
+        ".......####.....",
+        "......####......",
+        "..#..####.......",
+        "..#+####........",
+        "...+##..........",
+        "...##+#.........",
+        "..##..+#........",
+        ".##.............",
+        "................",
+        "................",
+    ],
+    "hand": [  # an open right hand
+        "................",
+        "......#.........",
+        "....#.#.#.......",
+        "....#.#.#.#.....",
+        "....#.#.#.#.....",
+        "....#######.....",
+        "..#.#######.....",
+        "..##.######.....",
+        "...#########....",
+        "....########....",
+        ".....#######....",
+        ".....######.....",
+        ".....++++++.....",
+        "................",
+        "................",
+        "................",
+    ],
+    "bag": [
+        "................",
+        ".....######.....",
+        "....#......#....",
+        "....#......#....",
+        "..############..",
+        "..############..",
+        "..#####++#####..",
+        "..#####++#####..",
+        "..############..",
+        "..############..",
+        "..############..",
+        "..++++++++++++..",
+        "................",
+        "................",
+        "................",
+        "................",
+    ],
+}
+SIL_HI, SIL_LO = hexc("d8d8d8"), hexc("8c8c8c")
+y = 128
+for i, (name, rows) in enumerate(SIL.items()):
+    sx = i * 16
+    assert len(rows) == 16 and all(len(r) == 16 for r in rows), name
+    for j, row in enumerate(rows):
+        for k, ch in enumerate(row):
+            if ch == "#":
+                put(sx + k, y + j, SIL_HI)
+            elif ch == "+":
+                put(sx + k, y + j, SIL_LO)
+    add("sil_" + name, sx, y, 16, 16)
+# The left hand is the right one mirrored.
+sx = len(SIL) * 16
+for j in range(16):
+    for k in range(16):
+        c = px[(len(SIL) - 2) * 16 + 15 - k, y + j]
+        if c[3]:
+            put(sx + k, y + j, c)
+add("sil_hand_left", sx, y, 16, 16)
+
+# tab: a folder tab on top of the window. tab_active: the open one, whose
+# face runs into the panel below it (no bottom edge).
+x = 176
+frame(x, y, 16, 14, INK, hexc("4a5a4c"), hexc("1d2620"), hexc("18201b", 240))
+add("tab", x, y, 16, 14, 4)
+x = 192
+rect(x, y, 16, 14, INK)
+rect(x + 1, y + 1, 14, 2, WOOD_HI)
+rect(x + 1, y + 1, 2, 13, WOOD_HI)
+rect(x + 13, y + 1, 2, 13, WOOD_LO)
+rect(x + 3, y + 3, 10, 11, PANEL_FACE)
+put(x + 1, y + 1, BRASS_HI)
+put(x + 14, y + 1, BRASS)
+add("tab_active", x, y, 16, 14, (4, 4, 4, 1))
+# tab_hover: a raised, lighter tab.
+x = 208
+frame(x, y, 16, 14, INK, hexc("7d9670"), hexc("2d3a28"), hexc("26332a", 245))
+add("tab_hover", x, y, 16, 14, 4)
+# slot_glow: a slot that takes what you carry (gold-green light round it).
+x = 224
+frame(x, y, 16, 16, hexc("b8e07a"), hexc("e8f6a0"), hexc("6e9a3a"), hexc("1f2f1c", 235), inner=hexc("0b0d0a"))
+add("slot_glow", x, y, 16, 16, 4)
+# card: a quiet frame for the stats tab.
+x = 240
+frame(x, y, 16, 16, hexc("0b0d0a", 255), hexc("2f3b33"), hexc("121813"), hexc("161e19", 235))
+put(x + 1, y + 1, BRASS)
+put(x + 14, y + 1, BRASS)
+add("card", x, y, 16, 16, 4)
+
+# plinth: the stone disc the player stands on in the equipment tab, with its
+# shadow. Drawn under the live picture.
+y = 148
+pw, ph = 64, 20
+for j in range(ph):
+    for i in range(pw):
+        nx = (i + 0.5 - pw / 2) / (pw / 2)
+        ny = (j + 0.5 - 7) / 6.5
+        top = nx * nx + ny * ny
+        side = nx * nx + ((j + 0.5 - 11) / 6.5) ** 2
+        shade = nx * nx + ((j + 0.5 - 13) / 7.0) ** 2
+        if top <= 1.0:
+            rim = top > 0.78
+            c = hexc("5d6a5c") if rim else (hexc("4b574a") if (i + j) % 7 else hexc("566355"))
+            if ny < -0.55 and not rim:
+                c = hexc("6a786a")
+            put(i, y + j, c)
+        elif side <= 1.0 and j > 7:
+            put(i, y + j, hexc("2b332b") if j > 12 else hexc("374036"))
+        elif shade <= 1.0:
+            put(i, y + j, (0, 0, 0, int(120 * (1 - shade))))
+add("plinth", 0, y, pw, ph)
 
 # --- Write -----------------------------------------------------------------
 root = os.path.join(os.path.dirname(__file__), "..", "assets", "textures")
