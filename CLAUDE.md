@@ -299,11 +299,13 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   other benches (slots keel / rigging / envelope / engine, the drive wheel is a `ToolUse::Turn` tool). It builds
   machines: items of kind `Machine("name")` in items.ron, numbers in `assets/data/machines.ron`. Only the airship so
   far (8 planks, 6 cordage, 4 hide, 6 raw iron). `game::airship`: right click open ground with it to set it down
-  (bow the way you look; needs ~4 x 9 x 7 clear), right click or E to board, W/S ahead/astern, A/D turn, Space/Ctrl
-  rise/sink, E steps off over the rail. Pure flight rules in `airship::flight` (eased speed, oriented footprint,
-  stops on solid blocks one axis at a time). While aboard `player::walk` is off (`airship::not_aboard`) and the
-  player stands at the helm. Ships and who is aboard save to `airships.ron`. You can't walk on the deck (the ship
-  isn't a collider) and it can't be picked back up yet.
+  (bow the way you look; needs ~4 x 9 x 7 clear), right click or E to board onto the deck (`Airships.deck`: ship and
+  spot in its frame; `walk_deck` moves you with WASD inside the rails, `DECK_MIN`/`DECK_MAX`), right click within 1.4
+  blocks of the helm to take it (`Airships.aboard`): W/S ahead/astern, A/D turn, Space/Ctrl rise/sink, E lets go back
+  onto the deck; on deck E steps off over the nearest rail (`over_rail`). Pure flight rules in `airship::flight`
+  (eased speed, oriented footprint, stops on solid blocks one axis at a time). At the helm or on deck `player::walk` is
+  off (`airship::not_aboard`). Crouch + right click a ship with an empty hand (not aboard) picks it back up as the
+  `airship` item. Ships, the helm and the deck spot save to `airships.ron`.
 - Urn split (Legacy prompts 2-4): the tool urn keeps only the tool bench and the anvils. Carpentry urn
   (`carpentry_urn`): carpentry bench, carpentry table, Joiner's Table (`chair`, `table`), tier 2 Door Frame
   (`wooden_door`) and Glass Kiln (`glass`, `window`; sand and glass need heat). Vehicle urn (`vehicle_urn`): the

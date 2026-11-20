@@ -393,8 +393,6 @@ mod tests {
         }
     }
 
-    use super::*;
-
     #[test]
     fn tint_and_sway_pack_and_unpack() {
         for tint in [0.0, 0.5, 1.0] {
