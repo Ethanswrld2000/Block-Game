@@ -8,6 +8,11 @@
 //! on `GameUpdate` runs inside `Update` every frame. Systems in `First`,
 //! `PreUpdate` or `Last` use `run_if(in_game)`.
 //!
+//! "Save and quit to title" in the pause menu saves everything (the usual exit
+//! path), then starts the game again on this screen: the game's state lives in
+//! many resources and entities, and a fresh start is the one reset that can't
+//! miss any of them.
+//!
 //! Screenshot and bench runs skip the screen and open `saves/world1` (or
 //! `BLOCKGAME_WORLD=<folder>`). `BLOCKGAME_MENU=1|new|load` keeps it up, with
 //! `BLOCKGAME_SCREENSHOT` too, to take a picture of it.
@@ -44,6 +49,21 @@ pub enum Screen {
 }
 
 /// Run condition for game systems outside `GameUpdate`.
+/// Set by the pause menu's "Save and quit to title".
+pub static RETURN_TO_TITLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// After the app has closed and saved: start it again on the title screen if
+/// that is what was asked. `BLOCKGAME_WORLD` is dropped so the title shows.
+pub fn relaunch_to_title() {
+    if !RETURN_TO_TITLE.load(std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
+    let Ok(exe) = std::env::current_exe() else { return };
+    if let Err(e) = std::process::Command::new(exe).args(std::env::args_os().skip(1)).env_remove("BLOCKGAME_WORLD").spawn() {
+        eprintln!("could not return to the title screen: {e}");
+    }
+}
+
 pub fn in_game(screen: Option<Res<State<Screen>>>) -> bool {
     screen.is_some_and(|s| *s.get() == Screen::Game)
 }

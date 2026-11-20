@@ -1,6 +1,6 @@
 //! Settings (view distance, mouse, field of view, sound) and the pause menu.
 //!
-//! Esc opens the menu (Resume, Settings, Save and quit); settings are saved to
+//! Esc opens the menu (Resume, Settings, Save and quit to title); settings are saved to
 //! `settings.ron` next to the world folders, so every world shares them.
 
 use bevy::prelude::*;
@@ -203,7 +203,7 @@ fn spawn_menu(mut commands: Commands, theme: Res<Theme>) {
                 p.spawn((Node { width: Val::Px(260.0), height: Val::Px(8.0), margin: UiRect::bottom(Val::Px(6.0)), ..default() }, theme.skin("divider")));
                 p.spawn(button(theme, Button::Resume, "Resume", 260.0));
                 p.spawn(button(theme, Button::Settings, "Settings", 260.0));
-                p.spawn(button(theme, Button::Quit, "Save and quit", 260.0));
+                p.spawn(button(theme, Button::Quit, "Save and quit to title", 260.0));
             });
             root.spawn((SettingsPage, page(Display::None), theme.skin("panel"))).with_children(|p| {
                 p.spawn((theme.bold(sizes::TITLE), Text::new("Settings"), TextColor(colors::HEADING)));
@@ -305,8 +305,10 @@ fn hover_and_click(
         }
         Some(Button::Settings) => pause.settings = true,
         Some(Button::Back) => pause.settings = false,
-        // Every system that saves on exit runs before the app closes.
+        // Every system that saves on exit runs before the app closes; then the
+        // game starts again on the title screen (`menu::relaunch_to_title`).
         Some(Button::Quit) => {
+            crate::menu::RETURN_TO_TITLE.store(true, std::sync::atomic::Ordering::Relaxed);
             exit.write(AppExit::Success);
         }
         Some(Button::Step(i, d)) => Knob::ALL[i].step(&mut settings, d as f32),
