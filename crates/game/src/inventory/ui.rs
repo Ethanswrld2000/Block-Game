@@ -327,7 +327,14 @@ fn open_close(
             *seed = seed.wrapping_add(0x9E37_79B9_7F4A_7C15) ^ (p.x as u64).wrapping_mul(31) ^ (p.z as u64).wrapping_mul(1_000_003);
             let mut rng = crate::creatures::brain::Rng(*seed | 1);
             let grid = chests.grid(p);
-            loot.fill(if in_barrow { "barrow" } else { "village" }, &items, grid, || rng.unit());
+            let table = if generator.0.island_chest(p.x, p.y, p.z) {
+                "sky_island"
+            } else if in_barrow {
+                "barrow"
+            } else {
+                "village"
+            };
+            loot.fill(table, &items, grid, || rng.unit());
         }
         chests.grid(m.0);
         ui.dirty = true;
