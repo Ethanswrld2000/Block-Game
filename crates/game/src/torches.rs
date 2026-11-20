@@ -26,7 +26,7 @@ impl Plugin for TorchPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Torches>()
             .add_systems(crate::menu::GameStartup, torch_assets)
-            .add_systems(crate::menu::GameUpdate, (sync_torches, flicker).chain());
+            .add_systems(crate::menu::GameUpdate, (sync_torches, share_lights, flicker).chain());
     }
 }
 
@@ -72,6 +72,55 @@ pub struct Flicker {
     pub seed: f32,
 }
 
+/// A placed torch's or campfire's light. Only the `MAX_LIGHTS` nearest the
+/// camera shine (the furthest few fade out), so a wall of torches costs no
+/// more than a handful; the flames still show.
+#[derive(Component)]
+pub struct FireLight(f32);
+
+/// Placed fire lights that shine at once.
+pub const MAX_LIGHTS: usize = 24;
+/// The furthest this many of them fade out instead of popping.
+const FADE_LIGHTS: usize = 6;
+
+/// How bright the light ranked `rank` (0 = nearest the camera) shines, 0..1.
+pub fn light_share(rank: usize) -> f32 {
+    if rank >= MAX_LIGHTS {
+        0.0
+    } else {
+        ((MAX_LIGHTS - rank) as f32 / FADE_LIGHTS as f32).min(1.0)
+    }
+}
+
+/// Rank placed fire lights by distance to the camera and dim all but the nearest.
+fn share_lights(
+    time: Res<Time>,
+    mut wait: Local<f32>,
+    cam: Query<&GlobalTransform, With<crate::camera::FlyCamera>>,
+    mut lights: Query<(&GlobalTransform, &mut FireLight, &mut Visibility)>,
+) {
+    *wait -= time.delta_secs();
+    if *wait > 0.0 {
+        return;
+    }
+    *wait = 0.25;
+    let Ok(cam) = cam.single() else { return };
+    let eye = cam.translation();
+    let mut ranked: Vec<(f32, usize)> = lights.iter().enumerate().map(|(i, (tf, _, _))| (tf.translation().distance_squared(eye), i)).collect();
+    ranked.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let mut rank_of = vec![0; ranked.len()];
+    for (rank, (_, i)) in ranked.iter().enumerate() {
+        rank_of[*i] = rank;
+    }
+    for (i, (_, mut light, mut vis)) in lights.iter_mut().enumerate() {
+        light.0 = light_share(rank_of[i]);
+        let want = if light.0 > 0.0 { Visibility::Inherited } else { Visibility::Hidden };
+        if *vis != want {
+            *vis = want;
+        }
+    }
+}
+
 fn torch_assets(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<StandardMaterial>>) {
     commands.insert_resource(TorchAssets {
         stick: meshes.add(Cuboid::new(0.12, 0.6, 0.12)),
@@ -97,6 +146,7 @@ pub fn torch_model(parent: &mut ChildSpawnerCommands, a: &TorchAssets, seed: f32
     parent.spawn((
         PointLight { intensity: TORCH_LUMENS, range: TORCH_RANGE, color: TORCH_COLOR, shadow_maps_enabled: false, ..default() },
         Flicker { base: TORCH_LUMENS, seed },
+        FireLight(1.0),
         Transform::from_xyz(0.0, 0.8, 0.0),
     ));
 }
@@ -124,6 +174,7 @@ pub fn campfire_model(parent: &mut ChildSpawnerCommands, a: &TorchAssets, seed: 
     parent.spawn((
         PointLight { intensity: CAMPFIRE_LUMENS, range: CAMPFIRE_RANGE, color: TORCH_COLOR, shadow_maps_enabled: false, ..default() },
         Flicker { base: CAMPFIRE_LUMENS, seed },
+        FireLight(1.0),
         Transform::from_xyz(0.0, 0.7, 0.0),
     ));
 }
@@ -183,10 +234,24 @@ fn sync_torches(
     }
 }
 
-fn flicker(time: Res<Time>, mut lights: Query<(&mut PointLight, &Flicker)>) {
+fn flicker(time: Res<Time>, mut lights: Query<(&mut PointLight, &Flicker, Option<&FireLight>)>) {
     let t = time.elapsed_secs();
-    for (mut l, f) in &mut lights {
+    for (mut l, f, share) in &mut lights {
         let n = (t * 9.0 + f.seed).sin() * 0.5 + (t * 23.0 + f.seed * 1.7).sin() * 0.3 + (t * 3.1 + f.seed).sin() * 0.2;
-        l.intensity = f.base * (1.0 + n * 0.08);
+        l.intensity = f.base * (1.0 + n * 0.08) * share.map_or(1.0, |s| s.0);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_the_nearest_lights_shine() {
+        assert_eq!(light_share(0), 1.0);
+        assert_eq!(light_share(MAX_LIGHTS - FADE_LIGHTS), 1.0);
+        assert!(light_share(MAX_LIGHTS - 2) > 0.0 && light_share(MAX_LIGHTS - 2) < 1.0);
+        assert_eq!(light_share(MAX_LIGHTS), 0.0);
+        assert_eq!(light_share(500), 0.0);
     }
 }

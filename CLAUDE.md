@@ -115,7 +115,8 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   guides in `assets/textures/creatures/guides/`. No skin or missing PNG = flat `color`s. Hurt tints
   the skin red; spirits blend the PNG's alpha. `--features dev` hot-reloads PNGs (`bevy/file_watcher`).
   A PNG may be painted at 2x/4x as long as its shape matches (tested).
-- Known gaps: vertices are 40 bytes, not the packed 8-byte format (performance pass); no snow cover yet; no block light propagation (torches are real point lights); villagers walk straight at goals (they vanish at the door at night). Wild creatures find
+- Known gaps: vertices are 40 bytes, not the packed 8-byte format (performance pass); no snow cover yet; no block light propagation (torches are real point lights; only the `torches::MAX_LIGHTS` (24) placed fires nearest the
+  camera shine, the furthest few fade, `share_lights`); villagers walk straight at goals (they vanish at the door at night). Wild creatures find
   their way with `combat::path` (`creatures::steer`) when chasing or wandering; boxes named `leg_*` swing in diagonal
   pairs and `tail*` sways as they walk (`creatures::limb_swing`, driven by `Creature.stride`).
 - Phase 10 (UI overhaul): done. `game::theme`: UI sprite sheet `assets/textures/ui.png` + `ui.ron`
