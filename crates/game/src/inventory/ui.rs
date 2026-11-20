@@ -12,8 +12,10 @@
 //! Click an item to pick it up, click again to put it down (or drag it and
 //! let go); R turns it while you hold it. Right click moves an item straight
 //! across (to the chest and back, onto your body, into the weapon slot).
-//! Hover an item and press 1-9 to put it on the hotbar. Q throws what you
-//! hold. Shift-click picks up half a stack. Slots that take what you hold
+//! The Items tab shows the 1-9 hotbar under the pockets: drop an item on a
+//! key to put it there, click a key to take it in your right hand, right
+//! click to clear it (hovering an item and pressing 1-9 works too). Q throws
+//! what you hold. Shift-click picks up half a stack. Slots that take what you hold
 //! glow; the rest dim. K opens the screen on the Abilities tab.
 
 mod abilities;
@@ -45,7 +47,7 @@ const CELL: f32 = 40.0;
 const SIDE_W: f32 = 360.0;
 /// The space every tab has inside the window.
 pub(crate) const CONTENT_W: f32 = 1182.0;
-pub(crate) const CONTENT_H: f32 = 456.0;
+pub(crate) const CONTENT_H: f32 = 530.0;
 
 pub struct InventoryUiPlugin;
 
@@ -142,6 +144,8 @@ enum Hover {
     Weapon,
     LeftHand,
     RightHand,
+    /// A hotbar key (0-8) on the Items tab.
+    Hotbar(usize),
     /// An item in the equipment tab's strip of gear you carry (index into the pockets).
     Gear(usize),
     Recipe(usize),
@@ -475,7 +479,7 @@ fn accepts(items: &Items, at: Hover, item: ItemId) -> bool {
     match at {
         Hover::Slot(s) => it.wear_slot() == Some(s),
         Hover::Weapon => it.is_weapon(),
-        Hover::LeftHand | Hover::RightHand => true,
+        Hover::LeftHand | Hover::RightHand | Hover::Hotbar(_) => true,
         _ => false,
     }
 }
@@ -491,7 +495,7 @@ fn click(
     (mut ui, mut screen, mut motion): (ResMut<InvUi>, ResMut<InvScreen>, ResMut<Motion>),
     mut inv: ResMut<Inventory>,
     mut chests: ResMut<Chests>,
-    (hands, mut hotbar): (Res<Hands>, ResMut<Hotbar>),
+    (mut hands, mut hotbar): (ResMut<Hands>, ResMut<Hotbar>),
     (mut spill, mut sound): (MessageWriter<Spill>, MessageWriter<PlaySound>),
     (mut gain, prog): (MessageWriter<crate::progress::GainXp>, Option<Res<crate::progress::xp::Progression>>),
 ) {
@@ -693,18 +697,38 @@ fn click(
                 let id = h.stack.item;
                 ui.held = None;
                 put_back(h, &mut inv, &mut chests, &items, player.pos + Vec3::Y, &mut spill);
-                for s in hotbar.slots.iter_mut() {
-                    if *s == Some(id) {
-                        *s = None;
-                    }
-                }
-                if let Some(s) = hotbar.slots.get_mut(key) {
-                    *s = Some(id);
-                }
+                set_hotbar(&mut hotbar, key, id);
                 ui.message = format!("{} in your right hand (hotbar key {})", items.get(id).title, key + 1);
             }
             Some(_) => {}
             None => ui.message = "The right hand holds your hotbar pick (1-9); R draws your weapon".into(),
+        },
+        Hover::Hotbar(k) => match ui.held {
+            Some(h) if left => {
+                // The hotbar holds shortcuts: the item goes back where it
+                // came from and the key points at it.
+                let id = h.stack.item;
+                ui.held = None;
+                put_back(h, &mut inv, &mut chests, &items, player.pos + Vec3::Y, &mut spill);
+                set_hotbar(&mut hotbar, k, id);
+                ui.message = format!("{} on hotbar key {}", items.get(id).title, k + 1);
+                motion.settle = Some((hover, motion.now));
+            }
+            Some(_) => {}
+            None if left => {
+                hands.right = Some(k);
+                hands.drawn = false;
+                if let Some(id) = hotbar.slots.get(k).copied().flatten() {
+                    ui.message = format!("{} in your right hand", items.get(id).title);
+                }
+                sound.write(PlaySound::new("ui_equip"));
+                motion.settle = Some((hover, motion.now));
+            }
+            None => {
+                if let Some(s) = hotbar.slots.get_mut(k) {
+                    *s = None;
+                }
+            }
         },
         Hover::Recipe(i) => {
             if !left {
@@ -833,15 +857,22 @@ fn keys(
         }
         .or(ui.held.map(|h| h.stack.item));
         if let Some(id) = item {
-            for s in hotbar.slots.iter_mut() {
-                if *s == Some(id) {
-                    *s = None;
-                }
-            }
-            hotbar.slots[k] = Some(id);
+            set_hotbar(&mut hotbar, k, id);
             ui.message = format!("{} on hotbar key {}", items.get(id).title, k + 1);
             ui.dirty = true;
         }
+    }
+}
+
+/// Put an item on hotbar key `k`, taking it off any other key.
+fn set_hotbar(hotbar: &mut Hotbar, k: usize, id: ItemId) {
+    for s in hotbar.slots.iter_mut() {
+        if *s == Some(id) {
+            *s = None;
+        }
+    }
+    if let Some(s) = hotbar.slots.get_mut(k) {
+        *s = Some(id);
     }
 }
 
@@ -1126,7 +1157,7 @@ fn icon_line(p: &mut ChildSpawnerCommands, theme: &Theme, icon_name: &str, s: St
 }
 
 /// The item under the cursor, for the card.
-fn hovered_item(hover: Option<Hover>, inv: &Inventory, chests: &Chests, items: &Items, recipes: Option<&Recipes>, wielded: Option<ItemId>) -> Option<ItemId> {
+fn hovered_item(hover: Option<Hover>, inv: &Inventory, chests: &Chests, items: &Items, recipes: Option<&Recipes>, wielded: Option<ItemId>, hotbar: &Hotbar) -> Option<ItemId> {
     match hover? {
         Hover::Cell(g, x, y) => {
             let grid = match g {
@@ -1139,6 +1170,7 @@ fn hovered_item(hover: Option<Hover>, inv: &Inventory, chests: &Chests, items: &
         Hover::Weapon => inv.weapon,
         Hover::LeftHand => inv.left_item(),
         Hover::RightHand => wielded,
+        Hover::Hotbar(k) => hotbar.slots.get(k).copied().flatten(),
         Hover::Gear(i) => inv.pockets.items.get(i).map(|p| p.stack.item),
         Hover::Recipe(i) => recipes.and_then(|r| r.list.get(i)).map(|r| r.makes.item),
         Hover::Tab(_) | Hover::Side(_) | Hover::Preview => None,
@@ -1157,6 +1189,8 @@ struct Data<'w> {
     player: Res<'w, Player>,
     s: Res<'w, Survival>,
     wielded: Res<'w, crate::interact::Wielded>,
+    hotbar: Res<'w, Hotbar>,
+    hands: Res<'w, Hands>,
     progress: Res<'w, crate::progress::Progress>,
     prog: Res<'w, crate::progress::xp::Progression>,
     perks: Res<'w, crate::progress::skills::Perks>,
@@ -1166,7 +1200,7 @@ struct Data<'w> {
 
 #[allow(clippy::too_many_arguments)]
 fn rebuild(mut commands: Commands, mut ui: ResMut<InvUi>, theme: Res<Theme>, d: Data, roots: Query<Entity, With<InvRoot>>) {
-    if !(ui.dirty || (ui.open && (d.inv.is_changed() || d.chests.is_changed()))) {
+    if !(ui.dirty || (ui.open && (d.inv.is_changed() || d.chests.is_changed() || d.hotbar.is_changed() || d.hands.is_changed()))) {
         return;
     }
     ui.dirty = false;
@@ -1239,7 +1273,7 @@ fn rebuild(mut commands: Commands, mut ui: ResMut<InvUi>, theme: Res<Theme>, d: 
             });
             // A card about what's under the cursor.
             if held.is_none()
-                && let Some(id) = hovered_item(hover, inv, &d.chests, items, d.recipes.as_deref(), d.wielded.0)
+                && let Some(id) = hovered_item(hover, inv, &d.chests, items, d.recipes.as_deref(), d.wielded.0, &d.hotbar)
             {
                 tooltip(root, theme, items, art, id);
             }
@@ -1262,7 +1296,7 @@ fn rebuild(mut commands: Commands, mut ui: ResMut<InvUi>, theme: Res<Theme>, d: 
 
 fn hint(tab: Tab) -> &'static str {
     match tab {
-        Tab::Items => "Click: pick up / put down   Drag and drop   R: turn   Right click: move across or wear   Shift-click: half   1-9: hotbar   Q: throw",
+        Tab::Items => "Click: pick up / put down   Drag and drop   R: turn   Right click: move across or wear   Shift-click: half   Hotbar: drop on a key, right click clears   Q: throw",
         Tab::Equipment => "Click or drag gear onto a slot   Right click: put on / take off   Drag the picture to turn it   R in play: draw your weapon",
         Tab::Stats => "Your body, gear and progress right now",
         Tab::Abilities => "Spells use focus. Learn new ones in the tree   K: open this tab",
@@ -1333,6 +1367,19 @@ fn items_tab(c: &mut ChildSpawnerCommands, view: &SlotView, d: &Data, ui: &mut I
                 });
             });
             grid_node(col, theme, &inv.pockets, GridRef::Pockets, items, art, hover, held);
+            // The hotbar keys 1-9, under the pockets.
+            col.spawn(Node { column_gap: Val::Px(6.0), align_items: AlignItems::Center, margin: UiRect::top(Val::Px(6.0)), ..default() }).with_children(|h| {
+                h.spawn((text("Hotbar", sizes::SMALL, colors::MUTED), Node { margin: UiRect::right(Val::Px(6.0)), ..default() }));
+                for k in 0..d.hotbar.slots.len() {
+                    let id = d.hotbar.slots[k];
+                    let count = id.map_or(0, |i| inv.count(i));
+                    let selected = d.hands.right == Some(k) && !d.hands.drawn;
+                    h.spawn(Node { flex_direction: FlexDirection::Column, align_items: AlignItems::Center, ..default() }).with_children(|s| {
+                        view.slot(s, Hover::Hotbar(k), id.map(|i| Stack::new(i, count.clamp(1, u16::MAX as u32) as u16)), 44.0);
+                        s.spawn(text(format!("{}", k + 1), sizes::SMALL, if selected { colors::GOLD } else if count == 0 && id.is_some() { colors::BAD } else { colors::FAINT }));
+                    });
+                }
+            });
         });
         // Side panel: Crafting, and the chest when one is open.
         row.spawn(Node { flex_direction: FlexDirection::Column, width: Val::Px(SIDE_W), ..default() }).with_children(|side| {
@@ -1516,6 +1563,21 @@ fn animate(
 mod tests {
     use super::*;
     use crate::items::tests::load;
+
+    #[test]
+    fn hotbar_key_moves_an_item_off_its_old_key() {
+        let (_, items) = load();
+        let (dirt, torch) = (items.id("dirt").unwrap(), items.id("torch").unwrap());
+        let mut hb = Hotbar { slots: vec![None; 9] };
+        set_hotbar(&mut hb, 2, dirt);
+        set_hotbar(&mut hb, 4, torch);
+        set_hotbar(&mut hb, 7, dirt);
+        assert_eq!(hb.slots[2], None);
+        assert_eq!(hb.slots[4], Some(torch));
+        assert_eq!(hb.slots[7], Some(dirt));
+        set_hotbar(&mut hb, 4, dirt);
+        assert_eq!((hb.slots[4], hb.slots[7]), (Some(dirt), None));
+    }
 
     #[test]
     fn put_down_merges_places_or_swaps() {
