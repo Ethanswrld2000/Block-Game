@@ -85,14 +85,12 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `interact` writes `Mined`/`OpenChest` messages (hand slots and tabs: see "Inventory redesign" below). Survival reads weight, clothes warmth
   (`vitals::clothed`) and armor from the inventory. `camera::Menus.open` frees the mouse.
   Saves: `inventory.ron`, `chests.ron`. `BLOCKGAME_INVENTORY=1` opens the screen for screenshots.
-- Phase 8 (living world): done. `worldgen::structures` (villages of stilt huts every ~640 blocks,
-  one always 50-90 blocks from spawn; barrows with a stair, hall and side rooms; names from
+- Phase 8 (living world): done. `worldgen::structures` (barrows with a stair, hall and side rooms; names from
   syllables), `game::creatures` (kinds in `assets/data/creatures.ron`: temper Skittish/Neutral/
-  Hostile/Spirit/Villager, box models, attacks with a `DamageCause`, spawn rules, drops; `brain` has
+  Hostile/Spirit/Critter, box models, attacks with a `DamageCause`, spawn rules, drops; `brain` has
   the pure rules; ring spawner with caps; barrow wights once a day per barrow; spirits ignore walls,
-  keep `brain::TORCH_FEAR` from placed or held torches, fade at dawn), `creatures::villagers`
-  (one per hut, `brain::plan` schedule, talk lines in `assets/data/villagers.ron`), combat via
-  `interact::{Aimed, Strike, UseCreature}` (items have `damage`), `game::places` (title cards for
+  keep `brain::TORCH_FEAR` from placed or held torches, fade at dawn), combat via
+  `interact::{Aimed, Strike}` (items have `damage`), `game::places` (title cards for
   villages, barrows and regions), chest loot (`assets/data/loot.ron`, rolled on first open;
   placed chests start empty via `interact::Placed`), season weather (`cold_snap`, `gale` with
   wind push in `player`, `DamageCause::Chill` -> Fatigue). Creatures ignore a flying player.
@@ -117,8 +115,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   A PNG may be painted at 2x/4x as long as its shape matches (tested).
 - Known gaps: vertices are 40 bytes, not the packed 8-byte format (performance pass); no thunder
   sound or snow cover yet; no block light propagation (torches are real point lights); items on the
-  ground and creatures are not saved; creatures walk straight at goals (no pathfinding, villagers
-  don't climb into huts: they vanish at the door at night); creature parts don't animate yet.
+  ground and creatures are not saved; creatures walk straight at goals (no pathfinding); creature parts don't animate yet.
 - Phase 10 (UI overhaul): done. `game::theme`: UI sprite sheet `assets/textures/ui.png` + `ui.ron`
   (name -> rect and 9-slice borders, drawn at 2x; placeholder from `tools/gen_ui_art.py`, which
   overwrites the PNG), `theme.skin("panel")` / `theme.icon("icon_food")` / `theme.image(..)`;
@@ -294,7 +291,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   and its rim is lifted above sea level so seas stay inside. Underside: a rounded bowl ~300 blocks deep at the
   middle, hung with rounded lobes and stalactite drips (`underside`). Outer islands (jittered 520-block grid,
   radius 50-260, tops at y -140..240) float past the coast with the same climate, biomes and underside, and no
-  water. `Column` has `land` (Void/Main/Outer), `bottom` and `water`; villages and barrows are main island only.
+  water. `Column` has `land` (Void/Main/Outer), `bottom` and `water`; barrows are main island only.
   Rootstone no longer generates. `game::lod` draws undersides and leaves the void empty.
 - Machination table (vehicle urn, tier 1): `StationKind::MachinationTable`, a board like the
   other benches (slots keel / rigging / envelope / engine, the drive wheel is a `ToolUse::Turn` tool). It builds
@@ -316,7 +313,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   (`StationKind::base`: layout, slots, tool, size) and add a few parts of their own in `models::parts`. Chairs,
   tables and doors are plain cube blocks for now (doors don't open); glass and windows are see-through blocks.
 - Warded dungeons: `worldgen::dungeons` (pure). One per 1024-block cell (chance 0.7, 700+ blocks from spawn) plus a home
-  dungeon 170-290 blocks from spawn, away from the home village. A stone gatehouse with one doorway, a stair 20-27 down,
+  dungeon 170-290 blocks from spawn, away from `WorldGen::home` (where the home village once stood). A stone gatehouse with one doorway, a stair 20-27 down,
   then 7-10 large rooms (13-23 wide, 6-9 high) on a 30-block grid in the dungeon's own frame, joined by 3-wide corridors
   (a few loops); the furthest room is the warden's hall (25x25, boss). `Dungeon` has `rooms`, `links`, `spaces` (open
   boxes past the veil: `inside(p)`), `spawns` (`SpawnPoint` pos/kind Guard|Pack|Boss/room: hooks for enemies, nothing
@@ -388,9 +385,8 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   NPC but the gate guides to `people.ron` (order, flags, place). Nothing places the cast in the world yet: Ctrl+Shift+N
   spawns the next kind each press; `BLOCKGAME_NPC=3 BLOCKGAME_NPC_KIND=gilm` for screenshots.
 - Landmarks and cast services (Legacy prompts 10-12): `worldgen::landmarks` (pure, once per world): Sporrow, a village of
-  giant mushroom houses (`mushroom_stem`/`mushroom_cap` blocks) 60-110 blocks from the Rotting Gate, a `Village` with
-  `folk: Folk::Mushroom` (so `villages_in`, warding and villagers include it; its villagers are the `mushroom_folk` creature,
-  wary lines in villagers.ron `mushroom`); Gilm's stone hut with a forge just outside it (`gilm_forge`); the castle
+  giant mushroom houses (`mushroom_stem`/`mushroom_cap` blocks) 60-110 blocks from the Rotting Gate, a `Village`
+  (so `villages_in` and warding include it; empty, no villagers); Gilm's stone hut with a forge just outside it (`gilm_forge`); the castle
   (`castle`): a walled court on a plinth on the highest level-enough mountain ground, a 7x7 tower 20 high with a stair round
   the inside coming out on the roof. Positions are logged at startup. `game::cast`: Brindlespheimer stands by the gate
   (`GATE_POST`, not saved); Gilm (at his hut) and Orrin (on the tower roof) are placed once per world, the Star Urn is set
@@ -455,6 +451,8 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   slide, slots lift and settle (`ui::animate`), UI sounds `ui_*` (`gen_placeholder_sounds.py --only ui_`).
   Screenshots: `BLOCKGAME_INVENTORY=items|equipment|stats|abilities`, `BLOCKGAME_SKILLTREE=1` (= abilities),
   `BLOCKGAME_DRAWN=1` starts with the weapon drawn.
+- Villages and villagers removed (Ethan's ask): no stilt villages, no `villager`/`mushroom_folk` creatures,
+  no `Temper::Villager`, no `UseCreature`. Sporrow's houses stay for the story (C11/C12), empty.
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen
@@ -468,6 +466,5 @@ With `BLOCKGAME_CAMERA` the shot is taken flying (`BLOCKGAME_WALK=1` stands ther
 `BLOCKGAME_SLOT=n` starts with hotbar slot n in hand; `BLOCKGAME_SKILLS=n` gives n points and learns Wanderer and Mystic;
 `BLOCKGAME_CAST=levitate,light` starts spells; `BLOCKGAME_SKILLTREE=1` opens the tree; `BLOCKGAME_LOOK=fen_stag` turns the camera to the nearest creature of a kind;
 `BLOCKGAME_SWING=0.55` freezes the right arm that far through a swing; `BLOCKGAME_LINEUP=1` stands a still model of every creature skin in a row in front of the camera.
-The home village's name and position are logged at startup.
 In the cloud container: `BEVY_ASSET_ROOT=$PWD BLOCKGAME_SCREENSHOT=/tmp/s.png WGPU_BACKEND=vulkan xvfb-run -s "-screen 0 1280x720x24" ./target/debug/block-game`
 (needs `mesa-vulkan-drivers xvfb libxkbcommon-x11-0`).

@@ -53,7 +53,6 @@ impl Plugin for InteractPlugin {
             .add_message::<OpenChest>()
             .add_message::<Placed>()
             .add_message::<Strike>()
-            .add_message::<UseCreature>()
             .add_message::<Swung>()
             .add_systems(
                 crate::menu::GameUpdate,
@@ -170,10 +169,6 @@ pub struct Swung {
     pub reach: f32,
     pub damage: f32,
 }
-
-/// Right click on a creature (villagers talk).
-#[derive(Message, Debug, Clone, Copy)]
-pub struct UseCreature(pub Entity);
 
 /// Seconds between blows.
 pub const STRIKE_COOLDOWN: f32 = 0.45;
@@ -434,14 +429,13 @@ fn use_hands(
     (wielded, off): (Res<Wielded>, Res<OffHand>),
     items: Res<Items>,
     mut inv: ResMut<Inventory>,
-    (mut mined, mut blows, mut chops, mut open_chest, mut placed, mut strikes, mut use_creature, mut toast): (
+    (mut mined, mut blows, mut chops, mut open_chest, mut placed, mut strikes, mut toast): (
         MessageWriter<Mined>,
         MessageWriter<Blow>,
         MessageWriter<crate::chop::Chop>,
         MessageWriter<OpenChest>,
         MessageWriter<Placed>,
         MessageWriter<Strike>,
-        MessageWriter<UseCreature>,
         MessageWriter<crate::survival::Toast>,
     ),
     (aimed, cam, perks, station, edges, ship, guard, mut swung, generator): (
@@ -494,9 +488,6 @@ fn use_hands(
         && block_dist.is_none_or(|d| aimed.dist < d)
     {
         mining.block = None;
-        if mouse.just_pressed(MouseButton::Right) {
-            use_creature.write(UseCreature(e));
-        }
         if mouse.pressed(MouseButton::Left) && anim.strike_cooldown <= 0.0 {
             anim.start(hand, style);
             anim.strike_cooldown = STRIKE_COOLDOWN;

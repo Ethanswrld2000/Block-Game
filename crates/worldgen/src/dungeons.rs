@@ -231,12 +231,12 @@ impl WorldGen {
         out
     }
 
-    /// The dungeon a short walk from spawn (away from the home village).
+    /// The dungeon a short walk from spawn.
     pub fn home_dungeon(&self) -> Option<Arc<Dungeon>> {
         self.home_dungeon.clone()
     }
 
-    /// Ground 170-290 blocks from spawn, not towards the home village, where a
+    /// Ground 170-290 blocks from spawn, not towards `WorldGen::home`, where a
     /// whole dungeon fits under the island.
     pub(crate) fn search_home_dungeon(&self) -> Option<Dungeon> {
         let [sx, _, sz] = self.spawn;
@@ -669,12 +669,9 @@ mod tests {
         let r = &d.rooms[1].inner;
         assert!(g.warded(r.min[0] - 1, r.min[1], r.min[2]), "room wall");
         assert!(g.warded(d.gate[0], d.gate[1] + 5, d.gate[2]), "gatehouse roof");
-        let v = g.home_village().unwrap();
-        let h = &v.huts[0];
-        assert!(g.warded(h.x, h.floor, h.z), "hut floor");
         // Open country is not.
         let [sx, sy, sz] = g.find_spawn();
-        assert!(!g.warded(sx, sy - 1, sz) || g.villages_in(sx, sz, sx, sz).iter().any(|v| v.warded(sx, sy - 1, sz)));
+        assert!(!g.warded(sx, sy - 1, sz));
     }
 
     #[test]

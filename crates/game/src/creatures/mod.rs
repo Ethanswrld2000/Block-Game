@@ -1,5 +1,5 @@
 //! Creatures: swamp animals, night hunters, barrow wights, ancestral spirits
-//! and villagers. Kinds come from `assets/data/creatures.ron`; the rules that
+//! and critters. Kinds come from `assets/data/creatures.ron`; the rules that
 //! need no Bevy live in `data` and `brain`.
 //!
 //! Creatures spawn in a ring around you (animals by day, hunters and spirits
@@ -18,7 +18,6 @@ pub mod brain;
 pub mod critters;
 pub mod data;
 pub mod skin;
-mod villagers;
 
 use std::collections::HashMap;
 
@@ -39,7 +38,6 @@ use crate::world::{Generator, World};
 use brain::Rng;
 use data::{Kinds, Temper};
 
-pub use villagers::Villager;
 
 pub struct CreaturesPlugin;
 
@@ -58,7 +56,7 @@ impl Plugin for CreaturesPlugin {
             )
             .add_systems(crate::menu::GameUpdate, look_at_creature.run_if(|| std::env::var_os("BLOCKGAME_LOOK").is_some()))
             .add_systems(crate::menu::GameUpdate, lineup.run_if(|| std::env::var_os("BLOCKGAME_LINEUP").is_some()))
-            .add_plugins((villagers::VillagersPlugin, critters::CrittersPlugin));
+            .add_plugins(critters::CrittersPlugin);
     }
 }
 
@@ -69,7 +67,7 @@ pub struct CreatureSet;
 const GRAVITY: f32 = 25.0;
 /// Upward speed of a hop over a one-block step.
 const HOP: f32 = 7.6;
-/// Creatures further than this from you are removed (villagers excepted).
+/// Creatures further than this from you are removed.
 const DESPAWN: f32 = 112.0;
 /// How many of each sort may be around you at once.
 const MAX_ANIMALS: usize = 8;
@@ -104,7 +102,7 @@ pub struct Creature {
     pub fade: f32,
     /// Fading away (spirits at dawn).
     pub leaving: bool,
-    /// Stay within this distance of a point (wights in their barrow, villagers in their village).
+    /// Stay within this distance of a point (wights in their barrow).
     pub leash: Option<(Vec3, f32)>,
 }
 
@@ -352,7 +350,7 @@ fn take_strikes(
     mut commands: Commands,
     mut strikes: MessageReader<Strike>,
     kinds: Option<Res<Kinds>>,
-    mut q: Query<(&Transform, &mut Creature, Option<&Villager>)>,
+    mut q: Query<(&Transform, &mut Creature)>,
     mut spill: MessageWriter<crate::inventory::Spill>,
     mut toast: MessageWriter<crate::survival::Toast>,
     mut dice: ResMut<Dice>,
@@ -360,7 +358,7 @@ fn take_strikes(
 ) {
     let Some(kinds) = kinds else { return };
     for s in strikes.read() {
-        let Ok((tf, mut c, villager)) = q.get_mut(s.entity) else { continue };
+        let Ok((tf, mut c)) = q.get_mut(s.entity) else { continue };
         if c.health <= 0.0 {
             continue;
         }
@@ -371,7 +369,7 @@ fn take_strikes(
         c.on_ground = false;
         match k.temper {
             Temper::Neutral | Temper::Hostile | Temper::Spirit => c.angry = 20.0,
-            Temper::Skittish | Temper::Villager | Temper::Critter => c.scared = 8.0,
+            Temper::Skittish | Temper::Critter => c.scared = 8.0,
         }
         if c.health <= 0.0 {
             let at = tf.translation + Vec3::Y * (k.height * 0.5);
@@ -380,14 +378,8 @@ fn take_strikes(
                     spill.write(crate::inventory::Spill { stack: Stack::new(*item, *n), at });
                 }
             }
-            let msg = match villager {
-                Some(v) => format!("{} of {} is dead", v.name, v.village_name),
-                None => format!("{} slain", k.title),
-            };
-            toast.write(crate::survival::Toast(msg));
-            if villager.is_none() {
-                gain.write(crate::progress::GainXp { xp: k.health * prog.xp.kill, why: String::new() });
-            }
+            toast.write(crate::survival::Toast(format!("{} slain", k.title)));
+            gain.write(crate::progress::GainXp { xp: k.health * prog.xp.kill, why: String::new() });
             commands.entity(s.entity).despawn();
         }
     }
@@ -447,7 +439,7 @@ fn spawn_around(
             Temper::Skittish | Temper::Neutral => counts[0] += 1,
             Temper::Hostile => counts[1] += 1,
             Temper::Spirit => counts[2] += 1,
-            Temper::Villager | Temper::Critter => {}
+            Temper::Critter => {}
         }
     }
     let lights = lights(&torches, &player, (&wielded, &off), &items, spells.light);
@@ -469,7 +461,7 @@ fn spawn_around(
             Temper::Skittish | Temper::Neutral => counts[0] >= MAX_ANIMALS,
             Temper::Hostile => counts[1] >= MAX_HUNTERS,
             Temper::Spirit => counts[2] >= MAX_SPIRITS,
-            Temper::Villager | Temper::Critter => true,
+            Temper::Critter => true,
         };
         let list: Vec<(usize, f32)> = kinds.candidates(biome, night).into_iter().filter(|(i, _)| !full(kinds.get(*i).temper)).collect();
         let Some(kind) = data::pick(&list, rng.unit()) else { continue };
@@ -491,7 +483,7 @@ fn spawn_around(
             Temper::Skittish | Temper::Neutral => counts[0] += n as usize,
             Temper::Hostile => counts[1] += n as usize,
             Temper::Spirit => counts[2] += n as usize,
-            Temper::Villager | Temper::Critter => {}
+            Temper::Critter => {}
         }
     }
 }
@@ -542,8 +534,8 @@ pub(crate) fn flat(v: Vec3) -> Vec3 {
     Vec3::new(v.x, 0.0, v.z)
 }
 
-/// Wander, flee, chase and strike (everything but spirits and villagers'
-/// schedules, which have their own systems).
+/// Wander, flee, chase and strike (everything but spirits, which have their
+/// own system).
 #[allow(clippy::too_many_arguments)]
 fn think(
     time: Res<Time>,
@@ -552,7 +544,7 @@ fn think(
     mode: Res<MoveMode>,
     s: Res<Survival>,
     mut hits: MessageWriter<Damage>,
-    mut q: Query<(&Transform, &mut Creature), Without<Villager>>,
+    mut q: Query<(&Transform, &mut Creature)>,
     mut dice: ResMut<Dice>,
 ) {
     let Some(kinds) = kinds else { return };
@@ -789,7 +781,7 @@ fn tint(creatures: Query<&Creature>, mut parts: Query<(&ChildOf, &Part, &mut Mes
     }
 }
 
-type Wild = (With<Creature>, Without<Villager>);
+type Wild = With<Creature>;
 
 /// `BLOCKGAME_LOOK=<creature>`: keep the camera turned to the nearest one (for screenshots).
 fn look_at_creature(
