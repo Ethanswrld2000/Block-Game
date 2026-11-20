@@ -14,6 +14,7 @@ pub mod exposure;
 pub mod food;
 pub mod health;
 mod hud;
+pub mod shelter;
 pub mod vitals;
 
 use bevy::prelude::*;
@@ -26,7 +27,7 @@ use crate::inventory::Inventory;
 use crate::items::{ItemKind, Items};
 use crate::player::{Body, Damage, DamageCause, MoveMode, Player, PlayerSet};
 use crate::save::SaveDir;
-use crate::torches::Torches;
+use crate::torches::{Fire, Torches};
 use crate::weather::{Conditions, LocalClimate, WeatherKinds, WeatherState};
 use camp::Camp;
 use exposure::{Exposure, Scale};
@@ -54,7 +55,7 @@ impl Plugin for SurvivalPlugin {
             .add_systems(crate::menu::GamePostStartup, (remember_spawn, load_player).chain().after(crate::world::setup_generator))
             .add_systems(
                 crate::menu::GameUpdate,
-                (debug_keys, take_hits, eat, tick_body, die_and_respawn, set_body)
+                (debug_keys, take_hits, eat, find_cover, tick_body, die_and_respawn, set_body)
                     .chain()
                     .in_set(SurvivalSet)
                     .after(PlayerSet),
@@ -83,6 +84,27 @@ pub struct Survival {
     pub eating: f32,
     /// When you died; `None` while alive.
     pub dead_for: Option<f32>,
+    /// How sheltered you are (`find_cover`, once a second).
+    pub cover: shelter::Cover,
+}
+
+/// Looks for a roof and walls round you, once a second.
+fn find_cover(time: Res<Time>, mut wait: Local<f32>, player: Res<Player>, world: Res<crate::world::World>, blocks: Res<crate::blocks::Blocks>, mut s: ResMut<Survival>) {
+    *wait -= time.delta_secs();
+    if *wait > 0.0 {
+        return;
+    }
+    *wait = 1.0;
+    let feet = voxel::BlockPos::from_world((player.pos + Vec3::Y * 0.2).to_array());
+    let solid = |p: voxel::BlockPos| world.block(p).is_some_and(|b| blocks.registry.get(b).is_wall());
+    let roof = (2..=16).any(|dy| solid(voxel::BlockPos::new(feet.x, feet.y + dy, feet.z)));
+    s.cover = if !roof {
+        shelter::Cover::Open
+    } else if crate::station::room_at(&world, &blocks, feet).is_ok() {
+        shelter::Cover::Room
+    } else {
+        shelter::Cover::Roof
+    };
 }
 
 /// Where a new world puts you; the respawn point without a camp.
@@ -198,6 +220,7 @@ fn feels_like(
     eye: Vec3,
     torches: &Torches,
     holding_torch: bool,
+    cover: shelter::Cover,
     parts: &mut Vec<(String, f32)>,
 ) -> f32 {
     let biome = if climate.biome_title.is_empty() { "Climate".to_string() } else { climate.biome_title.clone() };
@@ -206,13 +229,25 @@ fn feels_like(
     parts.push(("Height above ground".into(), climate.altitude * 30.0));
     parts.push((if sun_height >= 0.0 { "Sun" } else { "Night" }.into(), sun_height * 5.0));
     parts.push((format!("Weather: {weather}"), conditions.chill));
+    let kept_off = shelter::shelter_warmth(cover, conditions.chill, sun_height * 5.0);
+    if kept_off > 0.0 {
+        let what = if cover == shelter::Cover::Room { "Shelter: walls and roof" } else { "Shelter: roof" };
+        parts.push((what.into(), kept_off));
+    }
     if wet {
         parts.push(("Wet".into(), -6.0));
     }
     let mut fire = 0.0;
-    for p in torches.positions() {
+    let mut camp_fire = 0.0;
+    for (p, kind) in torches.fires() {
         let d = eye.distance(Vec3::new(p.x as f32 + 0.5, p.y as f32 + 0.7, p.z as f32 + 0.5));
-        fire += (10.0 * (1.0 - d / 6.0)).max(0.0);
+        match kind {
+            Fire::Torch => fire += (10.0 * (1.0 - d / 6.0)).max(0.0),
+            Fire::Campfire => camp_fire += shelter::campfire_warmth(d),
+        }
+    }
+    if camp_fire > 0.0 {
+        parts.push(("Campfire".into(), camp_fire.min(shelter::CAMPFIRE_MAX)));
     }
     // Fire tops out at +16 all told.
     let placed = fire.min(FIRE_MAX);
@@ -253,7 +288,7 @@ fn tick_body(
     let mut parts = std::mem::take(&mut s.temperature);
     parts.clear();
     let weather = kinds.list.get(weather.current).map_or("", |k| k.title.as_str());
-    let raw = feels_like(&climate, &conditions, weather, sun, player.in_water, eye, &torches, holding_torch, &mut parts);
+    let raw = feels_like(&climate, &conditions, weather, sun, player.in_water, eye, &torches, holding_torch, s.cover, &mut parts);
     let underwater = player.head_in_water;
     let mut air = if underwater { 0.0 } else { vitals::air_at(if worldgen::in_pocket(eye.x as i32, eye.z as i32) { 0.0 } else { eye.y }) * conditions.air };
     let dressed = vitals::clothed(raw, inv.insulation(&items));
@@ -405,7 +440,7 @@ fn screenshot_run() -> bool {
     std::env::var_os("BLOCKGAME_SCREENSHOT").is_some()
 }
 
-fn load_player(
+pub(crate) fn load_player(
     dir: Res<SaveDir>,
     rules: Res<Exposure>,
     mut s: ResMut<Survival>,

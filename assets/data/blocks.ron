@@ -37,6 +37,8 @@
     (name: "cloud_moss", top: "cloud_moss", hardness: 0.7, material: "soil"),
     (name: "deeprock", top: "deeprock", hardness: 7.0, material: "stone"),
     (name: "torch", top: "planks", solid: false, opaque: false, hardness: 0.0, shape: torch),
+    // A ring of stones round crossed sticks: a big fire that warms you far more than a torch (drawn by `torches`).
+    (name: "campfire", top: "planks", solid: false, opaque: false, hardness: 0.5, material: "wood", shape: torch),
     // A storage chest: right click opens it (contents are kept in saves/<world>/chests.ron).
     (name: "chest", top: "log_top", bottom: "planks", side: "planks", hardness: 2.0, material: "wood"),
     // Ground plants: crossed quads that sway in the wind (see `plants` in biomes.ron).
