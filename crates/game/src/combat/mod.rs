@@ -269,6 +269,7 @@ fn spawn_key(
         let slot = hotbar.slots.iter().position(|s| s.is_none()).unwrap_or(0);
         hotbar.slots[slot] = Some(sword);
         hands.right = Some(slot);
+        hands.drawn = false;
     }
 }
 

@@ -142,7 +142,7 @@ pub struct Ate(pub crate::items::ItemId);
 fn eat(
     time: Res<Time>,
     mouse: Res<ButtonInput<MouseButton>>,
-    wielded: Res<Wielded>,
+    (wielded, off): (Res<Wielded>, Res<crate::interact::OffHand>),
     menus: Res<crate::camera::Menus>,
     items: Res<Items>,
     tiers: Res<FoodTiers>,
@@ -153,7 +153,9 @@ fn eat(
     mut toast: MessageWriter<Toast>,
     mut ate: MessageWriter<Ate>,
 ) {
-    let held = wielded.0;
+    // The left hand eats when the right hand's item has no right-click use.
+    let hand = crate::interact::right_click_hand(&items, wielded.0, off.0);
+    let held = if hand == crate::interact::Hand::Left { off.0 } else { wielded.0 };
     let food = held.and_then(|i| match items.get(i).kind {
         ItemKind::Food { tier, satiety } => Some((i, tier, satiety)),
         _ => None,
@@ -165,13 +167,15 @@ fn eat(
     };
     s.eating += time.delta_secs() / EAT_SECONDS;
     anim.eat = s.eating;
+    anim.eat_hand = hand;
     if s.eating >= 1.0 {
         s.eating = 0.0;
         let Some(t) = tiers.get(tier) else {
             warn!("{} names food tier {tier}, which food_tiers.ron doesn't have", items.get(id).name);
             return;
         };
-        if !inv.take(id, 1) {
+        let used = if hand == crate::interact::Hand::Left { inv.use_left(1) } else { inv.take(id, 1) };
+        if !used {
             return;
         }
         s.vitals.eat(t, satiety);
@@ -232,7 +236,7 @@ fn tick_body(
     seasons: Res<Seasons>,
     torches: Res<Torches>,
     camp: Res<Camp>,
-    wielded: Res<Wielded>,
+    (wielded, off): (Res<Wielded>, Res<crate::interact::OffHand>),
     inv: Res<Inventory>,
     items: Res<Items>,
     (perks, spells): (Res<crate::progress::skills::Perks>, Res<crate::progress::Spells>),
@@ -241,8 +245,7 @@ fn tick_body(
     mut toast: MessageWriter<Toast>,
 ) {
     let forced = *forced.get_or_insert_with(Forced::from_env);
-    let held = wielded.0;
-    let holding_torch = held.is_some_and(|i| matches!(items.get(i).kind, ItemKind::Torch));
+    let holding_torch = crate::interact::holding_torch(&items, &wielded, &off);
     let eye = player.pos + Vec3::Y * player.eye;
     let daylight = seasons.blended(seasons.at(&clock), |x| x.daylight);
     let sun = crate::sky::sun_direction(clock.time, daylight).y;

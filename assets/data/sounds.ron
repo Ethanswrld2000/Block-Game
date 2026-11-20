@@ -26,6 +26,9 @@
         "level_up": 0.6,
         // NPC speech blips (voice_0..3), one per syllable.
         "voice": 0.45,
+        // Inventory clicks (ui_open, ui_close, ui_tab, ui_pick, ui_drop, ui_equip),
+        // and drawing / putting away the weapon (ui_draw, ui_sheathe).
+        "ui": 0.35,
         // Working the cooking pot and the cutting board.
         "stir": 0.55,
         "knife": 0.55,

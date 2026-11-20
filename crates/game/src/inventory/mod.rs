@@ -2,7 +2,10 @@
 //! the world, crafting, and items lying on the ground.
 //!
 //! Items fill grids by their size (`grid`). The hotbar only holds shortcuts:
-//! a slot is "use the torches I have", wherever they are packed.
+//! a slot is "use the torches I have", wherever they are packed; the selected
+//! one is what the right hand holds. The left hand is a real slot (`left`):
+//! what is in it is out of the pockets and held. The weapon slot (`weapon`)
+//! holds one weapon, drawn into the right hand with R (`interact`).
 //!
 //! Tab opens the inventory screen (`ui`). F9 is a test key that hands you one
 //! of everything. `BLOCKGAME_INVENTORY=1` opens the screen at start, for
@@ -12,6 +15,7 @@ pub mod crafting;
 pub mod drops;
 pub mod grid;
 pub mod loot;
+pub(crate) mod preview;
 pub(crate) mod ui;
 mod world_items;
 
@@ -90,11 +94,47 @@ pub struct Inventory {
     pub worn: BTreeMap<WearSlot, ItemId>,
     /// The grid of the bag worn on your back.
     pub bag: Option<Grid>,
+    /// What the left hand holds (any item, a whole stack).
+    pub left: Option<Stack>,
+    /// The weapon slot (`Item::is_weapon` only).
+    pub weapon: Option<ItemId>,
 }
 
 impl Inventory {
     pub fn empty() -> Self {
-        Self { pockets: Grid::new(POCKETS.0, POCKETS.1), worn: BTreeMap::new(), bag: None }
+        Self { pockets: Grid::new(POCKETS.0, POCKETS.1), worn: BTreeMap::new(), bag: None, left: None, weapon: None }
+    }
+
+    /// The item in the left hand.
+    pub fn left_item(&self) -> Option<ItemId> {
+        self.left.map(|s| s.item)
+    }
+
+    /// Put a stack in the left hand. Returns what was there before.
+    pub fn hold_left(&mut self, stack: Stack) -> Option<Stack> {
+        self.left.replace(stack)
+    }
+
+    /// Use up `n` of what the left hand holds, only if it holds that many.
+    pub fn use_left(&mut self, n: u16) -> bool {
+        match &mut self.left {
+            Some(s) if s.count >= n => {
+                s.count -= n;
+                if s.count == 0 {
+                    self.left = None;
+                }
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Put a weapon in the weapon slot. Returns the one that was there.
+    pub fn arm(&mut self, items: &Items, item: ItemId) -> Result<Option<ItemId>, &'static str> {
+        if !items.get(item).is_weapon() {
+            return Err("Only weapons go in the weapon slot");
+        }
+        Ok(self.weapon.replace(item))
     }
 
     pub fn count(&self, item: ItemId) -> u32 {
@@ -129,6 +169,8 @@ impl Inventory {
         self.pockets.mass(items)
             + self.bag.as_ref().map_or(0.0, |b| b.mass(items))
             + self.worn.values().map(|i| items.get(*i).mass).sum::<f32>()
+            + self.left.map_or(0.0, |s| items.get(s.item).mass * s.count as f32)
+            + self.weapon.map_or(0.0, |i| items.get(i).mass)
     }
 
     /// Warmth of what you wear, °C.
@@ -307,6 +349,11 @@ struct InventorySave {
     bag: Option<GridSave>,
     hotbar: Vec<Option<String>>,
     selected: Option<usize>,
+    /// Left hand and weapon slot (missing in older saves: empty).
+    #[serde(default)]
+    left: Option<(String, u16)>,
+    #[serde(default)]
+    weapon: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -363,6 +410,8 @@ fn load_inventory(
             warn!("inventory.ron: no room for {} {}", s.count, items.get(s.item).name);
         }
     }
+    new.left = save.left.as_ref().and_then(|(n, c)| items.id(n).map(|id| Stack::new(id, (*c).clamp(1, items.get(id).stack))));
+    new.weapon = save.weapon.as_deref().and_then(|n| items.id(n)).filter(|id| items.get(*id).is_weapon());
     *inv = new;
     for (i, name) in save.hotbar.iter().take(SLOTS).enumerate() {
         hotbar.slots[i] = name.as_deref().and_then(|n| items.id(n));
@@ -391,6 +440,8 @@ fn store(dir: &SaveDir, items: &Items, inv: &Inventory, chests: &Chests, hotbar:
         bag: inv.bag.as_ref().map(|b| b.to_save(items)),
         hotbar: hotbar.slots.iter().map(|s| s.map(|i| items.get(i).name.clone())).collect(),
         selected: hands.right,
+        left: inv.left.map(|s| (items.get(s.item).name.clone(), s.count)),
+        weapon: inv.weapon.map(|i| items.get(i).name.clone()),
     };
     let cs = ChestsSave { chests: chests.map.iter().map(|(p, g)| ((p.x, p.y, p.z), g.to_save(items))).collect() };
     let pretty = ron::ser::PrettyConfig::default();
@@ -485,6 +536,47 @@ mod tests {
         assert_eq!(inv.protection(&items, Layer::Blood), 0.0);
         inv.wear(&items, items.id("hide_jerkin").unwrap()).unwrap();
         assert!(inv.protection(&items, Layer::Blood) > 0.25);
+    }
+
+    #[test]
+    fn left_hand_holds_a_stack_and_uses_it_up() {
+        let (_, items) = load();
+        let mut inv = kit(&items);
+        let torch = items.id("torch").unwrap();
+        let before = inv.mass(&items);
+        assert_eq!(inv.hold_left(Stack::new(torch, 2)), None);
+        assert!(inv.mass(&items) > before);
+        // The left hand is out of the pockets: recipes and the hotbar don't see it.
+        assert_eq!(inv.count(torch), 0);
+        assert!(inv.use_left(1));
+        assert!(!inv.use_left(2));
+        assert!(inv.use_left(1));
+        assert_eq!(inv.left, None);
+    }
+
+    #[test]
+    fn only_weapons_go_in_the_weapon_slot() {
+        let (_, items) = load();
+        let mut inv = kit(&items);
+        let id = |n: &str| items.id(n).unwrap();
+        assert!(inv.arm(&items, id("stone_pickaxe")).is_err());
+        assert!(inv.arm(&items, id("stone_axe")).is_err());
+        assert!(inv.arm(&items, id("torch")).is_err());
+        assert_eq!(inv.arm(&items, id("iron_sword")), Ok(None));
+        assert_eq!(inv.arm(&items, id("flint_spear")), Ok(Some(id("iron_sword"))));
+        assert_eq!(inv.weapon, Some(id("flint_spear")));
+    }
+
+    #[test]
+    fn old_saves_load_with_empty_hands() {
+        // An inventory.ron from before the left hand and weapon slot.
+        let old = "(pockets: (w: 20, h: 10, items: []), worn: [], bag: None, hotbar: [], selected: Some(0))";
+        let save: InventorySave = ron::from_str(old).unwrap();
+        assert!(save.left.is_none() && save.weapon.is_none());
+        let new = "(pockets: (w: 20, h: 10, items: []), worn: [], bag: None, hotbar: [], selected: Some(0), left: Some((\"torch\", 3)), weapon: Some(\"iron_sword\"))";
+        let save: InventorySave = ron::from_str(new).unwrap();
+        assert_eq!(save.left, Some(("torch".to_string(), 3)));
+        assert_eq!(save.weapon.as_deref(), Some("iron_sword"));
     }
 
     #[test]

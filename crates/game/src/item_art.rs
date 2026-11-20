@@ -116,6 +116,28 @@ impl ItemArt {
         Some(ImageNode { image: self.sheets[self.sheet(sheet)].clone(), rect: Some(r.as_rect()), ..default() })
     }
 
+    /// The sprite's average colour (its opaque pixels), once the sheet has loaded.
+    pub fn average_color(&self, id: ItemId, images: &Assets<Image>) -> Option<Color> {
+        let (sheet, r) = self.sprites.get(id.0 as usize).copied().flatten()?;
+        let img = images.get(&self.sheets[self.sheet(sheet)])?;
+        let (mut sum, mut n) = (Vec3::ZERO, 0.0);
+        for y in r.min.y..r.max.y {
+            for x in r.min.x..r.max.x {
+                if let Ok(c) = img.get_color_at(x, y)
+                    && c.alpha() > 0.5
+                {
+                    let s = c.to_srgba();
+                    sum += Vec3::new(s.red, s.green, s.blue);
+                    n += 1.0;
+                }
+            }
+        }
+        (n > 0.0).then(|| {
+            let a = sum / n;
+            Color::srgb(a.x, a.y, a.z)
+        })
+    }
+
     /// The 3D model made from the sprite, one unit per pixel, centred, the
     /// sprite's up along +Y and its face towards +Z.
     pub fn model(&self, id: ItemId) -> Option<(Handle<Mesh>, Handle<StandardMaterial>)> {

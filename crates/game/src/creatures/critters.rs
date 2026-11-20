@@ -253,7 +253,7 @@ struct Around {
 }
 
 /// Fly, hop and drift; leave when unwelcome.
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn move_critters(
     mut commands: Commands,
     time: Res<Time>,
@@ -261,7 +261,7 @@ fn move_critters(
     (world, blocks): (Res<World>, Res<Blocks>),
     (clock, climate, conditions): (Res<WorldClock>, Res<LocalClimate>, Res<Conditions>),
     player: Res<Player>,
-    (torches, wielded, items, spells): (Res<Torches>, Res<Wielded>, Res<Items>, Res<crate::progress::Spells>),
+    (torches, wielded, items, spells, off): (Res<Torches>, Res<Wielded>, Res<Items>, Res<crate::progress::Spells>, Res<crate::interact::OffHand>),
     mut sounds: MessageWriter<PlaySound>,
     mut q: Query<(Entity, &mut Transform, &mut Creature, &mut Critter)>,
     mut dice: ResMut<Dice>,
@@ -273,7 +273,7 @@ fn move_critters(
         precipitation: conditions.precipitation,
         player: player.pos,
         crouching: player.crouching,
-        lights: lights(&torches, &player, &wielded, &items, spells.light),
+        lights: lights(&torches, &player, (&wielded, &off), &items, spells.light),
         t: time.elapsed_secs(),
         dt: time.delta_secs().min(0.05),
     };
