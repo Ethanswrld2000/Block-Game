@@ -6,6 +6,7 @@
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::camera::{FlyCamera, Menus};
 use crate::save::SaveDir;
@@ -51,11 +52,13 @@ pub struct Settings {
     pub debug_overlay: bool,
     /// 0 off, 1 on (three layers).
     pub clouds: u8,
+    /// Temperatures shown in °F (else °C).
+    pub fahrenheit: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { view_distance: 12, sensitivity: 1.0, fov: 70.0, volume: 0.8, ambience: 0.7, debug_overlay: true, clouds: 1 }
+        Self { view_distance: 12, sensitivity: 1.0, fov: 70.0, volume: 0.8, ambience: 0.7, debug_overlay: true, clouds: 1, fahrenheit: true }
     }
 }
 
@@ -68,11 +71,13 @@ enum Knob {
     Volume,
     Ambience,
     Clouds,
+    Temperature,
     DebugOverlay,
 }
 
 impl Knob {
-    const ALL: [Knob; 7] = [Knob::ViewDistance, Knob::Sensitivity, Knob::Fov, Knob::Volume, Knob::Ambience, Knob::Clouds, Knob::DebugOverlay];
+    const ALL: [Knob; 8] =
+        [Knob::ViewDistance, Knob::Sensitivity, Knob::Fov, Knob::Volume, Knob::Ambience, Knob::Clouds, Knob::Temperature, Knob::DebugOverlay];
 
     fn label(self) -> &'static str {
         match self {
@@ -82,6 +87,7 @@ impl Knob {
             Knob::Volume => "Volume",
             Knob::Ambience => "Ambience",
             Knob::Clouds => "Clouds",
+            Knob::Temperature => "Temperature",
             Knob::DebugOverlay => "Debug overlay (F3)",
         }
     }
@@ -94,6 +100,7 @@ impl Knob {
             Knob::Volume => format!("{:.0}%", s.volume * 100.0),
             Knob::Ambience => format!("{:.0}%", s.ambience * 100.0),
             Knob::Clouds => if s.clouds > 0 { "on" } else { "off" }.into(),
+            Knob::Temperature => if s.fahrenheit { "°F" } else { "°C" }.into(),
             Knob::DebugOverlay => (if s.debug_overlay { "on" } else { "off" }).into(),
         }
     }
@@ -106,9 +113,34 @@ impl Knob {
             Knob::Volume => s.volume = (s.volume + 0.1 * dir).clamp(0.0, 1.0),
             Knob::Ambience => s.ambience = (s.ambience + 0.1 * dir).clamp(0.0, 1.0),
             Knob::Clouds => s.clouds = (s.clouds as i32 + dir as i32).clamp(0, 1) as u8,
+            Knob::Temperature => s.fahrenheit = !s.fahrenheit,
             Knob::DebugOverlay => s.debug_overlay = !s.debug_overlay,
         }
     }
+}
+
+/// The temperature unit for display, mirrored from `Settings.fahrenheit` so
+/// any text can format a temperature without the resource.
+static FAHRENHEIT: AtomicBool = AtomicBool::new(true);
+
+fn unit() -> (bool, char) {
+    let f = FAHRENHEIT.load(Ordering::Relaxed);
+    (f, if f { 'F' } else { 'C' })
+}
+
+/// A temperature (given in °C) in the chosen unit, e.g. "68°F".
+pub fn temp(celsius: f32, decimals: usize) -> String {
+    let (f, u) = unit();
+    let v = if f { celsius * 1.8 + 32.0 } else { celsius };
+    format!("{v:.decimals$}°{u}")
+}
+
+/// A temperature difference (given in °C) in the chosen unit, e.g. "9°F";
+/// `signed` adds a + to positive values.
+pub fn temp_diff(celsius: f32, decimals: usize, signed: bool) -> String {
+    let (f, u) = unit();
+    let v = if f { celsius * 1.8 } else { celsius };
+    if signed { format!("{v:+.decimals$}°{u}") } else { format!("{v:.decimals$}°{u}") }
 }
 
 #[derive(Resource, Default)]
@@ -349,6 +381,7 @@ fn apply(
     mut cams: Query<(&mut FlyCamera, &mut Projection)>,
     mut first: Local<bool>,
 ) {
+    FAHRENHEIT.store(settings.fahrenheit, Ordering::Relaxed);
     if view.is_changed() && !settings.is_changed() && view.chunks != settings.view_distance && *first {
         settings.view_distance = view.chunks;
     }
@@ -387,5 +420,21 @@ mod tests {
         assert_eq!(ron::from_str::<Settings>(&text).unwrap(), s);
         // Missing fields fall back to defaults.
         assert_eq!(ron::from_str::<Settings>("(fov: 90.0)").unwrap().view_distance, 12);
+    }
+
+    #[test]
+    fn temperature_units() {
+        let mut s = Settings::default();
+        assert!(s.fahrenheit);
+        FAHRENHEIT.store(true, Ordering::Relaxed);
+        assert_eq!(temp(20.0, 0), "68°F");
+        assert_eq!(temp_diff(5.0, 0, true), "+9°F");
+        assert_eq!(temp_diff(-2.5, 1, false), "-4.5°F");
+        Knob::Temperature.step(&mut s, 1.0);
+        assert!(!s.fahrenheit);
+        FAHRENHEIT.store(false, Ordering::Relaxed);
+        assert_eq!(temp(20.0, 1), "20.0°C");
+        assert_eq!(temp_diff(5.0, 0, true), "+5°C");
+        FAHRENHEIT.store(true, Ordering::Relaxed);
     }
 }

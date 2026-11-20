@@ -51,7 +51,7 @@ impl Gives {
         match *self {
             Gives::Carry(kg) => format!("+{kg:.0} kg carried"),
             Gives::Air(a) => format!("+{:.0}% breath in thin air", a * 100.0),
-            Gives::Cold(c) => format!("shrug off {c:.0}°C of cold"),
+            Gives::Cold(c) => format!("shrug off {} of cold", crate::settings::temp_diff(c, 0, false)),
             Gives::Speed(s) => format!("+{:.0}% speed", s * 100.0),
             Gives::Mining(m) => format!("+{:.0}% mining speed", m * 100.0),
             Gives::Damage(d) => format!("+{:.0}% damage", d * 100.0),
