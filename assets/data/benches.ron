@@ -87,6 +87,7 @@
         // Gunsmith bench (gear station): guns that can't be fired yet.
         (station: "gunsmith_bench", slots: {"handle": ("planks", 1), "anvil": ("raw_iron", 3), "flux": ("coal", 2)}, work: 8, makes: ("makeshift_pistol", 1)),
         (station: "gunsmith_bench", slots: {"handle": ("planks", 1), "anvil": ("raw_iron", 4), "flux": ("coal", 2)}, work: 10, makes: ("rifle", 1)),
+        (station: "gunsmith_bench", slots: {"anvil": ("raw_iron", 1), "flux": ("coal", 1)}, work: 3, makes: ("iron_shot", 8)),
 
         // Machination table (vehicle station): machines, set down in the world (machines.ron).
         (station: "machination_table", slots: {"keel": ("planks", 8), "rigging": ("cordage", 6), "envelope": ("hide", 4), "engine": ("raw_iron", 6)}, work: 10, makes: ("airship", 1)),

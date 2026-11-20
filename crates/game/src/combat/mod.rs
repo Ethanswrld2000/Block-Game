@@ -12,6 +12,7 @@
 
 pub mod ai;
 pub mod data;
+pub mod guns;
 pub mod path;
 mod saved;
 
@@ -58,7 +59,7 @@ impl Plugin for CombatPlugin {
             )
             .add_systems(
                 crate::menu::GameUpdate,
-                (spawn_key, spawn, take_swings, take_strikes, shove, think, shoot, fly_bolts, walk, animate, haunt, fall)
+                (spawn_key, spawn, take_swings, guns::fire, take_strikes, shove, think, shoot, fly_bolts, walk, animate, haunt, fall)
                     .chain()
                     .after(InteractSet)
                     .after(crate::npc::NpcSet),

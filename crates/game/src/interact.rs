@@ -489,8 +489,11 @@ fn use_hands(
         let min = Vec3::new(h.block.x as f32, h.block.y as f32, h.block.z as f32);
         ray_box(cam.translation, cam.forward().as_vec3(), min, min + Vec3::ONE)
     });
+    // A gun fires (`combat::guns`) and never mines or strikes.
+    let gun = item.is_some_and(|i| items.get(i).gun.is_some());
     if let Some(e) = aimed.entity
         && style != Swing::Slash
+        && !gun
         && block_dist.is_none_or(|d| aimed.dist < d)
     {
         mining.block = None;
@@ -541,6 +544,11 @@ fn use_hands(
         }
         anim.start(hand, style);
         break_block(&mut world, &blocks, &mut mined, hit.block);
+        return;
+    }
+
+    if gun {
+        mining.block = None;
         return;
     }
 

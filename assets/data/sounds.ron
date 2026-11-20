@@ -36,6 +36,7 @@
         "craft_shimmer": 0.45,
         "craft_pop": 0.7,
         "thunder": 0.9,
+        "gunshot": 0.8,
         "wind_loop": 0.5,
         "rain_loop": 0.5,
         "levitate_loop": 0.35,

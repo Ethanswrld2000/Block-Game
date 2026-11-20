@@ -152,6 +152,9 @@ def main():
     save("levitate_loop", hum * (0.8 + 0.2 * np.sin(2 * np.pi * 0.5 * tt)), loop=True)
     # Thunder: a crack and a long rumble.
     n = noise(4.0)
+    # A gunshot: a sharp crack, a boom under it and a short tail.
+    n = noise(0.9)
+    save("gunshot", highpass(n, 0.5) * env(len(n), 0.0005, 0.03) * 1.5 + lowpass(n, 0.02) * env(len(n), 0.001, 0.25) * 4)
     save("thunder", lowpass(n, 0.004) * env(len(n), 0.02, 1.3) * 3 + highpass(n, 0.2) * env(len(n), 0.001, 0.08))
 
     critters()

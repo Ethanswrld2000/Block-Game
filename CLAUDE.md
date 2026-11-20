@@ -310,7 +310,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   machination table. Gear urn (`gear_urn`): Sewing Table (the clothes that were on the Tab list), Armor Stand (bark
   and hide armor; iron helm and mail after the tier 3 `metal_armor` step), tier 2 Bladesmith Bench (`iron_dagger`,
   `iron_sword`, moved off the iron anvil; `rapier` after the `rapier` step) and the Sharpening Stone, tier 3 Gunsmith
-  Bench (`later: true`: `makeshift_pistol` and `rifle` can be made, not fired). The ancestral urn gives the three new
+  Bench (`makeshift_pistol`, `rifle`, `iron_shot`; guns fire, see `combat::guns`). The ancestral urn gives the three new
   urns (carpentry after the tool urn, gear and vehicle after carpentry). New benches reuse an older bench's board
   (`StationKind::base`: layout, slots, tool, size) and add a few parts of their own in `models::parts`. Chairs,
   tables and doors are plain cube blocks for now (doors don't open); glass and windows are see-through blocks.
@@ -480,6 +480,11 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   Placeholder tracks `music_day_0/1`, `music_night_0` from `gen_placeholder_sounds.py --only music_`. Thunder follows each
   lightning flash after 0.3-7 s (`thunder_delay`), quieter and deeper the later it comes. Voice lines still need recordings
   (`assets/voice/<line id>.ogg`; `lines` plays them when present).
+- Guns: `combat::guns`. Items with `gun: (damage, range, reload, ammo)` in items.ron (`Item::gun`; they are
+  weapon-slot tools) fire on left click from the right hand: one `ammo` (`iron_shot`, 8 from 1 raw iron + 1 coal at the
+  gunsmith bench) per shot, `reload` seconds between, a straight shot from the eyes (`ray_hits_body`) hitting the nearest
+  foe or creature before any solid block. Sound `gunshot`, smoke at the muzzle, chips where it hits a wall. `interact`
+  never mines or strikes with a gun.
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen
