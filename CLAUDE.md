@@ -115,8 +115,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   guides in `assets/textures/creatures/guides/`. No skin or missing PNG = flat `color`s. Hurt tints
   the skin red; spirits blend the PNG's alpha. `--features dev` hot-reloads PNGs (`bevy/file_watcher`).
   A PNG may be painted at 2x/4x as long as its shape matches (tested).
-- Known gaps: vertices are 40 bytes, not the packed 8-byte format (performance pass); no thunder
-  sound or snow cover yet; no block light propagation (torches are real point lights); creatures walk straight at goals (no pathfinding, villagers
+- Known gaps: vertices are 40 bytes, not the packed 8-byte format (performance pass); no snow cover yet; no block light propagation (torches are real point lights); creatures walk straight at goals (no pathfinding, villagers
   don't climb into huts: they vanish at the door at night); creature parts don't animate yet.
 - Phase 10 (UI overhaul): done. `game::theme`: UI sprite sheet `assets/textures/ui.png` + `ui.ron`
   (name -> rect and 9-slice borders, drawn at 2x; placeholder from `tools/gen_ui_art.py`, which
@@ -476,6 +475,11 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   only lets `shape: plant` blocks go on soil. `Fields` (saved to `crops.ron`) remembers each sown crop; every 2 s loaded
   crops are set to the stage they've reached. Ripe barley drops `barley` (3 make `bread` in the cooking pot), ripe tubers
   `mire_tuber` (food). Tiles `barley_0..2`, `tuber_0..2` in `gen_placeholder_art.py`.
+- Music and thunder: `sound::music` plays one track now and then (sounds.ron `music`: `day`/`night` lists by
+  `brain::spirit_hours`, `gap` seconds of quiet between, `first` before the first), scaled by the new Music setting.
+  Placeholder tracks `music_day_0/1`, `music_night_0` from `gen_placeholder_sounds.py --only music_`. Thunder follows each
+  lightning flash after 0.3-7 s (`thunder_delay`), quieter and deeper the later it comes. Voice lines still need recordings
+  (`assets/voice/<line id>.ogg`; `lines` plays them when present).
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen

@@ -1,6 +1,6 @@
 //! Sound: footsteps by the ground's material, mining and breaking, fights,
 //! spells and levelling up, critters calling (panned to where they are), and
-//! looping wind, rain and levitation sounds. Which material sounds like what is in `assets/data/sounds.ron`;
+//! looping wind, rain and levitation sounds, thunder after lightning, and music now and then. Which material sounds like what is in `assets/data/sounds.ron`;
 //! the files are in `assets/sounds/`.
 
 use std::collections::HashMap;
@@ -29,7 +29,7 @@ impl Plugin for SoundPlugin {
             .add_systems(crate::menu::GameStartup, (load_bank, start_loops).chain())
             .add_systems(
                 crate::menu::GameUpdate,
-                (footsteps, mining, fights, spells, level_up, thunder, spirits, play, loops)
+                (footsteps, mining, fights, spells, level_up, thunder, spirits, play, loops, music)
                     .chain()
                     .after(crate::creatures::CreatureSet)
                     .after(crate::survival::SurvivalSet),
@@ -48,6 +48,17 @@ struct SoundSpec {
     materials: HashMap<String, MaterialSounds>,
     fallback: MaterialSounds,
     volumes: HashMap<String, f32>,
+    #[serde(default)]
+    music: MusicSpec,
+}
+
+/// Which tracks play when, and the quiet between them (seconds).
+#[derive(Deserialize, Debug, Clone, Default)]
+struct MusicSpec {
+    day: Vec<String>,
+    night: Vec<String>,
+    gap: (f32, f32),
+    first: f32,
 }
 
 impl SoundSpec {
@@ -276,13 +287,81 @@ fn level_up(progress: Res<Progress>, mut out: MessageWriter<PlaySound>, mut last
     *last = Some(l);
 }
 
-fn thunder(conditions: Res<Conditions>, mut out: MessageWriter<PlaySound>, mut was: Local<bool>) {
+/// Thunder follows each lightning flash after a delay, as if the strike were
+/// somewhere between close by and a few kilometres off: the further, the later,
+/// quieter and deeper.
+fn thunder(time: Res<Time>, conditions: Res<Conditions>, mut out: MessageWriter<PlaySound>, mut state: Local<(bool, Vec<(f32, f32)>, u64)>) {
+    let (was, pending, seed) = &mut *state;
+    if *seed == 0 {
+        *seed = 0x7A1D_0E57;
+    }
     let flash = conditions.flash > 0.5;
     if flash && !*was {
-        out.write(PlaySound::new("thunder"));
+        // 0 = overhead, 1 = far away.
+        let far = (jitter(seed) - 0.9) * 5.0;
+        pending.push((thunder_delay(far), far));
     }
     *was = flash;
+    let dt = time.delta_secs();
+    pending.retain_mut(|(wait, far)| {
+        *wait -= dt;
+        if *wait > 0.0 {
+            return true;
+        }
+        out.write(PlaySound::new("thunder").gain(1.0 - 0.6 * *far).speed(1.05 - 0.3 * *far));
+        false
+    });
 }
+
+/// Seconds from the flash to the thunder for a strike `far` (0 close, 1 a few km off).
+fn thunder_delay(far: f32) -> f32 {
+    0.3 + far.clamp(0.0, 1.0) * 7.0
+}
+
+/// One music track now and then: day or night tracks by the sun, quiet between.
+#[allow(clippy::too_many_arguments)]
+fn music(
+    mut commands: Commands,
+    time: Res<Time<Real>>,
+    spec: Res<SoundSpec>,
+    settings: Res<Settings>,
+    clock: Res<crate::clock::WorldClock>,
+    bank: Option<ResMut<Bank>>,
+    server: Res<AssetServer>,
+    mut playing: Query<&mut AudioSink, With<Music>>,
+    mut state: Local<(Option<f32>, usize, u64)>,
+) {
+    let Some(mut bank) = bank else { return };
+    let (wait, count, seed) = &mut *state;
+    if *seed == 0 {
+        *seed = 0xB0_6A11;
+    }
+    let level = spec.volume("music") * settings.volume * settings.music;
+    if let Some(mut sink) = playing.iter_mut().next() {
+        sink.set_volume(Volume::Linear(level));
+        return;
+    }
+    let wait = wait.get_or_insert(spec.music.first);
+    *wait -= time.delta_secs();
+    if *wait > 0.0 {
+        return;
+    }
+    let (lo, hi) = spec.music.gap;
+    *wait = lo + (hi - lo) * ((jitter(seed) - 0.9) * 5.0);
+    let night = crate::creatures::brain::spirit_hours(clock.hour());
+    let list = if night && !spec.music.night.is_empty() { &spec.music.night } else { &spec.music.day };
+    if list.is_empty() || level <= 0.001 {
+        return;
+    }
+    let name = &list[*count % list.len()];
+    *count += 1;
+    let h = bank.handles.entry(name.clone()).or_insert_with(|| server.load(format!("sounds/{name}.ogg"))).clone();
+    commands.spawn((Music, AudioPlayer(h), PlaybackSettings::DESPAWN.with_volume(Volume::Linear(level))));
+}
+
+/// The music track playing.
+#[derive(Component)]
+struct Music;
 
 /// Spirits murmur now and then when they're close.
 fn spirits(
@@ -342,5 +421,27 @@ fn loops(
         if (next - now).abs() > 1e-4 {
             sink.set_volume(Volume::Linear(next));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn far_thunder_comes_later() {
+        assert!(thunder_delay(0.0) < 1.0);
+        assert!(thunder_delay(1.0) > thunder_delay(0.5));
+    }
+
+    #[test]
+    fn sounds_ron_lists_music_that_exists() {
+        let spec: SoundSpec = ron::from_str(include_str!("../../../assets/data/sounds.ron")).unwrap();
+        assert!(!spec.music.day.is_empty() && !spec.music.night.is_empty());
+        for name in spec.music.day.iter().chain(&spec.music.night) {
+            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/sounds").join(format!("{name}.ogg"));
+            assert!(path.is_file(), "missing {}", path.display());
+        }
+        assert!(spec.music.gap.0 <= spec.music.gap.1);
     }
 }
