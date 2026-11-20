@@ -33,7 +33,7 @@ pub(super) fn build(c: &mut ChildSpawnerCommands, view: &SlotView, d: &Data) {
             ))
             .with_children(|st| {
                 st.spawn((theme.bold(sizes::BODY), Text::new("Wearing"), TextColor(colors::HEADING)));
-                super::icon_line(st, theme, "icon_warmth", format!("Clothes +{:.0}°C, feels {:.0}°C", inv.insulation(&d.items), d.s.env.feels), colors::TEXT);
+                super::icon_line(st, theme, "icon_warmth", format!("Clothes +{}, feels {}", crate::settings::temp_diff(inv.insulation(&d.items), 0, false), crate::settings::temp(d.s.env.feels, 0)), colors::TEXT);
                 let any = Layer::ALL.iter().any(|l| inv.protection(&d.items, *l) > 0.0);
                 if !any {
                     super::icon_line(st, theme, "icon_injuries", "No armor".into(), colors::MUTED);
@@ -159,7 +159,7 @@ fn gear_row(p: &mut ChildSpawnerCommands, view: &SlotView, d: &Data, slot: WearS
             match &it.kind {
                 ItemKind::Wear { insulation, protection, .. } => {
                     if *insulation > 0.0 {
-                        parts.push(format!("+{insulation:.0}°C"));
+                        parts.push(format!("+{}", crate::settings::temp_diff(*insulation, 0, false)));
                     }
                     for l in Layer::ALL {
                         if let Some(v) = protection.get(&l) {

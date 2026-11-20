@@ -50,7 +50,7 @@ pub(super) fn build(c: &mut ChildSpawnerCommands, theme: &Theme, d: &Data) {
         // Gear and progress.
         column(row, |col| {
             card(col, theme, "Gear", "icon_injuries", |k| {
-                line(k, theme, "icon_warmth", "Clothes warmth", format!("+{:.0}°C", d.inv.insulation(items)), colors::TEXT);
+                line(k, theme, "icon_warmth", "Clothes warmth", format!("+{}", crate::settings::temp_diff(d.inv.insulation(items), 0, false)), colors::TEXT);
                 for l in Layer::ALL {
                     let p = d.inv.protection(items, l);
                     bar(k, theme, super::layer_icon(l), l.name(), p / crate::inventory::MAX_PROTECTION, format!("-{:.0}%", p * 100.0), Color::srgb(0.55, 0.7, 0.85), false);
@@ -72,13 +72,13 @@ pub(super) fn build(c: &mut ChildSpawnerCommands, theme: &Theme, d: &Data) {
                 let color = if v.feels < vitals::COMFORT_LOW { Color::srgb(0.55, 0.78, 1.0) } else if v.feels > vitals::COMFORT_HIGH { colors::BAD } else { colors::GOOD };
                 k.spawn(Node { column_gap: Val::Px(10.0), align_items: AlignItems::Center, margin: UiRect::bottom(Val::Px(4.0)), ..default() }).with_children(|r| {
                     r.spawn(theme.icon("icon_warmth"));
-                    r.spawn((theme.bold(sizes::TITLE), Text::new(format!("{:.0}°C", v.feels)), TextColor(color)));
+                    r.spawn((theme.bold(sizes::TITLE), Text::new(crate::settings::temp(v.feels, 0)), TextColor(color)));
                     r.spawn(text("feels like", sizes::SMALL, colors::MUTED));
                 });
                 for (what, c) in d.s.temperature.iter().filter(|(_, c)| c.abs() >= 0.5) {
                     k.spawn(Node { justify_content: JustifyContent::SpaceBetween, width: Val::Percent(100.0), ..default() }).with_children(|r| {
                         r.spawn((text(what.clone(), sizes::SMALL, colors::TEXT), Node { max_width: Val::Px(COL_W - 90.0), ..default() }));
-                        r.spawn(text(format!("{c:+.0}°C"), sizes::SMALL, if *c >= 0.0 { Color::srgb(1.0, 0.72, 0.45) } else { Color::srgb(0.55, 0.78, 1.0) }));
+                        r.spawn(text(crate::settings::temp_diff(*c, 0, true), sizes::SMALL, if *c >= 0.0 { Color::srgb(1.0, 0.72, 0.45) } else { Color::srgb(0.55, 0.78, 1.0) }));
                     });
                 }
             });
@@ -91,7 +91,7 @@ pub(super) fn build(c: &mut ChildSpawnerCommands, theme: &Theme, d: &Data) {
                 for (icon, what, value, any) in [
                     ("icon_load", "Carry", format!("+{:.0} kg", p.carry), p.carry != 0.0),
                     ("icon_air", "Thin air", pct(p.air), p.air != 0.0),
-                    ("icon_warmth", "Cold", format!("{:.0}°C", p.cold), p.cold != 0.0),
+                    ("icon_warmth", "Cold", crate::settings::temp_diff(p.cold, 0, false), p.cold != 0.0),
                     ("icon_fatigue", "Speed", pct(p.speed), p.speed != 0.0),
                     ("icon_injuries", "Mining", pct(p.mining), p.mining != 0.0),
                     ("icon_sword", "Damage", pct(p.damage), p.damage != 0.0),
