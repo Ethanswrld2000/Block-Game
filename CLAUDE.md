@@ -493,7 +493,12 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   whole block if `solid`; `is_wall` counts solid models, so a shut door closes a room. Right click a door to swap
   `wooden_door` <-> `wooden_door_open` (`interact::door_swap`), with the doors stacked above and below it; it won't shut
   on you.
-- Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
+- Away camps and twigs: hold a `portable_bedroll` or `portable_tent` and right click the ground to lay it out on a clear
+  2x2 patch (`camp::Away`, `Camp.away`, one at a time, saved in player.ron); Z by it sleeps there (no home-bed extras; a
+  tent wakes you warm); inside a pitched tent `find_cover` gives `Cover::Room`; crouch + empty hand right click packs it
+  up. Home camp and respawn don't move. Snapped twigs grow back after `farming::regrow::REGROW_DAYS` (2) game days if the
+  cell is empty and the trunk still stands (`twigs.ron`).
+- Next: retire the rest of the Tab crafting list.
 
 ## Testing without a screen
 

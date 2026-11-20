@@ -126,7 +126,7 @@ pub fn from_map(center: Vec2, uv: Vec2) -> Vec2 {
 pub fn bearing(from: Vec3, yaw: f32, to: Vec3) -> f32 {
     let d = Vec2::new(to.x - from.x, to.z - from.z);
     let fwd = Vec2::new(-yaw.sin(), -yaw.cos());
-    let right = Vec2::new(fwd.y * -1.0, fwd.x);
+    let right = Vec2::new(-fwd.y, fwd.x);
     right.dot(d).atan2(fwd.dot(d)).to_degrees()
 }
 

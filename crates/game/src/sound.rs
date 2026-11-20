@@ -290,6 +290,7 @@ fn level_up(progress: Res<Progress>, mut out: MessageWriter<PlaySound>, mut last
 /// Thunder follows each lightning flash after a delay, as if the strike were
 /// somewhere between close by and a few kilometres off: the further, the later,
 /// quieter and deeper.
+#[allow(clippy::type_complexity)]
 fn thunder(time: Res<Time>, conditions: Res<Conditions>, mut out: MessageWriter<PlaySound>, mut state: Local<(bool, Vec<(f32, f32)>, u64)>) {
     let (was, pending, seed) = &mut *state;
     if *seed == 0 {

@@ -7,6 +7,9 @@
 //! faster); every couple of seconds loaded crops are set to the stage they
 //! have reached. Breaking a crop gives what drops.ron lists for its stage.
 //! Seeds come from tall grass (barley) and ferns (tuber eyes).
+//! Snapped twigs grow back too (`regrow`).
+
+mod regrow;
 
 use std::collections::HashMap;
 
@@ -29,6 +32,7 @@ pub struct FarmingPlugin;
 impl Plugin for FarmingPlugin {
     fn build(&self, app: &mut App) {
         let crops = load_crops(include_str!("../../../../assets/data/crops.ron")).unwrap_or_else(|e| panic!("crops.ron: {e}"));
+        regrow::plugin(app);
         app.insert_resource(CropBook(crops))
             .init_resource::<Fields>()
             .add_systems(crate::menu::GamePostStartup, load)

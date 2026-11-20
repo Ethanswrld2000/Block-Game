@@ -89,7 +89,16 @@ pub struct Survival {
 }
 
 /// Looks for a roof and walls round you, once a second.
-fn find_cover(time: Res<Time>, mut wait: Local<f32>, player: Res<Player>, world: Res<crate::world::World>, blocks: Res<crate::blocks::Blocks>, mut s: ResMut<Survival>) {
+#[allow(clippy::too_many_arguments)]
+fn find_cover(
+    time: Res<Time>,
+    mut wait: Local<f32>,
+    player: Res<Player>,
+    world: Res<crate::world::World>,
+    blocks: Res<crate::blocks::Blocks>,
+    camp: Res<Camp>,
+    mut s: ResMut<Survival>,
+) {
     *wait -= time.delta_secs();
     if *wait > 0.0 {
         return;
@@ -98,7 +107,10 @@ fn find_cover(time: Res<Time>, mut wait: Local<f32>, player: Res<Player>, world:
     let feet = voxel::BlockPos::from_world((player.pos + Vec3::Y * 0.2).to_array());
     let solid = |p: voxel::BlockPos| world.block(p).is_some_and(|b| blocks.registry.get(b).is_wall());
     let roof = (2..=16).any(|dy| solid(voxel::BlockPos::new(feet.x, feet.y + dy, feet.z)));
-    s.cover = if !roof {
+    s.cover = if camp.away.is_some_and(|a| a.tent && a.inside(player.pos)) {
+        // A pitched tent keeps the weather off like walls do.
+        shelter::Cover::Room
+    } else if !roof {
         shelter::Cover::Open
     } else if crate::station::room_at(&world, &blocks, feet).is_ok() {
         shelter::Cover::Room
@@ -433,6 +445,9 @@ struct PlayerSave {
     pitch: f32,
     vitals: Vitals,
     camp: Option<camp::Bedroll>,
+    /// A spare bedroll or tent laid out away from camp.
+    #[serde(default)]
+    away: Option<camp::Away>,
 }
 
 /// Screenshot runs neither load nor save the player, so they start the same.
@@ -457,6 +472,7 @@ pub(crate) fn load_player(
                 s.vitals = save.vitals;
                 s.vitals.breath = s.vitals.breath.min(rules.breath);
                 camp.bedroll = save.camp;
+                camp.away = save.away;
                 for (mut tf, mut fc) in &mut cam {
                     tf.translation = player.pos + Vec3::Y * crate::player::EYE;
                     fc.yaw = save.yaw;
@@ -479,7 +495,7 @@ pub(crate) fn load_player(
 }
 
 fn store(dir: &SaveDir, s: &Survival, camp: &Camp, player: &Player, cam: &FlyCamera) {
-    let save = PlayerSave { pos: player.pos.into(), yaw: cam.yaw, pitch: cam.pitch, vitals: s.vitals, camp: camp.bedroll };
+    let save = PlayerSave { pos: player.pos.into(), yaw: cam.yaw, pitch: cam.pitch, vitals: s.vitals, camp: camp.bedroll, away: camp.away };
     match ron::ser::to_string_pretty(&save, ron::ser::PrettyConfig::default()) {
         Ok(text) => {
             if let Err(e) = std::fs::write(dir.file("player.ron"), text) {
