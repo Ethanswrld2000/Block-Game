@@ -455,6 +455,12 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   slide, slots lift and settle (`ui::animate`), UI sounds `ui_*` (`gen_placeholder_sounds.py --only ui_`).
   Screenshots: `BLOCKGAME_INVENTORY=items|equipment|stats|abilities`, `BLOCKGAME_SKILLTREE=1` (= abilities),
   `BLOCKGAME_DRAWN=1` starts with the weapon drawn.
+- Biome regions: biomes.ron `region: main|outer|sky|air` (default main). Outer islands pick from `outer` biomes
+  (main ones if none), each sky island gets one `sky` biome from the climate under its centre
+  (`WorldGen::island_biome`), and open air (void columns, or 40+ blocks over the land above `SKY_MIN - 40`) uses an
+  `air` biome (`open_sky`) in `biome_at`. `guaranteed: Some((radius, near, far))` places a biome once per world on the
+  main island (`WorldGen::zones`, logged at startup), never by climate: `fungal_growth` (giant mushrooms,
+  `TreeKind::Mushroom`), 350-1100 blocks from spawn, radius 170.
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen

@@ -10,6 +10,34 @@ pub enum TreeKind {
     Swamp,
     Oak,
     Pine,
+    /// Giant mushrooms (stem and cap).
+    Mushroom,
+}
+
+/// Where a biome can appear.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Region {
+    /// The main island.
+    #[default]
+    Main,
+    /// The outer islands past the coast (they use `main` biomes if none are listed).
+    Outer,
+    /// Sky islands.
+    Sky,
+    /// Open air: the void between islands and the sky above the land.
+    Air,
+}
+
+/// A biome placed once per world on the main island, whatever the climate there.
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct Guaranteed {
+    /// Radius of the area in blocks (its edge wobbles a little).
+    pub radius: f32,
+    /// Its centre lies this many blocks from spawn, at least...
+    pub near: f32,
+    /// ...and at most.
+    pub far: f32,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -30,6 +58,10 @@ struct BiomeSpec {
     haze: f32,
     #[serde(default)]
     plants: Vec<PlantSpec>,
+    #[serde(default)]
+    region: Region,
+    #[serde(default)]
+    guaranteed: Option<Guaranteed>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -74,11 +106,15 @@ pub struct Biome {
     pub haze: f32,
     /// Ground plants, tried in order.
     pub plants: Vec<Plant>,
+    pub region: Region,
+    /// Placed once per world on the main island; never picked by climate.
+    pub guaranteed: Option<Guaranteed>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Biomes {
     list: Vec<Biome>,
+    /// The default sky island biome (the first `sky` one).
     pub sky: usize,
     pub spawn: usize,
 }
@@ -111,11 +147,20 @@ impl Biomes {
                 fog: [s.fog.0, s.fog.1, s.fog.2],
                 haze: s.haze,
                 plants,
+                region: s.region,
+                guaranteed: s.guaranteed,
             });
         }
-        let find = |n: &str| list.iter().position(|b| b.name == n).ok_or_else(|| format!("biomes.ron needs a '{n}' biome"));
-        let sky = find("skyreach")?;
-        let spawn = find("great_swamp")?;
+        for b in &list {
+            if b.guaranteed.is_some() && b.region != Region::Main {
+                return Err(format!("biome '{}': only main island biomes can be guaranteed", b.name));
+            }
+        }
+        if !list.iter().any(|b| b.region == Region::Main && b.guaranteed.is_none()) {
+            return Err("biomes.ron needs a main island biome".into());
+        }
+        let sky = list.iter().position(|b| b.region == Region::Sky).ok_or("biomes.ron needs a sky biome")?;
+        let spawn = list.iter().position(|b| b.name == "great_swamp").ok_or("biomes.ron needs a 'great_swamp' biome")?;
         Ok(Self { list, sky, spawn })
     }
 
@@ -131,18 +176,35 @@ impl Biomes {
         self.list.is_empty()
     }
 
-    /// Pick a surface biome from climate and height above sea level.
+    /// Is any biome listed for this region?
+    pub fn has(&self, region: Region) -> bool {
+        self.list.iter().any(|b| b.region == region && b.guaranteed.is_none())
+    }
+
+    /// Biomes placed once per world, by index.
+    pub fn guaranteed(&self) -> impl Iterator<Item = (usize, Guaranteed)> + '_ {
+        self.list.iter().enumerate().filter_map(|(i, b)| b.guaranteed.map(|g| (i, g)))
+    }
+
+    /// Pick a main island biome from climate and height above sea level.
     pub fn select(&self, temperature: f32, humidity: f32, height: i32) -> usize {
-        let mut best = (f32::MAX, 0);
+        self.select_in(Region::Main, temperature, humidity, height).unwrap_or(self.spawn)
+    }
+
+    /// Pick a biome of a region from climate and height (above sea level, or above
+    /// the island's base off the main island). `None` if the region lists none
+    /// that fit. Guaranteed biomes are never picked here.
+    pub fn select_in(&self, region: Region, temperature: f32, humidity: f32, height: i32) -> Option<usize> {
+        let mut best: Option<(f32, usize)> = None;
         for (i, b) in self.list.iter().enumerate() {
-            if i == self.sky || height < b.min_height || height > b.max_height {
+            if b.region != region || b.guaranteed.is_some() || height < b.min_height || height > b.max_height {
                 continue;
             }
             let d = (temperature - b.temperature).powi(2) + (humidity - b.humidity).powi(2);
-            if d < best.0 {
-                best = (d, i);
+            if best.is_none_or(|(bd, _)| d < bd) {
+                best = Some((d, i));
             }
         }
-        best.1
+        best.map(|(_, i)| i)
     }
 }

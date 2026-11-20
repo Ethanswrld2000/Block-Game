@@ -149,6 +149,24 @@ pub(crate) fn draw(wg: &WorldGen, c: &mut Canvas, kind: TreeKind, x: i32, ground
             twigs(wg, c, x, ground + 1, ground + 5, z, h, 0.15);
             trunk_vines(wg, c, x, ground + 4, ground + 1, z, h, 0.1);
         }
+        TreeKind::Mushroom => {
+            // A pale stem under a broad cap with a rim hanging one block down.
+            let top = ground + 5 + var % 6;
+            let r = 2 + var % 2;
+            for y in ground + 1..=top {
+                c.put(x, y, z, ids.mushroom_stem);
+            }
+            disc(c, x, top + 1, z, r, ids.mushroom_cap);
+            disc(c, x, top + 2, z, r - 1, ids.mushroom_cap);
+            for dz in -r..=r {
+                for dx in -r..=r {
+                    let d = dx * dx + dz * dz;
+                    if d <= r * r + 1 && d > (r - 1) * (r - 1) + 1 {
+                        c.fill(x + dx, top, z + dz, ids.mushroom_cap);
+                    }
+                }
+            }
+        }
     }
 }
 
