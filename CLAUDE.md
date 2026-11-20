@@ -438,7 +438,8 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   outside her door once (`cast.ron`), so the C16 beat can fire; the position is logged at startup. No smoke effect yet.
 - Inventory redesign: `inventory::ui` is one window with folder tabs (Items, Equipment, Stats, Abilities; submodules
   `ui/equipment.rs`, `ui/stats.rs`, `ui/abilities.rs`); `InvScreen { open, tab }` says which is up. Items: the pockets
-  grid with the weapon and hand slots over it, side panel Crafting / Chest. Equipment: a live picture of you
+  grid with the weapon and hand slots over it, the 1-9 hotbar under it (drop an item on a key to put it there, click a key
+  to take it in the right hand, right click clears; `Hover::Hotbar`), side panel Crafting / Chest. Equipment: a live picture of you
   (`inventory::preview`: a second `npc::body` rig on render layer 3 filmed into `PreviewImage`; idles, looks towards the
   cursor, drag turns it, shrugs when gear changes) with armor slots left, clothes (and the Back/bag slot) right, weapon and
   hands under it, and a strip of carried gear. `preview::Dressed` bodies (the picture and your third-person body) wear a
