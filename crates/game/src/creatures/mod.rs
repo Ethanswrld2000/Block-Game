@@ -17,6 +17,7 @@
 pub mod brain;
 pub mod critters;
 pub mod data;
+pub mod saved;
 pub mod skin;
 mod villagers;
 
@@ -47,7 +48,9 @@ impl Plugin for CreaturesPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Dice(Rng(0x5EED_C0FF_EE15_u64)))
             .init_resource::<Barrows>()
-            .add_systems(crate::menu::GamePostStartup, setup)
+            .add_systems(crate::menu::GamePostStartup, (setup, saved::load).chain())
+            .add_systems(crate::menu::GameUpdate, saved::save_now_and_then)
+            .add_systems(Last, saved::save_on_exit.run_if(crate::menu::in_game))
             .add_systems(crate::menu::GameUpdate, aim.before(InteractSet).after(crate::player::PlayerSet))
             .add_systems(
                 crate::menu::GameUpdate,

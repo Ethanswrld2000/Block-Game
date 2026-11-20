@@ -165,7 +165,7 @@ fn run(
                         From::Airship(_) => 2.5,
                     };
                     let p = at + Vec3::new(a.cos(), 0.0, a.sin()) * ring + Vec3::Y * 2.0;
-                    spawn.write(SpawnFoe { kind: k, at: p, boost: 1.0, tag: TAG });
+                    spawn.write(SpawnFoe { tag: TAG, ..SpawnFoe::new(k, p) });
                 }
             }
         }

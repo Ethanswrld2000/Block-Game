@@ -287,6 +287,8 @@ fn walk_floor(
                     // Each depth's boss is made for its depth (foes.ron).
                     boost: if boss { 1.0 } else { boost },
                     tag: if boss { BOSS } else { TAG },
+                    home: None,
+                    health: None,
                 });
             }
         }

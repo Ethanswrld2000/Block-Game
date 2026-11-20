@@ -244,6 +244,31 @@ impl SaveDir {
     }
 }
 
+/// Screenshot and bench runs neither load nor save what is in the world, so they start the same.
+pub fn screenshot_run() -> bool {
+    std::env::var_os("BLOCKGAME_SCREENSHOT").is_some() || std::env::var_os("BLOCKGAME_BENCH").is_some()
+}
+
+/// Reads `file` from the world's folder (`None` if missing or damaged; damage is logged).
+pub fn read_ron<T: serde::de::DeserializeOwned>(dir: &SaveDir, file: &str) -> Option<T> {
+    let text = std::fs::read_to_string(dir.file(file)).ok()?;
+    ron::from_str(&text).map_err(|e| warn!("{file}: {e}")).ok()
+}
+
+/// Writes `value` to `file` in the world's folder (write then rename, so a crash never leaves half a file).
+pub fn write_ron<T: Serialize>(dir: &SaveDir, file: &str, value: &T) {
+    match ron::ser::to_string_pretty(value, ron::ser::PrettyConfig::default()) {
+        Ok(text) => {
+            let path = dir.file(file);
+            let tmp = path.with_extension("tmp");
+            if let Err(e) = std::fs::write(&tmp, text).and_then(|_| std::fs::rename(&tmp, &path)) {
+                warn!("saving {file}: {e}");
+            }
+        }
+        Err(e) => warn!("{file}: {e}"),
+    }
+}
+
 fn save_all(world: &mut World, dir: &SaveDir, blocks: &Blocks) -> usize {
     let modified = world.take_modified();
     let n = modified.len();

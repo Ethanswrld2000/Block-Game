@@ -13,6 +13,7 @@
 pub mod ai;
 pub mod data;
 pub mod path;
+mod saved;
 
 use bevy::prelude::*;
 use voxel::BlockPos;
@@ -48,6 +49,9 @@ impl Plugin for CombatPlugin {
             .add_message::<SpawnFoe>()
             .add_message::<Shoot>()
             .add_message::<FoeSlain>()
+            .add_systems(crate::menu::GamePostStartup, saved::load)
+            .add_systems(crate::menu::GameUpdate, saved::save_now_and_then)
+            .add_systems(Last, saved::save_on_exit.run_if(crate::menu::in_game))
             .add_systems(
                 crate::menu::GameUpdate,
                 (guard_input, aim_foes).chain().after(crate::creatures::aim).after(crate::player::PlayerSet).before(InteractSet),
@@ -111,11 +115,15 @@ pub struct SpawnFoe {
     pub boost: f32,
     /// Tagged on the foe entity, so whoever spawned it can tell it apart (0 = none).
     pub tag: u32,
+    /// Where it keeps to, if not `at` (a foe back from a save).
+    pub home: Option<Vec3>,
+    /// Its health, if not full (a foe back from a save).
+    pub health: Option<f32>,
 }
 
 impl SpawnFoe {
     pub fn new(kind: usize, at: Vec3) -> Self {
-        Self { kind, at, boost: 1.0, tag: 0 }
+        Self { kind, at, boost: 1.0, tag: 0, home: None, health: None }
     }
 }
 
@@ -293,12 +301,12 @@ fn spawn(
         }
         let foe = Foe {
             kind: m.kind,
-            health: k.health * m.boost,
+            health: m.health.unwrap_or(k.health * m.boost),
             brain: Brain::new(&k.style, dice.0.next()),
             vel: Vec3::ZERO,
             yaw,
             on_ground: false,
-            home: m.at,
+            home: m.home.unwrap_or(m.at),
             want: Vec3::ZERO,
             way: Vec::new(),
             way_to: None,
