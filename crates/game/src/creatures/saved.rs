@@ -1,5 +1,5 @@
 //! Saving the creatures out in the world (`creatures.ron`): every wild
-//! creature (not villagers or critters, which come back on their own) with its
+//! creature (not critters, which come back on their own) with its
 //! kind, place, health and leash, and when each barrow last woke its wights.
 //! Saved every 30 s and on exit, not in screenshot runs.
 
@@ -9,7 +9,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use super::data::{Kinds, Temper};
-use super::{spawn_creature, Barrows, Creature, CreatureAssets, Villager};
+use super::{spawn_creature, Barrows, Creature, CreatureAssets};
 use crate::save::{read_ron, screenshot_run, write_ron, SaveDir};
 
 const FILE: &str = "creatures.ron";
@@ -35,7 +35,7 @@ pub struct SavedCreature {
 
 /// Whether a creature of this temper is saved.
 pub fn kept(temper: Temper) -> bool {
-    !matches!(temper, Temper::Villager | Temper::Critter)
+    !matches!(temper, Temper::Critter)
 }
 
 pub(super) fn load(mut commands: Commands, dir: Res<SaveDir>, kinds: Option<Res<Kinds>>, assets: Option<Res<CreatureAssets>>, mut barrows: ResMut<Barrows>) {
@@ -60,7 +60,7 @@ pub(super) fn load(mut commands: Commands, dir: Res<SaveDir>, kinds: Option<Res<
 
 type Wild<'a> = (&'a Creature, &'a Transform);
 
-fn store(dir: &SaveDir, kinds: &Kinds, barrows: &Barrows, q: &Query<Wild, Without<Villager>>) {
+fn store(dir: &SaveDir, kinds: &Kinds, barrows: &Barrows, q: &Query<Wild>) {
     let creatures = q
         .iter()
         .filter(|(c, _)| kept(kinds.get(c.kind).temper) && c.health > 0.0 && !c.leaving)
@@ -81,7 +81,7 @@ pub(super) fn save_now_and_then(
     dir: Res<SaveDir>,
     kinds: Option<Res<Kinds>>,
     barrows: Res<Barrows>,
-    q: Query<Wild, Without<Villager>>,
+    q: Query<Wild>,
 ) {
     *since += time.delta_secs();
     let Some(kinds) = kinds else { return };
@@ -92,7 +92,7 @@ pub(super) fn save_now_and_then(
     store(&dir, &kinds, &barrows, &q);
 }
 
-pub(super) fn save_on_exit(mut exit: MessageReader<AppExit>, dir: Res<SaveDir>, kinds: Option<Res<Kinds>>, barrows: Res<Barrows>, q: Query<Wild, Without<Villager>>) {
+pub(super) fn save_on_exit(mut exit: MessageReader<AppExit>, dir: Res<SaveDir>, kinds: Option<Res<Kinds>>, barrows: Res<Barrows>, q: Query<Wild>) {
     if exit.read().next().is_some()
         && !screenshot_run()
         && let Some(kinds) = kinds
@@ -118,7 +118,7 @@ mod tests {
 
     #[test]
     fn villagers_and_critters_are_not_saved() {
-        assert!(!kept(Temper::Villager) && !kept(Temper::Critter));
+        assert!(!kept(Temper::Critter));
         assert!(kept(Temper::Hostile) && kept(Temper::Spirit) && kept(Temper::Skittish));
     }
 }
