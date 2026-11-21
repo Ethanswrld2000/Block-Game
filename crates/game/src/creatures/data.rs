@@ -17,8 +17,6 @@ pub enum Temper {
     Hostile,
     /// Drifts through walls at night, kept back by torchlight.
     Spirit,
-    /// Lives in a village, keeps a daily schedule.
-    Villager,
     /// Small ambient life (birds, frogs, insects): moved by `critters`, not fought.
     Critter,
 }
@@ -296,7 +294,7 @@ pub mod tests {
     #[test]
     fn creatures_load_and_drop_real_items() {
         let k = load();
-        for name in ["marsh_boar", "fen_stag", "bog_lurker", "ancestral_spirit", "barrow_wight", "villager"] {
+        for name in ["marsh_boar", "fen_stag", "bog_lurker", "ancestral_spirit", "barrow_wight"] {
             assert!(k.id(name).is_some(), "{name}");
         }
         let stag = k.get(k.id("fen_stag").unwrap());

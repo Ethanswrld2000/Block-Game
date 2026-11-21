@@ -12,7 +12,7 @@
 //! 4. **Biome** per column from data (`biomes.ron`), picking surface blocks.
 //! 5. **Caves**: big chambers plus long tunnels, from 3D noise sampled on a
 //!    coarse grid and interpolated (cheap).
-//! 6. **Ores, trees, villages and barrows (`structures`), sky islands.**
+//! 6. **Ores, trees, barrows (`structures`), landmarks, sky islands.**
 //!
 //! All of it floats (`floating`): one big island around spawn with a rounded,
 //! stalactite-hung underside, open void past its coast, and more islands off
@@ -34,7 +34,7 @@ pub use dungeons::{Aabb, Dungeon, Room, RoomKind, SpawnKind, SpawnPoint, Veil};
 pub use floating::{Land, MAIN_RADIUS};
 pub use rotting::{floor as rotting_floor, in_pocket, Floor, FloorKind, FloorRoom, RottingGate, DEPTHS, POCKET};
 pub use landmarks::{AuntIsland, Castle, Forge, AUNT_RADIUS, SPORROW_RADIUS};
-pub use structures::{person_name, Barrow, Folk, Hut, Village, VILLAGE_RADIUS};
+pub use structures::{Barrow, Hut, Village};
 
 use std::sync::Arc;
 
@@ -108,7 +108,6 @@ struct Ids {
     snow: BlockId,
     cobblestone: BlockId,
     planks: BlockId,
-    peat: BlockId,
     torch: BlockId,
     chest: BlockId,
     /// Vines clinging to the north, south, east and west side of their cell.
@@ -150,7 +149,8 @@ pub struct WorldGen {
     ids: Ids,
     structures: structures::Cache,
     spawn: [i32; 3],
-    /// Centre of the home village, near spawn.
+    /// A spot 50-90 blocks from spawn (where the home village once stood);
+    /// the home dungeon is placed away from it, so it stays where it was.
     home: (i32, i32),
     /// Centre of the main island (the spawn column).
     center: (i32, i32),
@@ -209,7 +209,6 @@ impl WorldGen {
             snow: b("snow")?,
             cobblestone: b("cobblestone")?,
             planks: b("planks")?,
-            peat: b("peat")?,
             torch: b("torch")?,
             chest: b("chest")?,
         };
@@ -258,7 +257,7 @@ impl WorldGen {
         Ok(wg)
     }
 
-    /// Dry, flat ground 50-90 blocks from spawn for the home village.
+    /// Dry, flat ground 50-90 blocks from spawn (see `home`).
     fn search_home(&self) -> (i32, i32) {
         let [sx, _, sz] = self.spawn;
         for ring in 0..6 {

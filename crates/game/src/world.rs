@@ -309,9 +309,6 @@ pub fn setup_generator(
     for z in wg.zones() {
         info!("{} at {} {} (radius {})", wg.biomes.get(z.biome).title, z.x, z.z, z.radius);
     }
-    if let Some(v) = wg.home_village() {
-        info!("home village {} at {:?} with {} huts", v.name, v.center, v.huts.len());
-    }
     world.shaped = Arc::new(blocks.registry.iter().map(|(_, d)| d.shape == voxel::Shape::Torch).collect());
     player.pos = Vec3::new(x as f32 + 0.5, y as f32, z as f32 + 0.5);
     for mut tf in &mut cam {
