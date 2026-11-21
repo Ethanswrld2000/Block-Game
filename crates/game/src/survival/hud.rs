@@ -425,8 +425,8 @@ fn update_meters(
     for (g, mut t, mut color) in &mut texts {
         let (s2, c) = match g.0 {
             Gauge::Temperature => match temp {
-                Some((_, a)) => (format!("{} {:.0}°C", a.stage.name, v.feels), if a.level > 0 { colors::BAD } else { colors::TEXT }),
-                None => (format!("{:.0}°C", v.feels), colors::TEXT),
+                Some((_, a)) => (format!("{} {}", a.stage.name, crate::settings::temp(v.feels, 0)), if a.level > 0 { colors::BAD } else { colors::TEXT }),
+                None => (crate::settings::temp(v.feels, 0), colors::TEXT),
             },
             Gauge::Air => {
                 let c = if air.is_some_and(|a| a.level > 0) { colors::BAD } else { colors::TEXT };
@@ -524,7 +524,7 @@ fn temperature_list(
     // Hide what adds nothing, except the biome (always the first line).
     let parts: Vec<&(String, f32)> = s.temperature.iter().enumerate().filter(|(i, p)| *i == 0 || p.1.abs() >= 0.05).map(|(_, p)| p).collect();
     if let Ok(mut t) = header.single_mut() {
-        let h = format!("Surroundings {:.1}°C, you feel {:.1}°C", s.env.feels, s.vitals.feels);
+        let h = format!("Surroundings {}, you feel {}", crate::settings::temp(s.env.feels, 1), crate::settings::temp(s.vitals.feels, 1));
         if t.0 != h {
             t.0 = h;
         }
@@ -544,7 +544,7 @@ fn temperature_list(
     }
     for (v, mut t, mut c) in &mut values {
         if let Some(p) = parts.get(v.0) {
-            let x = format!("{:+.1}°C", p.1);
+            let x = crate::settings::temp_diff(p.1, 1, true);
             if t.0 != x {
                 t.0 = x;
             }

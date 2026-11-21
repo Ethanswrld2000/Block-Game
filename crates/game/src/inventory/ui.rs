@@ -1066,7 +1066,7 @@ fn describe(items: &Items, id: ItemId) -> (String, String, Vec<Line>) {
     let kind = match &it.kind {
         ItemKind::Wear { slot, insulation, protection } => {
             if *insulation > 0.0 {
-                lines.push((Some("icon_warmth"), format!("Warmth +{insulation:.0}°C"), colors::GOOD));
+                lines.push((Some("icon_warmth"), format!("Warmth +{}", crate::settings::temp_diff(*insulation, 0, false)), colors::GOOD));
             }
             for l in Layer::ALL {
                 if let Some(p) = protection.get(&l) {
