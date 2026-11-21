@@ -60,11 +60,7 @@ pub struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
-<<<<<<< HEAD
-        Self { view_distance: 12, sensitivity: 1.0, fov: 70.0, volume: 0.8, ambience: 0.7, debug_overlay: true, clouds: 1, fahrenheit: true }
-=======
-        Self { view_distance: 12, sensitivity: 1.0, fov: 70.0, volume: 0.8, ambience: 0.7, music: 0.6, debug_overlay: true, clouds: 1 }
->>>>>>> origin/claude/project-thread-29evjd
+        Self { view_distance: 12, sensitivity: 1.0, fov: 70.0, volume: 0.8, ambience: 0.7, music: 0.6, debug_overlay: true, clouds: 1, fahrenheit: true }
     }
 }
 
@@ -83,12 +79,17 @@ enum Knob {
 }
 
 impl Knob {
-<<<<<<< HEAD
-    const ALL: [Knob; 8] =
-        [Knob::ViewDistance, Knob::Sensitivity, Knob::Fov, Knob::Volume, Knob::Ambience, Knob::Clouds, Knob::Temperature, Knob::DebugOverlay];
-=======
-    const ALL: [Knob; 8] = [Knob::ViewDistance, Knob::Sensitivity, Knob::Fov, Knob::Volume, Knob::Ambience, Knob::Music, Knob::Clouds, Knob::DebugOverlay];
->>>>>>> origin/claude/project-thread-29evjd
+    const ALL: [Knob; 9] = [
+        Knob::ViewDistance,
+        Knob::Sensitivity,
+        Knob::Fov,
+        Knob::Volume,
+        Knob::Ambience,
+        Knob::Music,
+        Knob::Clouds,
+        Knob::Temperature,
+        Knob::DebugOverlay,
+    ];
 
     fn label(self) -> &'static str {
         match self {
