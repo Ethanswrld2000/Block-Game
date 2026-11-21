@@ -120,6 +120,8 @@ struct Ids {
     mud: BlockId,
     mushroom_stem: BlockId,
     mushroom_cap: BlockId,
+    redwood_log: BlockId,
+    redwood_leaves: BlockId,
 }
 
 /// The world generator. Build once, share between threads with `Arc`.
@@ -192,6 +194,8 @@ impl WorldGen {
             mud: b("mud")?,
             mushroom_stem: b("mushroom_stem")?,
             mushroom_cap: b("mushroom_cap")?,
+            redwood_log: b("redwood_log")?,
+            redwood_leaves: b("redwood_leaves")?,
             dirt: b("dirt")?,
             water: b("water")?,
             coal: b("coal_ore")?,
@@ -470,7 +474,7 @@ impl WorldGen {
         self.column(x, z).height
     }
 
-    /// A spawn point in the Great Swamp, on dry ground, near the origin.
+    /// A spawn point in the swamp, on dry ground, near the origin.
     pub fn find_spawn(&self) -> [i32; 3] {
         self.spawn
     }
@@ -517,8 +521,8 @@ impl WorldGen {
                 }
             }
         }
-        // Overhangs reach at most this far above the heightmap; trees ~14.
-        let top_reach = hi.saturating_add(24);
+        // Overhangs reach at most 24 above the heightmap; trees `trees::TALLEST`.
+        let top_reach = hi.saturating_add(24.max(trees::TALLEST + 2));
         let mut dense = vec![BlockId::AIR; CHUNK_VOLUME];
         let mut any = false;
 

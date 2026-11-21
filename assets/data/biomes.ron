@@ -1,8 +1,11 @@
-// Biomes. Each column picks the biome whose climate point (temperature,
+// Biomes. Titles are plain names shown in game. temperature/humidity only decide where a
+// biome goes; they do not change the temperature you feel.
+// Each column picks the biome whose climate point (temperature,
 // humidity, both -1..1) is nearest, among biomes whose elevation band contains
 // the column's height above sea level. Order does not matter.
 //   surface / subsurface / underwater: block names from blocks.ron
-//   trees: swamp, "oak", "pine" or "none";  tree_chance: per column, 0..1
+//   trees: swamp, oak, pine, redwood, mushroom or none;  tree_chance: per column, 0..1 (at most 0.05)
+//   bushes: optional, chance per column (at most 0.05) of a leafy bush made of the trees' leaves
 //   fog: RGB 0..1, the colour the sky and fog lean towards here
 //   haze: optional, default 1; how far you can see (0.5 = half as far)
 //   plants: optional ground plants (blocks with `shape: plant`), tried in order on
@@ -15,83 +18,92 @@
 //   guaranteed: optional, Some((radius, near, far)): placed once per world on the main
 //           island, `near..far` blocks from spawn, whatever the climate (only on ground
 //           inside its height band). Never picked by climate. Main island only.
-//   trees: also "mushroom" (giant mushrooms).
 [
     (
-        name: "great_swamp", title: "The Great Swamp",
+        name: "great_swamp", title: "Swamp",
         temperature: 0.4, humidity: 0.8, min_height: -3, max_height: 10,
         surface: "moss", subsurface: "peat", underwater: "mud",
-        trees: swamp, tree_chance: 0.012, fog: (0.46, 0.53, 0.47), haze: 0.4,
-        plants: [(block: "reeds", chance: 0.5, shore: true), (block: "fern", chance: 0.12), (block: "bog_bloom", chance: 0.03), (block: "tall_grass", chance: 0.2)],
+        trees: swamp, tree_chance: 0.016, bushes: 0.03, fog: (0.46, 0.53, 0.47), haze: 0.4,
+        plants: [(block: "reeds", chance: 0.6, shore: true), (block: "fern", chance: 0.2), (block: "shrub", chance: 0.06), (block: "bog_bloom", chance: 0.04), (block: "tall_grass", chance: 0.35)],
     ),
     (
-        name: "mossy_woods", title: "The Mossy Woods",
+        name: "mossy_woods", title: "Oak Forest",
         temperature: 0.1, humidity: 0.35, min_height: 1, max_height: 70,
         surface: "grass", subsurface: "dirt", underwater: "clay",
-        trees: oak, tree_chance: 0.03, fog: (0.55, 0.65, 0.6), haze: 0.8,
-        plants: [(block: "fern", chance: 0.15), (block: "tall_grass", chance: 0.25)],
+        trees: oak, tree_chance: 0.04, bushes: 0.04, fog: (0.55, 0.65, 0.6), haze: 0.8,
+        plants: [(block: "fern", chance: 0.22), (block: "shrub", chance: 0.08), (block: "tall_grass", chance: 0.4)],
     ),
     (
-        name: "meadow", title: "The Windward Meadows",
+        name: "meadow", title: "Meadow",
         temperature: 0.2, humidity: -0.3, min_height: 1, max_height: 70,
         surface: "grass", subsurface: "dirt", underwater: "gravel",
-        trees: oak, tree_chance: 0.002, fog: (0.7, 0.78, 0.86),
-        plants: [(block: "bog_bloom", chance: 0.03), (block: "tall_grass", chance: 0.55)],
+        trees: oak, tree_chance: 0.003, bushes: 0.012, fog: (0.7, 0.78, 0.86),
+        plants: [(block: "bog_bloom", chance: 0.05), (block: "shrub", chance: 0.03), (block: "tall_grass", chance: 0.75)],
     ),
     (
-        name: "dunes", title: "The Ochre Shore",
+        name: "dunes", title: "Desert",
         temperature: 0.8, humidity: -0.8, min_height: -4, max_height: 40,
         surface: "sand", subsurface: "sand", underwater: "sand",
         trees: none, tree_chance: 0.0, fog: (0.86, 0.8, 0.66),
+        plants: [(block: "dry_brush", chance: 0.05)],
     ),
     (
-        name: "pine_hills", title: "The Pinewatch Hills",
+        name: "pine_hills", title: "Pine Forest",
         temperature: -0.5, humidity: 0.2, min_height: 1, max_height: 90,
         surface: "grass", subsurface: "dirt", underwater: "gravel",
-        trees: pine, tree_chance: 0.025, fog: (0.6, 0.68, 0.75),
-        plants: [(block: "fern", chance: 0.08), (block: "tall_grass", chance: 0.18)],
+        trees: pine, tree_chance: 0.035, bushes: 0.025, fog: (0.6, 0.68, 0.75),
+        plants: [(block: "fern", chance: 0.14), (block: "shrub", chance: 0.06), (block: "tall_grass", chance: 0.3)],
     ),
     (
-        name: "shore", title: "The Grey Strand",
+        name: "shore", title: "Beach",
         temperature: 0.0, humidity: 0.0, min_height: -2, max_height: 2,
         surface: "sand", subsurface: "sand", underwater: "sand",
         trees: none, tree_chance: 0.0, fog: (0.7, 0.78, 0.86),
-        plants: [(block: "reeds", chance: 0.15, shore: true)],
+        plants: [(block: "reeds", chance: 0.2, shore: true), (block: "dry_brush", chance: 0.04)],
     ),
     (
-        name: "highlands", title: "The Broken Highlands",
+        name: "highlands", title: "Rocky Highlands",
         temperature: 0.0, humidity: 0.0, min_height: 70, max_height: 150,
         surface: "stone", subsurface: "stone", underwater: "gravel",
-        trees: pine, tree_chance: 0.004, fog: (0.66, 0.72, 0.82),
+        trees: pine, tree_chance: 0.006, bushes: 0.01, fog: (0.66, 0.72, 0.82),
+        plants: [(block: "dry_brush", chance: 0.06), (block: "shrub", chance: 0.03), (block: "tall_grass", chance: 0.08)],
     ),
     (
-        name: "frost_peaks", title: "The Frost Peaks",
+        name: "frost_peaks", title: "Snowy Mountains",
         temperature: 0.0, humidity: 0.0, min_height: 150, max_height: 1000,
         surface: "snow", subsurface: "stone", underwater: "ice",
         trees: none, tree_chance: 0.0, fog: (0.85, 0.9, 0.98),
+        plants: [(block: "dry_brush", chance: 0.02)],
     ),
     (
-        name: "deep_sea", title: "The Drowned Expanse",
+        name: "deep_sea", title: "Ocean",
         temperature: 0.0, humidity: 0.0, min_height: -1000, max_height: -4,
         surface: "gravel", subsurface: "sand", underwater: "gravel",
         trees: none, tree_chance: 0.0, fog: (0.35, 0.5, 0.65),
     ),
     (
-        name: "skyreach", title: "Skyreach", region: sky,
+        name: "skyreach", title: "Sky Islands", region: sky,
         temperature: 0.0, humidity: 0.0, min_height: -1000, max_height: 1000,
         surface: "cloud_moss", subsurface: "skystone", underwater: "skystone",
         trees: oak, tree_chance: 0.01, fog: (0.78, 0.86, 1.0),
     ),
     (
-        name: "fungal_growth", title: "The Fungal Growth",
-        temperature: 0.3, humidity: 0.6, min_height: 1, max_height: 60,
-        guaranteed: Some((radius: 170.0, near: 350.0, far: 1100.0)),
-        surface: "moss", subsurface: "peat", underwater: "mud",
-        trees: mushroom, tree_chance: 0.045, fog: (0.56, 0.47, 0.6), haze: 0.6,
-        plants: [(block: "fern", chance: 0.2), (block: "bog_bloom", chance: 0.06)],
+        name: "redwood_forest", title: "Redwood Forest",
+        temperature: -0.1, humidity: 0.6, min_height: 3, max_height: 90,
+        surface: "grass", subsurface: "dirt", underwater: "clay",
+        trees: redwood, tree_chance: 0.012, bushes: 0.035, fog: (0.5, 0.6, 0.55), haze: 0.65,
+        plants: [(block: "fern", chance: 0.4), (block: "shrub", chance: 0.1), (block: "tall_grass", chance: 0.2)],
     ),
     (
-        name: "open_sky", title: "The Open Sky", region: air,
+        name: "fungal_growth", title: "Mushroom Forest",
+        temperature: 0.3, humidity: 0.6, min_height: 1, max_height: 60,
+        guaranteed: Some((radius: 170.0, near: 350.0, far: 1100.0)),
+        surface: "spore_soil", subsurface: "dirt", underwater: "mud",
+        trees: mushroom, tree_chance: 0.014, bushes: 0.01, fog: (0.56, 0.47, 0.6), haze: 0.6,
+        plants: [(block: "brown_mushroom", chance: 0.22), (block: "glowcap", chance: 0.1), (block: "fern", chance: 0.12), (block: "shrub", chance: 0.04)],
+    ),
+    (
+        name: "open_sky", title: "Open Sky", region: air,
         temperature: -0.3, humidity: -0.2, min_height: -2000, max_height: 2000,
         surface: "cloud_moss", subsurface: "skystone", underwater: "skystone",
         trees: none, tree_chance: 0.0, fog: (0.7, 0.8, 0.95),

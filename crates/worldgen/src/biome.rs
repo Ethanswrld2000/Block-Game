@@ -12,6 +12,8 @@ pub enum TreeKind {
     Pine,
     /// Giant mushrooms (stem and cap).
     Mushroom,
+    /// Very large redwoods (2x2 trunks, up to ~46 blocks).
+    Redwood,
 }
 
 /// Where a biome can appear.
@@ -58,6 +60,8 @@ struct BiomeSpec {
     haze: f32,
     #[serde(default)]
     plants: Vec<PlantSpec>,
+    #[serde(default)]
+    bushes: f32,
     #[serde(default)]
     region: Region,
     #[serde(default)]
@@ -106,6 +110,8 @@ pub struct Biome {
     pub haze: f32,
     /// Ground plants, tried in order.
     pub plants: Vec<Plant>,
+    /// Chance per column of a leafy bush (a mound of the trees' leaves).
+    pub bushes: f32,
     pub region: Region,
     /// Placed once per world on the main island; never picked by climate.
     pub guaranteed: Option<Guaranteed>,
@@ -147,6 +153,7 @@ impl Biomes {
                 fog: [s.fog.0, s.fog.1, s.fog.2],
                 haze: s.haze,
                 plants,
+                bushes: s.bushes,
                 region: s.region,
                 guaranteed: s.guaranteed,
             });
