@@ -48,7 +48,8 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, cols: &[[Column; CHUNK_SIZE]; 
                 dense[at] = wg.ids.pebble;
                 continue;
             }
-            let patch = smoothstep(-0.45, 0.35, wg.plant_patch.get_noise_2d(x as f32, z as f32)) * 1.5;
+            // Patches thicken plants; even the gaps between them keep some.
+            let patch = 0.45 + smoothstep(-0.45, 0.35, wg.plant_patch.get_noise_2d(x as f32, z as f32)) * 1.1;
             for (i, p) in biome.plants.iter().enumerate() {
                 if p.shore && col.height > col.water.saturating_add(1) {
                     continue;

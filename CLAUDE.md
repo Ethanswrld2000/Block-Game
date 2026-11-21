@@ -455,6 +455,21 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   slide, slots lift and settle (`ui::animate`), UI sounds `ui_*` (`gen_placeholder_sounds.py --only ui_`).
   Screenshots: `BLOCKGAME_INVENTORY=items|equipment|stats|abilities`, `BLOCKGAME_SKILLTREE=1` (= abilities),
   `BLOCKGAME_DRAWN=1` starts with the weapon drawn.
+- Biome regions: biomes.ron `region: main|outer|sky|air` (default main). Outer islands pick from `outer` biomes
+  (main ones if none), each sky island gets one `sky` biome from the climate under its centre
+  (`WorldGen::island_biome`), and open air (void columns, or 40+ blocks over the land above `SKY_MIN - 40`) uses an
+  `air` biome (`open_sky`) in `biome_at`. `guaranteed: Some((radius, near, far))` places a biome once per world on the
+  main island (`WorldGen::zones`, logged at startup), never by climate: `fungal_growth` (giant mushrooms,
+  `TreeKind::Mushroom`), 350-1100 blocks from spawn, radius 170.
+- Biome round 2: titles are plain names (Swamp, Oak Forest, Meadow, Desert, Pine Forest, Beach, Rocky Highlands,
+  Snowy Mountains, Ocean, Sky Islands, Redwood Forest, Mushroom Forest, Open Sky); internal names unchanged. Biomes no
+  longer change felt temperature: `weather::BASE_TEMPERATURE` (0.3 = 9 °C) everywhere, plus season, height, sun, weather
+  (biome temperature/humidity only place biomes; snow now comes from season and weather alone). Fuller crowns (oak, pine,
+  swamp), `bushes` in biomes.ron (leaf mounds from `trees::draw_bush`), plant patches never fully empty, new plant blocks
+  `shrub`, `dry_brush`, `brown_mushroom`, `glowcap` in every biome's list. Redwood Forest (`TreeKind::Redwood`: 2x2 trunk
+  30-43 tall, buttress roots, deep cone; `redwood_log`/`redwood_leaves`; `trees::REACH` 7, `TALLEST` 48). Mushroom Forest
+  ground is `spore_soil`; glowcaps glow at night (voxel material uniform 106 `glow`: layer + strength from `sky::night_glow`;
+  emissive in voxel.wesl with alpha 0 so the camera exposure doesn't dim it).
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen

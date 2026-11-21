@@ -53,5 +53,13 @@
         "burnt_stem": 46,
         "burnt_cap": 47,
         "grave": 48,
+        "spore_soil": 49,
+        "spore_soil_side": 50,
+        "shrub": 51,
+        "dry_brush": 52,
+        "brown_mushroom": 53,
+        "redwood_log_side": 54,
+        "redwood_log_top": 55,
+        "redwood_leaves": 56,
     },
 )

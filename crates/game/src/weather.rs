@@ -185,6 +185,10 @@ impl Conditions {
     }
 }
 
+/// Temperature everywhere before season and height (x 30 = °C). Biomes don't
+/// change temperature (Ethan wants it simple); seasons, height and weather do.
+pub const BASE_TEMPERATURE: f32 = 0.3;
+
 /// The climate around the camera: biome fog colour and haze, temperature with
 /// the season applied. Eased so walking between biomes fades smoothly.
 #[derive(Resource, Debug, Clone)]
@@ -192,8 +196,8 @@ pub struct LocalClimate {
     pub fog: Vec3,
     pub haze: f32,
     pub temperature: f32,
-    /// What `temperature` is made of (eased the same way): the biome (or the
-    /// column's own climate, if colder), the season, and height above the ground.
+    /// What `temperature` is made of (eased the same way): the base
+    /// (`BASE_TEMPERATURE`, the same in every biome), the season, and height above the ground.
     pub biome: f32,
     pub season: f32,
     pub altitude: f32,
@@ -206,7 +210,8 @@ pub struct LocalClimate {
 impl Default for LocalClimate {
     fn default() -> Self {
         let fog = Vec3::new(0.46, 0.53, 0.47);
-        Self { fog, haze: 0.4, temperature: 0.4, biome: 0.4, season: 0.0, altitude: 0.0, biome_title: String::new(), target: (fog, 0.4, [0.4, 0.0, 0.0]), timer: 0.0 }
+        let t = BASE_TEMPERATURE;
+        Self { fog, haze: 0.4, temperature: t, biome: t, season: 0.0, altitude: 0.0, biome_title: String::new(), target: (fog, 0.4, [t, 0.0, 0.0]), timer: 0.0 }
     }
 }
 
@@ -231,7 +236,7 @@ fn sample_climate(
         // Colder with height above the ground too (sky islands, mountain air).
         // (Not in the Rotting Gate's floors, which are built high in the sky.)
         let altitude = if worldgen::in_pocket(p.x, p.z) { 0.0 } else { ((p.y - col.height.max(0)) as f32 / 400.0).max(0.0) };
-        climate.target = (Vec3::from(biome.fog), biome.haze, [biome.temperature.min(col.climate.temperature), season, -altitude]);
+        climate.target = (Vec3::from(biome.fog), biome.haze, [BASE_TEMPERATURE, season, -altitude]);
         if climate.biome_title != biome.title {
             climate.biome_title = biome.title.clone();
         }

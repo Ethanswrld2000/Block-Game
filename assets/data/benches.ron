@@ -27,7 +27,7 @@
 // When several recipes match, the one that uses the most wins (2 or 3 cobblestone).
 (
     // What burns in the cooking pot's fire, and the heat one of it gives.
-    fuel: { "plant_fiber": 1, "stick": 1, "planks": 2, "peat": 3, "log": 4, "swamp_log": 4, "coal": 6 },
+    fuel: { "plant_fiber": 1, "stick": 1, "planks": 2, "peat": 3, "log": 4, "swamp_log": 4, "redwood_log": 4, "coal": 6 },
     // Turns of the wheel; a sharpened tool works `speed` times as fast for `seconds` of play.
     sharpen: Some((work: 4, seconds: 600.0, speed: 1.6)),
     // Turns of the lens's focusing dial to study something.
@@ -48,6 +48,7 @@
         // Carpentry bench (carpentry station): saw logs into planks, planks into sticks, and build.
         (station: "carpentry_bench", slots: {"bed": ("log", 1)}, work: 4, makes: ("planks", 4)),
         (station: "carpentry_bench", slots: {"bed": ("swamp_log", 1)}, work: 4, makes: ("planks", 4)),
+        (station: "carpentry_bench", slots: {"bed": ("redwood_log", 1)}, work: 4, makes: ("planks", 4)),
         (station: "carpentry_bench", slots: {"bed": ("planks", 2)}, work: 2, makes: ("stick", 4)),
         (station: "carpentry_bench", slots: {"bed": ("planks", 8)}, work: 6, makes: ("chest", 1)),
 

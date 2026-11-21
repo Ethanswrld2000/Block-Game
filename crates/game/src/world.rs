@@ -306,6 +306,9 @@ pub fn setup_generator(
         .unwrap_or_else(|e| panic!("{e}"));
     let [x, y, z] = wg.find_spawn();
     info!("spawn at {x} {y} {z} in {}", wg.biome_at(x, y, z).title);
+    for z in wg.zones() {
+        info!("{} at {} {} (radius {})", wg.biomes.get(z.biome).title, z.x, z.z, z.radius);
+    }
     if let Some(v) = wg.home_village() {
         info!("home village {} at {:?} with {} huts", v.name, v.center, v.huts.len());
     }
