@@ -200,8 +200,7 @@ fn feels_like(
     holding_torch: bool,
     parts: &mut Vec<(String, f32)>,
 ) -> f32 {
-    let biome = if climate.biome_title.is_empty() { "Climate".to_string() } else { climate.biome_title.clone() };
-    parts.push((biome, climate.biome * 30.0));
+    parts.push(("Base".into(), climate.biome * 30.0));
     parts.push(("Season".into(), climate.season * 30.0));
     parts.push(("Height above ground".into(), climate.altitude * 30.0));
     parts.push((if sun_height >= 0.0 { "Sun" } else { "Night" }.into(), sun_height * 5.0));

@@ -5,7 +5,7 @@ use voxel::{BlockId, ChunkPos, CHUNK_SIZE_I32};
 
 use crate::trees::{draw, Canvas};
 use crate::util::{hash2, unit};
-use crate::{TreeKind, WorldGen, SKY_MIN};
+use crate::{WorldGen, SKY_MIN};
 
 const CELL: i32 = 192;
 pub(crate) const MAX_RADIUS: i32 = 58;
@@ -68,6 +68,11 @@ pub(crate) fn span(wg: &WorldGen, isl: &Island, x: i32, z: i32) -> Option<(i32, 
     Some((bottom.floor() as i32, top.floor() as i32))
 }
 
+/// The island that covers this column (the highest, if two do).
+pub(crate) fn island_at(wg: &WorldGen, x: i32, z: i32) -> Option<Island> {
+    islands_near(wg, x, z, x, z).into_iter().filter_map(|i| span(wg, &i, x, z).map(|s| (i, s.1))).max_by_key(|s| s.1).map(|s| s.0)
+}
+
 /// (bottom, top) of whichever island covers this column.
 pub(crate) fn span_at(wg: &WorldGen, x: i32, z: i32) -> Option<(i32, i32)> {
     islands_near(wg, x, z, x, z).iter().filter_map(|i| span(wg, i, x, z)).max_by_key(|s| s.1)
@@ -87,7 +92,6 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) -> bool
         return false;
     }
     let ids = wg.ids;
-    let sky = wg.biomes.get(wg.biomes.sky);
     let mut c = Canvas { origin: [o.x, o.y, o.z], dense };
     let mut any = false;
     let reach = 3;
@@ -96,6 +100,8 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) -> bool
         if o.y > isl.y + 30 || o.y + CHUNK_SIZE_I32 < isl.y - r - 10 {
             continue;
         }
+        // One biome per island (`sky` biomes in biomes.ron).
+        let sky = wg.biome_of_island(isl);
         for z in (o.z - reach).max(isl.z - r)..=(z1 + reach).min(isl.z + r) {
             for x in (o.x - reach).max(isl.x - r)..=(x1 + reach).min(isl.x + r) {
                 let Some((bottom, top)) = span(wg, isl, x, z) else { continue };
@@ -111,7 +117,7 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) -> bool
                 let h = hash2(wg.seed ^ 0x15_7EE5, x, z);
                 let clear = isl.aunt && wg.aunt_island().is_some_and(|a| a.keeps_clear(x, z));
                 if unit(h) < sky.tree_chance && top - bottom > 4 && !clear {
-                    draw(wg, &mut c, TreeKind::Oak, x, top, z, h);
+                    draw(wg, &mut c, sky.trees, x, top, z, h);
                     any = true;
                 }
             }

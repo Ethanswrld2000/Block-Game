@@ -18,6 +18,11 @@
     "reeds": [("plant_fiber", 1, 0.6), ("swamp_reed", 1, 0.25)],
     "fern": [("plant_fiber", 1, 0.3)],
     "bog_bloom": [("plant_fiber", 1, 0.2)],
+    "shrub": [("stick", 1, 0.5), ("plant_fiber", 1, 0.4)],
+    "dry_brush": [("stick", 1, 0.6)],
+    "brown_mushroom": [("plant_fiber", 1, 0.2)],
+    "glowcap": [("plant_fiber", 1, 0.2)],
+    "redwood_leaves": [("stick", 1, 0.5), ("plant_fiber", 1, 0.3)],
     // Tree details and pebbles (right click picks them up, or break them).
     "twig_north": [("stick", 1, 1.0)],
     "twig_south": [("stick", 1, 1.0)],

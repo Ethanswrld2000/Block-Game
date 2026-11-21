@@ -317,6 +317,73 @@ def bog_bloom(s):
     return img
 
 
+def spore_soil(s):
+    """Fungal ground: dark violet-brown soil dusted with pale spores."""
+    img = noisy(s, [(58, 40, 56), (86, 60, 80), (128, 98, 120)], (4, 2))
+    dots = np.random.default_rng(s).random((T, T)) < 0.06
+    img[dots, :3] = (214, 200, 222)
+    return img
+
+
+def spore_soil_side(s):
+    img = dirt(s)
+    top = spore_soil(s + 1)
+    r = np.random.default_rng(s)
+    for x in range(T):
+        d = int(r.integers(4, 9))
+        img[:d, x] = top[:d, x]
+    return img
+
+
+def shrub(s, colors=((40, 86, 36), (58, 112, 44), (84, 140, 58))):
+    """A round leafy bush filling most of the tile (crossed-quad plant)."""
+    ys, xs = np.mgrid[0:T, 0:T]
+    r = np.random.default_rng(s)
+    img = np.zeros((T, T, 4))
+    shape = ((xs - 15.5) ** 2 / 225 + (ys - 18) ** 2 / 196) < 1
+    shape &= r.random((T, T)) > 0.1
+    leaf = noisy(s, list(colors), (4, 2))
+    img[shape] = leaf[shape]
+    img[shape, 3] = 255
+    img[T - 3:, 14:17] = (70, 50, 32, 255)   # stem
+    return img
+
+
+def dry_brush(s):
+    """Twiggy brown brush: branching stems with a few dry leaves."""
+    img = np.zeros((T, T, 4))
+    r = np.random.default_rng(s)
+    for _ in range(9):
+        x, y = 15.5 + r.uniform(-3, 3), T - 1
+        dx = r.uniform(-0.7, 0.7)
+        for i in range(int(r.integers(12, 26))):
+            xi, yi = int(round(x)), int(round(y))
+            if 0 <= xi < T and 0 <= yi < T:
+                img[yi, xi] = (*(np.array([116, 88, 56]) * (0.8 + 0.3 * r.random())), 255)
+                if r.random() < 0.18 and xi + 1 < T:
+                    img[yi, xi + 1] = (150, 140, 70, 255)
+            x += dx
+            y -= 1
+            dx += r.uniform(-0.15, 0.15)
+    return img
+
+
+def brown_mushroom(s):
+    """A few small brown mushrooms."""
+    img = np.zeros((T, T, 4))
+    ys, xs = np.mgrid[0:T, 0:T]
+    for cx, h, w in ((9, 8, 5), (18, 12, 6), (25, 6, 4)):
+        img[T - h:, cx - 1:cx + 1] = (214, 202, 178, 255)
+        cap = ((xs - cx + 0.5) ** 2 / (w * w) + (ys - (T - h)) ** 2 / 9 < 1) & (ys <= T - h)
+        img[cap] = (128, 82, 50, 255)
+        img[cap & (ys == T - h)] = (100, 62, 38, 255)
+    return img
+
+
+def redwood_leaves(s):
+    return leaves(s, ((24, 58, 34), (36, 78, 42), (58, 104, 56)))
+
+
 def floorboards(s):
     # Long narrow boards running one way, with peg holes at their ends.
     img = noisy(s, [(138, 100, 60), (170, 128, 78)], (16, 2))
@@ -488,6 +555,11 @@ TILES = [
     ("chair", chair), ("table", table), ("wooden_door", wooden_door), ("glass", glass), ("window", window),
     ("mushroom_stem", mushroom_stem), ("mushroom_cap", mushroom_cap), ("mushroom_gills", mushroom_gills),
     ("burnt_stem", burnt_stem), ("burnt_cap", burnt_cap), ("grave", grave),
+    ("spore_soil", spore_soil), ("spore_soil_side", spore_soil_side), ("shrub", shrub), ("dry_brush", dry_brush),
+    ("brown_mushroom", brown_mushroom),
+    ("redwood_log_side", lambda s: log_side(s, (92, 40, 26), (150, 70, 44))),
+    ("redwood_log_top", lambda s: log_top(s, (92, 40, 26), (184, 104, 70))),
+    ("redwood_leaves", redwood_leaves),
 ]
 
 

@@ -34,6 +34,10 @@ pub struct VoxelExtension {
     /// (fades from 1 to 0; see `chop`).
     #[uniform(105)]
     pub shake: Vec4,
+    /// Glowing plants (glowcaps): x = their texture layer, y = how bright
+    /// (0 by day, up to 1 at night; see `sky::night_glow`).
+    #[uniform(106)]
+    pub glow: Vec4,
 }
 
 impl MaterialExtension for VoxelExtension {
@@ -49,6 +53,11 @@ impl MaterialExtension for VoxelExtension {
     fn prepass_vertex_shader() -> ShaderRef {
         "shaders/voxel_prepass.wesl".into()
     }
+}
+
+/// The glow uniform's starting value: the glowcap's texture layer, dark.
+fn glow_layer(tiles: &TileSheet) -> Vec4 {
+    Vec4::new(tiles.index("glowcap").map_or(-1.0, |i| i as f32), 0.0, 0.0, 0.0)
 }
 
 /// Shared block data. `material` is `None` until the spritesheet has loaded.
@@ -140,7 +149,7 @@ fn build_material(
             fog_enabled: false,
             ..default()
         },
-        extension: VoxelExtension { textures: textures.clone(), season: Vec4::ZERO, wind: Vec4::ZERO, atmos: default(), shake: Vec4::ZERO },
+        extension: VoxelExtension { textures: textures.clone(), season: Vec4::ZERO, wind: Vec4::ZERO, atmos: default(), shake: Vec4::ZERO, glow: glow_layer(&blocks.tiles) },
     }));
     blocks.translucent_material = Some(materials.add(VoxelMaterial {
         base: StandardMaterial {
@@ -152,6 +161,6 @@ fn build_material(
             fog_enabled: false,
             ..default()
         },
-        extension: VoxelExtension { textures, season: Vec4::ZERO, wind: Vec4::ZERO, atmos: default(), shake: Vec4::ZERO },
+        extension: VoxelExtension { textures, season: Vec4::ZERO, wind: Vec4::ZERO, atmos: default(), shake: Vec4::ZERO, glow: glow_layer(&blocks.tiles) },
     }));
 }

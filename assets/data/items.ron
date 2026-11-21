@@ -78,6 +78,8 @@
         (name: "gravel", title: "Gravel", kind: Block("gravel"), mass: 1.8),
         (name: "clay", title: "Clay", kind: Block("clay"), mass: 1.8),
         (name: "swamp_log", title: "Swamp Log", kind: Block("swamp_log"), mass: 2.0),
+        (name: "redwood_log", title: "Redwood Log", kind: Block("redwood_log"), mass: 2.4),
+        (name: "spore_soil", title: "Spore Soil", kind: Block("spore_soil"), mass: 1.0),
         (name: "skystone", title: "Skystone", kind: Block("skystone"), mass: 1.5),
         (name: "cloud_moss", title: "Cloud Moss", kind: Block("cloud_moss"), mass: 0.3),
         (name: "chest", title: "Chest", kind: Block("chest"), mass: 6.0, size: (2, 2), stack: 1),

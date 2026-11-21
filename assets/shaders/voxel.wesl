@@ -19,6 +19,8 @@ import bevy_pbr::render::{
 // xy: wind direction (x, z); z: how hard (see voxel_vertex.wesl).
 @group(constants::MATERIAL_BIND_GROUP) @binding(103) var<uniform> wind: vec4<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(104) var<uniform> atmos: Atmos;
+// x: the glowcap's texture layer; y: how bright it glows (0 by day, 1 at night).
+@group(constants::MATERIAL_BIND_GROUP) @binding(106) var<uniform> plant_glow: vec4<f32>;
 
 // --- Sky-matched fog and ground mist. Kept the same in voxel.wesl and
 // lod.wesl; the horizon formula matches sky.wesl at the horizon. Fields: see
@@ -117,6 +119,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     rgb *= 1.0 - 0.35 * crease;
     pbr_input.material.base_color = vec4<f32>(rgb * pbr_input.material.base_color.rgb, texel.a);
     pbr_input.diffuse_occlusion *= vec3<f32>(1.0 - 0.6 * crease);
+    // Glowcaps light up at night (bloom picks the glow up).
+    if plant_glow.y > 0.0 && plant_glow.x >= 0.0 && layer == u32(plant_glow.x) {
+        // (alpha 0: not scaled by the camera exposure.)
+        pbr_input.material.emissive = vec4<f32>(rgb * 3.0 * plant_glow.y, 0.0);
+    }
     let water = is_water_top(in.world_position.xyz, in.world_normal, texel.a);
     var wave_n = vec3<f32>(0.0, 1.0, 0.0);
     if water {

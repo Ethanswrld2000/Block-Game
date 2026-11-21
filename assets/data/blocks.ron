@@ -74,4 +74,12 @@
     (name: "burnt_stem", top: "burnt_stem", hardness: 0.8, material: "wood"),
     (name: "burnt_cap", top: "burnt_cap", hardness: 0.6, material: "wood"),
     (name: "grave", top: "grave", hardness: 3.0, material: "stone"),
+    // Biome round 2: fungal ground and mushrooms, shrubs and brush, redwoods.
+    (name: "spore_soil", top: "spore_soil", bottom: "dirt", side: "spore_soil_side", hardness: 0.8, material: "soil"),
+    (name: "shrub", top: "shrub", solid: false, opaque: false, foliage: true, hardness: 0.1, material: "plant", shape: plant),
+    (name: "dry_brush", top: "dry_brush", solid: false, opaque: false, hardness: 0.05, material: "plant", shape: plant),
+    (name: "brown_mushroom", top: "brown_mushroom", solid: false, opaque: false, hardness: 0.05, material: "plant", shape: plant),
+    (name: "glowcap", top: "glowcap", solid: false, opaque: false, hardness: 0.05, material: "plant", shape: plant),
+    (name: "redwood_log", top: "redwood_log_top", side: "redwood_log_side", hardness: 3.0, material: "log"),
+    (name: "redwood_leaves", top: "redwood_leaves", opaque: false, foliage: true, hardness: 0.3, material: "plant"),
 ]

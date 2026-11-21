@@ -336,7 +336,6 @@ fn build_tile(g: &WorldGen, reg: &BlockRegistry, colors: &Arc<Vec<Vec3>>, tile: 
     buf.columns(&grid, n, LAND_STEP as f32);
 
     // Sky islands, on a finer grid.
-    let sky = g.biomes.get(g.biomes.sky);
     let skystone = reg.id("skystone").map(|b| color(b, 2)).unwrap_or(Vec3::splat(0.6));
     let n = TILE / ISLAND_STEP;
     let mut grid = Vec::with_capacity(((n + 2) * (n + 2)) as usize);
@@ -346,6 +345,7 @@ fn build_tile(g: &WorldGen, reg: &BlockRegistry, colors: &Arc<Vec<Vec3>>, tile: 
             let (wx, wz) = (ox + x * ISLAND_STEP + ISLAND_STEP / 2, oz + z * ISLAND_STEP + ISLAND_STEP / 2);
             let c = g.island_span(wx, wz).map(|(b, t)| {
                 any = true;
+                let sky = g.island_biome(wx, wz).unwrap_or(g.biomes.get(g.biomes.sky));
                 Col {
                     bottom: b as f32,
                     top: t as f32 + 1.0,
