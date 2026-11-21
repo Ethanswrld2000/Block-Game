@@ -19,6 +19,48 @@ import bevy_pbr::render::{
 // xy: wind direction (x, z); z: how hard (see voxel_vertex.wesl).
 @group(constants::MATERIAL_BIND_GROUP) @binding(103) var<uniform> wind: vec4<f32>;
 @group(constants::MATERIAL_BIND_GROUP) @binding(104) var<uniform> atmos: Atmos;
+// Per tile index (four per vector): bits 0-9 first extra version, 10-13 how
+// many versions with the base, bit 14 turn (`voxel::tiles::pack_variant`).
+@group(constants::MATERIAL_BIND_GROUP) @binding(106) var<uniform> variants: array<vec4<u32>, 64>;
+
+fn cell_hash(c: vec3<i32>) -> u32 {
+    var h = (bitcast<u32>(c.x) * 73856093u) ^ (bitcast<u32>(c.y) * 19349663u) ^ (bitcast<u32>(c.z) * 83492791u);
+    h = (h ^ (h >> 16u)) * 0x7feb352du;
+    h = (h ^ (h >> 15u)) * 0x846ca68bu;
+    return h ^ (h >> 16u);
+}
+
+// A quarter turn `r` times, around the middle of the tile.
+fn turn(v: vec2<f32>, r: u32) -> vec2<f32> {
+    switch r {
+        case 1u: { return vec2<f32>(-v.y, v.x); }
+        case 2u: { return -v; }
+        case 3u: { return vec2<f32>(v.y, -v.x); }
+        default: { return v; }
+    }
+}
+
+// The block's tile, in this block's version and turn. Greedy quads span many
+// blocks, so the block comes from the world position, and the mip level from
+// the unbroken quad UVs (`fract` would jump a level at every block edge).
+fn sample_tile(base: u32, uv: vec2<f32>, world: vec3<f32>, normal: vec3<f32>) -> vec4<f32> {
+    let packed = variants[base / 4u][base % 4u];
+    let count = (packed >> 10u) & 15u;
+    let h = cell_hash(vec3<i32>(floor(world - normal * 0.5)));
+    var layer = base;
+    if count > 1u {
+        let k = h % count;
+        if k > 0u {
+            layer = (packed & 1023u) + k - 1u;
+        }
+    }
+    var r = 0u;
+    if ((packed >> 14u) & 1u) == 1u {
+        r = (h >> 20u) & 3u;
+    }
+    let p = turn(fract(uv) - vec2<f32>(0.5), r) + vec2<f32>(0.5);
+    return textureSampleGrad(block_textures, block_sampler, p, layer, turn(dpdx(uv), r), turn(dpdy(uv), r));
+}
 
 // --- Sky-matched fog and ground mist. Kept the same in voxel.wesl and
 // lod.wesl; the horizon formula matches sky.wesl at the horizon. Fields: see
@@ -99,7 +141,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let layer = u32(floor(in.uv_b.x));
     // Corner shading: 0 in the open, 1 deep in a crease.
     let crease = clamp((fract(in.uv_b.x) - 0.05) / 0.9, 0.0, 1.0);
-    let texel = textureSample(block_textures, block_sampler, fract(in.uv), layer);
+    let texel = sample_tile(layer, in.uv, in.world_position.xyz, in.world_normal);
     // Cut-out for leaves and plants (alpha 0); water and ice keep their alpha
     // and are drawn by the blended material.
     if texel.a < 0.1 {

@@ -12,7 +12,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
 | `crates/worldgen` | Terrain, biomes, caves, sky islands | Pure functions of (seed, position); thread-safe; no Bevy. |
 | `crates/game` | The Bevy client; one plugin per system | Gameplay state separate from rendering, so multiplayer can come later. |
 | `assets/textures/blocks.png` | 16x16 grid of 32x32 tiles | Placeholder art; Ethan repaints it. Keep tile positions stable. |
-| `assets/textures/blocks.ron` | Tile name -> index | Regenerate with `python3 tools/gen_placeholder_art.py` (overwrites the PNG; `--only <tiles>` adds tiles without touching the rest). |
+| `assets/textures/blocks.ron` | Tile name -> index, plus `variants` (extra versions per tile, `turn` = random quarter turn) | Regenerate with `python3 tools/gen_placeholder_art.py` (overwrites the PNG; `--only <tiles>` adds tiles without touching the rest). Core ground/wood/leaf tiles are drawn in `tools/drawn_tiles.py` (shapes, hue-shifted palettes, top-left light). |
 | `assets/textures/ui.png` | UI sprite sheet, 2x pixels | Ethan repaints it; `ui.ron` lists each sprite's rect and slice. `tools/gen_ui_art.py` overwrites it. |
 | `assets/textures/icons/` | Item sprites: `items`, `weapons` (tools), `blocks` (.png + .ron) | 20 px per inventory cell; Ethan repaints them. `tools/gen_item_art.py` only adds missing sprites (`--reset <sheet>` redraws). |
 | `assets/fonts/` | Jersey 15 (OFL) | Compiled in; swap the `.ttf` files to change the font. |
@@ -455,6 +455,10 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   slide, slots lift and settle (`ui::animate`), UI sounds `ui_*` (`gen_placeholder_sounds.py --only ui_`).
   Screenshots: `BLOCKGAME_INVENTORY=items|equipment|stats|abilities`, `BLOCKGAME_SKILLTREE=1` (= abilities),
   `BLOCKGAME_DRAWN=1` starts with the weapon drawn.
+- Block textures: the terrain texture array has mipmaps (`blocks::mip_chain`: linear-light averages, cut-out tiles keep their
+  coverage); `voxel.wesl` samples with `textureSampleGrad` from the unbroken quad UVs so levels don't jump at block edges, and
+  picks a version and turn per block from `variants` in blocks.ron (`voxel::tiles::variant_table`, uniform 106). Variant tiles
+  must sit at consecutive indices (`<tile>_2`, `<tile>_3`, ...).
 - Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
 
 ## Testing without a screen
