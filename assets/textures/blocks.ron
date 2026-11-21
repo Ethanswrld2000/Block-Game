@@ -61,5 +61,11 @@
         "redwood_log_side": 54,
         "redwood_log_top": 55,
         "redwood_leaves": 56,
+        "barley_0": 57,
+        "barley_1": 58,
+        "barley_2": 59,
+        "tuber_0": 60,
+        "tuber_1": 61,
+        "tuber_2": 62,
     },
 )

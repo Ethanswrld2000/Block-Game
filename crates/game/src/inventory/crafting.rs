@@ -76,18 +76,14 @@ mod tests {
     #[test]
     fn craft_by_hand_from_raw_materials() {
         let (_, items) = load();
-        let recipes = Recipes::from_ron(include_str!("../../../../assets/data/recipes.ron"), &items).unwrap();
-        let find = |name: &str| recipes.list.iter().find(|r| items.get(r.makes.item).name == name).unwrap();
+        // Everything moved to the stations; the list still reads and crafts.
+        assert!(Recipes::from_ron(include_str!("../../../../assets/data/recipes.ron"), &items).unwrap().list.is_empty());
+        let recipes = Recipes::from_ron(r#"[(makes: ("cordage", 1), needs: [("plant_fiber", 3)])]"#, &items).unwrap();
         let mut inv = Inventory::empty();
         let id = |n: &str| items.id(n).unwrap();
-        // Fiber from the grass.
-        inv.add(&items, Stack::new(id("plant_fiber"), 12));
-        assert!(find("cordage").craft(&mut inv, &items).is_some());
+        inv.add(&items, Stack::new(id("plant_fiber"), 4));
+        assert!(recipes.list[0].craft(&mut inv, &items).is_some());
         assert_eq!(inv.count(id("cordage")), 1);
-        // Fiber left for a hat; not enough for a cloak.
-        assert!(find("reed_hat").have_parts(&inv));
-        assert!(!find("reed_cloak").have_parts(&inv));
-        // Tools are made at the tool bench, not here.
-        assert!(recipes.list.iter().all(|r| !matches!(items.get(r.makes.item).kind, crate::items::ItemKind::Tool { .. })));
+        assert!(!recipes.list[0].have_parts(&inv));
     }
 }

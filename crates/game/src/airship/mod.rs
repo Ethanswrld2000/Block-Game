@@ -2,10 +2,14 @@
 //!
 //! Hold the `airship` item and right click open ground: it is set down there,
 //! bow pointing the way you look. Right click it (or press E looking at it) to
-//! board: you stand at the helm and the ship answers W / S (ahead, astern),
-//! A / D (turn), Space (rise) and Ctrl / C (sink); the mouse still looks
-//! around. E steps off over the rail. A ship nobody flies hovers where it was
-//! left. Rules in `flight` (pure); ships and who is aboard save to `airships.ron`.
+//! board: you stand on its deck and can walk about (WASD, kept inside the
+//! rails, carried with the ship). Right click near the helm to take it: the
+//! ship answers W / S (ahead, astern), A / D (turn), Space (rise) and Ctrl / C
+//! (sink); the mouse still looks around; E lets go of the helm. On deck, E
+//! steps off over the nearest rail. A ship nobody flies hovers where it was
+//! left. Crouch and right click a ship with an empty hand (not aboard) to pick
+//! it back up as an `airship` item. Rules in `flight` (pure); ships, who is at
+//! the helm and who is on deck save to `airships.ron`.
 
 pub mod flight;
 
@@ -25,7 +29,7 @@ use crate::player::{Body, MoveMode, Player};
 use crate::save::SaveDir;
 use crate::survival::Toast;
 use crate::world::World;
-use flight::{Controls, Machines, Ship, HALF, HEIGHT, HELM, STEP_OFF};
+use flight::{Controls, Machines, Ship, HALF, HEIGHT, HELM};
 
 pub struct AirshipPlugin;
 
@@ -36,11 +40,11 @@ impl Plugin for AirshipPlugin {
             .add_systems(crate::menu::GameStartup, load_ships)
             .add_systems(
                 crate::menu::GameUpdate,
-                steer.after(crate::camera::look).before(crate::player::PlayerSet),
+                (steer, walk_deck).chain().after(crate::camera::look).before(crate::player::PlayerSet),
             )
             .add_systems(
                 crate::menu::GameUpdate,
-                (aim, board, set_down, save_ships)
+                (aim, board, set_down, pick_up, save_ships)
                     .chain()
                     .after(crate::player::PlayerSet)
                     .before(crate::interact::InteractSet),
@@ -58,16 +62,48 @@ pub struct MachineBook(pub Machines);
 #[derive(Resource, Debug, Default)]
 pub struct Airships {
     pub ships: Vec<Ship>,
+    /// The ship whose helm you hold.
     pub aboard: Option<usize>,
+    /// The ship whose deck you walk, and where on it (in its frame).
+    pub deck: Option<(usize, Vec3)>,
 }
 
 /// The airship in front of you within reach, and how far its box is.
 #[derive(Resource, Debug, Default)]
 pub struct ShipAim(pub Option<(usize, f32)>);
 
-/// Walking is off while you're aboard (`player::walk`).
+/// Walking is off while you're aboard (`player::walk`): at the helm or on deck.
 pub fn not_aboard(ships: Option<Res<Airships>>) -> bool {
-    ships.is_none_or(|s| s.aboard.is_none())
+    ships.is_none_or(|s| s.aboard.is_none() && s.deck.is_none())
+}
+
+/// Where you can stand on deck (ship frame, x and z), inside the rails.
+pub const DECK_MIN: Vec2 = Vec2::new(-1.0, -3.2);
+pub const DECK_MAX: Vec2 = Vec2::new(1.0, 2.9);
+/// Walking speed on deck, blocks per second.
+const DECK_SPEED: f32 = 3.6;
+/// How near the helm (blocks) a right click takes it.
+const HELM_REACH: f32 = 1.4;
+
+/// A spot on deck, kept inside the rails, at deck height.
+pub fn on_deck(local: Vec3) -> Vec3 {
+    Vec3::new(local.x.clamp(DECK_MIN.x, DECK_MAX.x), HELM.y, local.z.clamp(DECK_MIN.y, DECK_MAX.y))
+}
+
+/// Just over the rail nearest a spot on deck (ship frame), to step off to.
+pub fn over_rail(local: Vec3) -> Vec3 {
+    let p = on_deck(local);
+    // Sideways rails are much nearer than bow and stern for most of the deck.
+    let side = if p.x >= 0.0 { 1.0 } else { -1.0 };
+    let to_side = DECK_MAX.x - p.x.abs();
+    let (to_bow, to_stern) = (p.z - DECK_MIN.y, DECK_MAX.y - p.z);
+    if to_side <= to_bow.min(to_stern) {
+        Vec3::new(side * (HALF.x + 0.6), HELM.y, p.z)
+    } else if to_bow < to_stern {
+        Vec3::new(p.x, HELM.y, -HALF.z - 0.6)
+    } else {
+        Vec3::new(p.x, HELM.y, HALF.z + 0.6)
+    }
 }
 
 /// What `airships.ron` holds.
@@ -76,6 +112,9 @@ struct Saved {
     ships: Vec<SavedShip>,
     #[serde(default)]
     aboard: Option<usize>,
+    /// The ship and spot (its frame) you stand on, if on deck.
+    #[serde(default)]
+    deck: Option<(usize, (f32, f32, f32))>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -102,6 +141,7 @@ fn load_ships(mut commands: Commands, dir: Res<SaveDir>) {
             Ok(s) => {
                 ships.ships = s.ships.iter().map(|p| Ship::new(Vec3::new(p.pos.0, p.pos.1, p.pos.2), p.yaw)).collect();
                 ships.aboard = s.aboard.filter(|i| *i < ships.ships.len());
+                ships.deck = s.deck.filter(|(i, _)| *i < ships.ships.len() && ships.aboard.is_none()).map(|(i, p)| (i, Vec3::new(p.0, p.1, p.2)));
             }
             Err(e) => warn!("airships.ron: {e}"),
         }
@@ -113,6 +153,7 @@ fn store(dir: &SaveDir, ships: &Airships) {
     let saved = Saved {
         ships: ships.ships.iter().map(|s| SavedShip { pos: (s.pos.x, s.pos.y, s.pos.z), yaw: s.yaw }).collect(),
         aboard: ships.aboard,
+        deck: ships.deck.map(|(i, p)| (i, (p.x, p.y, p.z))),
     };
     match ron::ser::to_string_pretty(&saved, ron::ser::PrettyConfig::default()) {
         Ok(text) => {
@@ -125,12 +166,13 @@ fn store(dir: &SaveDir, ships: &Airships) {
 }
 
 /// Saved when a ship is set down or boarded, and every few seconds while one flies.
-fn save_ships(time: Res<Time>, dir: Res<SaveDir>, ships: Res<Airships>, mut wait: Local<f32>, mut last: Local<(usize, Option<usize>)>) {
+#[allow(clippy::type_complexity)]
+fn save_ships(time: Res<Time>, dir: Res<SaveDir>, ships: Res<Airships>, mut wait: Local<f32>, mut last: Local<(usize, Option<usize>, Option<usize>)>) {
     if screenshot_run() || ships.is_added() {
         return;
     }
     *wait -= time.delta_secs();
-    let key = (ships.ships.len(), ships.aboard);
+    let key = (ships.ships.len(), ships.aboard, ships.deck.map(|d| d.0));
     if key != *last || (ships.aboard.is_some() && *wait <= 0.0) {
         *last = key;
         *wait = 5.0;
@@ -161,8 +203,11 @@ fn steer(
     mut player: ResMut<Player>,
     mut cam: Single<&mut FlyCamera>,
 ) {
-    let (Some(book), Some(i)) = (book, ships.aboard) else { return };
     // Free flight leaves the ship behind.
+    if *mode == MoveMode::Fly {
+        ships.deck = None;
+    }
+    let (Some(book), Some(i)) = (book, ships.aboard) else { return };
     if *mode == MoveMode::Fly {
         ships.aboard = None;
         flight::moor(&mut ships.ships[i]);
@@ -193,10 +238,49 @@ fn steer(
     p.ready = true;
 }
 
+/// Walk about the deck of the ship you stand on: WASD by where you look, kept
+/// inside the rails; you go where the ship goes.
+#[allow(clippy::too_many_arguments)]
+fn walk_deck(
+    time: Res<Time>,
+    keys: Res<ButtonInput<KeyCode>>,
+    (menus, body): (Res<Menus>, Res<Body>),
+    mut ships: ResMut<Airships>,
+    mut player: ResMut<Player>,
+    cam: Single<&FlyCamera>,
+) {
+    let Some((i, mut local)) = ships.deck else { return };
+    let Some(ship) = ships.ships.get(i).copied() else {
+        ships.deck = None;
+        return;
+    };
+    if !menus.open && !menus.still && !body.frozen {
+        let axis = |plus: bool, minus: bool| (plus as i32 - minus as i32) as f32;
+        let fwd = axis(keys.pressed(KeyCode::KeyW), keys.pressed(KeyCode::KeyS));
+        let side = axis(keys.pressed(KeyCode::KeyD), keys.pressed(KeyCode::KeyA));
+        // Where you look, in the ship's frame.
+        let yaw = cam.yaw - ship.yaw;
+        let (f, r) = (Vec3::new(-yaw.sin(), 0.0, -yaw.cos()), Vec3::new(yaw.cos(), 0.0, -yaw.sin()));
+        let step = (f * fwd + r * side).normalize_or_zero() * DECK_SPEED * time.delta_secs().min(0.1);
+        local = on_deck(local + step);
+    }
+    ships.deck = Some((i, local));
+    let p = &mut *player;
+    p.pos = ship.to_world(local);
+    p.vel = Vec3::ZERO;
+    p.on_ground = true;
+    p.in_water = false;
+    p.head_in_water = false;
+    p.ready = true;
+}
+
 /// Which ship the view points at, within reach.
 fn aim(cam: Single<&Transform, With<FlyCamera>>, ships: Res<Airships>, mut aimed: ResMut<ShipAim>) {
     aimed.0 = None;
     if ships.aboard.is_some() {
+        return;
+    }
+    if ships.deck.is_some() {
         return;
     }
     let (o, d) = (cam.translation, cam.forward().as_vec3());
@@ -220,6 +304,7 @@ fn board(
     cursor: Single<&CursorOptions, With<PrimaryWindow>>,
     (menus, body): (Res<Menus>, Res<Body>),
     (aimed, target, cam): (Res<ShipAim>, Res<Target>, Single<&Transform, With<FlyCamera>>),
+    wielded: Res<Wielded>,
     mut mode: ResMut<MoveMode>,
     mut ships: ResMut<Airships>,
     mut player: ResMut<Player>,
@@ -228,12 +313,25 @@ fn board(
     if cursor.grab_mode == CursorGrabMode::None || menus.open || body.frozen {
         return;
     }
+    // At the helm: E lets go and you stand on deck behind it.
     if let Some(i) = ships.aboard {
         if keys.just_pressed(KeyCode::KeyE) {
             ships.aboard = None;
-            let ship = &mut ships.ships[i];
-            flight::moor(ship);
-            player.pos = ship.to_world(STEP_OFF);
+            flight::moor(&mut ships.ships[i]);
+            ships.deck = Some((i, on_deck(HELM)));
+            toast.write(Toast("You let go of the helm. E steps off over the rail".into()));
+        }
+        return;
+    }
+    // On deck: right click by the helm takes it; E steps off over the nearest rail.
+    if let Some((i, local)) = ships.deck {
+        if mouse.just_pressed(MouseButton::Right) && local.distance(HELM) <= HELM_REACH {
+            ships.deck = None;
+            ships.aboard = Some(i);
+            toast.write(Toast("At the helm: W / S ahead and astern, A / D turn, Space rise, Ctrl sink. E lets go".into()));
+        } else if keys.just_pressed(KeyCode::KeyE) {
+            ships.deck = None;
+            player.pos = ships.ships[i].to_world(over_rail(local));
             player.vel = Vec3::ZERO;
             player.on_ground = false;
             toast.write(Toast("You step off the airship".into()));
@@ -249,10 +347,17 @@ fn board(
     if block_dist.is_some_and(|b| b < dist) {
         return;
     }
+    // Crouching with an empty hand picks the ship up (`pick_up`).
+    if player.crouching && wielded.0.is_none() {
+        return;
+    }
     if mouse.just_pressed(MouseButton::Right) || keys.just_pressed(KeyCode::KeyE) {
         *mode = MoveMode::Walk;
-        ships.aboard = Some(i);
-        toast.write(Toast("At the helm: W / S ahead and astern, A / D turn, Space rise, Ctrl sink. E steps off".into()));
+        // Onto the deck where you climb aboard.
+        let ship = ships.ships[i];
+        let local = on_deck(ship.rotation().inverse() * (player.pos - ship.pos));
+        ships.deck = Some((i, local));
+        toast.write(Toast("Aboard. Walk to the helm and right click to fly. E steps off".into()));
     }
 }
 
@@ -291,6 +396,35 @@ fn set_down(
     }
     ships.ships.push(ship);
     toast.write(Toast("Airship set down. Right click it to board".into()));
+}
+
+/// Crouch and right click a ship with an empty hand: it goes back into your
+/// pockets as the `airship` item (if there's room).
+#[allow(clippy::too_many_arguments)]
+fn pick_up(
+    mouse: Res<ButtonInput<MouseButton>>,
+    cursor: Single<&CursorOptions, With<PrimaryWindow>>,
+    menus: Res<Menus>,
+    (aimed, wielded, items): (Res<ShipAim>, Res<Wielded>, Res<Items>),
+    player: Res<Player>,
+    mut inv: ResMut<Inventory>,
+    mut ships: ResMut<Airships>,
+    mut toast: MessageWriter<Toast>,
+) {
+    if !mouse.just_pressed(MouseButton::Right) || cursor.grab_mode == CursorGrabMode::None || menus.open || !player.crouching || wielded.0.is_some() {
+        return;
+    }
+    let Some((i, _)) = aimed.0 else { return };
+    if ships.aboard.is_some() || ships.deck.is_some() {
+        return;
+    }
+    let Some(item) = items.id("airship") else { return };
+    if inv.add(&items, crate::inventory::grid::Stack::new(item, 1)).is_some() {
+        toast.write(Toast("No room in your pockets for the airship".into()));
+        return;
+    }
+    ships.ships.remove(i);
+    toast.write(Toast("You fold the airship up and take it with you".into()));
 }
 
 /// A ship's model; its index in `Airships.ships`.
@@ -401,4 +535,22 @@ fn spawn_model(commands: &mut Commands, meshes: &mut Assets<Mesh>, materials: &m
             p.spawn((Mesh3d(cross), MeshMaterial3d(wood.clone()), Transform::default(), NotShadowCaster));
         });
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_deck_keeps_you_inside_the_rails_and_steps_off_over_the_nearest() {
+        let p = on_deck(Vec3::new(5.0, 9.0, -9.0));
+        assert_eq!(p, Vec3::new(DECK_MAX.x, HELM.y, DECK_MIN.y));
+        // Near the starboard rail mid-ship: off to that side, outside the hull.
+        let off = over_rail(Vec3::new(0.9, 0.0, 0.0));
+        assert!(off.x > HALF.x);
+        // Near the bow: off over the bow.
+        let off = over_rail(Vec3::new(0.0, 0.0, -3.1));
+        assert!(off.z < -HALF.z);
+        assert!(HELM.distance(on_deck(HELM)) < 1e-4);
+    }
 }

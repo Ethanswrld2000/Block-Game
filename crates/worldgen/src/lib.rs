@@ -646,6 +646,11 @@ impl WorldGen {
     pub fn island_span(&self, x: i32, z: i32) -> Option<(i32, i32)> {
         islands::span_at(self, x, z)
     }
+
+    /// Is there a sky island's chest at this block?
+    pub fn island_chest(&self, x: i32, y: i32, z: i32) -> bool {
+        islands::chest_near(self, x, z) == Some([x, y, z])
+    }
 }
 
 /// Cave noise sampled every 4 blocks and interpolated: ~50x cheaper than per block.

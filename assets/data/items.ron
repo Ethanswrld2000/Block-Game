@@ -53,7 +53,7 @@
         (name: "timber_wall", title: "Timber Wall", kind: Block("timber_wall"), mass: 1.6),
         (name: "wattle_wall", title: "Wattle Wall", kind: Block("wattle_wall"), mass: 1.2),
         (name: "thatch", title: "Thatch", kind: Block("thatch"), mass: 0.4),
-        // Furniture, doors and glass from the carpentry urn's benches. Plain blocks for now.
+        // Furniture, doors and glass from the carpentry urn's benches (chairs, tables and doors are box models).
         (name: "chair", title: "Chair", kind: Block("chair"), mass: 2.0),
         (name: "table", title: "Table", kind: Block("table"), mass: 4.0),
         (name: "wooden_door", title: "Wooden Door", kind: Block("wooden_door"), mass: 3.0),
@@ -83,10 +83,16 @@
         (name: "spore_soil", title: "Spore Soil", kind: Block("spore_soil"), mass: 1.0),
         (name: "skystone", title: "Skystone", kind: Block("skystone"), mass: 1.5),
         (name: "cloud_moss", title: "Cloud Moss", kind: Block("cloud_moss"), mass: 0.3),
+        (name: "campfire", title: "Campfire", kind: Block("campfire"), mass: 3.0, size: (2, 2), stack: 4),
         (name: "chest", title: "Chest", kind: Block("chest"), mass: 6.0, size: (2, 2), stack: 1),
         // Crafting materials.
         (name: "stick", title: "Stick", kind: Material, mass: 0.1, size: (1, 2)),
         (name: "plant_fiber", title: "Plant Fiber", kind: Material, mass: 0.05),
+        // Farming (crops.ron): right click soil (dirt, grass, mud, peat) to sow.
+        (name: "barley_seeds", title: "Bog Barley Seeds", kind: Block("barley_0"), mass: 0.02),
+        (name: "barley", title: "Bog Barley", kind: Material, mass: 0.1),
+        (name: "tuber_eye", title: "Mire Tuber Eye", kind: Block("tuber_0"), mass: 0.05),
+        (name: "mire_tuber", title: "Mire Tuber", kind: Food(tier: 1, satiety: 12.0), mass: 0.4),
         (name: "cordage", title: "Cordage", kind: Material, mass: 0.1),
         (name: "coal", title: "Coal", kind: Material, mass: 0.3),
         (name: "raw_iron", title: "Raw Iron", kind: Material, mass: 0.8),
@@ -196,9 +202,13 @@
         // From the gear urn's bladesmith bench.
         (name: "iron_dagger", title: "Iron Dagger", mass: 0.6, size: (1, 2), damage: 6.0, swing: Slash, kind: Tool(speeds: {})),
         (name: "rapier", title: "Rapier", mass: 1.0, size: (1, 3), damage: 10.0, swing: Slash, kind: Tool(speeds: {})),
-        // From the gunsmith bench. They can't be fired yet (no ranged combat).
-        (name: "makeshift_pistol", title: "Makeshift Pistol", kind: Material, mass: 1.2, size: (2, 1), stack: 1),
-        (name: "rifle", title: "Rifle", kind: Material, mass: 3.5, size: (1, 4), stack: 1),
+        // From the gunsmith bench. Left click fires (`combat::guns`); each shot uses one `ammo`.
+        //   gun: (damage per hit, range in blocks, reload seconds between shots, ammo item)
+        (name: "makeshift_pistol", title: "Makeshift Pistol", mass: 1.2, size: (2, 1), stack: 1, damage: 3.0,
+         kind: Tool(speeds: {}), gun: (damage: 14.0, range: 40.0, reload: 1.6, ammo: "iron_shot")),
+        (name: "rifle", title: "Rifle", mass: 3.5, size: (1, 4), stack: 1, damage: 4.0,
+         kind: Tool(speeds: {}), gun: (damage: 28.0, range: 90.0, reload: 3.0, ammo: "iron_shot")),
+        (name: "iron_shot", title: "Iron Shot", kind: Material, mass: 0.03, stack: 24),
         // Urns: carry one and right click the ground to set it down; its station grows around it
         // (urns.ron). Crouch and right click an urn with an empty hand to pick it back up.
         (name: "tool_urn", title: "Tool Urn", kind: Material, mass: 6.0, size: (2, 2), stack: 1),

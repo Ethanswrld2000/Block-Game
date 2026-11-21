@@ -152,11 +152,15 @@ def main():
     save("levitate_loop", hum * (0.8 + 0.2 * np.sin(2 * np.pi * 0.5 * tt)), loop=True)
     # Thunder: a crack and a long rumble.
     n = noise(4.0)
+    # A gunshot: a sharp crack, a boom under it and a short tail.
+    n = noise(0.9)
+    save("gunshot", highpass(n, 0.5) * env(len(n), 0.0005, 0.03) * 1.5 + lowpass(n, 0.02) * env(len(n), 0.001, 0.25) * 4)
     save("thunder", lowpass(n, 0.004) * env(len(n), 0.02, 1.3) * 3 + highpass(n, 0.2) * env(len(n), 0.001, 0.08))
 
     critters()
     voices()
     ui()
+    music()
 
 
 def sweep(seconds, f0, f1, decay=0.05, attack=0.004):
@@ -243,6 +247,62 @@ def ui():
     ring = sum(np.sin(2 * np.pi * f * tt) for f in (1500, 2240)) * env(len(tt), 0.2, 0.15) * 0.25
     save("ui_draw", scrape + ring)
     save("ui_sheathe", scrape[::-1] * 0.8 + np.pad(tap(300, 0.04, 0.1), (int(RATE * 0.22), 0)))
+
+
+def music():
+    """Quiet placeholder music: slow pad chords and a plucked melody in a modal scale.
+    `music_day_*` by day, `music_night_*` at night (game::music). Replace by name."""
+    def note(midi):
+        return 440.0 * 2 ** ((midi - 69) / 12)
+
+    def pad(freqs, seconds):
+        tt = t(seconds)
+        x = sum(np.sin(2 * np.pi * f * tt) + 0.3 * np.sin(2 * np.pi * f * 2.003 * tt) for f in freqs)
+        swell = np.sin(np.pi * tt / seconds) ** 2
+        return x * swell / len(freqs)
+
+    def pluck(f, seconds, decay):
+        tt = t(seconds)
+        x = np.sin(2 * np.pi * f * tt) + 0.4 * np.sin(2 * np.pi * f * 2 * tt) + 0.15 * np.sin(2 * np.pi * f * 3 * tt)
+        return x * env(len(tt), 0.004, decay)
+
+    def piece(seed, root, scale, chords, bar, bars, decay, density):
+        r = np.random.default_rng(seed)
+        total = int(RATE * bar * bars) + RATE * 4
+        out = np.zeros(total)
+        for b in range(bars):
+            degs = chords[b % len(chords)]
+            fs = [note(root - 12 + scale[d % len(scale)] + 12 * (d // len(scale))) for d in degs]
+            x = pad(fs, bar * 1.6)
+            i = int(RATE * bar * b)
+            out[i:i + len(x)] += x * 0.35
+            # A few melody notes per bar, staying near the last one.
+            step = 0
+            for k in range(8):
+                if r.random() > density:
+                    continue
+                step = int(np.clip(step + r.integers(-2, 3), -2, 9))
+                d = degs[0] + step
+                f = note(root + 12 + scale[d % len(scale)] + 12 * (d // len(scale)))
+                y = pluck(f, decay * 4, decay) * (0.5 + 0.3 * r.random())
+                j = i + int(RATE * bar * k / 8)
+                out[j:j + len(y)] += y[: max(0, total - j)]
+        # A little room: two soft echoes.
+        for delay, g in ((0.31, 0.3), (0.67, 0.15)):
+            d = int(RATE * delay)
+            out[d:] += out[:-d] * g
+        fade = np.ones(total)
+        n = RATE * 3
+        fade[-n:] = np.linspace(1, 0, n)
+        fade[:RATE] = np.linspace(0, 1, RATE)
+        return lowpass(out * fade, 0.25)
+
+    dorian = [0, 2, 3, 5, 7, 9, 10]
+    lydian = [0, 2, 4, 6, 7, 9, 11]
+    aeolian = [0, 2, 3, 5, 7, 8, 10]
+    save("music_day_0", piece(11, 62, dorian, [[0, 2, 4], [3, 5, 7], [6, 8, 10], [4, 6, 8]], 4.0, 18, 0.9, 0.45))
+    save("music_day_1", piece(23, 65, lydian, [[0, 2, 4], [1, 3, 5], [4, 6, 8], [0, 2, 4]], 3.6, 20, 0.7, 0.5))
+    save("music_night_0", piece(37, 57, aeolian, [[0, 2, 4], [5, 7, 9], [3, 5, 7], [4, 6, 8]], 5.0, 14, 1.4, 0.3))
 
 
 if __name__ == "__main__":

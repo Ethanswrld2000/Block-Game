@@ -103,6 +103,19 @@ fn push_plants(chunk: &PaddedChunk, registry: &BlockRegistry, b: &mut Buffers) {
                         push_detail(def, cell, [x as u32, y as u32, z as u32], b);
                         continue;
                     }
+                    voxel::Shape::Model => {
+                        let solid = |dx: i32, dz: i32| {
+                            let n = chunk.get((x as i32 + dx) as usize, y, (z as i32 + dz) as usize);
+                            !n.is_air() && registry.get(n).is_wall()
+                        };
+                        let walls = Walls { east: solid(1, 0), west: solid(-1, 0), south: solid(0, 1), north: solid(0, -1) };
+                        if let Some(m) = def.model {
+                            for (lo, hi) in model_boxes(m, walls) {
+                                push_box(b, cell, lo, hi, def.textures[voxel::Face::PosX as usize] as f32, 0.0);
+                            }
+                        }
+                        continue;
+                    }
                     _ => continue,
                 }
                 let tex = def.textures[voxel::Face::PosY as usize] as f32;
@@ -204,6 +217,51 @@ fn push_detail(def: &voxel::BlockDef, cell: [f32; 3], key: [u32; 3], b: &mut Buf
             push_box(b, cell, [cx - w / 2.0, 0.0, cz - d / 2.0], [cx + w / 2.0, hgt, cz + d / 2.0], top_tex, tint);
         }
         _ => {}
+    }
+}
+
+/// Which sides of a cell have a wall block beside them.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Walls {
+    pub east: bool,
+    pub west: bool,
+    pub south: bool,
+    pub north: bool,
+}
+
+/// The boxes (`lo`, `hi` within the cell, 0..1) a piece of furniture is made of.
+/// A door spans the gap between walls on two opposite sides (east-west if
+/// those are there, else north-south); open, it lies against its hinge side.
+/// A chair's back goes against a wall beside it (north if none).
+pub fn model_boxes(m: voxel::Model, walls: Walls) -> Vec<([f32; 3], [f32; 3])> {
+    use voxel::Model;
+    let leg = |x: f32, z: f32, top: f32| ([x, 0.0, z], [x + 0.12, top, z + 0.12]);
+    let t = 0.14;
+    // A door across x (thin in z) unless walls stand north and south only.
+    let across_x = (walls.east || walls.west) || !(walls.north || walls.south);
+    match m {
+        Model::Table => vec![([0.0, 0.84, 0.0], [1.0, 0.98, 1.0]), leg(0.06, 0.06, 0.84), leg(0.82, 0.06, 0.84), leg(0.06, 0.82, 0.84), leg(0.82, 0.82, 0.84)],
+        Model::Chair => {
+            let mut v = vec![([0.14, 0.46, 0.14], [0.86, 0.56, 0.86]), leg(0.16, 0.16, 0.46), leg(0.72, 0.16, 0.46), leg(0.16, 0.72, 0.46), leg(0.72, 0.72, 0.46)];
+            let back = if walls.north {
+                ([0.14, 0.56, 0.14], [0.86, 1.0, 0.24])
+            } else if walls.east {
+                ([0.76, 0.56, 0.14], [0.86, 1.0, 0.86])
+            } else if walls.south {
+                ([0.14, 0.56, 0.76], [0.86, 1.0, 0.86])
+            } else if walls.west {
+                ([0.14, 0.56, 0.14], [0.24, 1.0, 0.86])
+            } else {
+                ([0.14, 0.56, 0.14], [0.86, 1.0, 0.24])
+            };
+            v.push(back);
+            v
+        }
+        Model::Door if across_x => vec![([0.0, 0.0, 0.5 - t / 2.0], [1.0, 1.0, 0.5 + t / 2.0])],
+        Model::Door => vec![([0.5 - t / 2.0, 0.0, 0.0], [0.5 + t / 2.0, 1.0, 1.0])],
+        // Swung open on the west (or north) edge, standing along the other axis.
+        Model::DoorOpen if across_x => vec![([0.0, 0.0, 0.0], [t, 1.0, 1.0])],
+        Model::DoorOpen => vec![([0.0, 0.0, 0.0], [1.0, 1.0, t])],
     }
 }
 
@@ -314,6 +372,26 @@ fn push_quad(q: &Quad, registry: &BlockRegistry, b: &mut Buffers) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn doors_span_the_gap_between_walls_and_swing_against_the_hinge() {
+        let ew = Walls { east: true, west: true, ..Walls::default() };
+        let ns = Walls { north: true, south: true, ..Walls::default() };
+        let door = |w| model_boxes(voxel::Model::Door, w)[0];
+        // Between east and west walls: wide in x, thin in z.
+        let (lo, hi) = door(ew);
+        assert!(hi[0] - lo[0] > 0.9 && hi[2] - lo[2] < 0.2);
+        let (lo, hi) = door(ns);
+        assert!(hi[2] - lo[2] > 0.9 && hi[0] - lo[0] < 0.2);
+        // Open, it turns the other way.
+        let (lo, hi) = model_boxes(voxel::Model::DoorOpen, ew)[0];
+        assert!(hi[2] - lo[2] > 0.9 && hi[0] - lo[0] < 0.2);
+        for m in [voxel::Model::Chair, voxel::Model::Table, voxel::Model::Door, voxel::Model::DoorOpen] {
+            for (lo, hi) in model_boxes(m, ew) {
+                assert!((0..3).all(|k| 0.0 <= lo[k] && lo[k] < hi[k] && hi[k] <= 1.0), "{m:?}");
+            }
+        }
+    }
 
     #[test]
     fn tint_and_sway_pack_and_unpack() {

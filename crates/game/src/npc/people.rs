@@ -1,9 +1,12 @@
 //! Saving the people in the world (`people.ron`): every NPC but the gate
 //! guides (those stand at their posts again on their own), with its order,
 //! its dialogue flags (who is recruited: flag `recruited`) and where it is.
+//! People who keep a post (gate guides, Brindlespheimer, the visiting Wren)
+//! are put back by their own code, but what they remember of your talks is
+//! kept per post in `posts.ron` and given back whenever they appear.
 //! Saved every 30 s and on exit, not in screenshot runs.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -15,13 +18,50 @@ pub struct PeoplePlugin;
 
 impl Plugin for PeoplePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(crate::menu::GamePostStartup, load)
-            .add_systems(crate::menu::GameUpdate, save_now_and_then)
+        app.init_resource::<Posts>()
+            .add_systems(crate::menu::GamePostStartup, load)
+            .add_systems(crate::menu::GameUpdate, ((restore_posts, remember_posts).chain(), save_now_and_then))
             .add_systems(Last, save_on_exit.run_if(crate::menu::in_game));
     }
 }
 
 const FILE: &str = "people.ron";
+const POSTS_FILE: &str = "posts.ron";
+
+/// What each posted NPC remembers of your talks, by its post.
+#[derive(Resource, Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Posts(pub BTreeMap<u64, Memory>);
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Memory {
+    pub flags: BTreeSet<String>,
+    pub asked: BTreeSet<(String, usize)>,
+}
+
+/// A posted NPC that has just appeared gets back what it remembered.
+fn restore_posts(posts: Res<Posts>, mut q: Query<&mut Npc, Added<Npc>>) {
+    for mut npc in &mut q {
+        if let Some(m) = npc.post.and_then(|p| posts.0.get(&p)) {
+            npc.flags = m.flags.iter().cloned().collect();
+            npc.asked = m.asked.iter().cloned().collect();
+        }
+    }
+}
+
+/// Keeps what posted NPCs remember, so it outlasts them.
+fn remember_posts(mut posts: ResMut<Posts>, q: Query<&Npc, Changed<Npc>>) {
+    for npc in &q {
+        let Some(post) = npc.post else { continue };
+        if npc.flags.is_empty() && npc.asked.is_empty() {
+            continue;
+        }
+        let m = Memory { flags: npc.flags.iter().cloned().collect(), asked: npc.asked.iter().cloned().collect() };
+        if posts.0.get(&post) != Some(&m) {
+            posts.0.insert(post, m);
+        }
+    }
+}
 
 /// One NPC as saved.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -75,9 +115,12 @@ fn screenshot_run() -> bool {
     std::env::var_os("BLOCKGAME_SCREENSHOT").is_some() || std::env::var_os("BLOCKGAME_BENCH").is_some()
 }
 
-fn load(dir: Res<SaveDir>, book: Res<NpcBook>, mut spawn: MessageWriter<super::body::SpawnNpc>) {
+fn load(dir: Res<SaveDir>, book: Res<NpcBook>, mut posts: ResMut<Posts>, mut spawn: MessageWriter<super::body::SpawnNpc>) {
     if screenshot_run() {
         return;
+    }
+    if let Some(p) = crate::save::read_ron::<Posts>(&dir, POSTS_FILE) {
+        *posts = p;
     }
     let Ok(text) = std::fs::read_to_string(dir.file(FILE)) else { return };
     let list: Vec<Saved> = match ron::from_str(&text) {
@@ -96,7 +139,8 @@ fn load(dir: Res<SaveDir>, book: Res<NpcBook>, mut spawn: MessageWriter<super::b
     }
 }
 
-fn store(dir: &SaveDir, book: &NpcBook, q: &Query<(&Transform, &Npc)>) {
+fn store(dir: &SaveDir, book: &NpcBook, posts: &Posts, q: &Query<(&Transform, &Npc)>) {
+    crate::save::write_ron(dir, POSTS_FILE, posts);
     let list: Vec<Saved> = q.iter().filter_map(|(tf, n)| to_saved(n, &book.kinds.get(n.kind)?.name, tf.translation)).collect();
     match ron::ser::to_string_pretty(&list, ron::ser::PrettyConfig::default()) {
         Ok(text) => {
@@ -108,24 +152,32 @@ fn store(dir: &SaveDir, book: &NpcBook, q: &Query<(&Transform, &Npc)>) {
     }
 }
 
-fn save_now_and_then(time: Res<Time<Real>>, mut since: Local<f32>, dir: Res<SaveDir>, book: Res<NpcBook>, q: Query<(&Transform, &Npc)>) {
+fn save_now_and_then(time: Res<Time<Real>>, mut since: Local<f32>, dir: Res<SaveDir>, book: Res<NpcBook>, posts: Res<Posts>, q: Query<(&Transform, &Npc)>) {
     *since += time.delta_secs();
     if *since < 30.0 || screenshot_run() {
         return;
     }
     *since = 0.0;
-    store(&dir, &book, &q);
+    store(&dir, &book, &posts, &q);
 }
 
-fn save_on_exit(mut exit: MessageReader<AppExit>, dir: Res<SaveDir>, book: Res<NpcBook>, q: Query<(&Transform, &Npc)>) {
+fn save_on_exit(mut exit: MessageReader<AppExit>, dir: Res<SaveDir>, book: Res<NpcBook>, posts: Res<Posts>, q: Query<(&Transform, &Npc)>) {
     if exit.read().next().is_some() && !screenshot_run() {
-        store(&dir, &book, &q);
+        store(&dir, &book, &posts, &q);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn post_memories_round_trip() {
+        let mut posts = Posts::default();
+        posts.0.insert(u64::MAX - 1, Memory { flags: ["met".to_string()].into(), asked: [("start".to_string(), 2)].into() });
+        let text = ron::to_string(&posts).unwrap();
+        assert_eq!(ron::from_str::<Posts>(&text).unwrap(), posts);
+    }
 
     #[test]
     fn people_and_who_is_recruited_round_trip() {

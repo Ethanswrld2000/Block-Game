@@ -38,6 +38,27 @@ struct ItemSpec {
     /// How it is swung (see `swing`).
     #[serde(default)]
     swing: Swing,
+    /// A gun: left click fires it.
+    #[serde(default)]
+    gun: Option<GunSpec>,
+}
+
+#[derive(Deserialize)]
+struct GunSpec {
+    damage: f32,
+    range: f32,
+    reload: f32,
+    ammo: String,
+}
+
+/// A gun: what one shot does, how far it reaches (blocks), seconds between
+/// shots, and the item each shot uses up.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Gun {
+    pub damage: f32,
+    pub range: f32,
+    pub reload: f32,
+    pub ammo: ItemId,
 }
 
 fn default_mass() -> f32 {
@@ -129,6 +150,8 @@ pub struct Item {
     pub damage: f32,
     /// How the arm swings it; mining blows land at the swing's contact.
     pub swing: Swing,
+    /// Fires (left click) instead of swinging.
+    pub gun: Option<Gun>,
 }
 
 /// Damage of a bare-handed blow.
@@ -163,6 +186,7 @@ impl Items {
             .from_str(text)
             .map_err(|e| format!("items.ron: {e}"))?;
         let mut list = Vec::new();
+        let names: Vec<String> = spec.items.iter().map(|s| s.name.clone()).collect();
         for s in spec.items {
             let kind = match s.kind {
                 KindSpec::Tool { speeds } => ItemKind::Tool { speeds },
@@ -198,7 +222,14 @@ impl Items {
                 ItemKind::Tool { .. } => 4.0,
                 _ => FIST_DAMAGE,
             });
-            list.push(Item { name: s.name, title: s.title, kind, mass: s.mass, size: s.size, stack: stack.max(1), damage, swing: s.swing });
+            let gun = match s.gun {
+                Some(g) => {
+                    let ammo = names.iter().position(|n| *n == g.ammo).ok_or_else(|| format!("item '{}' fires unknown ammo '{}'", s.name, g.ammo))?;
+                    Some(Gun { damage: g.damage, range: g.range, reload: g.reload, ammo: ItemId(ammo as u16) })
+                }
+                None => None,
+            };
+            list.push(Item { name: s.name, title: s.title, kind, mass: s.mass, size: s.size, stack: stack.max(1), damage, swing: s.swing, gun });
         }
         Ok(Self { hand: spec.hand, list })
     }
@@ -264,6 +295,16 @@ pub mod tests {
         let blocks = BlockRegistry::from_ron(include_str!("../../../assets/data/blocks.ron"), &tiles).unwrap();
         let items = Items::from_ron(include_str!("../../../assets/data/items.ron"), &blocks).unwrap();
         (blocks, items)
+    }
+
+    #[test]
+    fn doors_open_and_close() {
+        let (blocks, _) = load();
+        let shut = blocks.id("wooden_door").unwrap();
+        let open = crate::interact::door_swap(&blocks, shut).expect("opens");
+        assert!(!blocks.get(open).solid);
+        assert_eq!(crate::interact::door_swap(&blocks, open), Some(shut));
+        assert_eq!(crate::interact::door_swap(&blocks, blocks.id("chair").unwrap()), None);
     }
 
     #[test]
