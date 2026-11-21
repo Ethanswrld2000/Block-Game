@@ -12,7 +12,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
 | `crates/worldgen` | Terrain, biomes, caves, sky islands | Pure functions of (seed, position); thread-safe; no Bevy. |
 | `crates/game` | The Bevy client; one plugin per system | Gameplay state separate from rendering, so multiplayer can come later. |
 | `assets/textures/blocks.png` | 16x16 grid of 32x32 tiles | Placeholder art; Ethan repaints it. Keep tile positions stable. |
-| `assets/textures/blocks.ron` | Tile name -> index | Regenerate with `python3 tools/gen_placeholder_art.py` (overwrites the PNG; `--only <tiles>` adds tiles without touching the rest). |
+| `assets/textures/blocks.ron` | Tile name -> index, plus `variants` (extra versions per tile, `turn` = random quarter turn) | Regenerate with `python3 tools/gen_placeholder_art.py` (overwrites the PNG; `--only <tiles>` adds tiles without touching the rest). Core ground/wood/leaf tiles are drawn in `tools/drawn_tiles.py` (shapes, hue-shifted palettes, top-left light). |
 | `assets/textures/ui.png` | UI sprite sheet, 2x pixels | Ethan repaints it; `ui.ron` lists each sprite's rect and slice. `tools/gen_ui_art.py` overwrites it. |
 | `assets/textures/icons/` | Item sprites: `items`, `weapons` (tools), `blocks` (.png + .ron) | 20 px per inventory cell; Ethan repaints them. `tools/gen_item_art.py` only adds missing sprites (`--reset <sheet>` redraws). |
 | `assets/fonts/` | Jersey 15 (OFL) | Compiled in; swap the `.ttf` files to change the font. |
@@ -469,7 +469,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   swamp), `bushes` in biomes.ron (leaf mounds from `trees::draw_bush`), plant patches never fully empty, new plant blocks
   `shrub`, `dry_brush`, `brown_mushroom`, `glowcap` in every biome's list. Redwood Forest (`TreeKind::Redwood`: 2x2 trunk
   30-43 tall, buttress roots, deep cone; `redwood_log`/`redwood_leaves`; `trees::REACH` 7, `TALLEST` 48). Mushroom Forest
-  ground is `spore_soil`; glowcaps glow at night (voxel material uniform 106 `glow`: layer + strength from `sky::night_glow`;
+  ground is `spore_soil`; glowcaps glow at night (voxel material uniform 107 `glow`: layer + strength from `sky::night_glow`;
   emissive in voxel.wesl with alpha 0 so the camera exposure doesn't dim it).
 - Villages and villagers removed (Ethan's ask): no stilt villages, no `villager`/`mushroom_folk` creatures,
   no `Temper::Villager`, no `UseCreature`. Sporrow's houses stay for the story (C11/C12), empty.
@@ -519,6 +519,10 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   (`WorldGen::island_chest`), filled from loot.ron `sky_island` the first time it's opened.
 - The Tab crafting list is empty (recipes.ron kept for later): cordage, torches and ember herbs are made on the camp mat;
   the Crafting side tab hides while the list is empty.
+- Block textures: the terrain texture array has mipmaps (`blocks::mip_chain`: linear-light averages, cut-out tiles keep their
+  coverage); `voxel.wesl` samples with `textureSampleGrad` from the unbroken quad UVs so levels don't jump at block edges, and
+  picks a version and turn per block from `variants` in blocks.ron (`voxel::tiles::variant_table`, uniform 106). Variant tiles
+  must sit at consecutive indices (`<tile>_2`, `<tile>_3`, ...).
 - Next: see `docs/GAMEPLAY_LOOP.md`.
 
 ## Testing without a screen
