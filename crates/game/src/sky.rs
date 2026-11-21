@@ -77,7 +77,7 @@ impl Plugin for SkyPlugin {
             .insert_resource(ClearColor(Color::srgb(0.46, 0.53, 0.47)))
             .insert_resource(GlobalAmbientLight { color: Color::WHITE, brightness: 400.0, ..default() })
             .add_systems(crate::menu::GameStartup, spawn_sky)
-            .add_systems(crate::menu::GameUpdate, (update_sky, follow_camera, season_tint));
+            .add_systems(crate::menu::GameUpdate, (update_sky, follow_camera, season_tint, night_glow));
     }
 }
 
@@ -312,6 +312,28 @@ pub fn update_sky(
 fn follow_camera(cam: Query<&Transform, (With<FlyCamera>, Without<SkyDome>)>, mut dome: Query<&mut Transform, With<SkyDome>>) {
     if let (Ok(c), Ok(mut d)) = (cam.single(), dome.single_mut()) {
         d.translation = c.translation;
+    }
+}
+
+/// Glowcaps glow from dusk to dawn (the voxel material's `glow` uniform).
+fn night_glow(
+    clock: Res<WorldClock>,
+    seasons: Res<Seasons>,
+    blocks: Res<Blocks>,
+    mut materials: ResMut<Assets<VoxelMaterial>>,
+    mut last: Local<Option<f32>>,
+) {
+    let daylight = seasons.blended(seasons.at(&clock), |s| s.daylight);
+    let sun = sun_direction(clock.time, daylight);
+    let strength = 1.0 - smoothstep(-0.15, 0.08, sun.y);
+    if last.is_some_and(|l| (l - strength).abs() < 0.01) {
+        return;
+    }
+    if let Some(h) = &blocks.material
+        && let Some(mut m) = materials.get_mut(h)
+    {
+        m.extension.glow.y = strength;
+        *last = Some(strength);
     }
 }
 

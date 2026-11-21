@@ -7,6 +7,8 @@ and assets/textures/blocks.ron (tile name -> index).
 These are placeholders: paint over blocks.png in any editor. Keep tile
 positions the same, or update blocks.ron to match.
 Run from the repo root:  python3 tools/gen_placeholder_art.py
+The core ground, wood and leaf tiles are drawn in tools/drawn_tiles.py, with
+extra versions listed in VARIANTS (named <tile>_2, <tile>_3, ...).
 To add new tiles without touching painted ones:
     python3 tools/gen_placeholder_art.py --only tall_grass fern
 paints just those tiles into the existing blocks.png (and rewrites blocks.ron).
@@ -15,6 +17,9 @@ import os
 import sys
 import numpy as np
 from PIL import Image
+
+from drawn_tiles import (cobblestone as cobble, dirt, grass_side, grass_top, gravel, leaves, log_side,
+                         log_top, moss, mud, peat, planks, sand, stone)
 
 T = 32          # tile size in pixels
 COLS = 16       # tiles per row
@@ -72,93 +77,6 @@ def noisy(seed, colors, scales=(16, 8, 4, 2)):
 
 # ---- tile painters -------------------------------------------------------
 
-def grass_top(s):
-    return noisy(s, [(52, 92, 40), (70, 120, 48), (96, 148, 60)], (8, 4, 2))
-
-
-def dirt(s):
-    return noisy(s, [(78, 54, 36), (102, 72, 46), (124, 90, 58)])
-
-
-def grass_side(s):
-    img = dirt(s)
-    top = grass_top(s + 5)
-    edge = 6 + (value_noise(4, s + 9)[0] * 6).astype(int)
-    for x in range(T):
-        img[: edge[x], x] = top[: edge[x], x]
-    return img
-
-
-def stone(s):
-    img = noisy(s, [(92, 92, 96), (118, 118, 122), (140, 140, 146)], (8, 4, 2))
-    cracks = value_noise(4, s + 3)
-    img[np.abs(cracks - 0.5) < 0.03, :3] *= 0.7
-    return img
-
-
-def cobble(s):
-    img = noisy(s, [(90, 90, 92), (128, 128, 130)], (4, 2))
-    ys, xs = np.mgrid[0:T, 0:T]
-    # irregular brick-ish mortar lines
-    row = (ys // 8)
-    off = (row % 2) * 6
-    mortar = ((ys % 8) == 0) | (((xs + off) % 12) == 0)
-    img[mortar, :3] = (60, 60, 64)
-    return img
-
-
-def sand(s):
-    return noisy(s, [(196, 178, 128), (218, 202, 150), (232, 220, 172)], (4, 2))
-
-
-def mud(s):
-    img = noisy(s, [(44, 40, 30), (62, 56, 40), (80, 72, 48)], (16, 8, 4))
-    wet = value_noise(8, s + 2) > 0.7
-    img[wet, :3] = img[wet, :3] * 0.8 + np.array([30, 40, 30]) * 0.2
-    return img
-
-
-def moss(s):
-    return noisy(s, [(40, 70, 34), (60, 98, 40), (110, 140, 60)], (4, 2))
-
-
-def peat(s):
-    img = noisy(s, [(46, 32, 24), (66, 46, 32)], (8, 2))
-    ys = np.mgrid[0:T, 0:T][0]
-    img[(ys % 6) == 0, :3] *= 0.75
-    return img
-
-
-def log_side(s, dark=(70, 50, 32), light=(110, 80, 50)):
-    xs = np.mgrid[0:T, 0:T][1]
-    t = (np.sin(xs * 0.9 + value_noise(4, s) * 4) + 1) / 2 * 0.6 + fbm(s) * 0.4
-    return speckle(rgba(ramp(t, [dark, light])), s)
-
-
-def log_top(s, bark=(70, 50, 32), wood=(170, 132, 84)):
-    ys, xs = np.mgrid[0:T, 0:T]
-    d = np.hypot(xs - 15.5, ys - 15.5)
-    rings = (np.sin(d * 1.3) + 1) / 2
-    img = rgba(ramp(rings * 0.5 + 0.3, [wood, (196, 156, 104)]))
-    img[d > 14, :3] = bark
-    return speckle(img, s)
-
-
-def leaves(s, colors=((34, 74, 30), (54, 104, 38), (86, 136, 52))):
-    img = noisy(s, list(colors), (4, 2))
-    holes = np.random.default_rng(s).random((T, T)) < 0.12
-    img[holes, 3] = 0
-    return img
-
-
-def planks(s):
-    img = noisy(s, [(128, 94, 56), (158, 120, 72)], (16, 2))
-    ys, xs = np.mgrid[0:T, 0:T]
-    img[(ys % 8) == 7, :3] *= 0.6
-    img[((xs + (ys // 8) * 11) % 32) == 0, :3] *= 0.6
-    return img
-
-
 def water(s):
     img = noisy(s, [(30, 70, 130), (44, 96, 160), (70, 130, 190)], (8, 4))
     img[..., 3] = 170
@@ -172,12 +90,6 @@ def snow(s):
 def ice(s):
     img = noisy(s, [(150, 190, 230), (180, 214, 244)], (16, 8))
     img[..., 3] = 210
-    return img
-
-
-def gravel(s):
-    img = rgba(ramp(np.random.default_rng(s).random((T, T)) * 0.6 + fbm(s, (4, 2)) * 0.4,
-                    [(80, 76, 72), (120, 114, 108), (150, 144, 138)]))
     return img
 
 
@@ -315,6 +227,73 @@ def bog_bloom(s):
             y = int(r.integers(T - h + 2, T - 2))
             img[y, x + r.choice([-1, 1])] = (80, 132, 54, 255)
     return img
+
+
+def spore_soil(s):
+    """Fungal ground: dark violet-brown soil dusted with pale spores."""
+    img = noisy(s, [(58, 40, 56), (86, 60, 80), (128, 98, 120)], (4, 2))
+    dots = np.random.default_rng(s).random((T, T)) < 0.06
+    img[dots, :3] = (214, 200, 222)
+    return img
+
+
+def spore_soil_side(s):
+    img = dirt(s)
+    top = spore_soil(s + 1)
+    r = np.random.default_rng(s)
+    for x in range(T):
+        d = int(r.integers(4, 9))
+        img[:d, x] = top[:d, x]
+    return img
+
+
+def shrub(s, colors=((40, 86, 36), (58, 112, 44), (84, 140, 58))):
+    """A round leafy bush filling most of the tile (crossed-quad plant)."""
+    ys, xs = np.mgrid[0:T, 0:T]
+    r = np.random.default_rng(s)
+    img = np.zeros((T, T, 4))
+    shape = ((xs - 15.5) ** 2 / 225 + (ys - 18) ** 2 / 196) < 1
+    shape &= r.random((T, T)) > 0.1
+    leaf = noisy(s, list(colors), (4, 2))
+    img[shape] = leaf[shape]
+    img[shape, 3] = 255
+    img[T - 3:, 14:17] = (70, 50, 32, 255)   # stem
+    return img
+
+
+def dry_brush(s):
+    """Twiggy brown brush: branching stems with a few dry leaves."""
+    img = np.zeros((T, T, 4))
+    r = np.random.default_rng(s)
+    for _ in range(9):
+        x, y = 15.5 + r.uniform(-3, 3), T - 1
+        dx = r.uniform(-0.7, 0.7)
+        for i in range(int(r.integers(12, 26))):
+            xi, yi = int(round(x)), int(round(y))
+            if 0 <= xi < T and 0 <= yi < T:
+                img[yi, xi] = (*(np.array([116, 88, 56]) * (0.8 + 0.3 * r.random())), 255)
+                if r.random() < 0.18 and xi + 1 < T:
+                    img[yi, xi + 1] = (150, 140, 70, 255)
+            x += dx
+            y -= 1
+            dx += r.uniform(-0.15, 0.15)
+    return img
+
+
+def brown_mushroom(s):
+    """A few small brown mushrooms."""
+    img = np.zeros((T, T, 4))
+    ys, xs = np.mgrid[0:T, 0:T]
+    for cx, h, w in ((9, 8, 5), (18, 12, 6), (25, 6, 4)):
+        img[T - h:, cx - 1:cx + 1] = (214, 202, 178, 255)
+        cap = ((xs - cx + 0.5) ** 2 / (w * w) + (ys - (T - h)) ** 2 / 9 < 1) & (ys <= T - h)
+        img[cap] = (128, 82, 50, 255)
+        img[cap & (ys == T - h)] = (100, 62, 38, 255)
+    return img
+
+
+def redwood_leaves(s):
+    return leaves(s, ((24, 58, 34), (36, 78, 42), (58, 104, 56)))
 
 
 def floorboards(s):
@@ -467,6 +446,52 @@ def grave(s):
     return img
 
 
+def barley(s, stage):
+    """Bog barley: short green shoots, then tall stalks, then golden heads."""
+    img = np.zeros((T, T, 4))
+    r = np.random.default_rng(s)
+    tall = (10, 20, 27)[stage]
+    for _ in range(10 + stage * 4):
+        x = int(r.integers(3, T - 3))
+        h = int(tall * (0.7 + 0.3 * r.random()))
+        lean = r.uniform(-0.15, 0.15)
+        for i in range(h):
+            xx = int(round(x + lean * i)) % T
+            if stage == 2:
+                g = np.array([176, 150, 70]) * (0.8 + 0.3 * i / h)
+            else:
+                g = np.array([84, 140, 52]) * (0.8 + 0.3 * i / h)
+            img[T - 1 - i, xx] = (*g, 255)
+        if stage == 2:
+            top = T - h
+            for dy in range(5):
+                for dx in (-1, 0, 1):
+                    yy, xx = top + dy, int(round(x + lean * h)) + dx
+                    if 0 <= yy < T and 0 <= xx < T and (dx == 0 or dy % 2 == 0):
+                        img[yy, xx] = (220, 186, 84, 255)
+    return img
+
+
+def tuber(s, stage):
+    """Mire tuber: a leafy rosette that grows; when ripe the tuber shows at the soil."""
+    img = np.zeros((T, T, 4))
+    r = np.random.default_rng(s)
+    reach = (6, 10, 13)[stage]
+    for k in range(5 + stage * 2):
+        ang = np.pi * (0.15 + 0.7 * k / (4 + stage * 2)) + r.uniform(-0.1, 0.1)
+        for i in range(reach):
+            x = int(round(15.5 + np.cos(ang) * i * 1.1))
+            y = int(round(T - 2 - np.sin(ang) * i))
+            for w in (-1, 0, 1):
+                if 0 <= y < T and 0 <= x + w < T:
+                    img[y, x + w] = (*(np.array([52, 112, 58]) * (0.8 + 0.3 * r.random())), 255)
+    if stage == 2:
+        ys, xs = np.mgrid[0:T, 0:T]
+        body = ((xs - 15.5) ** 2 / 30 + (ys - (T - 3)) ** 2 / 9) < 1
+        img[body] = (150, 96, 70, 255)
+    return img
+
+
 TILES = [
     ("grass_top", grass_top), ("grass_side", grass_side), ("dirt", dirt), ("stone", stone),
     ("cobblestone", cobble), ("sand", sand), ("mud", mud), ("moss", moss),
@@ -488,7 +513,26 @@ TILES = [
     ("chair", chair), ("table", table), ("wooden_door", wooden_door), ("glass", glass), ("window", window),
     ("mushroom_stem", mushroom_stem), ("mushroom_cap", mushroom_cap), ("mushroom_gills", mushroom_gills),
     ("burnt_stem", burnt_stem), ("burnt_cap", burnt_cap), ("grave", grave),
+    ("spore_soil", spore_soil), ("spore_soil_side", spore_soil_side), ("shrub", shrub), ("dry_brush", dry_brush),
+    ("brown_mushroom", brown_mushroom),
+    ("redwood_log_side", lambda s: log_side(s, (92, 40, 26), (150, 70, 44))),
+    ("redwood_log_top", lambda s: log_top(s, (92, 40, 26), (184, 104, 70))),
+    ("redwood_leaves", redwood_leaves),
+    ("barley_0", lambda s: barley(s, 0)), ("barley_1", lambda s: barley(s, 1)), ("barley_2", lambda s: barley(s, 2)),
+    ("tuber_0", lambda s: tuber(s, 0)), ("tuber_1", lambda s: tuber(s, 1)), ("tuber_2", lambda s: tuber(s, 2)),
 ]
+
+# Other versions of a tile, picked per block by the terrain shader so the
+# ground doesn't show a repeating grid. turn = also give each block a random
+# quarter turn (only for tiles with no light direction that matters).
+VARIANTS = {
+    "grass_top": (3, True), "grass_side": (2, False), "dirt": (3, True), "stone": (3, False),
+    "cobblestone": (2, False), "sand": (2, True), "gravel": (2, False), "mud": (2, True),
+    "moss": (2, True), "peat": (2, False), "planks": (2, False), "log_side": (1, False),
+}
+for _base, (_n, _turn) in VARIANTS.items():
+    _fn = dict(TILES)[_base]
+    TILES += [(f"{_base}_{k + 2}", _fn) for k in range(_n)]
 
 
 def main():
@@ -515,6 +559,10 @@ def main():
         f.write("// Generated by tools/gen_placeholder_art.py. Safe to edit by hand.\n(\n    tile_size: 32,\n    columns: 16,\n    tiles: {\n")
         for i, (name, _) in enumerate(TILES):
             f.write(f'        "{name}": {i},\n')
+        f.write("    },\n    variants: {\n")
+        for base, (n, turn) in VARIANTS.items():
+            names = ", ".join(f'"{base}_{k + 2}"' for k in range(n))
+            f.write(f'        "{base}": (tiles: [{names}], turn: {"true" if turn else "false"}),\n')
         f.write("    },\n)\n")
     print(f"wrote {len(only) if only else len(TILES)} tiles")
 

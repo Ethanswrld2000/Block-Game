@@ -1,9 +1,8 @@
 //! One-of-a-kind places, each placed once per world (pure):
 //!
 //! - **Sporrow**: a small village of giant mushroom houses 60-110 blocks from
-//!   the Rotting Gate, home of the mushroom folk. It is a `Village` with
-//!   `folk: Folk::Mushroom`, so `villages_in` lists it with the others. No
-//!   torches: they fear fire.
+//!   the Rotting Gate (empty: villagers were removed). It is a `Village`, so
+//!   `villages_in` lists it and it is warded. No torches.
 //! - **Gilm's hut**: a lone stone hut with a forge just outside Sporrow.
 //! - **The castle**: an abandoned castle high in the mountains, a walled
 //!   court on a stone plinth with a tower in one corner. A stair winds up
@@ -12,7 +11,7 @@
 //!   her stone cottage (chimney on the back wall) and a broken arch facing its door.
 
 use crate::dungeons::Aabb;
-use crate::structures::{Folk, Hut, Village};
+use crate::structures::{Hut, Village};
 use crate::trees::Canvas;
 use crate::util::{hash2, unit};
 use crate::{Land, WorldGen, SEA_LEVEL};
@@ -251,7 +250,7 @@ impl WorldGen {
         if huts.len() < 4 {
             return None;
         }
-        Some(Village { id: h | 1, name: "Sporrow".into(), center: [x, col.height, z], radius: SPORROW_RADIUS, huts, folk: Folk::Mushroom })
+        Some(Village { id: h | 1, name: "Sporrow".into(), center: [x, col.height, z], radius: SPORROW_RADIUS, huts })
     }
 
     fn build_forge(&self, x: i32, z: i32, village: (i32, i32)) -> Option<Forge> {
@@ -570,7 +569,6 @@ mod tests {
         let v = wg.sporrow().expect("Sporrow");
         let d = (((v.center[0] - g.pos[0]).pow(2) + (v.center[2] - g.pos[2]).pow(2)) as f32).sqrt();
         assert!((55.0..125.0).contains(&d), "Sporrow is {d} blocks from the gate");
-        assert_eq!(v.folk, Folk::Mushroom);
         assert!(v.huts.len() >= 4);
         // Listed with the villages, and warded like them.
         assert!(wg.villages_in(v.center[0], v.center[2], v.center[0], v.center[2]).iter().any(|w| w.name == "Sporrow"));

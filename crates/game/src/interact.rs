@@ -53,7 +53,6 @@ impl Plugin for InteractPlugin {
             .add_message::<OpenChest>()
             .add_message::<Placed>()
             .add_message::<Strike>()
-            .add_message::<UseCreature>()
             .add_message::<Swung>()
             .add_systems(
                 crate::menu::GameUpdate,
@@ -170,10 +169,6 @@ pub struct Swung {
     pub reach: f32,
     pub damage: f32,
 }
-
-/// Right click on a creature (villagers talk).
-#[derive(Message, Debug, Clone, Copy)]
-pub struct UseCreature(pub Entity);
 
 /// Seconds between blows.
 pub const STRIKE_COOLDOWN: f32 = 0.45;
@@ -414,8 +409,21 @@ fn holds(world: &World, blocks: &Blocks, def: &voxel::BlockDef, p: BlockPos, o: 
     }
 }
 
+/// What a door block turns into when used: open <-> closed (`model: door` / `door_open`).
+pub fn door_swap(registry: &voxel::BlockRegistry, b: BlockId) -> Option<BlockId> {
+    let want = match registry.get(b).model? {
+        voxel::Model::Door => voxel::Model::DoorOpen,
+        voxel::Model::DoorOpen => voxel::Model::Door,
+        _ => return None,
+    };
+    let name = &registry.get(b).name;
+    let base = name.strip_suffix("_open").unwrap_or(name);
+    let other = if want == voxel::Model::DoorOpen { format!("{base}_open") } else { base.to_string() };
+    registry.id(&other).filter(|o| registry.get(*o).model == Some(want))
+}
+
 /// Remesh the chunk holding `p` and any neighbour sharing a face, right away.
-fn remesh_around(world: &mut World, blocks: &Blocks, p: BlockPos) {
+pub(crate) fn remesh_around(world: &mut World, blocks: &Blocks, p: BlockPos) {
     let c = p.chunk();
     for d in [[0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]] {
         let n = ChunkPos::new(c.x + d[0], c.y + d[1], c.z + d[2]);
@@ -434,14 +442,13 @@ fn use_hands(
     (wielded, off): (Res<Wielded>, Res<OffHand>),
     items: Res<Items>,
     mut inv: ResMut<Inventory>,
-    (mut mined, mut blows, mut chops, mut open_chest, mut placed, mut strikes, mut use_creature, mut toast): (
+    (mut mined, mut blows, mut chops, mut open_chest, mut placed, mut strikes, mut toast): (
         MessageWriter<Mined>,
         MessageWriter<Blow>,
         MessageWriter<crate::chop::Chop>,
         MessageWriter<OpenChest>,
         MessageWriter<Placed>,
         MessageWriter<Strike>,
-        MessageWriter<UseCreature>,
         MessageWriter<crate::survival::Toast>,
     ),
     (aimed, cam, perks, station, edges, ship, guard, mut swung, generator): (
@@ -489,14 +496,14 @@ fn use_hands(
         let min = Vec3::new(h.block.x as f32, h.block.y as f32, h.block.z as f32);
         ray_box(cam.translation, cam.forward().as_vec3(), min, min + Vec3::ONE)
     });
+    // A gun fires (`combat::guns`) and never mines or strikes.
+    let gun = item.is_some_and(|i| items.get(i).gun.is_some());
     if let Some(e) = aimed.entity
         && style != Swing::Slash
+        && !gun
         && block_dist.is_none_or(|d| aimed.dist < d)
     {
         mining.block = None;
-        if mouse.just_pressed(MouseButton::Right) {
-            use_creature.write(UseCreature(e));
-        }
         if mouse.pressed(MouseButton::Left) && anim.strike_cooldown <= 0.0 {
             anim.start(hand, style);
             anim.strike_cooldown = STRIKE_COOLDOWN;
@@ -529,6 +536,41 @@ fn use_hands(
         return;
     }
 
+    // Right click on a door: open or close it, and the door above or below it.
+    if mouse.just_pressed(MouseButton::Right)
+        && !at_station
+        && let Some(hit) = target.hit
+        && let Some(other) = world.block(hit.block).and_then(|b| door_swap(&blocks.registry, b))
+    {
+        if warded(hit.block) {
+            ward_note(&mut toast);
+            return;
+        }
+        let closing = blocks.registry.get(other).solid;
+        let mut cells = vec![hit.block];
+        for dy in [1, -1] {
+            let mut p = BlockPos::new(hit.block.x, hit.block.y + dy, hit.block.z);
+            while world.block(p).is_some_and(|b| door_swap(&blocks.registry, b).is_some()) {
+                cells.push(p);
+                p.y += dy;
+            }
+        }
+        // Never shut a door on yourself.
+        if closing && cells.iter().any(|c| player.overlaps(*c)) {
+            return;
+        }
+        for c in cells {
+            if let Some(to) = world.block(c).and_then(|b| door_swap(&blocks.registry, b))
+                && world.set_block(c, to)
+            {
+                remesh_around(&mut world, &blocks, c);
+            }
+        }
+        placed.write(Placed { pos: hit.block, block: other });
+        anim.start(hand, Swing::Jab);
+        return;
+    }
+
     // Right click on a twig or a pebble: snap it off or pick it up.
     if mouse.just_pressed(MouseButton::Right)
         && !at_station
@@ -541,6 +583,11 @@ fn use_hands(
         }
         anim.start(hand, style);
         break_block(&mut world, &blocks, &mut mined, hit.block);
+        return;
+    }
+
+    if gun {
+        mining.block = None;
         return;
     }
 
@@ -577,15 +624,21 @@ fn use_hands(
         // Aiming at a plant puts the block in its place.
         let is_plant = |p: BlockPos| world.block(p).is_some_and(|b| blocks.registry.get(b).shape.is_detail());
         let into = if is_plant(hit.block) { hit.block } else { hit.before };
-        let free = world.block(into).is_some_and(|b| !blocks.registry.get(b).solid && blocks.registry.get(b).shape != voxel::Shape::Torch);
+        let free = world.block(into).is_some_and(|b| !blocks.registry.get(b).solid && !matches!(blocks.registry.get(b).shape, voxel::Shape::Torch | voxel::Shape::Model));
         // Never inside yourself (solid blocks only; a torch can go at your feet).
         let blocks_player = blocks.registry.get(place).solid && player.overlaps(into);
         // Nothing can be built at or above the world's ceiling.
         let under_ceiling = into.y < worldgen::WORLD_CEILING;
+        // Plants (sown crops) only go on soil.
+        let below = BlockPos::new(into.x, into.y - 1, into.z);
+        let rooted = blocks.registry.get(place).shape != voxel::Shape::Plant || world.block(below).is_some_and(|b| blocks.registry.get(b).material == "soil");
+        if free && !rooted && mouse.just_pressed(MouseButton::Right) {
+            toast.write(crate::survival::Toast("Sow it on soil: dirt, grass, mud or peat".into()));
+        }
         if free && mouse.just_pressed(MouseButton::Right) && warded(into) {
             ward_note(&mut toast);
         }
-        if free && !warded(into) && !blocks_player && under_ceiling && use_up(&mut inv) && world.set_block(into, place) {
+        if free && rooted && !warded(into) && !blocks_player && under_ceiling && use_up(&mut inv) && world.set_block(into, place) {
             placed.write(Placed { pos: into, block: place });
             remesh_around(&mut world, &blocks, into);
             anim.start(place_hand, place_item.map_or(Swing::Jab, |i| items.get(i).swing));

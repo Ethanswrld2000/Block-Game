@@ -12,6 +12,10 @@
 //! and comes back when the spirit form ends: when you walk out of the dungeon
 //! and away from the gate, or when the spirit falls inside, which casts you out
 //! onto the path in front of the door (no death, no lost camp).
+//!
+//! Saved to `spirit.ron` (every 30 s and on exit): whether you are a spirit,
+//! the dungeon, and your body's waiting health. The run's rooms fill again as
+//! you walk into them after a load.
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -19,6 +23,7 @@ use std::sync::Arc;
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
+use serde::{Deserialize, Serialize};
 use worldgen::Dungeon;
 
 use super::{gate_dist, EnteredRoom, LeftDungeon, Nearby};
@@ -44,7 +49,60 @@ impl Plugin for SpiritPlugin {
                     .after(crate::npc::talk::TalkSet)
                     .after(crate::player::PlayerSet),
             )
-            .add_systems(crate::menu::GameUpdate, fall_inside.in_set(SpiritSet).after(crate::survival::SurvivalSet));
+            .add_systems(crate::menu::GameUpdate, fall_inside.in_set(SpiritSet).after(crate::survival::SurvivalSet))
+            .add_systems(crate::menu::GamePostStartup, load.after(crate::world::setup_generator).after(crate::survival::load_player))
+            .add_systems(crate::menu::GameUpdate, save_now_and_then)
+            .add_systems(Last, save_on_exit.run_if(crate::menu::in_game));
+    }
+}
+
+const FILE: &str = "spirit.ron";
+
+/// What `spirit.ron` holds while you walk as a spirit.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct SavedSpirit {
+    /// The dungeon's id.
+    pub dungeon: Option<u64>,
+    /// The body's health, waiting at the gate.
+    pub body: Option<Health>,
+}
+
+impl Spirit {
+    fn to_saved(&self) -> Option<SavedSpirit> {
+        self.is_spirit().then(|| SavedSpirit { dungeon: self.dungeon.as_ref().map(|d| d.id), body: self.body })
+    }
+
+    /// Back in spirit form from a save (the spirit's own health is the saved player's).
+    fn restore(&mut self, saved: SavedSpirit, dungeon: Option<Arc<Dungeon>>) {
+        self.form = Form::Spirit;
+        self.dungeon = dungeon;
+        self.body = saved.body;
+        self.visited.clear();
+    }
+}
+
+fn load(dir: Res<crate::save::SaveDir>, generator: Option<Res<crate::world::Generator>>, player: Res<Player>, mut spirit: ResMut<Spirit>) {
+    if crate::save::screenshot_run() {
+        return;
+    }
+    let Some(Some(saved)) = crate::save::read_ron::<Option<SavedSpirit>>(&dir, FILE) else { return };
+    let (x, z) = (player.pos.x as i32, player.pos.z as i32);
+    let dungeon = saved.dungeon.and_then(|id| generator.as_ref()?.0.dungeons_in(x - 1500, z - 1500, x + 1500, z + 1500).into_iter().find(|d| d.id == id));
+    spirit.restore(saved, dungeon);
+}
+
+fn save_now_and_then(time: Res<Time<Real>>, mut since: Local<f32>, dir: Res<crate::save::SaveDir>, spirit: Res<Spirit>) {
+    *since += time.delta_secs();
+    if *since < 30.0 || crate::save::screenshot_run() {
+        return;
+    }
+    *since = 0.0;
+    crate::save::write_ron(&dir, FILE, &spirit.to_saved());
+}
+
+fn save_on_exit(mut exit: MessageReader<AppExit>, dir: Res<crate::save::SaveDir>, spirit: Res<Spirit>) {
+    if exit.read().next().is_some() && !crate::save::screenshot_run() {
+        crate::save::write_ron(&dir, FILE, &spirit.to_saved());
     }
 }
 
@@ -495,6 +553,21 @@ fn spirit_look(
 mod tests {
     use super::*;
     use crate::survival::health::Layer;
+
+    #[test]
+    fn spirit_form_round_trips_through_the_save() {
+        let mut spirit = Spirit::default();
+        assert_eq!(spirit.to_saved(), None);
+        let mut s = Survival::default();
+        spirit.begin(&mut s);
+        let saved = spirit.to_saved().expect("a spirit is saved");
+        let text = ron::to_string(&Some(saved)).unwrap();
+        let back: Option<SavedSpirit> = ron::from_str(&text).unwrap();
+        let mut loaded = Spirit::default();
+        loaded.restore(back.unwrap(), None);
+        assert!(loaded.is_spirit());
+        assert_eq!(loaded.body, spirit.body);
+    }
 
     #[test]
     fn the_body_keeps_its_wounds_while_the_spirit_walks() {

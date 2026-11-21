@@ -12,7 +12,7 @@
 //! 4. **Biome** per column from data (`biomes.ron`), picking surface blocks.
 //! 5. **Caves**: big chambers plus long tunnels, from 3D noise sampled on a
 //!    coarse grid and interpolated (cheap).
-//! 6. **Ores, trees, villages and barrows (`structures`), sky islands.**
+//! 6. **Ores, trees, barrows (`structures`), landmarks, sky islands.**
 //!
 //! All of it floats (`floating`): one big island around spawn with a rounded,
 //! stalactite-hung underside, open void past its coast, and more islands off
@@ -29,12 +29,12 @@ mod structures;
 mod trees;
 mod util;
 
-pub use biome::{Biome, Biomes, TreeKind};
+pub use biome::{Biome, Biomes, Guaranteed, Region, TreeKind};
 pub use dungeons::{Aabb, Dungeon, Room, RoomKind, SpawnKind, SpawnPoint, Veil};
 pub use floating::{Land, MAIN_RADIUS};
 pub use rotting::{floor as rotting_floor, in_pocket, Floor, FloorKind, FloorRoom, RottingGate, DEPTHS, POCKET};
 pub use landmarks::{AuntIsland, Castle, Forge, AUNT_RADIUS, SPORROW_RADIUS};
-pub use structures::{person_name, Barrow, Folk, Hut, Village, VILLAGE_RADIUS};
+pub use structures::{Barrow, Hut, Village};
 
 use std::sync::Arc;
 
@@ -108,7 +108,6 @@ struct Ids {
     snow: BlockId,
     cobblestone: BlockId,
     planks: BlockId,
-    peat: BlockId,
     torch: BlockId,
     chest: BlockId,
     /// Vines clinging to the north, south, east and west side of their cell.
@@ -120,6 +119,8 @@ struct Ids {
     mud: BlockId,
     mushroom_stem: BlockId,
     mushroom_cap: BlockId,
+    redwood_log: BlockId,
+    redwood_leaves: BlockId,
 }
 
 /// The world generator. Build once, share between threads with `Arc`.
@@ -148,7 +149,8 @@ pub struct WorldGen {
     ids: Ids,
     structures: structures::Cache,
     spawn: [i32; 3],
-    /// Centre of the home village, near spawn.
+    /// A spot 50-90 blocks from spawn (where the home village once stood);
+    /// the home dungeon is placed away from it, so it stays where it was.
     home: (i32, i32),
     /// Centre of the main island (the spawn column).
     center: (i32, i32),
@@ -158,6 +160,17 @@ pub struct WorldGen {
     rotting_gate: Option<rotting::RottingGate>,
     /// Sporrow, Gilm's hut and the castle (one each per world).
     landmarks: Landmarks,
+    /// Areas of guaranteed biomes on the main island (one per such biome).
+    zones: Vec<Zone>,
+}
+
+/// Where a guaranteed biome (`Biome::guaranteed`) lies on the main island.
+#[derive(Debug, Clone, Copy)]
+pub struct Zone {
+    pub biome: usize,
+    pub x: i32,
+    pub z: i32,
+    pub radius: f32,
 }
 
 #[derive(Default)]
@@ -181,6 +194,8 @@ impl WorldGen {
             mud: b("mud")?,
             mushroom_stem: b("mushroom_stem")?,
             mushroom_cap: b("mushroom_cap")?,
+            redwood_log: b("redwood_log")?,
+            redwood_leaves: b("redwood_leaves")?,
             dirt: b("dirt")?,
             water: b("water")?,
             coal: b("coal_ore")?,
@@ -194,7 +209,6 @@ impl WorldGen {
             snow: b("snow")?,
             cobblestone: b("cobblestone")?,
             planks: b("planks")?,
-            peat: b("peat")?,
             torch: b("torch")?,
             chest: b("chest")?,
         };
@@ -226,9 +240,11 @@ impl WorldGen {
             home_dungeon: None,
             rotting_gate: None,
             landmarks: Landmarks::default(),
+            zones: Vec::new(),
         };
         wg.spawn = wg.search_spawn();
         wg.center = (wg.spawn[0], wg.spawn[2]);
+        wg.zones = wg.search_zones();
         wg.home = wg.search_home();
         wg.home_dungeon = wg.search_home_dungeon().map(Arc::new);
         wg.rotting_gate = wg.search_rotting_gate();
@@ -241,7 +257,7 @@ impl WorldGen {
         Ok(wg)
     }
 
-    /// Dry, flat ground 50-90 blocks from spawn for the home village.
+    /// Dry, flat ground 50-90 blocks from spawn (see `home`).
     fn search_home(&self) -> (i32, i32) {
         let [sx, _, sz] = self.spawn;
         for ring in 0..6 {
@@ -279,6 +295,9 @@ impl WorldGen {
                 col.height = lifted;
                 col.biome = self.biomes.select(col.climate.temperature, col.climate.humidity, lifted - SEA_LEVEL);
             }
+            if let Some(b) = self.zone_biome(x, z, col.height - SEA_LEVEL) {
+                col.biome = b;
+            }
             col.bottom = floating::underside(self, x, z, SEA_LEVEL as f32, e, floating::CORE_DEPTH, 1.0);
             col.height = col.height.max(col.bottom + 1);
             return col;
@@ -297,7 +316,10 @@ impl WorldGen {
         Column {
             height: top.max(bottom + 1),
             climate: Climate { overhang: 0.0, ..c },
-            biome: self.biomes.select(c.temperature, c.humidity, (top - isl.y).max(2)),
+            biome: {
+                let rel = (top - isl.y).max(2);
+                self.biomes.select_in(Region::Outer, c.temperature, c.humidity, rel).unwrap_or_else(|| self.biomes.select(c.temperature, c.humidity, rel))
+            },
             land: Land::Outer,
             bottom,
             water: i32::MIN,
@@ -353,12 +375,97 @@ impl WorldGen {
         }
     }
 
-    /// The biome at a position, including the sky island biome high up.
+    /// The biome at a position: a sky island's high up, open air (an `air` biome)
+    /// over the void or far above the land, else the column's.
     pub fn biome_at(&self, x: i32, y: i32, z: i32) -> &Biome {
-        if y > SKY_MIN - 40 && self.island_top(x, z).is_some() {
-            return self.biomes.get(self.biomes.sky);
+        if y > SKY_MIN - 40
+            && let Some(b) = self.island_biome(x, z)
+        {
+            return b;
         }
-        self.biomes.get(self.column(x, z).biome)
+        let col = self.column(x, z);
+        if col.land == Land::Void || (y > SKY_MIN - 40 && y > col.height + 40) {
+            let c = col.climate;
+            if let Some(b) = self.biomes.select_in(Region::Air, c.temperature, c.humidity, y - SEA_LEVEL) {
+                return self.biomes.get(b);
+            }
+        }
+        self.biomes.get(col.biome)
+    }
+
+    /// The biome of the sky island over this column, if any (picked by the
+    /// climate under the island's centre, so one island is one biome).
+    pub fn island_biome(&self, x: i32, z: i32) -> Option<&Biome> {
+        islands::island_at(self, x, z).map(|isl| self.biome_of_island(&isl))
+    }
+
+    pub(crate) fn biome_of_island(&self, isl: &islands::Island) -> &Biome {
+        let c = self.terrain(isl.x, isl.z).climate;
+        let i = self.biomes.select_in(Region::Sky, c.temperature, c.humidity, isl.y - SEA_LEVEL).unwrap_or(self.biomes.sky);
+        self.biomes.get(i)
+    }
+
+    /// Areas of the guaranteed biomes (e.g. the fungal growth) on the main island.
+    pub fn zones(&self) -> &[Zone] {
+        &self.zones
+    }
+
+    /// The guaranteed biome covering this main island column, if its height fits.
+    fn zone_biome(&self, x: i32, z: i32, height: i32) -> Option<usize> {
+        self.zones.iter().find_map(|zn| {
+            let b = self.biomes.get(zn.biome);
+            if height < b.min_height || height > b.max_height {
+                return None;
+            }
+            let (dx, dz) = ((x - zn.x) as f32, (z - zn.z) as f32);
+            let wobble = 1.0 + 0.25 * self.coast.get_noise_2d(x as f32 * 6.0, z as f32 * 6.0);
+            (dx * dx + dz * dz <= (zn.radius * wobble).powi(2)).then_some(zn.biome)
+        })
+    }
+
+    /// Place each guaranteed biome once: dry, low ground on the main island,
+    /// `near..far` blocks from spawn, with room for its whole radius.
+    fn search_zones(&self) -> Vec<Zone> {
+        let [sx, _, sz] = self.spawn;
+        let mut out: Vec<Zone> = Vec::new();
+        for (biome, g) in self.biomes.guaranteed() {
+            let b = self.biomes.get(biome);
+            let fits = |x: i32, z: i32| {
+                let c = self.column(x, z);
+                let h = c.height - SEA_LEVEL;
+                c.land == Land::Main && h >= b.min_height.max(1) && h <= b.max_height
+            };
+            let clear = |x: i32, z: i32| out.iter().all(|o| ((o.x - x).pow(2) + (o.z - z).pow(2)) as f32 > (o.radius + g.radius).powi(2));
+            let mut best: Option<(usize, i32, i32)> = None;
+            for k in 0..160u64 {
+                let h = util::hash2(self.seed ^ 0xF0_06, k as i32, biome as i32);
+                let a = util::unit(h) * std::f32::consts::TAU;
+                let r = g.near + util::unit(h.rotate_left(19)) * (g.far - g.near).max(0.0);
+                let (x, z) = (sx + (a.cos() * r) as i32, sz + (a.sin() * r) as i32);
+                if floating::main_edge(self, x, z) > 0.7 || !fits(x, z) || !clear(x, z) {
+                    continue;
+                }
+                // Count how much of the area is ground the biome can cover.
+                let mut good = 0;
+                for i in 0..16 {
+                    let t = i as f32 / 16.0 * std::f32::consts::TAU;
+                    for f in [0.4, 0.8] {
+                        let (px, pz) = (x + (t.cos() * g.radius * f) as i32, z + (t.sin() * g.radius * f) as i32);
+                        good += fits(px, pz) as usize;
+                    }
+                }
+                if best.is_none_or(|(n, _, _)| good > n) {
+                    best = Some((good, x, z));
+                }
+                if good >= 26 {
+                    break;
+                }
+            }
+            // Fall back to a spot `near` blocks out so the biome always exists.
+            let (x, z) = best.map(|(_, x, z)| (x, z)).unwrap_or((sx + g.near as i32, sz));
+            out.push(Zone { biome, x, z, radius: g.radius });
+        }
+        out
     }
 
     /// Surface height ignoring overhangs and caves.
@@ -366,7 +473,7 @@ impl WorldGen {
         self.column(x, z).height
     }
 
-    /// A spawn point in the Great Swamp, on dry ground, near the origin.
+    /// A spawn point in the swamp, on dry ground, near the origin.
     pub fn find_spawn(&self) -> [i32; 3] {
         self.spawn
     }
@@ -413,8 +520,8 @@ impl WorldGen {
                 }
             }
         }
-        // Overhangs reach at most this far above the heightmap; trees ~14.
-        let top_reach = hi.saturating_add(24);
+        // Overhangs reach at most 24 above the heightmap; trees `trees::TALLEST`.
+        let top_reach = hi.saturating_add(24.max(trees::TALLEST + 2));
         let mut dense = vec![BlockId::AIR; CHUNK_VOLUME];
         let mut any = false;
 
@@ -538,6 +645,11 @@ impl WorldGen {
     /// (bottom, top) of the sky island over this column, if any.
     pub fn island_span(&self, x: i32, z: i32) -> Option<(i32, i32)> {
         islands::span_at(self, x, z)
+    }
+
+    /// Is there a sky island's chest at this block?
+    pub fn island_chest(&self, x: i32, y: i32, z: i32) -> bool {
+        islands::chest_near(self, x, z) == Some([x, y, z])
     }
 }
 
@@ -764,5 +876,56 @@ mod tests {
             }
         }
         assert!(air > 1000, "some cave air between y -64 and -33 ({air})");
+    }
+
+    #[test]
+    fn fungal_growth_on_every_main_island() {
+        let tiles = TileSheet::from_ron(include_str!("../../../assets/textures/blocks.ron")).unwrap();
+        let reg = BlockRegistry::from_ron(include_str!("../../../assets/data/blocks.ron"), &tiles).unwrap();
+        for seed in [1u64, 42, 777, 9001, 123456] {
+            let g = WorldGen::new(seed, &reg, include_str!("../../../assets/data/biomes.ron")).unwrap();
+            let z = g.zones().iter().find(|z| g.biomes.get(z.biome).name == "fungal_growth").expect("fungal zone");
+            let r = z.radius as i32;
+            let mut fungal = 0;
+            for dz in (-r..=r).step_by(8) {
+                for dx in (-r..=r).step_by(8) {
+                    let c = g.column(z.x + dx, z.z + dz);
+                    if c.land == Land::Main && g.biomes.get(c.biome).name == "fungal_growth" {
+                        fungal += 1;
+                    }
+                }
+            }
+            assert!(fungal > 150, "seed {seed}: only {fungal} fungal samples at {:?}", (z.x, z.z));
+        }
+    }
+
+    #[test]
+    fn open_air_and_sky_islands_have_their_own_biomes() {
+        let g = wg();
+        let (cx, cz) = g.island_center();
+        // Far past the coast: open air.
+        let mut void = None;
+        for d in (2400..6000).step_by(40) {
+            if g.column(cx + d, cz).land == Land::Void {
+                void = Some(cx + d);
+                break;
+            }
+        }
+        let vx = void.expect("void past the coast");
+        assert_eq!(g.biome_at(vx, 100, cz).name, "open_sky");
+        // High above the ground with no island there: open air too.
+        let (x, _, z) = (cx, 0, cz);
+        if g.island_top(x, z).is_none() {
+            assert_eq!(g.biome_at(x, SKY_MAX, z).name, "open_sky");
+        }
+        // On a sky island: its sky biome.
+        'found: for gz in (-2000..2000).step_by(16) {
+            for gx in (-2000..2000).step_by(16) {
+                if let Some(top) = g.island_top(cx + gx, cz + gz) {
+                    assert_eq!(g.biome_at(cx + gx, top + 1, cz + gz).name, "skyreach");
+                    break 'found;
+                }
+            }
+        }
     }
 }

@@ -306,8 +306,8 @@ pub fn setup_generator(
         .unwrap_or_else(|e| panic!("{e}"));
     let [x, y, z] = wg.find_spawn();
     info!("spawn at {x} {y} {z} in {}", wg.biome_at(x, y, z).title);
-    if let Some(v) = wg.home_village() {
-        info!("home village {} at {:?} with {} huts", v.name, v.center, v.huts.len());
+    for z in wg.zones() {
+        info!("{} at {} {} (radius {})", wg.biomes.get(z.biome).title, z.x, z.z, z.radius);
     }
     world.shaped = Arc::new(blocks.registry.iter().map(|(_, d)| d.shape == voxel::Shape::Torch).collect());
     player.pos = Vec3::new(x as f32 + 0.5, y as f32, z as f32 + 0.5);

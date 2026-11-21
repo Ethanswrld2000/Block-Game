@@ -22,8 +22,7 @@
 //     after: steps (of this urn) that must be done first
 //     desc:  one line for the tree and the planning sheet
 //     later: true where what it does isn't in the game yet (the step still
-//            fills and places its model, so the tree can be played through);
-//            (the gunsmith bench: its guns can be made, not fired)
+//            fills and places its model, so the tree can be played through)
 (
     urns: [
         (
@@ -137,9 +136,9 @@
                 (name: "metal_armor", title: "Metal Armor", tier: 3, gives: Recipes, after: ["armor_stand", "bladesmith_bench"],
                  needs: { "raw_iron": 16, "coal": 8, "hide": 4, "deepstone_shard": 4, "warden_sigil": 1 },
                  desc: "The armor stand learns iron: an iron helm and iron mail."),
-                (name: "gunsmith_bench", title: "Gunsmith Bench", tier: 3, gives: Station("gunsmith_bench"), after: ["bladesmith_bench"], later: true,
+                (name: "gunsmith_bench", title: "Gunsmith Bench", tier: 3, gives: Station("gunsmith_bench"), after: ["bladesmith_bench"],
                  needs: { "raw_iron": 20, "coal": 10, "planks": 6, "deepstone_shard": 4, "warden_sigil": 1 },
-                 desc: "Barrels and stocks: a makeshift pistol and a rifle. Firing them comes later."),
+                 desc: "Barrels and stocks: a makeshift pistol, a rifle and iron shot to fire from them."),
             ],
         ),
         (

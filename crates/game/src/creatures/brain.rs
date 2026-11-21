@@ -3,27 +3,6 @@
 
 use bevy::math::Vec3;
 
-/// Where a villager wants to be at an hour of the day.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Plan {
-    /// 21:00-6:00: indoors, asleep.
-    Home,
-    /// 6:00-8:00 and 18:00-21:00: gathered at the plaza.
-    Plaza,
-    /// 8:00-18:00: about the village.
-    Wander,
-}
-
-pub fn plan(hour: f32) -> Plan {
-    if !(6.0..21.0).contains(&hour) {
-        Plan::Home
-    } else if hour < 8.0 || hour >= 18.0 {
-        Plan::Plaza
-    } else {
-        Plan::Wander
-    }
-}
-
 /// When spirits walk.
 pub fn spirit_hours(hour: f32) -> bool {
     !(5.5..19.5).contains(&hour)
@@ -79,15 +58,6 @@ impl Rng {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn villager_day() {
-        assert_eq!(plan(2.0), Plan::Home);
-        assert_eq!(plan(22.0), Plan::Home);
-        assert_eq!(plan(6.5), Plan::Plaza);
-        assert_eq!(plan(12.0), Plan::Wander);
-        assert_eq!(plan(19.0), Plan::Plaza);
-    }
 
     #[test]
     fn spirits_keep_away_from_torches() {

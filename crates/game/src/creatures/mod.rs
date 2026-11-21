@@ -1,5 +1,5 @@
 //! Creatures: swamp animals, night hunters, barrow wights, ancestral spirits
-//! and villagers. Kinds come from `assets/data/creatures.ron`; the rules that
+//! and critters. Kinds come from `assets/data/creatures.ron`; the rules that
 //! need no Bevy live in `data` and `brain`.
 //!
 //! Creatures spawn in a ring around you (animals by day, hunters and spirits
@@ -17,8 +17,8 @@
 pub mod brain;
 pub mod critters;
 pub mod data;
+pub mod saved;
 pub mod skin;
-mod villagers;
 
 use std::collections::HashMap;
 
@@ -39,7 +39,6 @@ use crate::world::{Generator, World};
 use brain::Rng;
 use data::{Kinds, Temper};
 
-pub use villagers::Villager;
 
 pub struct CreaturesPlugin;
 
@@ -47,18 +46,20 @@ impl Plugin for CreaturesPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Dice(Rng(0x5EED_C0FF_EE15_u64)))
             .init_resource::<Barrows>()
-            .add_systems(crate::menu::GamePostStartup, setup)
+            .add_systems(crate::menu::GamePostStartup, (setup, saved::load).chain())
+            .add_systems(crate::menu::GameUpdate, saved::save_now_and_then)
+            .add_systems(Last, saved::save_on_exit.run_if(crate::menu::in_game))
             .add_systems(crate::menu::GameUpdate, aim.before(InteractSet).after(crate::player::PlayerSet))
             .add_systems(
                 crate::menu::GameUpdate,
-                (take_strikes, spawn_around, spawn_wights, think, spirits, walk, tint, despawn_far)
+                (take_strikes, spawn_around, spawn_wights, think, spirits, walk, animate, tint, despawn_far)
                     .chain()
                     .in_set(CreatureSet)
                     .after(InteractSet),
             )
             .add_systems(crate::menu::GameUpdate, look_at_creature.run_if(|| std::env::var_os("BLOCKGAME_LOOK").is_some()))
             .add_systems(crate::menu::GameUpdate, lineup.run_if(|| std::env::var_os("BLOCKGAME_LINEUP").is_some()))
-            .add_plugins((villagers::VillagersPlugin, critters::CrittersPlugin));
+            .add_plugins(critters::CrittersPlugin);
     }
 }
 
@@ -69,7 +70,7 @@ pub struct CreatureSet;
 const GRAVITY: f32 = 25.0;
 /// Upward speed of a hop over a one-block step.
 const HOP: f32 = 7.6;
-/// Creatures further than this from you are removed (villagers excepted).
+/// Creatures further than this from you are removed.
 const DESPAWN: f32 = 112.0;
 /// How many of each sort may be around you at once.
 const MAX_ANIMALS: usize = 8;
@@ -104,8 +105,14 @@ pub struct Creature {
     pub fade: f32,
     /// Fading away (spirits at dawn).
     pub leaving: bool,
-    /// Stay within this distance of a point (wights in their barrow, villagers in their village).
+    /// Stay within this distance of a point (wights in their barrow).
     pub leash: Option<(Vec3, f32)>,
+    /// The way found to where it's going (cells to stand in, next first).
+    pub way: Vec<IVec3>,
+    way_to: Option<IVec3>,
+    repath: f32,
+    /// Distance walked, in blocks: drives the legs.
+    pub stride: f32,
 }
 
 impl Creature {
@@ -126,6 +133,10 @@ impl Creature {
             fade: 0.0,
             leaving: false,
             leash: None,
+            way: Vec::new(),
+            way_to: None,
+            repath: 0.0,
+            stride: 0.0,
         }
     }
 }
@@ -352,7 +363,7 @@ fn take_strikes(
     mut commands: Commands,
     mut strikes: MessageReader<Strike>,
     kinds: Option<Res<Kinds>>,
-    mut q: Query<(&Transform, &mut Creature, Option<&Villager>)>,
+    mut q: Query<(&Transform, &mut Creature)>,
     mut spill: MessageWriter<crate::inventory::Spill>,
     mut toast: MessageWriter<crate::survival::Toast>,
     mut dice: ResMut<Dice>,
@@ -360,7 +371,7 @@ fn take_strikes(
 ) {
     let Some(kinds) = kinds else { return };
     for s in strikes.read() {
-        let Ok((tf, mut c, villager)) = q.get_mut(s.entity) else { continue };
+        let Ok((tf, mut c)) = q.get_mut(s.entity) else { continue };
         if c.health <= 0.0 {
             continue;
         }
@@ -371,7 +382,7 @@ fn take_strikes(
         c.on_ground = false;
         match k.temper {
             Temper::Neutral | Temper::Hostile | Temper::Spirit => c.angry = 20.0,
-            Temper::Skittish | Temper::Villager | Temper::Critter => c.scared = 8.0,
+            Temper::Skittish | Temper::Critter => c.scared = 8.0,
         }
         if c.health <= 0.0 {
             let at = tf.translation + Vec3::Y * (k.height * 0.5);
@@ -380,14 +391,8 @@ fn take_strikes(
                     spill.write(crate::inventory::Spill { stack: Stack::new(*item, *n), at });
                 }
             }
-            let msg = match villager {
-                Some(v) => format!("{} of {} is dead", v.name, v.village_name),
-                None => format!("{} slain", k.title),
-            };
-            toast.write(crate::survival::Toast(msg));
-            if villager.is_none() {
-                gain.write(crate::progress::GainXp { xp: k.health * prog.xp.kill, why: String::new() });
-            }
+            toast.write(crate::survival::Toast(format!("{} slain", k.title)));
+            gain.write(crate::progress::GainXp { xp: k.health * prog.xp.kill, why: String::new() });
             commands.entity(s.entity).despawn();
         }
     }
@@ -447,7 +452,7 @@ fn spawn_around(
             Temper::Skittish | Temper::Neutral => counts[0] += 1,
             Temper::Hostile => counts[1] += 1,
             Temper::Spirit => counts[2] += 1,
-            Temper::Villager | Temper::Critter => {}
+            Temper::Critter => {}
         }
     }
     let lights = lights(&torches, &player, (&wielded, &off), &items, spells.light);
@@ -469,7 +474,7 @@ fn spawn_around(
             Temper::Skittish | Temper::Neutral => counts[0] >= MAX_ANIMALS,
             Temper::Hostile => counts[1] >= MAX_HUNTERS,
             Temper::Spirit => counts[2] >= MAX_SPIRITS,
-            Temper::Villager | Temper::Critter => true,
+            Temper::Critter => true,
         };
         let list: Vec<(usize, f32)> = kinds.candidates(biome, night).into_iter().filter(|(i, _)| !full(kinds.get(*i).temper)).collect();
         let Some(kind) = data::pick(&list, rng.unit()) else { continue };
@@ -491,7 +496,7 @@ fn spawn_around(
             Temper::Skittish | Temper::Neutral => counts[0] += n as usize,
             Temper::Hostile => counts[1] += n as usize,
             Temper::Spirit => counts[2] += n as usize,
-            Temper::Villager | Temper::Critter => {}
+            Temper::Critter => {}
         }
     }
 }
@@ -542,8 +547,8 @@ pub(crate) fn flat(v: Vec3) -> Vec3 {
     Vec3::new(v.x, 0.0, v.z)
 }
 
-/// Wander, flee, chase and strike (everything but spirits and villagers'
-/// schedules, which have their own systems).
+/// Wander, flee, chase and strike (everything but spirits, which have their
+/// own system).
 #[allow(clippy::too_many_arguments)]
 fn think(
     time: Res<Time>,
@@ -552,8 +557,9 @@ fn think(
     mode: Res<MoveMode>,
     s: Res<Survival>,
     mut hits: MessageWriter<Damage>,
-    mut q: Query<(&Transform, &mut Creature), Without<Villager>>,
+    mut q: Query<(&Transform, &mut Creature)>,
     mut dice: ResMut<Dice>,
+    (world, blocks): (Res<World>, Res<Blocks>),
 ) {
     let Some(kinds) = kinds else { return };
     let dt = time.delta_secs();
@@ -585,7 +591,7 @@ fn think(
         } else if hunting && let Some(to) = to {
             let reach = k.attack.map_or(1.5, |a| a.reach);
             c.want = if dist > reach * 0.7 && leashed(pos + flat(to).normalize_or_zero(), &c) {
-                flat(to).normalize_or_zero() * k.run
+                steer(&mut c, &world, &blocks, pos, pos + to, k.run, dt)
             } else {
                 Vec3::ZERO
             };
@@ -599,7 +605,86 @@ fn think(
             }
         } else {
             wander(&mut c, pos, k.speed, &mut dice.0);
+            // Find a way round walls and up steps to where it ambles.
+            if let Some(g) = c.goal {
+                c.want = steer(&mut c, &world, &blocks, pos, g, k.speed, dt);
+            }
         }
+    }
+}
+
+/// Seconds between new searches while chasing a moving target.
+const REPATH: f32 = 1.0;
+/// How far (blocks) a search may stray from where it starts.
+const PATH_RADIUS: i32 = 24;
+
+/// The wanted velocity to walk towards `goal` along a found way (A* from
+/// `combat::path`); straight at it while there's no way.
+fn steer(c: &mut Creature, world: &World, blocks: &Blocks, pos: Vec3, goal: Vec3, speed: f32, dt: f32) -> Vec3 {
+    let cell = |p: Vec3| IVec3::new(p.x.floor() as i32, (p.y + 0.01).floor() as i32, p.z.floor() as i32);
+    let (here, there) = (cell(pos), cell(goal));
+    c.repath -= dt;
+    let moved = c.way_to.is_none_or(|w| (w - there).abs().max_element() > 1);
+    if moved || (c.repath <= 0.0 && c.way.is_empty()) {
+        let solid = |x, y, z| world.block(BlockPos::new(x, y, z)).is_none_or(|b| blocks.registry.get(b).solid);
+        c.way = crate::combat::path::find(solid, here, there, PATH_RADIUS);
+        c.way_to = Some(there);
+        c.repath = REPATH;
+    }
+    while let Some(next) = c.way.first() {
+        let at = Vec3::new(next.x as f32 + 0.5, next.y as f32, next.z as f32 + 0.5);
+        if flat(at - pos).length() < 0.45 && (at.y - pos.y).abs() < 1.2 {
+            c.way.remove(0);
+        } else {
+            break;
+        }
+    }
+    let aim = c.way.first().map_or(goal, |n| Vec3::new(n.x as f32 + 0.5, n.y as f32, n.z as f32 + 0.5));
+    let d = flat(aim - pos);
+    if flat(goal - pos).length() < 0.8 {
+        c.goal = None;
+        c.way.clear();
+        return Vec3::ZERO;
+    }
+    if d.length() < 0.15 { Vec3::ZERO } else { d.normalize() * speed }
+}
+
+/// How far a leg or tail swings, and at which beat, from its box's name:
+/// legs swing in diagonal pairs (front right with back left), tails sway.
+/// `None` = the box doesn't move.
+pub fn limb_swing(name: &str, stride: f32, pace: f32, leg_len: f32) -> Option<Quat> {
+    let cycle = std::f32::consts::TAU * stride / (1.0 + leg_len * 2.0);
+    if name.starts_with("leg") {
+        let off = (name.contains("left") != name.contains("back")) as u8 as f32 * std::f32::consts::PI;
+        Some(Quat::from_rotation_x((cycle + off).sin() * 0.6 * pace))
+    } else if name.starts_with("tail") {
+        Some(Quat::from_rotation_y((cycle * 0.5).sin() * 0.35 * pace))
+    } else {
+        None
+    }
+}
+
+/// Walking creatures move their legs (from the top) and tails (from the body end).
+fn animate(kinds: Option<Res<Kinds>>, creatures: Query<&Creature>, mut parts: Query<(&ChildOf, &Part, &mut Transform)>) {
+    let Some(kinds) = kinds else { return };
+    for (parent, part, mut tf) in &mut parts {
+        let Ok(c) = creatures.get(parent.parent()) else { continue };
+        let k = kinds.get(c.kind);
+        if matches!(k.temper, Temper::Critter | Temper::Spirit) {
+            continue;
+        }
+        let b = &k.model[part.index];
+        let pace = (flat(c.vel).length() / 1.5).min(1.0);
+        let Some(rot) = limb_swing(&b.name, c.stride, pace, b.size.1) else { continue };
+        let offset = Vec3::new(b.offset.0, b.offset.1, b.offset.2);
+        // Legs hang from their top, tails from the end nearest the body.
+        let pivot = if b.name.starts_with("leg") {
+            offset + Vec3::Y * (b.size.1 * 0.5)
+        } else {
+            offset - Vec3::Z * (b.size.2 * 0.5 * offset.z.signum())
+        };
+        tf.translation = pivot + rot * (offset - pivot);
+        tf.rotation = rot;
     }
 }
 
@@ -769,6 +854,7 @@ fn walk(time: Res<Time>, kinds: Option<Res<Kinds>>, world: Res<World>, blocks: R
         if bumped && (c.on_ground || swimming) && c.want.length_squared() > 0.01 {
             c.vel.y = HOP;
         }
+        c.stride += flat(pos - tf.translation).length();
         tf.translation = pos;
         let face = flat(c.want);
         if face.length_squared() > 0.01 && c.angry <= 0.0 {
@@ -789,7 +875,7 @@ fn tint(creatures: Query<&Creature>, mut parts: Query<(&ChildOf, &Part, &mut Mes
     }
 }
 
-type Wild = (With<Creature>, Without<Villager>);
+type Wild = With<Creature>;
 
 /// `BLOCKGAME_LOOK=<creature>`: keep the camera turned to the nearest one (for screenshots).
 fn look_at_creature(
@@ -855,5 +941,20 @@ fn despawn_far(mut commands: Commands, player: Res<Player>, q: Query<(Entity, &T
         if flat(tf.translation - player.pos).length() > DESPAWN {
             commands.entity(e).despawn();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legs_swing_in_diagonal_pairs_and_rest_when_still() {
+        let a = |n: &str| limb_swing(n, 0.4, 1.0, 0.3).unwrap().to_euler(EulerRot::XYZ).0;
+        assert!((a("leg_front_right") - a("leg_back_left")).abs() < 1e-5);
+        assert!((a("leg_front_right") + a("leg_front_left")).abs() < 1e-5);
+        assert!((a("leg_right") + a("leg_left")).abs() < 1e-5);
+        assert!(limb_swing("leg_right", 0.4, 0.0, 0.3).unwrap().angle_between(Quat::IDENTITY) < 1e-5);
+        assert!(limb_swing("head", 0.4, 1.0, 0.3).is_none());
     }
 }

@@ -12,7 +12,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
 | `crates/worldgen` | Terrain, biomes, caves, sky islands | Pure functions of (seed, position); thread-safe; no Bevy. |
 | `crates/game` | The Bevy client; one plugin per system | Gameplay state separate from rendering, so multiplayer can come later. |
 | `assets/textures/blocks.png` | 16x16 grid of 32x32 tiles | Placeholder art; Ethan repaints it. Keep tile positions stable. |
-| `assets/textures/blocks.ron` | Tile name -> index | Regenerate with `python3 tools/gen_placeholder_art.py` (overwrites the PNG; `--only <tiles>` adds tiles without touching the rest). |
+| `assets/textures/blocks.ron` | Tile name -> index, plus `variants` (extra versions per tile, `turn` = random quarter turn) | Regenerate with `python3 tools/gen_placeholder_art.py` (overwrites the PNG; `--only <tiles>` adds tiles without touching the rest). Core ground/wood/leaf tiles are drawn in `tools/drawn_tiles.py` (shapes, hue-shifted palettes, top-left light). |
 | `assets/textures/ui.png` | UI sprite sheet, 2x pixels | Ethan repaints it; `ui.ron` lists each sprite's rect and slice. `tools/gen_ui_art.py` overwrites it. |
 | `assets/textures/icons/` | Item sprites: `items`, `weapons` (tools), `blocks` (.png + .ron) | 20 px per inventory cell; Ethan repaints them. `tools/gen_item_art.py` only adds missing sprites (`--reset <sheet>` redraws). |
 | `assets/fonts/` | Jersey 15 (OFL) | Compiled in; swap the `.ttf` files to change the font. |
@@ -85,14 +85,12 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `interact` writes `Mined`/`OpenChest` messages (hand slots and tabs: see "Inventory redesign" below). Survival reads weight, clothes warmth
   (`vitals::clothed`) and armor from the inventory. `camera::Menus.open` frees the mouse.
   Saves: `inventory.ron`, `chests.ron`. `BLOCKGAME_INVENTORY=1` opens the screen for screenshots.
-- Phase 8 (living world): done. `worldgen::structures` (villages of stilt huts every ~640 blocks,
-  one always 50-90 blocks from spawn; barrows with a stair, hall and side rooms; names from
+- Phase 8 (living world): done. `worldgen::structures` (barrows with a stair, hall and side rooms; names from
   syllables), `game::creatures` (kinds in `assets/data/creatures.ron`: temper Skittish/Neutral/
-  Hostile/Spirit/Villager, box models, attacks with a `DamageCause`, spawn rules, drops; `brain` has
+  Hostile/Spirit/Critter, box models, attacks with a `DamageCause`, spawn rules, drops; `brain` has
   the pure rules; ring spawner with caps; barrow wights once a day per barrow; spirits ignore walls,
-  keep `brain::TORCH_FEAR` from placed or held torches, fade at dawn), `creatures::villagers`
-  (one per hut, `brain::plan` schedule, talk lines in `assets/data/villagers.ron`), combat via
-  `interact::{Aimed, Strike, UseCreature}` (items have `damage`), `game::places` (title cards for
+  keep `brain::TORCH_FEAR` from placed or held torches, fade at dawn), combat via
+  `interact::{Aimed, Strike}` (items have `damage`), `game::places` (title cards for
   villages, barrows and regions), chest loot (`assets/data/loot.ron`, rolled on first open;
   placed chests start empty via `interact::Placed`), season weather (`cold_snap`, `gale` with
   wind push in `player`, `DamageCause::Chill` -> Fatigue). Creatures ignore a flying player.
@@ -115,10 +113,10 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   guides in `assets/textures/creatures/guides/`. No skin or missing PNG = flat `color`s. Hurt tints
   the skin red; spirits blend the PNG's alpha. `--features dev` hot-reloads PNGs (`bevy/file_watcher`).
   A PNG may be painted at 2x/4x as long as its shape matches (tested).
-- Known gaps: vertices are 40 bytes, not the packed 8-byte format (performance pass); no thunder
-  sound or snow cover yet; no block light propagation (torches are real point lights); items on the
-  ground and creatures are not saved; creatures walk straight at goals (no pathfinding, villagers
-  don't climb into huts: they vanish at the door at night); creature parts don't animate yet.
+- Known gaps: vertices are 40 bytes, not the packed 8-byte format (performance pass); no snow cover yet; no block light propagation (torches are real point lights; only the `torches::MAX_LIGHTS` (24) placed fires nearest the
+  camera shine, the furthest few fade, `share_lights`); Wild creatures find
+  their way with `combat::path` (`creatures::steer`) when chasing or wandering; boxes named `leg_*` swing in diagonal
+  pairs and `tail*` sways as they walk (`creatures::limb_swing`, driven by `Creature.stride`).
 - Phase 10 (UI overhaul): done. `game::theme`: UI sprite sheet `assets/textures/ui.png` + `ui.ron`
   (name -> rect and 9-slice borders, drawn at 2x; placeholder from `tools/gen_ui_art.py`, which
   overwrites the PNG), `theme.skin("panel")` / `theme.icon("icon_food")` / `theme.image(..)`;
@@ -238,7 +236,8 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   opens: plugins add systems to `menu::GamePreStartup`/`GameStartup`/`GamePostStartup`/`GameUpdate`
   instead of Bevy's `Startup`/`Update` (entering `Screen::Game` runs the startup three once, then
   `GameUpdate` runs inside `Update`); systems in `First`/`PreUpdate`/`Last` need `.run_if(menu::in_game)`.
-  No "quit to title" yet (game state isn't reset), so Save and quit closes the game.
+  "Save and quit to title" (pause menu) exits through the usual save-on-exit path, then `menu::relaunch_to_title`
+  starts the game again on the title screen (a fresh process, so no state is left over).
 - Every station works now (no `later: true` steps left). Boards (`station::board`, rules in `station::bench`)
   also cover the cooking pot (`SlotKind::Mix` slots fill in any order, recipes list a `mix`; a `Fire` slot burns
   `fuel` from benches.ron for a recipe's `heat`; stirring swirls the pot), cutting board, smoking rack, iron anvil
@@ -294,29 +293,31 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   and its rim is lifted above sea level so seas stay inside. Underside: a rounded bowl ~300 blocks deep at the
   middle, hung with rounded lobes and stalactite drips (`underside`). Outer islands (jittered 520-block grid,
   radius 50-260, tops at y -140..240) float past the coast with the same climate, biomes and underside, and no
-  water. `Column` has `land` (Void/Main/Outer), `bottom` and `water`; villages and barrows are main island only.
+  water. `Column` has `land` (Void/Main/Outer), `bottom` and `water`; barrows are main island only.
   Rootstone no longer generates. `game::lod` draws undersides and leaves the void empty.
 - Machination table (vehicle urn, tier 1): `StationKind::MachinationTable`, a board like the
   other benches (slots keel / rigging / envelope / engine, the drive wheel is a `ToolUse::Turn` tool). It builds
   machines: items of kind `Machine("name")` in items.ron, numbers in `assets/data/machines.ron`. Only the airship so
   far (8 planks, 6 cordage, 4 hide, 6 raw iron). `game::airship`: right click open ground with it to set it down
-  (bow the way you look; needs ~4 x 9 x 7 clear), right click or E to board, W/S ahead/astern, A/D turn, Space/Ctrl
-  rise/sink, E steps off over the rail. Pure flight rules in `airship::flight` (eased speed, oriented footprint,
-  stops on solid blocks one axis at a time). While aboard `player::walk` is off (`airship::not_aboard`) and the
-  player stands at the helm. Ships and who is aboard save to `airships.ron`. You can't walk on the deck (the ship
-  isn't a collider) and it can't be picked back up yet.
+  (bow the way you look; needs ~4 x 9 x 7 clear), right click or E to board onto the deck (`Airships.deck`: ship and
+  spot in its frame; `walk_deck` moves you with WASD inside the rails, `DECK_MIN`/`DECK_MAX`), right click within 1.4
+  blocks of the helm to take it (`Airships.aboard`): W/S ahead/astern, A/D turn, Space/Ctrl rise/sink, E lets go back
+  onto the deck; on deck E steps off over the nearest rail (`over_rail`). Pure flight rules in `airship::flight`
+  (eased speed, oriented footprint, stops on solid blocks one axis at a time). At the helm or on deck `player::walk` is
+  off (`airship::not_aboard`). Crouch + right click a ship with an empty hand (not aboard) picks it back up as the
+  `airship` item. Ships, the helm and the deck spot save to `airships.ron`.
 - Urn split (Legacy prompts 2-4): the tool urn keeps only the tool bench and the anvils. Carpentry urn
   (`carpentry_urn`): carpentry bench, carpentry table, Joiner's Table (`chair`, `table`), tier 2 Door Frame
   (`wooden_door`) and Glass Kiln (`glass`, `window`; sand and glass need heat). Vehicle urn (`vehicle_urn`): the
   machination table. Gear urn (`gear_urn`): Sewing Table (the clothes that were on the Tab list), Armor Stand (bark
   and hide armor; iron helm and mail after the tier 3 `metal_armor` step), tier 2 Bladesmith Bench (`iron_dagger`,
   `iron_sword`, moved off the iron anvil; `rapier` after the `rapier` step) and the Sharpening Stone, tier 3 Gunsmith
-  Bench (`later: true`: `makeshift_pistol` and `rifle` can be made, not fired). The ancestral urn gives the three new
+  Bench (`makeshift_pistol`, `rifle`, `iron_shot`; guns fire, see `combat::guns`). The ancestral urn gives the three new
   urns (carpentry after the tool urn, gear and vehicle after carpentry). New benches reuse an older bench's board
   (`StationKind::base`: layout, slots, tool, size) and add a few parts of their own in `models::parts`. Chairs,
-  tables and doors are plain cube blocks for now (doors don't open); glass and windows are see-through blocks.
+  tables and doors are box models (see Furniture below); glass and windows are see-through blocks.
 - Warded dungeons: `worldgen::dungeons` (pure). One per 1024-block cell (chance 0.7, 700+ blocks from spawn) plus a home
-  dungeon 170-290 blocks from spawn, away from the home village. A stone gatehouse with one doorway, a stair 20-27 down,
+  dungeon 170-290 blocks from spawn, away from `WorldGen::home` (where the home village once stood). A stone gatehouse with one doorway, a stair 20-27 down,
   then 7-10 large rooms (13-23 wide, 6-9 high) on a 30-block grid in the dungeon's own frame, joined by 3-wide corridors
   (a few loops); the furthest room is the warden's hall (25x25, boss). `Dungeon` has `rooms`, `links`, `spaces` (open
   boxes past the veil: `inside(p)`), `spawns` (`SpawnPoint` pos/kind Guard|Pack|Boss/room: hooks for enemies, nothing
@@ -331,7 +332,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `EnteredRoom` (first time per run) and `LeftDungeon { fell }` drive `dungeon::foes`: entering a room spawns the foes
   (`combat::SpawnFoe`) of it and the rooms its corridors lead to, from the dungeon's spawn points (guards hollows, packs
   mixed hollows and shades, boss a shade: `foes::kind_for`); the run ending despawns every foe whose home is inside that
-  dungeon. Spirit form isn't saved.
+  dungeon.
   Screenshots: `BLOCKGAME_DUNGEON=1` starts on the home dungeon's path facing the door (its position is logged),
   `BLOCKGAME_SPIRIT=cast` runs the cinematic, `=1` starts as a spirit.
 - Player body and third person: `game::avatar` builds your body with `npc::body::build` (the NPC rig; looks in
@@ -360,7 +361,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   budgeted; goes as near as it can when there's no way). Ghosts (`ghost: true`): own materials made blue and see-through,
   shimmering per part, a faint light, `BurstKind::Wisp` particles trailing (and a burst on death). Sound `clash`.
   Dev keys: Ctrl+Shift+J (Cmd on a Mac) spawns a Hollow Warden, Ctrl+Shift+H a Fen Shade, 6 blocks ahead; either gives
-  you an iron sword on the hotbar if you have no sword. Foes are not saved and don't despawn.
+  you an iron sword on the hotbar if you have no sword. Foes don't despawn.
 - Rotting Gate (Legacy prompts 5-7): `worldgen::rotting` (pure). The gate is a mossy cobblestone arch placed once on the
   main island 300-600 blocks from spawn (`WorldGen::rotting_gate`, warded, position logged). `rotting_floor(seed, run, depth)`
   lays out a fresh floor per run on a 28-block grid: start room (way out in its west wall), halls, boss room with the stair;
@@ -388,9 +389,8 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   NPC but the gate guides to `people.ron` (order, flags, place). Nothing places the cast in the world yet: Ctrl+Shift+N
   spawns the next kind each press; `BLOCKGAME_NPC=3 BLOCKGAME_NPC_KIND=gilm` for screenshots.
 - Landmarks and cast services (Legacy prompts 10-12): `worldgen::landmarks` (pure, once per world): Sporrow, a village of
-  giant mushroom houses (`mushroom_stem`/`mushroom_cap` blocks) 60-110 blocks from the Rotting Gate, a `Village` with
-  `folk: Folk::Mushroom` (so `villages_in`, warding and villagers include it; its villagers are the `mushroom_folk` creature,
-  wary lines in villagers.ron `mushroom`); Gilm's stone hut with a forge just outside it (`gilm_forge`); the castle
+  giant mushroom houses (`mushroom_stem`/`mushroom_cap` blocks) 60-110 blocks from the Rotting Gate, a `Village`
+  (so `villages_in` and warding include it; empty, no villagers); Gilm's stone hut with a forge just outside it (`gilm_forge`); the castle
   (`castle`): a walled court on a plinth on the highest level-enough mountain ground, a 7x7 tower 20 high with a stair round
   the inside coming out on the roof. Positions are logged at startup. `game::cast`: Brindlespheimer stands by the gate
   (`GATE_POST`, not saved); Gilm (at his hut) and Orrin (on the tower roof) are placed once per world, the Star Urn is set
@@ -438,7 +438,8 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   outside her door once (`cast.ron`), so the C16 beat can fire; the position is logged at startup. No smoke effect yet.
 - Inventory redesign: `inventory::ui` is one window with folder tabs (Items, Equipment, Stats, Abilities; submodules
   `ui/equipment.rs`, `ui/stats.rs`, `ui/abilities.rs`); `InvScreen { open, tab }` says which is up. Items: the pockets
-  grid with the weapon and hand slots over it, side panel Crafting / Chest. Equipment: a live picture of you
+  grid with the weapon and hand slots over it, the 1-9 hotbar under it (drop an item on a key to put it there, click a key
+  to take it in the right hand, right click clears; `Hover::Hotbar`), side panel Crafting / Chest. Equipment: a live picture of you
   (`inventory::preview`: a second `npc::body` rig on render layer 3 filmed into `PreviewImage`; idles, looks towards the
   cursor, drag turns it, shrugs when gear changes) with armor slots left, clothes (and the Back/bag slot) right, weapon and
   hands under it, and a strip of carried gear. `preview::Dressed` bodies (the picture and your third-person body) wear a
@@ -455,7 +456,74 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   slide, slots lift and settle (`ui::animate`), UI sounds `ui_*` (`gen_placeholder_sounds.py --only ui_`).
   Screenshots: `BLOCKGAME_INVENTORY=items|equipment|stats|abilities`, `BLOCKGAME_SKILLTREE=1` (= abilities),
   `BLOCKGAME_DRAWN=1` starts with the weapon drawn.
-- Next: retire the rest of the Tab crafting list, portable bedroll/tent use, twig regrowth.
+- Biome regions: biomes.ron `region: main|outer|sky|air` (default main). Outer islands pick from `outer` biomes
+  (main ones if none), each sky island gets one `sky` biome from the climate under its centre
+  (`WorldGen::island_biome`), and open air (void columns, or 40+ blocks over the land above `SKY_MIN - 40`) uses an
+  `air` biome (`open_sky`) in `biome_at`. `guaranteed: Some((radius, near, far))` places a biome once per world on the
+  main island (`WorldGen::zones`, logged at startup), never by climate: `fungal_growth` (giant mushrooms,
+  `TreeKind::Mushroom`), 350-1100 blocks from spawn, radius 170.
+- Biome round 2: titles are plain names (Swamp, Oak Forest, Meadow, Desert, Pine Forest, Beach, Rocky Highlands,
+  Snowy Mountains, Ocean, Sky Islands, Redwood Forest, Mushroom Forest, Open Sky); internal names unchanged. Biomes no
+  longer change felt temperature: `weather::BASE_TEMPERATURE` (0.3 = 9 °C) everywhere, plus season, height, sun, weather
+  (biome temperature/humidity only place biomes; snow now comes from season and weather alone). Fuller crowns (oak, pine,
+  swamp), `bushes` in biomes.ron (leaf mounds from `trees::draw_bush`), plant patches never fully empty, new plant blocks
+  `shrub`, `dry_brush`, `brown_mushroom`, `glowcap` in every biome's list. Redwood Forest (`TreeKind::Redwood`: 2x2 trunk
+  30-43 tall, buttress roots, deep cone; `redwood_log`/`redwood_leaves`; `trees::REACH` 7, `TALLEST` 48). Mushroom Forest
+  ground is `spore_soil`; glowcaps glow at night (voxel material uniform 107 `glow`: layer + strength from `sky::night_glow`;
+  emissive in voxel.wesl with alpha 0 so the camera exposure doesn't dim it).
+- Villages and villagers removed (Ethan's ask): no stilt villages, no `villager`/`mushroom_folk` creatures,
+  no `Temper::Villager`, no `UseCreature`. Sporrow's houses stay for the story (C11/C12), empty.
+- Saving what's in the world: `save::{read_ron, write_ron, screenshot_run}`. Items on the ground (`ground_items.ron`, with
+  their age), wild creatures and when barrows woke (`creatures.ron`; not villagers or critters), foes (`foes.ron`; not
+  tagged encounter/Rotting Gate foes or a dungeon run's foes, which start over), spirit form (`spirit.ron`: dungeon id and
+  the body's waiting health; the run's rooms refill), and what posted NPCs (gate guides, Brindlespheimer, Wren) remember
+  of your talks (`posts.ron`, by `Npc.post`, given back when they appear).
+- Shelter and campfire: `survival::shelter` (pure). `survival::find_cover` checks once a second: a wall block over your
+  head = `Cover::Roof` (half the weather's chill kept off), and if `station::room_at` finds a closed room where you stand,
+  `Cover::Room` (all the weather's chill and 60% of the night's cold). Shows as "Shelter" in the temperature breakdown.
+  Campfire: block `campfire` (`shape: torch`, so `torches` tracks it: `Torches::fires()` gives `Fire::Torch|Campfire`;
+  drawn as a stone ring, crossed sticks, a big flame and a brighter light), made on the camp mat (4 small rocks + 4 sticks);
+  warms up to +24 °C close by, fading out at 10 blocks (`CAMPFIRE_MAX` 28 all told).
+- Map and waypoints: `game::map`. M opens a top-down map 2048 blocks across (`map::paint`, pure, on the
+  `AsyncComputeTaskPool`; biome colour shaded by height, blue water, dark void), repainted when opened over 512 blocks
+  from where it was painted. Red mark = you, gold = waypoints. On the map: click adds a waypoint, Space marks where you
+  stand, right click removes one. Waypoints within 60° of where you look show along the top of the screen with distance.
+  Saved to `waypoints.ron`. `BLOCKGAME_MAP=1` opens it for screenshots.
+- Farming: `game::farming` + `assets/data/crops.ron` (stages = plant blocks, `days` per stage, `wet` speed-up with water
+  within 4 blocks). Seeds are block items for stage 0 (`barley_seeds` from tall grass, `tuber_eye` from ferns); `interact`
+  only lets `shape: plant` blocks go on soil. `Fields` (saved to `crops.ron`) remembers each sown crop; every 2 s loaded
+  crops are set to the stage they've reached. Ripe barley drops `barley` (3 make `bread` in the cooking pot), ripe tubers
+  `mire_tuber` (food). Tiles `barley_0..2`, `tuber_0..2` in `gen_placeholder_art.py`.
+- Music and thunder: `sound::music` plays one track now and then (sounds.ron `music`: `day`/`night` lists by
+  `brain::spirit_hours`, `gap` seconds of quiet between, `first` before the first), scaled by the new Music setting.
+  Placeholder tracks `music_day_0/1`, `music_night_0` from `gen_placeholder_sounds.py --only music_`. Thunder follows each
+  lightning flash after 0.3-7 s (`thunder_delay`), quieter and deeper the later it comes. Voice lines still need recordings
+  (`assets/voice/<line id>.ogg`; `lines` plays them when present).
+- Guns: `combat::guns`. Items with `gun: (damage, range, reload, ammo)` in items.ron (`Item::gun`; they are
+  weapon-slot tools) fire on left click from the right hand: one `ammo` (`iron_shot`, 8 from 1 raw iron + 1 coal at the
+  gunsmith bench) per shot, `reload` seconds between, a straight shot from the eyes (`ray_hits_body`) hitting the nearest
+  foe or creature before any solid block. Sound `gunshot`, smoke at the muzzle, chips where it hits a wall. `interact`
+  never mines or strikes with a gun.
+- Furniture and doors: `voxel::Shape::Model` blocks with `model: chair|table|door|door_open` are meshed as a few
+  boxes into the chunk's detail mesh (`chunk_mesh::model_boxes`, textured with the block's side tile); facing comes from
+  wall blocks beside them (a door spans the gap between two walls; a chair's back goes against a wall). They collide as a
+  whole block if `solid`; `is_wall` counts solid models, so a shut door closes a room. Right click a door to swap
+  `wooden_door` <-> `wooden_door_open` (`interact::door_swap`), with the doors stacked above and below it; it won't shut
+  on you.
+- Away camps and twigs: hold a `portable_bedroll` or `portable_tent` and right click the ground to lay it out on a clear
+  2x2 patch (`camp::Away`, `Camp.away`, one at a time, saved in player.ron); Z by it sleeps there (no home-bed extras; a
+  tent wakes you warm); inside a pitched tent `find_cover` gives `Cover::Room`; crouch + empty hand right click packs it
+  up. Home camp and respawn don't move. Snapped twigs grow back after `farming::regrow::REGROW_DAYS` (2) game days if the
+  cell is empty and the trunk still stands (`twigs.ron`).
+- Sky island chests: grid islands with radius >= `worldgen::islands::CHEST_RADIUS` (24) keep a chest at their middle
+  (`WorldGen::island_chest`), filled from loot.ron `sky_island` the first time it's opened.
+- The Tab crafting list is empty (recipes.ron kept for later): cordage, torches and ember herbs are made on the camp mat;
+  the Crafting side tab hides while the list is empty.
+- Block textures: the terrain texture array has mipmaps (`blocks::mip_chain`: linear-light averages, cut-out tiles keep their
+  coverage); `voxel.wesl` samples with `textureSampleGrad` from the unbroken quad UVs so levels don't jump at block edges, and
+  picks a version and turn per block from `variants` in blocks.ron (`voxel::tiles::variant_table`, uniform 106). Variant tiles
+  must sit at consecutive indices (`<tile>_2`, `<tile>_3`, ...).
+- Next: see `docs/GAMEPLAY_LOOP.md`.
 
 ## Testing without a screen
 
@@ -468,6 +536,5 @@ With `BLOCKGAME_CAMERA` the shot is taken flying (`BLOCKGAME_WALK=1` stands ther
 `BLOCKGAME_SLOT=n` starts with hotbar slot n in hand; `BLOCKGAME_SKILLS=n` gives n points and learns Wanderer and Mystic;
 `BLOCKGAME_CAST=levitate,light` starts spells; `BLOCKGAME_SKILLTREE=1` opens the tree; `BLOCKGAME_LOOK=fen_stag` turns the camera to the nearest creature of a kind;
 `BLOCKGAME_SWING=0.55` freezes the right arm that far through a swing; `BLOCKGAME_LINEUP=1` stands a still model of every creature skin in a row in front of the camera.
-The home village's name and position are logged at startup.
 In the cloud container: `BEVY_ASSET_ROOT=$PWD BLOCKGAME_SCREENSHOT=/tmp/s.png WGPU_BACKEND=vulkan xvfb-run -s "-screen 0 1280x720x24" ./target/debug/block-game`
 (needs `mesa-vulkan-drivers xvfb libxkbcommon-x11-0`).

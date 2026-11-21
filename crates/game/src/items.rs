@@ -38,6 +38,27 @@ struct ItemSpec {
     /// How it is swung (see `swing`).
     #[serde(default)]
     swing: Swing,
+    /// A gun: left click fires it.
+    #[serde(default)]
+    gun: Option<GunSpec>,
+}
+
+#[derive(Deserialize)]
+struct GunSpec {
+    damage: f32,
+    range: f32,
+    reload: f32,
+    ammo: String,
+}
+
+/// A gun: what one shot does, how far it reaches (blocks), seconds between
+/// shots, and the item each shot uses up.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Gun {
+    pub damage: f32,
+    pub range: f32,
+    pub reload: f32,
+    pub ammo: ItemId,
 }
 
 fn default_mass() -> f32 {
@@ -129,6 +150,8 @@ pub struct Item {
     pub damage: f32,
     /// How the arm swings it; mining blows land at the swing's contact.
     pub swing: Swing,
+    /// Fires (left click) instead of swinging.
+    pub gun: Option<Gun>,
 }
 
 /// Damage of a bare-handed blow.
@@ -163,6 +186,7 @@ impl Items {
             .from_str(text)
             .map_err(|e| format!("items.ron: {e}"))?;
         let mut list = Vec::new();
+        let names: Vec<String> = spec.items.iter().map(|s| s.name.clone()).collect();
         for s in spec.items {
             let kind = match s.kind {
                 KindSpec::Tool { speeds } => ItemKind::Tool { speeds },
@@ -198,7 +222,14 @@ impl Items {
                 ItemKind::Tool { .. } => 4.0,
                 _ => FIST_DAMAGE,
             });
-            list.push(Item { name: s.name, title: s.title, kind, mass: s.mass, size: s.size, stack: stack.max(1), damage, swing: s.swing });
+            let gun = match s.gun {
+                Some(g) => {
+                    let ammo = names.iter().position(|n| *n == g.ammo).ok_or_else(|| format!("item '{}' fires unknown ammo '{}'", s.name, g.ammo))?;
+                    Some(Gun { damage: g.damage, range: g.range, reload: g.reload, ammo: ItemId(ammo as u16) })
+                }
+                None => None,
+            };
+            list.push(Item { name: s.name, title: s.title, kind, mass: s.mass, size: s.size, stack: stack.max(1), damage, swing: s.swing, gun });
         }
         Ok(Self { hand: spec.hand, list })
     }
@@ -267,6 +298,16 @@ pub mod tests {
     }
 
     #[test]
+    fn doors_open_and_close() {
+        let (blocks, _) = load();
+        let shut = blocks.id("wooden_door").unwrap();
+        let open = crate::interact::door_swap(&blocks, shut).expect("opens");
+        assert!(!blocks.get(open).solid);
+        assert_eq!(crate::interact::door_swap(&blocks, open), Some(shut));
+        assert_eq!(crate::interact::door_swap(&blocks, blocks.id("chair").unwrap()), None);
+    }
+
+    #[test]
     fn right_tool_is_faster() {
         let (blocks, items) = load();
         let stone = blocks.get(blocks.expect("stone"));
@@ -275,13 +316,27 @@ pub mod tests {
         let axe = items.id("stone_axe");
         let hand = items.break_time(None, stone).unwrap();
         let picked = items.break_time(pick, stone).unwrap();
-        assert!(picked < 1.0 && hand > 8.0, "pick {picked}, hand {hand}");
+        assert!(picked < hand && hand > 8.0, "pick {picked}, hand {hand}");
         // Logs need an axe: not bare hands, not a pickaxe.
         assert!(items.break_time(axe, log).is_some_and(|t| t < 1.0));
         assert_eq!(items.break_time(pick, log), None);
         assert_eq!(items.break_time(None, log), None);
         // A torch in the hand mines like a bare hand.
         assert_eq!(items.break_time(items.id("torch"), stone), Some(hand));
+    }
+
+    #[test]
+    fn base_tools_take_about_eight_swings() {
+        use crate::swing::{blow_share, Swing};
+        let (blocks, items) = load();
+        let swings = |tool: &str, block: &str, swing: Swing| {
+            let t = items.break_time(items.id(tool), blocks.get(blocks.expect(block))).unwrap();
+            (1.0 / blow_share(swing, t) - 1e-4).ceil() as u32
+        };
+        assert_eq!(swings("rough_axe", "log", Swing::Chop), 8);
+        assert_eq!(swings("rough_axe", "swamp_log", Swing::Chop), 8);
+        assert_eq!(swings("stone_pickaxe", "stone", Swing::Overhead), 8);
+        assert_eq!(swings("stone_pickaxe", "cobblestone", Swing::Overhead), 8);
     }
 
     #[test]

@@ -1,5 +1,6 @@
 // What a chest holds the first time it is opened: table -> [(item, min, max, chance 0..1)].
-// "village" fills chests found in village huts, "barrow" those underground in barrows.
+// "village" fills chests found in village huts, "barrow" those underground in barrows,
+// "sky_island" the chest at the middle of each bigger sky island.
 // Chests you place yourself start empty.
 // "rotting" is rolled for every foe that falls below the Rotting Gate, "rotting_warden" for its
 // wardens (game::delve): the only source of the dungeon materials.
@@ -24,6 +25,16 @@
         ("fur_hood", 1, 1, 0.2),
         ("raw_iron", 1, 4, 0.5),
         ("cured_meat", 1, 2, 0.35),
+    ],
+    "sky_island": [
+        ("levitation_draught", 1, 2, 0.8),
+        ("cloud_moss", 2, 6, 0.6),
+        ("spirit_ember", 2, 5, 0.6),
+        ("raw_iron", 2, 6, 0.5),
+        ("old_coin", 4, 16, 0.7),
+        ("light_draught", 1, 1, 0.35),
+        ("warmth_draught", 1, 1, 0.35),
+        ("steel_pickaxe", 1, 1, 0.08),
     ],
     "rotting": [
         ("mold_bloom", 1, 3, 0.7),

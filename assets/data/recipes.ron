@@ -1,13 +1,10 @@
 // Crafting recipes, shown in the inventory screen (Tab). Tools, planks, sticks,
-// chests, food, clothes and armor are made by hand at the benches instead (benches.ron); what's left
-// here moves to its own station as those are built.
+// chests, food, clothes and armor are made by hand at the benches instead (benches.ron); nothing is
+// left here.
 //   makes:  (item, count)
 //   needs:  [(item, count), ...] used up when you craft
 //   at:     where you have to be: Hand (anywhere, the default) or Camp (by your bedroll)
 [
-    (makes: ("cordage", 1), needs: [("plant_fiber", 3)]),
-    (makes: ("torch", 4), needs: [("stick", 1), ("coal", 1)]),
-    (makes: ("torch", 2), needs: [("stick", 1), ("peat", 1)]),
-    // Spirit work happens at camp. Cooking moved to the cooking pot and cutting board (benches.ron).
-    (makes: ("ember_herb", 1), needs: [("spirit_ember", 3), ("plant_fiber", 2)], at: Camp),
+    // Empty: everything is made at a station now (benches.ron). Cordage, torches and ember herbs
+    // moved to the camp mat.
 ]

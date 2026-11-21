@@ -37,6 +37,8 @@
     (name: "cloud_moss", top: "cloud_moss", hardness: 0.7, material: "soil"),
     (name: "deeprock", top: "deeprock", hardness: 7.0, material: "stone"),
     (name: "torch", top: "planks", solid: false, opaque: false, hardness: 0.0, shape: torch),
+    // A ring of stones round crossed sticks: a big fire that warms you far more than a torch (drawn by `torches`).
+    (name: "campfire", top: "planks", solid: false, opaque: false, hardness: 0.5, material: "wood", shape: torch),
     // A storage chest: right click opens it (contents are kept in saves/<world>/chests.ron).
     (name: "chest", top: "log_top", bottom: "planks", side: "planks", hardness: 2.0, material: "wood"),
     // Ground plants: crossed quads that sway in the wind (see `plants` in biomes.ron).
@@ -44,6 +46,13 @@
     (name: "reeds", top: "reed", solid: false, opaque: false, hardness: 0.05, material: "plant", shape: plant),
     (name: "fern", top: "fern", solid: false, opaque: false, foliage: true, hardness: 0.05, material: "plant", shape: plant),
     (name: "bog_bloom", top: "bog_bloom", solid: false, opaque: false, hardness: 0.05, material: "plant", shape: plant),
+    // Crops (crops.ron): each stage is its own plant block; `farming` swaps them as they grow.
+    (name: "barley_0", top: "barley_0", solid: false, opaque: false, foliage: true, hardness: 0.05, material: "plant", shape: plant),
+    (name: "barley_1", top: "barley_1", solid: false, opaque: false, foliage: true, hardness: 0.05, material: "plant", shape: plant),
+    (name: "barley_2", top: "barley_2", solid: false, opaque: false, hardness: 0.05, material: "plant", shape: plant),
+    (name: "tuber_0", top: "tuber_0", solid: false, opaque: false, foliage: true, hardness: 0.05, material: "plant", shape: plant),
+    (name: "tuber_1", top: "tuber_1", solid: false, opaque: false, foliage: true, hardness: 0.05, material: "plant", shape: plant),
+    (name: "tuber_2", top: "tuber_2", solid: false, opaque: false, hardness: 0.05, material: "plant", shape: plant),
     // The floor of the world (y -300): can't be mined.
     (name: "rootstone", top: "rootstone", hardness: -1.0, material: "stone"),
     // Tree details (worldgen::trees): vines hang against a side, twigs poke out of trunks
@@ -63,9 +72,12 @@
     (name: "timber_wall", top: "timber_wall", hardness: 2.5, material: "wood"),
     (name: "wattle_wall", top: "wattle_wall", hardness: 1.5, material: "wood"),
     (name: "thatch", top: "thatch", hardness: 0.8, material: "plant"),
-    (name: "chair", top: "chair", hardness: 1.5, material: "wood"),
-    (name: "table", top: "table", hardness: 2.0, material: "wood"),
-    (name: "wooden_door", top: "wooden_door", hardness: 2.0, material: "wood"),
+    // Furniture: `shape: model` draws a few boxes (`chunk_mesh::model_boxes`); facing comes from walls beside it.
+    // Right click a door to open or close it (with the door above or below it).
+    (name: "chair", top: "planks", opaque: false, hardness: 1.5, material: "wood", shape: model, model: chair),
+    (name: "table", top: "planks", opaque: false, hardness: 2.0, material: "wood", shape: model, model: table),
+    (name: "wooden_door", top: "wooden_door", opaque: false, hardness: 2.0, material: "wood", shape: model, model: door),
+    (name: "wooden_door_open", top: "wooden_door", solid: false, opaque: false, hardness: 2.0, material: "wood", shape: model, model: door_open),
     (name: "glass", top: "glass", opaque: false, translucent: true, hardness: 0.5, material: "stone"),
     (name: "window", top: "window", opaque: false, translucent: true, hardness: 1.0, material: "wood"),
     // Sporrow's houses (worldgen::landmarks): giant mushrooms.
@@ -74,4 +86,12 @@
     (name: "burnt_stem", top: "burnt_stem", hardness: 0.8, material: "wood"),
     (name: "burnt_cap", top: "burnt_cap", hardness: 0.6, material: "wood"),
     (name: "grave", top: "grave", hardness: 3.0, material: "stone"),
+    // Biome round 2: fungal ground and mushrooms, shrubs and brush, redwoods.
+    (name: "spore_soil", top: "spore_soil", bottom: "dirt", side: "spore_soil_side", hardness: 0.8, material: "soil"),
+    (name: "shrub", top: "shrub", solid: false, opaque: false, foliage: true, hardness: 0.1, material: "plant", shape: plant),
+    (name: "dry_brush", top: "dry_brush", solid: false, opaque: false, hardness: 0.05, material: "plant", shape: plant),
+    (name: "brown_mushroom", top: "brown_mushroom", solid: false, opaque: false, hardness: 0.05, material: "plant", shape: plant),
+    (name: "glowcap", top: "glowcap", solid: false, opaque: false, hardness: 0.05, material: "plant", shape: plant),
+    (name: "redwood_log", top: "redwood_log_top", side: "redwood_log_side", hardness: 3.0, material: "log"),
+    (name: "redwood_leaves", top: "redwood_leaves", opaque: false, foliage: true, hardness: 0.3, material: "plant"),
 ]
