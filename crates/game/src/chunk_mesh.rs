@@ -23,6 +23,8 @@ pub struct ChunkMeshes {
     pub translucent: Option<Mesh>,
     /// Grass, reeds and the like: drawn with the opaque material, but cast no shadow.
     pub plants: Option<Mesh>,
+    /// The chunk's light at half resolution (`voxel::light::Light::coarse`), for lighting NPCs.
+    pub light: Option<Vec<u8>>,
 }
 
 impl ChunkMeshes {
@@ -100,7 +102,7 @@ pub fn build(chunk: &PaddedChunk, light: &Light, registry: &BlockRegistry, opaqu
     }
     let mut plants = Buffers::default();
     push_plants(chunk, light, registry, &mut plants);
-    ChunkMeshes { opaque: solid.into_mesh(), translucent: clear.into_mesh(), plants: plants.into_mesh() }
+    ChunkMeshes { opaque: solid.into_mesh(), translucent: clear.into_mesh(), plants: plants.into_mesh(), light: Some(light.coarse()) }
 }
 
 /// Two crossed quads per plant block, each drawn from both sides. Normals

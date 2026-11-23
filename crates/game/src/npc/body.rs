@@ -25,7 +25,7 @@ pub struct BodyPlugin;
 impl Plugin for BodyPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<SpawnNpc>()
-            .add_systems(crate::menu::GameUpdate, (spawn, animate).chain().after(super::NpcSet).after(super::talk::TalkSet));
+            .add_systems(crate::menu::GameUpdate, (spawn, animate, match_light).chain().after(super::NpcSet).after(super::talk::TalkSet));
     }
 }
 
@@ -68,6 +68,13 @@ pub struct Rig {
     brow: [Spring; 3],
     /// The chest's twist and roll follow the hips a moment later.
     chest: [Spring; 2],
+    /// Its own materials and their colours as built, darkened and torch-lit
+    /// to match the terrain's light where it stands (`match_light`).
+    mats: Vec<(Handle<StandardMaterial>, LinearRgba)>,
+    /// Sky and torch brightness now (eased), 0..1.
+    lit: Vec2,
+    /// Lit by the world's light (off for the inventory picture).
+    pub follows_light: bool,
 }
 
 impl Rig {
@@ -177,6 +184,7 @@ pub fn build(c: &mut Commands, meshes: &mut Assets<Mesh>, materials: &mut Assets
     .map(|m| materials.add(m))
     .collect();
     let mut kit = Kit { meshes, mats };
+    let flat_colors: Vec<LinearRgba> = kit.mats.iter().map(|h| materials.get(h).map_or(LinearRgba::WHITE, |m| m.base_color.to_linear())).collect();
     let root = c.spawn((Transform::from_translation(at).with_rotation(Quat::from_rotation_y(yaw)).with_scale(Vec3::splat(l.scale)), Visibility::default())).id();
 
     // Legs.
@@ -260,6 +268,9 @@ pub fn build(c: &mut Commands, meshes: &mut Assets<Mesh>, materials: &mut Assets
     }
 
     let seed = (at.x.to_bits() as u64) << 32 ^ at.z.to_bits() as u64 ^ 0x9E37_79B9;
+    let mut colors = flat_colors;
+    colors.extend(l.extras.iter().map(|x| Color::srgb(x.color.0, x.color.1, x.color.2).to_linear()));
+    let mats = kit.mats.iter().cloned().zip(colors).collect();
     let rig = Rig {
         hips,
         legs,
@@ -287,6 +298,9 @@ pub fn build(c: &mut Commands, meshes: &mut Assets<Mesh>, materials: &mut Assets
         wide: Spring::new(0.8),
         brow: [Spring::default(); 3],
         chest: [Spring::default(); 2],
+        mats,
+        lit: Vec2::new(1.0, 0.0),
+        follows_light: true,
     };
     (root, rig)
 }
@@ -536,5 +550,49 @@ mod spawn_tests {
         let mut n = Npc::new(1, 0.3);
         n.post = Some(42);
         assert_eq!(clone_npc(&n).post, Some(42));
+    }
+}
+
+/// Torch light on a body: colour and strength at full level, matching
+/// `TORCH_RGB * TORCH_STRENGTH` in voxel.wesl at the camera's exposure.
+const TORCH_GLOW: Vec3 = Vec3::new(2.2, 1.36, 0.66);
+
+/// Light level 0..15 to brightness, as `level_brightness` in voxel.wesl.
+pub fn level_brightness(level: u8) -> f32 {
+    let x = (level as f32 / voxel::light::MAX as f32).clamp(0.0, 1.0);
+    x / (4.0 - 3.0 * x)
+}
+
+/// Bodies take the terrain's light where their head is: their colours are
+/// dimmed by the sky light (so sun and sky light fade in a cave like they
+/// do on the walls) and torch light glows on them warm. Eased so walking
+/// past a torch doesn't pop; materials change only when the light does.
+fn match_light(
+    time: Res<Time>,
+    world: Res<crate::world::World>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut rigs: Query<(&GlobalTransform, &mut Rig), Without<crate::combat::Ghost>>,
+) {
+    let k = 1.0 - (-6.0 * time.delta_secs()).exp();
+    for (tf, mut rig) in &mut rigs {
+        if !rig.follows_light {
+            continue;
+        }
+        let head = tf.translation() + Vec3::Y * 1.2 * tf.scale().y;
+        let Some((sky, block)) = world.light_at(voxel::BlockPos::from_world(head.to_array())) else { continue };
+        let want = Vec2::new(level_brightness(sky), level_brightness(block));
+        let before = rig.lit;
+        rig.lit = before + (want - before) * k;
+        if (rig.lit - before).abs().max_element() < 0.0005 {
+            continue; // settled: leave the materials alone
+        }
+        let (s, t) = (rig.lit.x, rig.lit.y);
+        for (h, base) in &rig.mats {
+            let Some(mut m) = materials.get_mut(h) else { continue };
+            m.base_color = Color::LinearRgba(LinearRgba::new(base.red * s, base.green * s, base.blue * s, base.alpha));
+            // The sky's shine on it fades too (0.5 is Bevy's default, which every part is built with).
+            m.reflectance = 0.5 * s;
+            m.emissive = LinearRgba::rgb(base.red * TORCH_GLOW.x * t, base.green * TORCH_GLOW.y * t, base.blue * TORCH_GLOW.z * t);
+        }
     }
 }

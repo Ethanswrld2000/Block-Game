@@ -89,6 +89,42 @@ impl Light {
     }
 }
 
+/// Cells per edge of [`Light::coarse`].
+pub const COARSE: usize = CHUNK_SIZE / 2;
+
+impl Light {
+    /// The chunk's own light at half resolution, for lighting things that
+    /// move (NPCs): one byte per 2x2x2 cells, the brightest open cell's sky
+    /// level in the high four bits and block level in the low four. Index
+    /// `x + z * COARSE + y * COARSE * COARSE`.
+    pub fn coarse(&self) -> Vec<u8> {
+        let mut out = vec![0u8; COARSE * COARSE * COARSE];
+        for y in 0..COARSE {
+            for z in 0..COARSE {
+                for x in 0..COARSE {
+                    let (mut s, mut b) = (0u8, 0u8);
+                    for d in 0..8 {
+                        let (dx, dy, dz) = (d & 1, (d >> 1) & 1, d >> 2);
+                        let i = region_index(MARGIN + 2 * x + dx, MARGIN + 2 * y + dy, MARGIN + 2 * z + dz);
+                        if !self.stops[i] {
+                            s = s.max(self.sky[i]);
+                            b = b.max(self.block[i]);
+                        }
+                    }
+                    out[x + z * COARSE + y * COARSE * COARSE] = s << 4 | b;
+                }
+            }
+        }
+        out
+    }
+}
+
+/// (sky, block) at a chunk-local position from [`Light::coarse`].
+pub fn coarse_at(coarse: &[u8], x: usize, y: usize, z: usize) -> (u8, u8) {
+    let v = coarse[x / 2 + (z / 2) * COARSE + (y / 2) * COARSE * COARSE];
+    (v >> 4, v & 15)
+}
+
 /// The in-bounds face neighbours of a region cell.
 #[inline]
 fn neighbours(x: usize, y: usize, z: usize) -> impl Iterator<Item = usize> {
@@ -337,6 +373,19 @@ mod tests {
         assert_eq!(at(&l, 16, 5, 16).0, MAX, "straight down the shaft");
         assert_eq!(at(&l, 20, 5, 16).0, MAX - 4, "round the corner it fades");
         assert_eq!(at(&l, 10, 10, 10).0, 0, "inside the rock");
+    }
+
+    #[test]
+    fn coarse_light_keeps_the_brightest_open_cell() {
+        let stone = Chunk::filled(STONE);
+        let mut mid = Chunk::filled(STONE);
+        mid.set(4, 4, 4, TORCH);
+        let mut chunks = [Some(&stone); 27];
+        chunks[neighbour_index(0, 0, 0)] = Some(&mid);
+        let l = compute(&hood(chunks), &tables());
+        let c = l.coarse();
+        assert_eq!(coarse_at(&c, 5, 5, 5), (0, 14), "the torch's cell");
+        assert_eq!(coarse_at(&c, 10, 10, 10), (0, 0), "solid rock");
     }
 
     #[test]

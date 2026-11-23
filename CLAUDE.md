@@ -527,8 +527,11 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   Light spell) are kept apart (`point_lights`) so they still shine underground, torch light is added warm, and fog
   in sealed places goes dark (`apply_atmosphere_lit`). Edits remesh the chunks whose light changes
   (`World::set_block`). Placed torches have no point lights any more; they get a textured stick, a stacked flickering
-  flame and fire particles (flame licks, embers, smoke; `torches::spawn_fire_particles`). Entities (creatures, the
-  first-person arm) still use Bevy's lights only, so they aren't darkened underground yet.
+  flame and fire particles (flame licks, embers, smoke; `torches::spawn_fire_particles`). Bodies built with
+  `npc::body::build` (NPCs, foes, your third-person body; not ghosts or the inventory picture, `Rig.follows_light`) take
+  the light at their head (`World::light_at`, from each chunk's half-resolution `Light::coarse` kept after meshing):
+  `body::match_light` dims their colours and shine by the sky level and adds warm torch glow, eased. Creatures and the
+  first-person arm still use Bevy's lights only.
 - Block textures: the terrain texture array has mipmaps (`blocks::mip_chain`: linear-light averages, cut-out tiles keep their
   coverage); `voxel.wesl` samples with `textureSampleGrad` from the unbroken quad UVs so levels don't jump at block edges, and
   picks a version and turn per block from `variants` in blocks.ron (`voxel::tiles::variant_table`, uniform 106). Variant tiles

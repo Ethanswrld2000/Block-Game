@@ -116,7 +116,9 @@ fn spawn_body(
     if !existing.is_empty() {
         return;
     }
-    let (root, rig) = body::build(&mut commands, &mut meshes, &mut materials, &looks.0, AT, 0.0);
+    let (root, mut rig) = body::build(&mut commands, &mut meshes, &mut materials, &looks.0, AT, 0.0);
+    // Lit by its own little stage, not by the world's light where it happens to be.
+    rig.follows_light = false;
     commands.spawn((Held::new(Hand::Right), Transform::from_scale(Vec3::splat(1.6)), Visibility::default(), ChildOf(rig.hands[1])));
     commands.spawn((Held::new(Hand::Left), Transform::from_scale(Vec3::splat(1.6)), Visibility::default(), ChildOf(rig.hands[0])));
     let dressed = Dressed::new(rig.anchors());

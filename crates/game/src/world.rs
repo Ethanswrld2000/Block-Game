@@ -87,6 +87,8 @@ struct LoadedChunk {
     drawn: bool,
     /// Edited by the player since it was last saved.
     modified: bool,
+    /// Light from its last mesh (`ChunkMeshes::light`), for lighting NPCs.
+    light: Option<Vec<u8>>,
 }
 
 type MeshResult = (ChunkPos, u32, ChunkMeshes);
@@ -132,6 +134,14 @@ pub struct WorldStats {
 impl World {
     pub fn is_loaded(&self, c: ChunkPos) -> bool {
         self.chunks.contains_key(&c)
+    }
+
+    /// (sky, block) light at `p`, 0..=15, from its chunk's last mesh. Full sky
+    /// where a loaded chunk has no light worked out (open air chunks); `None` if not loaded.
+    pub fn light_at(&self, p: BlockPos) -> Option<(u8, u8)> {
+        let c = self.chunks.get(&p.chunk())?;
+        let [x, y, z] = p.local();
+        Some(c.light.as_deref().map_or((voxel::light::MAX, 0), |l| voxel::light::coarse_at(l, x, y, z)))
     }
 
     pub fn block(&self, p: BlockPos) -> Option<BlockId> {
@@ -512,7 +522,7 @@ fn collect_generated(mut world: ResMut<World>) {
         }
         world.chunks.insert(
             p,
-            LoadedChunk { data: Arc::new(chunk), entities: Vec::new(), version: 0, meshed_version: None, drawn: false, modified: false },
+            LoadedChunk { data: Arc::new(chunk), entities: Vec::new(), version: 0, meshed_version: None, drawn: false, modified: false, light: None },
         );
         // Neighbours meshed while this chunk was outside the vertical band
         // treated it as air (and open sky); remesh them now that the real blocks are here.
@@ -581,7 +591,7 @@ fn collect_meshes(
     // real meshes are capped per frame and the rest wait for the next frame.
     let mut uploads = 0;
     let mut later = Vec::new();
-    for (p, version, m) in std::mem::take(&mut world.finished_meshes) {
+    for (p, version, mut m) in std::mem::take(&mut world.finished_meshes) {
         if !m.is_empty() && uploads >= MAX_UPLOADS_PER_FRAME {
             later.push((p, version, m));
             continue;
@@ -592,6 +602,7 @@ fn collect_meshes(
         }
         chunk.meshed_version = Some(version);
         chunk.drawn = true;
+        chunk.light = m.light.take();
         for e in chunk.entities.drain(..) {
             commands.entity(e).despawn();
         }
