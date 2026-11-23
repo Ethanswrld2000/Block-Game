@@ -16,7 +16,8 @@ use crate::inventory::Inventory;
 use crate::items::Items;
 use crate::npc::{body::SpawnNpc, talk::Talk, Npc, NpcBook, Order};
 use crate::player::Player;
-use crate::theme::{colors, sizes, text, Theme};
+use crate::book::{ink, Book, BookLook, INK_FAINT};
+use crate::theme::{colors, sizes, text, NoShadow, Theme};
 use beats::StoryData;
 
 pub struct StoryPlugin;
@@ -169,7 +170,7 @@ pub fn prison_spot(floor: &worldgen::Floor, boss_room: bool) -> Option<[f32; 3]>
 
 // ---- The journal ----
 
-/// J opens the journal: the clues found so far.
+/// J opens the journal: the clues found so far, in a `crate::book` you page through.
 #[derive(Resource, Default)]
 pub struct Journal {
     pub open: bool,
@@ -179,43 +180,45 @@ pub struct Journal {
 #[derive(Component)]
 struct JournalUi;
 
-#[derive(Component)]
-struct JournalList;
+/// Rough size of a page in characters, to split the clues into pages.
+const JOURNAL_PAGE: usize = 520;
 
-fn spawn_journal(mut commands: Commands, theme: Res<Theme>) {
+fn spawn_journal(mut commands: Commands) {
     commands
         .spawn((
-            Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() },
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                flex_direction: FlexDirection::Column,
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                row_gap: Val::Px(10.0),
+                ..default()
+            },
             Visibility::Hidden,
             GlobalZIndex(30),
             JournalUi,
         ))
         .with_children(|root| {
-            root.spawn((
-                Node { flex_direction: FlexDirection::Column, width: Val::Px(720.0), max_width: Val::Percent(95.0), max_height: Val::Percent(90.0), padding: UiRect::axes(Val::Px(24.0), Val::Px(18.0)), row_gap: Val::Px(12.0), ..default() },
-                theme.skin("panel"),
-            ))
-            .with_children(|p| {
-                p.spawn((theme.bold(sizes::TITLE), Text::new("Journal"), TextColor(colors::HEADING)));
-                p.spawn((Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(14.0), overflow: Overflow::clip_y(), ..default() }, JournalList));
-                p.spawn(text("J or Esc   close", sizes::SMALL, colors::MUTED));
-            });
+            root.spawn(text("Left / Right or wheel   turn the page        J or Esc   close", sizes::SMALL, colors::MUTED));
+            crate::book::build(root, BookLook { sides: 2, page: Vec2::new(330.0, 430.0), wheel: true }, ());
         });
 }
 
-/// J (or `BLOCKGAME_JOURNAL=1` for screenshots) opens and closes it; the clues are listed in the order found.
-#[allow(clippy::too_many_arguments)]
+/// J (or `BLOCKGAME_JOURNAL=1`, `=all` for every clue, for screenshots) opens and closes it; the clues are listed in the order found.
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn journal(
     mut commands: Commands,
     keys: Res<ButtonInput<KeyCode>>,
     mut j: ResMut<Journal>,
     mut menus: ResMut<Menus>,
     story: Res<Story>,
-    book: Res<StoryBook>,
+    data: Res<StoryBook>,
     playing: Res<Playing>,
     theme: Res<Theme>,
-    mut ui: Single<&mut Visibility, With<JournalUi>>,
-    list: Single<Entity, With<JournalList>>,
+    ui: Single<(&mut Visibility, &Children), With<JournalUi>>,
+    mut books: Query<&mut Book>,
     mut cursor: Single<&mut CursorOptions, With<PrimaryWindow>>,
     mut forced: Local<bool>,
 ) {
@@ -233,27 +236,49 @@ fn journal(
         menus.open = true;
         j.shown = usize::MAX;
     }
+    let (mut vis, kids) = ui.into_inner();
     let want = if j.open { Visibility::Inherited } else { Visibility::Hidden };
-    if **ui != want {
-        **ui = want;
+    if *vis != want {
+        *vis = want;
     }
-    if !j.open || j.shown == story.clues.len() {
+    let Some(book_e) = kids.iter().find(|e| books.contains(*e)) else { return };
+    let Ok(mut book) = books.get_mut(book_e) else { return };
+    if !j.open {
         return;
     }
-    j.shown = story.clues.len();
-    commands.entity(*list).despawn_related::<Children>();
-    commands.entity(*list).with_children(|l| {
-        if story.clues.is_empty() {
-            l.spawn(text("Nothing written down yet.", sizes::BODY, colors::MUTED));
-        }
-        for id in &story.clues {
-            let (title, body) = book.0.clues.get(id).map_or((id.clone(), String::new()), |c| (c.title.clone(), c.text.clone()));
-            l.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(4.0), ..default() }).with_children(|c| {
-                c.spawn((theme.bold(sizes::LABEL), Text::new(title), TextColor(colors::HEADING)));
-                c.spawn(text(body, sizes::BODY, colors::TEXT));
-            });
-        }
-    });
+    // The clues, split into pages by how much they say.
+    // `BLOCKGAME_JOURNAL=all` shows every clue (screenshots).
+    let all: Vec<String> = if std::env::var("BLOCKGAME_JOURNAL").is_ok_and(|v| v == "all") { data.0.clues.keys().cloned().collect() } else { story.clues.clone() };
+    let clues: Vec<(String, String)> = all.iter().map(|id| data.0.clues.get(id).map_or((id.clone(), String::new()), |c| (c.title.clone(), c.text.clone()))).collect();
+    let costs: Vec<usize> = clues.iter().map(|(t, b)| 80 + t.len() + b.len()).collect();
+    let pages = crate::book::paginate(&costs, JOURNAL_PAGE);
+    book.set_pages(pages.len().max(1));
+    if j.shown != all.len() {
+        // Newly opened or a clue was found: open at the last page written.
+        j.shown = all.len();
+        book.open_at(usize::MAX);
+        book.refill();
+    }
+    if !book.take_refill() {
+        return;
+    }
+    for (page_e, n) in book.shown() {
+        commands.entity(page_e).despawn_related::<Children>();
+        commands.entity(page_e).with_children(|l| {
+            if n == 0 {
+                l.spawn((theme.bold(sizes::TITLE), Text::new("Journal"), TextColor(crate::book::INK), NoShadow));
+                if clues.is_empty() {
+                    l.spawn(ink("Nothing written down yet.", sizes::BODY, INK_FAINT));
+                }
+            }
+            for (title, body) in pages.get(n).map_or(&clues[0..0], |r| &clues[r.clone()]) {
+                l.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(4.0), margin: UiRect::bottom(Val::Px(8.0)), ..default() }).with_children(|c| {
+                    c.spawn((theme.bold(sizes::LABEL), Text::new(title.clone()), TextColor(crate::book::INK), NoShadow));
+                    c.spawn(ink(body.clone(), sizes::BODY, INK_FAINT));
+                });
+            }
+        });
+    }
 }
 
 #[cfg(test)]
