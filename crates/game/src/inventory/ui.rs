@@ -1262,7 +1262,7 @@ fn rebuild(mut commands: Commands, mut ui: ResMut<InvUi>, theme: Res<Theme>, d: 
                             });
                         }
                     });
-                col.spawn((Node { flex_direction: FlexDirection::Column, padding: UiRect::new(Val::Px(18.0), Val::Px(18.0), Val::Px(20.0), Val::Px(14.0)), row_gap: Val::Px(10.0), ..default() }, BackgroundColor(Color::srgb(0.06, 0.08, 0.07)), theme.skin("panel")))
+                col.spawn((Node { flex_direction: FlexDirection::Column, padding: UiRect::new(Val::Px(18.0), Val::Px(18.0), Val::Px(20.0), Val::Px(14.0)), row_gap: Val::Px(10.0), ..default() }, BackgroundColor(Color::srgb(0.08, 0.065, 0.05)), theme.skin("panel")))
                     .with_children(|win| {
                         win.spawn((Content, UiTransform::default(), Node { width: Val::Px(CONTENT_W), height: Val::Px(CONTENT_H), ..default() })).with_children(|c| match tab {
                             Tab::Items => items_tab(c, &view, &d, &mut ui),
