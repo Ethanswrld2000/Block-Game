@@ -21,6 +21,10 @@ opt-level = 1
 [profile.dev.package."*"]
 opt-level = 3
 
+# Lighting and meshing run for every chunk; keep them fast in dev builds too.
+[profile.dev.package.voxel]
+opt-level = 3
+
 # Shipping builds.
 [profile.release]
 lto = "thin"

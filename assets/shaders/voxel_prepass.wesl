@@ -84,6 +84,9 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     out.uv_b = vec2<f32>(vertex.uv_b.x, vertex.uv_b.y - 2.0 * kk);
 }
 
+@if(VERTEX_COLORS)
+    out.color = vertex.color;
+
 @if(NORMAL_PREPASS_OR_DEFERRED_PREPASS && VERTEX_NORMALS)
     out.world_normal = mesh_functions::mesh_normal_local_to_world(vertex.normal, vertex_in.instance_index);
 

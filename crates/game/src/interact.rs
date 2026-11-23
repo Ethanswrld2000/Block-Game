@@ -422,13 +422,28 @@ pub fn door_swap(registry: &voxel::BlockRegistry, b: BlockId) -> Option<BlockId>
     registry.id(&other).filter(|o| registry.get(*o).model == Some(want))
 }
 
-/// Remesh the chunk holding `p` and any neighbour sharing a face, right away.
+/// Remesh the chunk holding `p`, and a neighbour whose face it touches, right
+/// away. Chunks whose light alone changed are remeshed in the background.
 pub(crate) fn remesh_around(world: &mut World, blocks: &Blocks, p: BlockPos) {
     let c = p.chunk();
-    for d in [[0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]] {
+    let l = p.local();
+    let last = voxel::CHUNK_SIZE - 1;
+    let mut near = vec![[0, 0, 0]];
+    for axis in 0..3 {
+        let mut d = [0; 3];
+        if l[axis] == 0 {
+            d[axis] = -1;
+        } else if l[axis] == last {
+            d[axis] = 1;
+        } else {
+            continue;
+        }
+        near.push(d);
+    }
+    for d in near {
         let n = ChunkPos::new(c.x + d[0], c.y + d[1], c.z + d[2]);
         if world.needs_mesh(n) {
-            world.mesh_now(n, &blocks.registry, &blocks.opaque);
+            world.mesh_now(n, blocks);
         }
     }
 }

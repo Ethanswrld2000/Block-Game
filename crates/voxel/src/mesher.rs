@@ -14,6 +14,10 @@
 //!    Faces only merge where the shading stays correct across the merged quad
 //!    (same values, and only along the direction they don't change in).
 //!
+//! 5. With light (`crate::light`), each corner also gets smooth light: the
+//!    average sky and block light of the cells in front of the face around
+//!    that corner. Faces merge only where it matches, like the shading.
+//!
 //! The output is a list of [`Quad`]s; turning those into GPU vertices is the
 //! renderer's job.
 
@@ -77,6 +81,9 @@ pub struct Quad {
     /// Corner shading, 0 (open) to 3 (in a crease), for the corners
     /// (u0, v0), (u1, v0), (u0, v1), (u1, v1), where u1/v1 is the far edge.
     pub ao: [u8; 4],
+    /// Smooth light per corner (same order as `ao`): (sky, block), each in
+    /// quarter levels, 0..=60 (`light::MAX * 4`). Full sky when meshed without light.
+    pub light: [[u8; 2]; 4],
 }
 
 /// How faces with this corner shading may merge with their neighbours.
@@ -92,7 +99,7 @@ enum Merge {
     None,
 }
 
-fn merge_kind(ao: [u8; 4]) -> Merge {
+fn merge_kind<T: PartialEq>(ao: [T; 4]) -> Merge {
     let along_v = ao[0] == ao[2] && ao[1] == ao[3];
     let along_u = ao[0] == ao[1] && ao[2] == ao[3];
     match (along_u, along_v) {
@@ -141,9 +148,36 @@ impl PaddedChunk {
 
 /// Mesh one padded chunk. `opaque[id]` says whether a block hides faces behind it.
 pub fn mesh(chunk: &PaddedChunk, opaque: &[bool]) -> Vec<Quad> {
+    mesh_lit(chunk, opaque, None)
+}
+
+/// Full sky light, no block light, in quarter levels.
+const OPEN: [u8; 2] = [crate::light::MAX * 4, 0];
+
+/// Smooth light at one corner: the cell in front of it, its two side
+/// neighbours and the diagonal, leaving out cells that hide light (and the
+/// diagonal when both sides do, as for shading). `cells` = front, side u,
+/// side v, diagonal, each with (opaque, sky, block).
+#[inline]
+fn corner_light(cells: [(bool, (u8, u8)); 4]) -> [u8; 2] {
+    let (mut s, mut b, mut n) = (0u32, 0u32, 0u32);
+    for (k, (op, (sl, bl))) in cells.into_iter().enumerate() {
+        if k > 0 && op || k == 3 && cells[1].0 && cells[2].0 {
+            continue;
+        }
+        s += sl as u32;
+        b += bl as u32;
+        n += 1;
+    }
+    [((s * 4 + n / 2) / n) as u8, ((b * 4 + n / 2) / n) as u8]
+}
+
+/// Like [`mesh`], with smooth light from `light` baked into each corner.
+pub fn mesh_lit(chunk: &PaddedChunk, opaque: &[bool], light: Option<&crate::light::Light>) -> Vec<Quad> {
     let mut quads = Vec::new();
-    // Planes reused between slices: (block, corner shading, rows[u] = bits along v).
-    let mut planes: Vec<(BlockId, [u8; 4], [u32; CHUNK_SIZE])> = Vec::new();
+    // Planes reused between slices: (block, corner shading, corner light, rows[u] = bits along v).
+    #[allow(clippy::type_complexity)]
+    let mut planes: Vec<(BlockId, [u8; 4], [[u8; 2]; 4], [u32; CHUNK_SIZE])> = Vec::new();
     let occludes = |x: usize, y: usize, z: usize| opaque[chunk.get(x, y, z).0 as usize];
 
     for axis in 0..3 {
@@ -241,29 +275,45 @@ pub fn mesh(chunk: &PaddedChunk, opaque: &[bool]) -> Vec<Quad> {
                             occludes(q[0], q[1], q[2])
                         };
                         let (nu, pu, nv, pv) = (at(-1, 0), at(1, 0), at(0, -1), at(0, 1));
-                        let ao = [
-                            corner_ao(nu, nv, at(-1, -1)),
-                            corner_ao(pu, nv, at(1, -1)),
-                            corner_ao(nu, pv, at(-1, 1)),
-                            corner_ao(pu, pv, at(1, 1)),
-                        ];
-                        let plane = match planes.iter_mut().find(|(pb, pa, _)| *pb == b && *pa == ao) {
+                        let (dnu, dpu, dnv, dpv) = (at(-1, -1), at(1, -1), at(-1, 1), at(1, 1));
+                        let ao = [corner_ao(nu, nv, dnu), corner_ao(pu, nv, dpu), corner_ao(nu, pv, dnv), corner_ao(pu, pv, dpv)];
+                        let lit = match light {
+                            None => [OPEN; 4],
+                            Some(l) => {
+                                let cell = |du: isize, dv: isize, op: bool| {
+                                    let mut q = [0usize; 3];
+                                    q[axis] = front;
+                                    q[ua] = (u as isize + 1 + du) as usize;
+                                    q[va] = (v as isize + 1 + dv) as usize;
+                                    (op, l.padded(q[0], q[1], q[2]))
+                                };
+                                let f = cell(0, 0, false);
+                                [
+                                    corner_light([f, cell(-1, 0, nu), cell(0, -1, nv), cell(-1, -1, dnu)]),
+                                    corner_light([f, cell(1, 0, pu), cell(0, -1, nv), cell(1, -1, dpu)]),
+                                    corner_light([f, cell(-1, 0, nu), cell(0, 1, pv), cell(-1, 1, dnv)]),
+                                    corner_light([f, cell(1, 0, pu), cell(0, 1, pv), cell(1, 1, dpv)]),
+                                ]
+                            }
+                        };
+                        let plane = match planes.iter_mut().find(|(pb, pa, pl, _)| *pb == b && *pa == ao && *pl == lit) {
                             Some(pl) => pl,
                             None => {
-                                planes.push((b, ao, [0; CHUNK_SIZE]));
+                                planes.push((b, ao, lit, [0; CHUNK_SIZE]));
                                 planes.last_mut().unwrap()
                             }
                         };
-                        plane.2[u] |= 1 << v;
+                        plane.3[u] |= 1 << v;
                     }
                 }
-                for (block, ao, plane) in planes.iter_mut() {
-                    greedy_plane(plane, merge_kind(*ao), |u, v, su, sv| {
+                for (block, ao, lit, plane) in planes.iter_mut() {
+                    let key: [u32; 4] = std::array::from_fn(|i| ao[i] as u32 | (lit[i][0] as u32) << 8 | (lit[i][1] as u32) << 16);
+                    greedy_plane(plane, merge_kind(key), |u, v, su, sv| {
                         let mut origin = [0u8; 3];
                         origin[axis] = d as u8;
                         origin[ua] = u as u8;
                         origin[va] = v as u8;
-                        quads.push(Quad { face, block: *block, origin, size_u: su as u8, size_v: sv as u8, ao: *ao });
+                        quads.push(Quad { face, block: *block, origin, size_u: su as u8, size_v: sv as u8, ao: *ao, light: *lit });
                     });
                 }
             }

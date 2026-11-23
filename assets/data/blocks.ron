@@ -8,6 +8,7 @@
 //   foliage:     tinted by the season (seasons.ron); all faces of see-through blocks, top only otherwise
 //   hardness:    seconds to break by hand at speed 1 (default 1); tools divide it (items.ron)
 //   material:    what tools are rated against: stone, ore, wood, soil, plant (default "generic")
+//   light:       block light it gives off, 0..15 (torch 14, campfire 15); lights the terrain around it
 //   shape:       cube (default), torch (drawn as its own model with a light) or plant
 //                (two crossed quads that sway in the wind; worldgen scatters them by
 //                `plants` in biomes.ron, and they go when the block below them is mined)
@@ -36,9 +37,9 @@
     (name: "skystone", top: "skystone", hardness: 3.0, material: "stone"),
     (name: "cloud_moss", top: "cloud_moss", hardness: 0.7, material: "soil"),
     (name: "deeprock", top: "deeprock", hardness: 7.0, material: "stone"),
-    (name: "torch", top: "planks", solid: false, opaque: false, hardness: 0.0, shape: torch),
+    (name: "torch", top: "planks", solid: false, opaque: false, hardness: 0.0, shape: torch, light: 14),
     // A ring of stones round crossed sticks: a big fire that warms you far more than a torch (drawn by `torches`).
-    (name: "campfire", top: "planks", solid: false, opaque: false, hardness: 0.5, material: "wood", shape: torch),
+    (name: "campfire", top: "planks", solid: false, opaque: false, hardness: 0.5, material: "wood", shape: torch, light: 15),
     // A storage chest: right click opens it (contents are kept in saves/<world>/chests.ron).
     (name: "chest", top: "log_top", bottom: "planks", side: "planks", hardness: 2.0, material: "wood"),
     // Ground plants: crossed quads that sway in the wind (see `plants` in biomes.ron).
