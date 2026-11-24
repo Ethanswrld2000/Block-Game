@@ -74,20 +74,35 @@ fn bearing(az: f32, alt: f32) -> Vec3 {
     Vec3::new(az.sin() * alt.cos(), alt.sin(), -az.cos() * alt.cos())
 }
 
-/// Where a constellation's middle is at a time of day (0..1): the sky turns
-/// like the sky dome's stars (`sky::sky_rotation`), fixed to where it stands at midnight.
+/// Where a constellation's middle is at a time of day (0..1): the stars turn
+/// slowly (`sky::star_rotation`), from where it stands at midnight.
 pub fn centre(c: &Constellation, time: f32) -> Vec3 {
-    let at_midnight = bearing(c.midnight.0, c.midnight.1);
-    let star_map = crate::sky::sky_rotation(0.0).inverse() * at_midnight;
-    (crate::sky::sky_rotation(time) * star_map).normalize()
+    (crate::sky::star_rotation(time) * bearing(c.midnight.0, c.midnight.1)).normalize()
+}
+
+/// Its stars on the star map (where they stand at midnight). The sky dome
+/// draws these same stars (`sky::SkyStars`).
+pub fn map_stars(c: &Constellation) -> Vec<Vec3> {
+    let mid = bearing(c.midnight.0, c.midnight.1);
+    let right = mid.cross(Vec3::Y).normalize_or(Vec3::X);
+    let up = right.cross(mid).normalize();
+    c.stars.iter().map(|(x, y)| (mid + right * x.to_radians().tan() + up * y.to_radians().tan()).normalize()).collect()
 }
 
 /// The directions of its stars at a time of day.
 pub fn stars(c: &Constellation, time: f32) -> Vec<Vec3> {
-    let mid = centre(c, time);
-    let right = mid.cross(Vec3::Y).normalize_or(Vec3::X);
-    let up = right.cross(mid).normalize();
-    c.stars.iter().map(|(x, y)| (mid + right * x.to_radians().tan() + up * y.to_radians().tan()).normalize()).collect()
+    let turn = crate::sky::star_rotation(time);
+    map_stars(c).into_iter().map(|d| turn * d).collect()
+}
+
+/// How bright a constellation's stars are on the dome: the better telescopes'
+/// ones are fainter.
+pub fn brightness(tier: u8) -> f32 {
+    match tier {
+        1 => 2.4,
+        2 => 1.2,
+        _ => 0.6,
+    }
 }
 
 /// The constellation you are holding in view: up, seen with this telescope, nearest the middle.
@@ -167,9 +182,12 @@ pub fn lens_image(size: u32) -> Vec<u8> {
     px
 }
 
-pub(super) fn load_constellations(mut commands: Commands) {
+pub(super) fn load_constellations(mut commands: Commands, mut sky: ResMut<crate::sky::SkyStars>) {
     match Constellations::from_ron(include_str!("../../../../assets/data/constellations.ron")) {
-        Ok(c) => commands.insert_resource(c),
+        Ok(c) => {
+            sky.named = c.0.iter().flat_map(|c| map_stars(c).into_iter().map(|d| d.extend(brightness(c.tier)))).take(crate::sky::MAX_NAMED_STARS).collect();
+            commands.insert_resource(c);
+        }
         Err(e) => {
             error!("{e}");
             commands.insert_resource(Constellations::default());
@@ -241,6 +259,7 @@ pub(super) fn scope_view(
     mut ui: Query<&mut Visibility, With<ScopeUi>>,
     mut line_text: Query<&mut Text, With<ScopeLine>>,
     mut blink: Query<&mut BackgroundColor, (With<ScopeBlink>, Without<ScopeDark>)>,
+    mut sky: ResMut<crate::sky::SkyStars>,
     mut was_open: Local<bool>,
     mut screenshot: Local<bool>,
 ) {
@@ -265,6 +284,8 @@ pub(super) fn scope_view(
     // Putting your eye to it: the view goes dark for a blink, then the lens opens.
     scope.blend = if scope.open { (scope.blend + time.delta_secs() / 0.45).min(1.0) } else { 0.0 };
     let k = scope.blend * scope.blend * (3.0 - 2.0 * scope.blend);
+    // The lens gathers more light: fainter stars come out.
+    sky.scope = k;
     for mut b in &mut blink {
         b.0 = Color::srgba(0.0, 0.0, 0.0, 1.0 - k);
     }
@@ -317,7 +338,7 @@ pub(super) fn scope_view(
     }
 }
 
-/// The stars seen through the telescope, and the lines of the charted ones.
+/// The lines of the charted constellations, between their stars on the sky dome.
 pub(super) fn draw_constellations(scope: Res<Scope>, clock: Res<WorldClock>, list: Res<Constellations>, urns: Res<Urns>, cam: Single<&Transform, With<FlyCamera>>, mut gizmos: Gizmos) {
     if !scope.open {
         return;
@@ -327,24 +348,16 @@ pub(super) fn draw_constellations(scope: Res<Scope>, clock: Res<WorldClock>, lis
     let eye = cam.translation;
     let far = 120.0;
     let charted: &BTreeSet<String> = &urns.charted;
-    for c in list.0.iter().filter(|c| c.tier <= tier) {
-        let dirs = stars(c, clock.time);
+    for c in list.0.iter().filter(|c| c.tier <= tier && charted.contains(&c.name)) {
         if centre(c, clock.time).y < 0.0 {
             continue;
         }
-        let done = charted.contains(&c.name);
-        let star = if done { Color::srgb(1.0, 0.86, 0.5) } else { Color::srgb(0.85, 0.9, 1.0) };
-        for d in &dirs {
-            let p = eye + *d * far;
-            let r = d.cross(Vec3::Y).normalize_or(Vec3::X) * 0.35;
-            let u = r.cross(*d).normalize() * 0.35;
-            gizmos.line(p - r, p + r, star);
-            gizmos.line(p - u, p + u, star);
-        }
-        if done {
-            for (a, b) in &c.lines {
-                gizmos.line(eye + dirs[*a] * far, eye + dirs[*b] * far, Color::srgba(1.0, 0.8, 0.45, 0.6));
-            }
+        let dirs = stars(c, clock.time);
+        for (a, b) in &c.lines {
+            // Stop short of each star so the line doesn't cover it.
+            let (pa, pb) = (eye + dirs[*a] * far, eye + dirs[*b] * far);
+            let gap = (pb - pa).normalize_or_zero() * 0.6;
+            gizmos.line(pa + gap, pb - gap, Color::srgba(1.0, 0.8, 0.45, 0.5));
         }
     }
 }
@@ -391,6 +404,18 @@ mod tests {
     #[test]
     fn the_sky_turns_through_the_night() {
         let c = &list().0[0];
-        assert!(centre(c, 0.0).angle_between(centre(c, 0.1)) > 0.3);
+        assert!(centre(c, 0.0).angle_between(centre(c, 0.1)) > 0.05);
+    }
+
+    #[test]
+    fn the_dome_draws_the_constellation_stars() {
+        let l = list();
+        let n: usize = l.0.iter().map(|c| c.stars.len()).sum();
+        assert!(n <= crate::sky::MAX_NAMED_STARS, "{n} stars, room for {}", crate::sky::MAX_NAMED_STARS);
+        // At any hour, a star seen through the telescope is the star-map star turned by the sky.
+        let c = &l.0[0];
+        for (seen, map) in stars(c, 0.1).iter().zip(map_stars(c)) {
+            assert!((crate::sky::star_rotation(0.1).inverse() * *seen - map).length() < 1e-5);
+        }
     }
 }

@@ -59,7 +59,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   foliage via the voxel material's `season` uniform and UV_1.y), `game::clouds` (blocky, y 236; three layers since phase 10; drift with `game::wind` since phase 11),
   `game::precipitation` (rain/snow pool), `game::lod` (distant terrain and islands as coloured
   columns out to 1500 blocks; `assets/shaders/lod.wesl` cuts it away only where a real chunk is drawn, from a per-chunk mask `World::drawn_mask`).
-  Stars turn around the sun's axis; the moon has its own 8-day cycle and phases (`sky::moon_*`).
+  Stars are round soft points that twinkle (`sky.wesl` `star_field`, sized in pixels so they stay points when zoomed) and turn around the sun's axis at `sky::STAR_TURNS_PER_DAY` (0.25, much slower than the sun; same sky every midnight); the moon has its own 8-day cycle and phases (`sky::moon_*`).
 - Phase 5 (player): done. `game::player` (`Player` resource: AABB walking, gravity, jump, sprint,
   crouch edge-guard, swimming, head-bob, landing dip, fall `Damage` messages; F toggles `MoveMode`
   Walk/Fly), `game::items` (`assets/data/items.ron`: tools with per-material speeds, block items,
@@ -252,7 +252,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   runs a spell free via `Spells.brewed` or gives focus). Herb rack teaches seasoned pot recipes. Stone fridge and
   the golem's pack are chests not in the world (`inventory::virtual_chest`). Bedframe/double bed: `camp::Bed::rest`.
   Telescope (`station::telescope`, `assets/data/constellations.ron`): on a clear night, look through it (zoomed
-  view, gizmo stars) and hold a constellation in the middle to chart it (`Urns.charted`, XP); improved telescope /
+  view of the dome's own stars: constellation stars are drawn by `sky.wesl` from `sky::SkyStars`, charted ones get lines) and hold a constellation in the middle to chart it (`Urns.charted`, XP); improved telescope /
   diamond lens show tier 2 / 3. Golem (`station::golem`): `golem_heart` wakes it (a walking `StationKind::Golem`,
   right click follow/stay), `golem_hands` gives it a pack (crouch + right click) and it strikes hostile creatures
   near it; saved to `golem.ron`. Cooking moved out of the Tab list (roast meat, peat stew).

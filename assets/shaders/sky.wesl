@@ -7,7 +7,7 @@
 // so distant land melts into the sky behind it.
 
 import bevy_pbr::render::{
-    mesh_view_bindings::view,
+    mesh_view_bindings::{view, globals},
     pbr_fragment::pbr_input_from_standard_material,
     forward_io::{VertexOutput, FragmentOutput},
     pbr_functions::main_pass_post_lighting_processing,
@@ -29,8 +29,11 @@ struct SkyParams {
     star_z: vec4<f32>,
     mid: vec4<f32>,
     // x: daytime haze towards the sun, y: star band brightness,
-    // z: fog veil (thick fog or mist hides the sky, sun, moon and stars)
+    // z: fog veil (thick fog or mist hides the sky, sun, moon and stars),
+    // w: telescope raised (0..1), which brings out fainter stars
     haze: vec4<f32>,
+    // Constellation stars in star-map space: xyz direction, w brightness (0 = none).
+    named: array<vec4<f32>, 64>,
 }
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100) var<uniform> sky: SkyParams;
@@ -39,6 +42,58 @@ fn hash3(p: vec3<f32>) -> f32 {
     let q = fract(p * vec3<f32>(0.1031, 0.1030, 0.0973));
     let r = q + dot(q, q.yxz + 33.33);
     return fract((r.x + r.y) * r.z);
+}
+
+// Stars are scattered over a grid of cells in star-map space; a cell holds a
+// star when its hash is under STAR_DENSITY and its jittered point lies within
+// half a cell of the sphere STAR_SCALE across, so every star belongs to one
+// cell and the 3x3x3 cells around a direction find every star near it.
+const STAR_SCALE: f32 = 60.0;
+const STAR_DENSITY: f32 = 0.05;
+
+// One star: a soft round point about one to two pixels across (`px` is the
+// angle one pixel covers, so it stays a point when the telescope zooms in),
+// `d` is the angle to its centre.
+fn star_light(d: f32, bright: f32, px: f32) -> f32 {
+    // A little bigger on the sky for bright stars, which shows when magnified.
+    let sigma = max(px * (0.7 + 0.4 * sqrt(bright)), 0.00045 * sqrt(bright));
+    let core = exp(-(d * d) / (sigma * sigma));
+    // A faint glow round the brightest.
+    let g = d / (sigma * 3.5);
+    let glow = exp(-g * g) * 0.06 * max(bright - 1.0, 0.0);
+    return bright * core + glow;
+}
+
+fn star_field(rd: vec3<f32>, px: f32, t: f32, low: f32) -> vec3<f32> {
+    let p = rd * STAR_SCALE;
+    let base = floor(p);
+    var sum = vec3<f32>(0.0);
+    for (var x = -1; x <= 1; x++) {
+        for (var y = -1; y <= 1; y++) {
+            for (var z = -1; z <= 1; z++) {
+                let cell = base + vec3<f32>(f32(x), f32(y), f32(z));
+                if (hash3(cell) > STAR_DENSITY) { continue; }
+                let sp = cell + vec3<f32>(hash3(cell + 11.3), hash3(cell + 23.7), hash3(cell + 41.1));
+                let r = length(sp);
+                if (abs(r - STAR_SCALE) > 0.5) { continue; }
+                let d = length(rd - sp / r);
+                if (d > 0.02) { continue; }
+                // Most stars faint, a few bright.
+                let m = hash3(cell + 5.9);
+                let bright = 0.12 + 2.2 * pow(m, 6.0);
+                // Colour: warm orange through white to pale blue.
+                let c = hash3(cell + 3.3);
+                var tint = mix(vec3<f32>(1.0, 0.78, 0.58), vec3<f32>(1.0, 0.97, 0.94), smoothstep(0.0, 0.35, c));
+                tint = mix(tint, vec3<f32>(0.72, 0.82, 1.0), smoothstep(0.65, 1.0, c));
+                // Twinkle: stronger low in the sky, where the air is thicker.
+                let w = hash3(cell + 9.1);
+                let tw = sin(t * (1.7 + 3.1 * w) + w * 40.0) * sin(t * (2.9 + 2.3 * m) + c * 31.0);
+                let twinkle = 1.0 + (0.15 + 0.35 * low) * tw;
+                sum += tint * star_light(d, bright, px) * twinkle;
+            }
+        }
+    }
+    return sum;
 }
 
 @fragment
@@ -85,11 +140,23 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let band = exp(-pow(dot(rd, band_n) / 0.16, 2.0)) * sky.haze.y;
     let mottle = 0.55 + 0.45 * hash3(floor(rd * 28.0));
     col += vec3<f32>(0.42, 0.46, 0.65) * 0.03 * band * mottle * clear * clamp(up * 6.0, 0.0, 1.0);
-    let cell = floor(rd * 220.0);
-    let h = hash3(cell);
-    if (h > 0.9975 - 0.003 * band && up > -0.05) {
-        let twinkle = 0.6 + 0.4 * hash3(cell + 7.0);
-        col += vec3<f32>(0.9, 0.92, 1.0) * sky.extra.x * twinkle * clear * clamp(up * 6.0, 0.0, 1.0);
+    // Angle one pixel covers here (shrinks when the telescope zooms in).
+    let px = max(length(dpdx(dir)), length(dpdy(dir)));
+    if (up > -0.05 && sky.extra.x > 0.0) {
+        let starlight = sky.extra.x * (1.0 + 1.2 * sky.haze.w) * clear * clamp(up * 6.0, 0.0, 1.0);
+        let low = 1.0 - smoothstep(0.0, 0.5, up);
+        var stars = star_field(rd, px, globals.time, low);
+        // The constellations: the same stars the telescope charts.
+        for (var i = 0; i < 64; i++) {
+            let s = sky.named[i];
+            if (s.w <= 0.0) { continue; }
+            let d = length(rd - s.xyz);
+            if (d < 0.02) {
+                let tw = 1.0 + (0.1 + 0.3 * low) * sin(globals.time * (2.0 + f32(i % 5) * 0.6) + f32(i) * 1.7);
+                stars += vec3<f32>(1.0, 0.96, 0.9) * star_light(d, s.w, px) * tw;
+            }
+        }
+        col += stars * starlight;
     }
 
     // Sun disc with a soft halo; hidden behind thick cloud.
