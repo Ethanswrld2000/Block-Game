@@ -11,6 +11,10 @@ const CELL: i32 = 192;
 pub(crate) const MAX_RADIUS: i32 = 58;
 /// Islands at least this wide keep a chest at their middle (`sky_island` in loot.ron).
 pub const CHEST_RADIUS: f32 = 24.0;
+/// Islands at least this wide also keep a sky shrine, `SHRINE_OFFSET` blocks east of the chest
+/// (right click it once for a skill point: `game::shrine`).
+pub const SHRINE_RADIUS: f32 = 40.0;
+pub const SHRINE_OFFSET: i32 = 5;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Island {
@@ -134,6 +138,16 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) -> bool
             any = true;
         }
     }
+    // A sky shrine on the biggest islands, east of the chest.
+    for isl in islands.iter().filter(|i| !i.aunt && i.radius >= SHRINE_RADIUS) {
+        let sx = isl.x + SHRINE_OFFSET;
+        if let Some((_, top)) = span(wg, isl, sx, isl.z) {
+            for y in top + 1..=top + 3 {
+                c.put(sx, y, isl.z, if y == top + 1 { ids.sky_shrine } else { BlockId::AIR });
+            }
+            any = true;
+        }
+    }
     // The aunt's cottage and the broken arch.
     if let Some(a) = wg.aunt_island()
         && islands.iter().any(|i| i.aunt)
@@ -159,10 +173,35 @@ pub(crate) fn chest_near(wg: &WorldGen, x: i32, z: i32) -> Option<[i32; 3]> {
     })
 }
 
+/// Where the shrine on a grid island stands, if this island has one near (x, z).
+#[cfg(test)]
+pub(crate) fn shrine_near(wg: &WorldGen, x: i32, z: i32) -> Option<[i32; 3]> {
+    islands_near(wg, x, z, x, z).into_iter().filter(|i| !i.aunt && i.radius >= SHRINE_RADIUS).find_map(|i| {
+        let sx = i.x + SHRINE_OFFSET;
+        let (_, top) = span(wg, &i, sx, i.z)?;
+        ((sx - x).abs() <= 1 && (i.z - z).abs() <= 1).then_some([sx, top + 1, i.z])
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use voxel::BlockPos;
+
+    #[test]
+    fn the_biggest_islands_keep_a_shrine() {
+        let wg = crate::tests::wg();
+        let isl = (-20..20)
+            .flat_map(|cz| (-20..20).map(move |cx| (cx, cz)))
+            .filter_map(|(cx, cz)| island_in_cell(&wg, cx, cz))
+            .find(|i| i.radius >= SHRINE_RADIUS + 2.0)
+            .expect("an island big enough");
+        let [x, y, z] = shrine_near(&wg, isl.x + SHRINE_OFFSET, isl.z).unwrap();
+        let p = BlockPos::new(x, y, z);
+        let chunk = wg.generate(p.chunk());
+        let o = p.chunk().origin();
+        assert_eq!(chunk.get((x - o.x) as usize, (y - o.y) as usize, (z - o.z) as usize), wg.ids.sky_shrine);
+    }
 
     #[test]
     fn bigger_islands_keep_a_chest_in_the_middle() {

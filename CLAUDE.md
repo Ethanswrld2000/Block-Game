@@ -587,6 +587,10 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   guard break 0.8, kill 1.0; creature hits too; `Strike.yours` is false for the golem) stop the game briefly
   (`Time<Virtual>` at 4% speed for 0.03-0.1 real seconds) and nod the camera; `player::Damage` jolts it (`feel::Kick`, a
   spring added in `player::ride_camera`). Foes rock back when hit (`Foe.flinch`), and every hurting blow adds a low `hit` thud.
+- Sky shrines: grid sky islands with radius >= `worldgen::islands::SHRINE_RADIUS` (40) keep a `sky_shrine` block (glows,
+  can't be broken) `SHRINE_OFFSET` (5) blocks east of their chest. Right click (`shrine::UseShrine` from `interact`) gives
+  +1 skill point and XP once per shrine (`shrine:x,y,z` in `Progress.found`). Tiles `sky_shrine`, `sky_shrine_top` are
+  appended after the variant tiles in `gen_placeholder_art.py` so nothing moves.
 - Next: see `docs/GAMEPLAY_LOOP.md`.
 
 ## Testing without a screen
