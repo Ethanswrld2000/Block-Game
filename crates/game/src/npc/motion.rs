@@ -5,6 +5,7 @@
 
 use std::f32::consts::{PI, TAU};
 
+use super::dialogue::Anim;
 use crate::creatures::brain::Rng;
 
 /// A critically damped spring: `x` follows a moving target on a smooth curve,
@@ -50,7 +51,8 @@ pub fn wrap(a: f32) -> f32 {
 /// Signs: `hip`/`shoulder` > 0 swings the limb forward, `knee` > 0 bends it
 /// back, `elbow` > 0 bends the forearm up, `arm_out` > 0 lifts the arm away
 /// from the side, `lean` > 0 bends the chest forward, `twist` > 0 turns the
-/// shoulders left, `roll` > 0 drops the left hip.
+/// shoulders left, `roll` > 0 drops the left hip, `nod` > 0 tips the head
+/// up, `shake` > 0 turns it left.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Pose {
     pub bob: f32,
@@ -65,10 +67,12 @@ pub struct Pose {
     pub shoulder: [f32; 2],
     pub arm_out: [f32; 2],
     pub elbow: [f32; 2],
+    pub nod: f32,
+    pub shake: f32,
 }
 
 impl Pose {
-    pub const JOINTS: usize = 15;
+    pub const JOINTS: usize = 17;
 
     pub fn to_array(self) -> [f32; Self::JOINTS] {
         [
@@ -87,6 +91,8 @@ impl Pose {
             self.arm_out[1],
             self.elbow[0],
             self.elbow[1],
+            self.nod,
+            self.shake,
         ]
     }
 
@@ -102,6 +108,8 @@ impl Pose {
             shoulder: [a[9], a[10]],
             arm_out: [a[11], a[12]],
             elbow: [a[13], a[14]],
+            nod: a[15],
+            shake: a[16],
         }
     }
 
@@ -114,6 +122,103 @@ impl Pose {
         let (a, b) = (self.to_array(), other.to_array());
         Pose::from_array(std::array::from_fn(|i| a[i] + b[i]))
     }
+
+    pub fn scale(self, k: f32) -> Pose {
+        Pose::from_array(self.to_array().map(|x| x * k))
+    }
+}
+
+/// A body animation (`dialogue::Anim`) `t` seconds in, added on top of the
+/// stance. `leg` is the body's hip height (blocks), so sitting puts any body
+/// on the ground. One-offs ease in and out within `Anim::length`; held ones
+/// ease in and stay (`body` fades them out when they stop).
+pub fn act(anim: Anim, t: f32, leg: f32) -> Pose {
+    let len = anim.length();
+    // 0 -> 1 over the first `rise` seconds, back to 0 over the last `rise`.
+    let env = |rise: f32| {
+        let up = smooth(t / rise);
+        if anim.held() { up } else { up * smooth((len - t) / rise) }
+    };
+    match anim {
+        Anim::Wave => {
+            // Hand up beside the head, swinging side to side.
+            let e = env(0.3);
+            let sweep = (t * 2.6 * TAU).sin() * smooth((t - 0.2) / 0.2);
+            Pose {
+                twist: -0.08,
+                shoulder: [0.0, 0.25],
+                arm_out: [0.0, 2.35 + 0.28 * sweep],
+                elbow: [0.0, 0.35],
+                nod: 0.05,
+                ..Pose::default()
+            }
+            .scale(e)
+        }
+        Anim::Nod => Pose { nod: -0.24 * (t * 1.8 * TAU).sin().abs(), ..Pose::default() }.scale(env(0.15)),
+        Anim::HeadShake => Pose { shake: 0.34 * (t * 2.0 * TAU).sin(), nod: -0.05, ..Pose::default() }.scale(env(0.15)),
+        Anim::Shrug => {
+            let e = env(0.3);
+            Pose { arm_out: [0.35, 0.35], shoulder: [0.35, 0.35], elbow: [1.2, 1.2], nod: 0.08, roll: 0.04, ..Pose::default() }.scale(e)
+        }
+        Anim::Bow => Pose { lean: 0.65, nod: -0.35, shoulder: [-0.12, -0.12], knee: [0.08, 0.08], ..Pose::default() }.scale(env(0.45)),
+        Anim::Point => Pose { twist: -0.15, shoulder: [0.0, 1.45], arm_out: [0.0, 0.08], elbow: [0.0, -0.1], ..Pose::default() }.scale(env(0.3)),
+        Anim::Cheer => {
+            let e = env(0.25);
+            let bounce = (t * 2.2 * TAU).sin();
+            Pose {
+                arm_out: [2.5 + 0.15 * bounce, 2.5 + 0.15 * bounce],
+                elbow: [0.25, 0.25],
+                nod: 0.15,
+                bob: 0.03 * bounce.max(0.0),
+                ..Pose::default()
+            }
+            .scale(e)
+        }
+        Anim::Give => {
+            // Reach out, hold it there to be taken, then the arm comes back.
+            Pose {
+                lean: 0.12,
+                twist: -0.06,
+                shoulder: [0.1, 1.35],
+                arm_out: [0.0, -0.08],
+                elbow: [0.1, 0.2],
+                nod: -0.12,
+                ..Pose::default()
+            }
+            .scale(env(0.4))
+        }
+        Anim::Sit => {
+            // Thighs a little above level, shins down to the feet, hips
+            // dropped until the seat is on the ground; hands on the knees.
+            Pose {
+                bob: -0.71 * leg,
+                lean: -0.04,
+                hip: [1.9, 1.9],
+                knee: [1.4, 1.4],
+                shoulder: [0.55, 0.55],
+                arm_out: [-0.02, -0.02],
+                elbow: [0.3, 0.3],
+                ..Pose::default()
+            }
+            .scale(env(0.6))
+        }
+        Anim::Think => Pose {
+            // Right hand to the chin, the left arm across under it.
+            shoulder: [0.35, 0.55],
+            arm_out: [-0.22, -0.3],
+            elbow: [1.35, 2.25],
+            nod: -0.12,
+            ..Pose::default()
+        }
+        .scale(env(0.4)),
+        Anim::Stand => Pose::default(),
+    }
+}
+
+/// 0 below 0, 1 above 1, smooth in between.
+fn smooth(x: f32) -> f32 {
+    let x = x.clamp(0.0, 1.0);
+    x * x * (3.0 - 2.0 * x)
 }
 
 /// Standing: weight shifting slowly from foot to foot, breathing, arms hanging
@@ -132,6 +237,7 @@ pub fn idle(t: f32) -> Pose {
         shoulder: [0.03 * breath, 0.03 * (t * 1.7 + 0.6).sin()],
         arm_out: [0.07 + 0.015 * breath, 0.07 + 0.015 * breath],
         elbow: [0.14, 0.16],
+        ..Pose::default()
     }
 }
 
@@ -183,6 +289,7 @@ pub fn walk(phase: f32, pace: f32) -> Pose {
         shoulder: [-a * arm * ls, a * arm * ls],
         arm_out: [a.min(1.0) * 0.06 + a * 0.02, a.min(1.0) * 0.06 + a * 0.02],
         elbow: [a * (0.18 + 0.3 * run + 0.22 * curl(lc)), a * (0.18 + 0.3 * run + 0.22 * curl(-lc))],
+        ..Pose::default()
     }
 }
 
@@ -440,6 +547,34 @@ mod tests {
         }
         assert!(last.head_yaw <= HEAD_YAW + 1e-3);
         assert!(last.pupil[0] > 0.9, "the eyes look the rest of the way");
+    }
+
+    #[test]
+    fn one_off_animations_start_and_end_at_rest() {
+        for a in [Anim::Wave, Anim::Nod, Anim::HeadShake, Anim::Shrug, Anim::Bow, Anim::Point, Anim::Cheer, Anim::Give] {
+            assert_eq!(act(a, 0.0, LEG), Pose::default(), "{a:?} starts at rest");
+            assert!(act(a, a.length(), LEG).to_array().iter().all(|x| x.abs() < 1e-4), "{a:?} ends at rest");
+            let mid = act(a, a.length() * 0.4, LEG).to_array();
+            assert!(mid.iter().any(|x| x.abs() > 0.05), "{a:?} moves");
+            // No snapping from frame to frame.
+            for i in 0..200 {
+                let t = a.length() * i as f32 / 200.0;
+                let (x, y) = (act(a, t, LEG).to_array(), act(a, t + 1.0 / 60.0, LEG).to_array());
+                for j in 0..Pose::JOINTS {
+                    assert!((x[j] - y[j]).abs() < 0.2, "{a:?} joint {j} jumps at {t}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn sitting_holds_and_puts_the_seat_down() {
+        let p = act(Anim::Sit, 5.0, LEG);
+        assert_eq!(p, act(Anim::Sit, 50.0, LEG), "held");
+        // Hip height after the drop: low, but still above the ground.
+        let seat = LEG + p.bob;
+        assert!((0.1..0.35).contains(&seat), "seat at {seat}");
+        assert!(p.hip[0] > 1.5, "thighs forward");
     }
 
     #[test]

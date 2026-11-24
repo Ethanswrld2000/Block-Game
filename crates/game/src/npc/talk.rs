@@ -15,7 +15,7 @@
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
-use super::dialogue::{Act, Mood, Offer};
+use super::dialogue::{Act, Anim, Mood, Offer};
 use super::motion::Spring;
 use super::voice::{self, Speech};
 use super::{Npc, NpcBook, Order, EYES};
@@ -68,6 +68,9 @@ pub struct Talk {
     speech: Speech,
     text: String,
     mood: Mood,
+    /// The body animation the current node started, numbered so the same one can start again.
+    act: Option<(Anim, u32)>,
+    acts: u32,
     /// Seconds into the line (negative = waiting to start).
     t: f32,
     offers: Vec<Offer>,
@@ -117,6 +120,13 @@ impl Talk {
     }
 
     /// Who you are talking to.
+    /// Start a body animation on the NPC being talked to (it shows until a
+    /// later node starts another).
+    pub fn play(&mut self, anim: Anim) {
+        self.acts = self.acts.wrapping_add(1);
+        self.act = Some((anim, self.acts));
+    }
+
     pub fn with(&self) -> Option<Entity> {
         self.with
     }
@@ -293,6 +303,7 @@ fn prompt(
     let node = tree.opening(&npc.flags).to_string();
     tree.enter(&node, &mut npc.flags);
     talk.with = Some(e);
+    talk.act = None;
     talk.vars.clear();
     talk.leaving = false;
     talk.choosing = false;
@@ -308,6 +319,11 @@ fn prompt(
 }
 
 fn begin_node(talk: &mut Talk, book: &NpcBook, npc: &Npc, node: String) {
+    let anim = book.kinds.get(npc.kind).and_then(|k| book.trees.get(&k.dialogue)).and_then(|t| t.nodes.get(&node)).and_then(|n| n.anim);
+    if let Some(a) = anim {
+        talk.acts = talk.acts.wrapping_add(1);
+        talk.act = Some((a, talk.acts));
+    }
     talk.node = node;
     talk.line = 0;
     talk.choosing = false;
@@ -501,6 +517,7 @@ fn run(
     if talk.leaving {
         npc.mouth = (0.0, 0.8);
         npc.speaking = 0.0;
+        npc.act = None;
         if bars < 0.02 {
             // Done: everything back as it was.
             npc.talking = false;
@@ -553,6 +570,7 @@ fn run(
     npc.mouth = if speaking { talk.speech.mouth(talk.t) } else { (0.0, 0.8) };
     npc.speaking = if speaking { 1.0 } else { 0.0 };
     npc.mood = talk.mood;
+    npc.act = talk.act;
     // The last line of a node done: show the replies straight away.
     if !talk.choosing && talk.t >= talk.speech.length + 0.15 {
         let last = book.kinds.get(npc.kind).and_then(|k| book.trees.get(&k.dialogue)).and_then(|t| t.nodes.get(&talk.node)).is_some_and(|n| talk.line + 1 >= n.say.len() && !n.choices.is_empty());
