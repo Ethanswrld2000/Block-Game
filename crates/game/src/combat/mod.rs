@@ -723,6 +723,7 @@ fn animate(real: Res<Time<Real>>, game: Res<Time>, book: Res<FoeBook>, cam: Sing
             speaking: 0.0,
             arms: Some(arms),
             sway,
+            act: None,
         };
         body::drive(&mut tf, &mut rig, &mut parts, dt, &drive);
     }

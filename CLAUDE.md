@@ -288,7 +288,10 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `goto: "node"` works without `Some`; flags, `needs`/`without`, `once`, tone tags, `again` opening, acts
   Follow/Stay/Wander). `npc::body`: jointed box model (hips, knees, torso, shoulders, elbows, neck, head) with eye
   whites, iris + pupil that move, blinking lids, mood brows and a rectangular mouth with upper and lower teeth;
-  animates on real time. `npc::talk`: look at an NPC and press E: black bars, `Time<Virtual>` paused (so autoshot
+  animates on real time. No scarf. Looks `body: Human|Rat|Mushroom` (`data::Species`) picks the shape (`body::Frame` +
+  `human`/`rat`/`mushroom`: same joints, own boxes; rats have a swaying tail, mushrooms a built-in cap in `hair` colour).
+  Dialogue nodes can have `anim:` (`dialogue::Anim`: Wave, Nod, HeadShake, Shrug, Bow, Point, Cheer once; Sit, Think held
+  until another `anim`/`Stand` or the talk ends; poses in `motion::act`, layered in `body::step_act`). `npc::talk`: look at an NPC and press E: black bars, `Time<Virtual>` paused (so autoshot
   uses real time), HUD and arms hidden, camera eases to frame the speaker; click/Space/E/Enter continue, replies by
   mouse, 1-8 or W/S + Enter, Esc leaves. Not saved yet; no combat yet (room left in `npc::Order`).
   Screenshots: `BLOCKGAME_NPC=3` spawns one 3 blocks ahead, `BLOCKGAME_TALK=1` talks to it (`=replies` jumps to the replies).
@@ -591,6 +594,16 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   can't be broken) `SHRINE_OFFSET` (5) blocks east of their chest. Right click (`shrine::UseShrine` from `interact`) gives
   +1 skill point and XP once per shrine (`shrine:x,y,z` in `Progress.found`). Tiles `sky_shrine`, `sky_shrine_top` are
   appended after the variant tiles in `gen_placeholder_art.py` so nothing moves.
+- First-person feel: `game::pov` (`Pov`: eased `sprint`, `Spring`s for the hands' `drop` and look lag). Sprint widens
+  the FOV by `pov::SPRINT_FOV` (8°, negative narrows; skipped while `Menus.still`), hands sink while falling, are knocked
+  down on landing and spring back, hop on a jump, trail the mouse, and drop into a low tilted carry while sprinting
+  (`hands::pose_hands`, eased out during swings, guard and eating). Landing also nods the view down (`ride_camera`).
+- Urn grab: `station::grab`. Right click an urn with an empty hand: both first-person hands take its shoulders
+  (`Grab.grips`, used by `hands::pose_hands`) and the camera leans over its mouth (`grab::lean_view`) over
+  `REACH_SECONDS`; at `OPEN_AT` the tree opens from the mouth. Closing the tree lets go and leans back. The mouth is a
+  quad with `MouthMaterial` (`assets/shaders/urn_mouth.wesl`): the same dark as the tree's background, worked out per
+  screen pixel from the same clock (`grab::void_clock`), so the hole grows out of it seamlessly. `void_inside` and its
+  helpers are copied between `urn_void.wesl` and `urn_mouth.wesl` and must stay the same.
 - Next: see `docs/GAMEPLAY_LOOP.md`.
 
 ## Testing without a screen

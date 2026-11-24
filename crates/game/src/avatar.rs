@@ -152,6 +152,7 @@ fn animate(
         speaking: 0.0,
         arms,
         sway,
+        act: None,
     };
     body::drive(&mut tf, &mut rig, &mut parts, dt, &drive);
 }

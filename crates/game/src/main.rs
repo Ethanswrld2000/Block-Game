@@ -20,6 +20,7 @@ mod menu;
 mod npc;
 mod places;
 mod player;
+mod pov;
 mod precipitation;
 mod progress;
 mod debug;
@@ -98,6 +99,7 @@ fn main() {
             item_art::ItemArtPlugin,
             player::PlayerPlugin,
             hands::HandsPlugin,
+            pov::PovPlugin,
             torches::TorchPlugin,
             glowcaps::GlowcapPlugin,
             hud::HudPlugin,

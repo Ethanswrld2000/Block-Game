@@ -46,7 +46,7 @@ pub struct UrnVoid {
 
 #[derive(Clone, Copy, Default, ShaderType)]
 struct VoidParams {
-    /// Seconds open, how far open (0..1), pixel size.
+    /// The dark's clock, how far open (0..1), pixel size.
     look: Vec4,
     /// The urn's colour; `w` = how much the world outside is dimmed.
     tint: Vec4,
@@ -245,7 +245,7 @@ pub(super) fn tree_animate(
         && let Ok(p) = camera.world_to_viewport(ct, at)
     {
         centre = p / size.max(Vec2::ONE);
-        if let Ok(q) = camera.world_to_viewport(ct, at + ct.right() * 0.3) {
+        if let Ok(q) = camera.world_to_viewport(ct, at + ct.right() * super::grab::MOUTH_HALF) {
             radius = (q - p).length().clamp(6.0, 200.0) * window.scale_factor();
         }
     }
@@ -255,7 +255,8 @@ pub(super) fn tree_animate(
         && let Some(mut m) = mats.get_mut(&node.0)
     {
         m.params = VoidParams {
-            look: Vec4::new(t, open, 4.0 * window.scale_factor(), 0.0),
+            // The same clock as the mouth's dark in the world (`grab`), so it carries on unbroken.
+            look: Vec4::new(super::grab::void_clock(&time), open, 4.0 * window.scale_factor(), 0.0),
             tint: Vec4::new(glow.red, glow.green, glow.blue, 0.55),
             centre: Vec4::new(centre.x, centre.y, radius, 0.0),
         };

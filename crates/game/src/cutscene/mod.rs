@@ -66,6 +66,8 @@ const FILE: &str = "story.ron";
 const PLACE_BEYOND: f32 = 24.0;
 /// Actors nearer than this are close enough to start where they stand.
 const NEARBY: f32 = 12.0;
+/// An actor this near you hands over what a `Give` step gives.
+const GIVE_REACH: f32 = 4.0;
 /// Seconds to wait for actors to walk in before placing them.
 const GATHER_MAX: f32 = 8.0;
 /// A line stays up this long after it's said.
@@ -465,6 +467,7 @@ struct Effects<'w> {
     blocks: Res<'w, Blocks>,
     spill: MessageWriter<'w, Spill>,
     encounter: MessageWriter<'w, StartEncounter>,
+    hand_over: MessageWriter<'w, crate::npc::handover::HandOver>,
 }
 
 impl Effects<'_> {
@@ -763,6 +766,20 @@ fn direct(
             Step::Wait(_) => {}
             Step::Follow(_) | Step::Remove(_) => {
                 cast(step, &scene.actors, &mut npcs, &mut commands);
+            }
+            Step::Give(name, _) => {
+                // The nearest actor within reach hands it over in person (`npc::handover`).
+                let giver = scene
+                    .actors
+                    .values()
+                    .filter_map(|e| npcs.get(*e).ok())
+                    .map(|(e, tf, _)| (e, tf.translation.distance(player_pos)))
+                    .filter(|(_, d)| *d < GIVE_REACH)
+                    .min_by(|a, b| a.1.total_cmp(&b.1));
+                if let (Some((npc, _)), Some(item)) = (giver, fx.items.id(name)) {
+                    fx.hand_over.write(crate::npc::handover::HandOver { npc, item });
+                }
+                fx.apply(step, player_pos, &|m| resolve(m, &where_is));
             }
             _ => fx.apply(step, player_pos, &|m| resolve(m, &where_is)),
         }

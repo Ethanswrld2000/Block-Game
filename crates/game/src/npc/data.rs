@@ -11,12 +11,14 @@ pub struct Looks {
     pub skin: Rgb,
     pub hair: Rgb,
     pub shirt: Rgb,
-    /// Scarf or collar round the neck.
-    pub scarf: Rgb,
     pub trousers: Rgb,
+    /// Boots; on a rat, the bare pink skin of its paws, ears, nose and tail.
     pub boots: Rgb,
     /// The coloured ring round each pupil.
     pub iris: Rgb,
+    /// What it is: the shape of its body and face.
+    #[serde(default)]
+    pub body: Species,
     /// Size of the whole body (0.55 = one block tall, for mushroom folk and rats).
     #[serde(default = "one")]
     pub scale: f32,
@@ -30,6 +32,18 @@ pub struct Looks {
 
 fn one() -> f32 {
     1.0
+}
+
+/// The kind of body (`npc::body::build` shapes each its own way; the joints are
+/// the same, so every animation works on all of them).
+#[derive(Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Species {
+    #[default]
+    Human,
+    /// Short legs, a pear-shaped body, a long snout with whiskers, big round ears, a tail.
+    Rat,
+    /// Mushroom folk: stubby legs, a stem of a body, a cap (`hair` colour) with gills under it.
+    Mushroom,
 }
 
 /// Which part of the body an extra box rides on.

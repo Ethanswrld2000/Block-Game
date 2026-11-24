@@ -22,7 +22,7 @@ pub struct HandsPlugin;
 
 impl Plugin for HandsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(crate::menu::GameUpdate, (spawn_hands, update_held, pose_hands).chain().after(crate::interact::InteractSet));
+        app.add_systems(crate::menu::GameUpdate, (spawn_hands, update_held, pose_hands).chain().after(crate::interact::InteractSet).after(crate::player::PlayerSet));
     }
 }
 
@@ -211,8 +211,9 @@ pub(crate) fn frozen_swing() -> Option<f32> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn pose_hands(
+pub(crate) fn pose_hands(
     anim: Res<HandAnim>,
+    pov: Res<crate::pov::Pov>,
     mining: Res<Mining>,
     player: Res<Player>,
     mode: Res<MoveMode>,
@@ -220,6 +221,7 @@ fn pose_hands(
     items: Res<Items>,
     view: Res<crate::camera::View>,
     guard: Res<crate::combat::Guard>,
+    grab: Res<crate::station::grab::Grab>,
     mut frozen: Local<Option<Option<f32>>>,
     mut roots: Query<(&HandRoot, &mut Transform, &mut Visibility)>,
 ) {
@@ -229,7 +231,9 @@ fn pose_hands(
         let hand = root.0;
         // In third person your body holds things instead; the left arm only
         // comes up while it holds something.
-        let shown = !view.pulled && (hand == Hand::Right || off.0.is_some());
+        // Both come up to hold an urn (`station::grab`).
+        let held = grab.blend();
+        let shown = !view.pulled && (hand == Hand::Right || off.0.is_some() || held > 0.001);
         let want = if shown { Visibility::Inherited } else { Visibility::Hidden };
         if *vis != want {
             *vis = want;
@@ -258,7 +262,31 @@ fn pose_hands(
         let e = if anim.eat_hand == hand { (anim.eat * 4.0).min(1.0) } else { 0.0 };
         let chew = (anim.eat * 40.0).sin() * 0.012 * e;
         let to_mouth = Vec3::new(-side * 0.2, 0.12 + chew, 0.12) * e;
-        tf.translation = base_position(hand) + sway + to_mouth + Vec3::Y * lift + swing_pos * mirror;
-        tf.rotation = swing_rot * Quat::from_rotation_x(0.5 * e) * Quat::from_rotation_y(side * 0.5 * e);
+        // Motion feel (`pov`), eased out while the hand is busy (a swing,
+        // a guard, eating) so those poses stay as they are.
+        let busy = if t.is_some() || e > 0.0 || (hand == Hand::Right && guard.blend > 0.001) { 1.0 } else { 0.0 };
+        let calm = 1.0 - busy;
+        // Sprint carry: low, pulled in and tipped down, pumping with the stride.
+        let k = pov.sprint * calm;
+        let pump = (phase * 0.5).sin() * k;
+        let sprint_pos = Vec3::new(-side * 0.04 * k, -0.06 * k + pump * 0.015 * side, 0.03 * k);
+        let sprint_rot = Quat::from_rotation_x(-0.45 * k + pump * 0.08 * side) * Quat::from_rotation_z(side * 0.35 * k) * Quat::from_rotation_y(side * 0.2 * k);
+        // Falls and landings: the hands sink, get knocked down, spring back.
+        let drop = pov.drop.x;
+        let drop_rot = Quat::from_rotation_x(drop * 2.5);
+        // Look sway: trail the turn a little, sideways and in angle.
+        let (ly, lp) = (pov.lag_yaw.x * calm, pov.lag_pitch.x * calm);
+        let lag_pos = Vec3::new(-ly * 0.25, lp * 0.25, 0.0);
+        let lag_rot = Quat::from_rotation_y(ly) * Quat::from_rotation_x(lp) * Quat::from_rotation_z(-ly * 0.6);
+        tf.translation = base_position(hand) + sway + to_mouth + Vec3::Y * (lift + drop) + swing_pos * mirror + sprint_pos + lag_pos;
+        tf.rotation = lag_rot * drop_rot * sprint_rot * swing_rot * Quat::from_rotation_x(0.5 * e) * Quat::from_rotation_y(side * 0.5 * e);
+        // Holding an urn by its shoulders: the hands go to its sides, the
+        // arms angled out and the fists turned in against the clay.
+        if held > 0.001 {
+            let grip = grab.grips[if hand == Hand::Right { 0 } else { 1 }];
+            let hold = Quat::from_rotation_y(side * 0.45) * Quat::from_rotation_z(side * 0.5) * Quat::from_rotation_x(-0.2);
+            tf.translation = tf.translation.lerp(grip, held);
+            tf.rotation = tf.rotation.slerp(hold, held);
+        }
     }
 }
