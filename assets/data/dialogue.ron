@@ -2,6 +2,9 @@
 //
 // A node: `say` = lines spoken one after another (click, Space or E moves on),
 // `mood` = Neutral | Happy | Curious | Worried | Sad | Angry | Surprised (face and hands),
+// `anim` = a body animation as the node starts: Wave | Nod | HeadShake | Shrug | Bow | Point | Cheer
+// play once; Sit (on the ground) | Think (hand to chin) are held until a later node's `anim`
+// (Stand gets up) or the talk ends,
 // `sets` = flags set on entering, `choices` = your replies, `then` = go straight on
 // when there are no replies.
 // A reply: `text`, optional `tone` tag, `goto` a node, `end: true` to finish,
@@ -16,6 +19,7 @@
         nodes: {
             "greet": (
                 mood: Surprised,
+                anim: Wave,
                 say: [
                     "MOSSA_GREET_01",
                     "MOSSA_GREET_02",
@@ -72,6 +76,7 @@
             ),
             "swamp": (
                 mood: Worried,
+                anim: Think,
                 say: [
                     "MOSSA_SWAMP_01",
                     "MOSSA_SWAMP_02",
@@ -97,6 +102,7 @@
             ),
             "follow": (
                 mood: Happy,
+                anim: Cheer,
                 say: ["MOSSA_FOLLOW_01"],
                 choices: [(text: "Let's go.", act: Follow, end: true)],
             ),
@@ -120,6 +126,7 @@
         nodes: {
             "greet": (
                 mood: Curious,
+                anim: Point,
                 say: [
                     "WARDEN_GREET_01",
                     "WARDEN_GREET_02",
@@ -167,6 +174,7 @@
             ),
             "below": (
                 mood: Worried,
+                anim: Think,
                 say: [
                     "WARDEN_BELOW_01",
                     "WARDEN_BELOW_02",
@@ -196,6 +204,7 @@
         nodes: {
             "greet": (
                 mood: Curious,
+                anim: Shrug,
                 say: [
                     "BRAM_GREET_01",
                     "BRAM_GREET_02",
@@ -244,6 +253,7 @@
             ),
             "why": (
                 mood: Angry,
+                anim: HeadShake,
                 say: [
                     "BRAM_WHY_01",
                     "BRAM_WHY_02",
@@ -252,6 +262,7 @@
             ),
             "explore": (
                 mood: Worried,
+                anim: Point,
                 say: [
                     "BRAM_EXPLORE_01",
                     "BRAM_EXPLORE_02",
@@ -260,6 +271,7 @@
             ),
             "follow": (
                 mood: Happy,
+                anim: Nod,
                 say: ["BRAM_FOLLOW_01"],
                 choices: [(text: "Come on, then.", act: Follow, end: true)],
             ),
@@ -277,6 +289,7 @@
         nodes: {
             "greet": (
                 mood: Angry,
+                anim: HeadShake,
                 say: [
                     "GILM_GREET_01",
                     "GILM_GREET_02",
@@ -317,6 +330,7 @@
             ),
             "tools": (
                 mood: Happy,
+                anim: Nod,
                 say: [
                     "GILM_TOOLS_01",
                     "GILM_TOOLS_02",
@@ -325,6 +339,7 @@
             ),
             "sporrow": (
                 mood: Sad,
+                anim: Sit,
                 say: [
                     "GILM_SPORROW_01",
                     "GILM_SPORROW_02",
@@ -354,6 +369,7 @@
             ),
             "commission_short": (
                 mood: Angry,
+                anim: HeadShake,
                 say: ["GILM_COMMISSION_SHORT_01"],
                 then: "hub",
             ),
@@ -366,6 +382,7 @@
         nodes: {
             "greet": (
                 mood: Happy,
+                anim: Wave,
                 say: [
                     "WREN_GREET_01",
                     "WREN_GREET_02",
@@ -406,6 +423,7 @@
             ),
             "sell": (
                 mood: Happy,
+                anim: Shrug,
                 say: [
                     "WREN_SELL_01",
                     "WREN_SELL_02",
@@ -414,6 +432,7 @@
             ),
             "fly": (
                 mood: Curious,
+                anim: Point,
                 say: [
                     "WREN_FLY_01",
                     "WREN_FLY_02",
@@ -455,6 +474,7 @@
         nodes: {
             "greet": (
                 mood: Curious,
+                anim: Bow,
                 say: [
                     "LIORA_GREET_01",
                     "LIORA_GREET_02",
@@ -495,6 +515,7 @@
             ),
             "court": (
                 mood: Neutral,
+                anim: Shrug,
                 say: [
                     "LIORA_COURT_01",
                     "LIORA_COURT_02",
@@ -525,6 +546,7 @@
             ),
             "court_lords": (
                 mood: Worried,
+                anim: Think,
                 say: [
                     "LIORA_COURT_LORDS_01",
                     "LIORA_COURT_LORDS_02",
@@ -566,6 +588,7 @@
         nodes: {
             "greet": (
                 mood: Angry,
+                anim: HeadShake,
                 say: [
                     "MESSLER_GREET_01",
                     "MESSLER_GREET_02",
@@ -606,6 +629,7 @@
             ),
             "wizard": (
                 mood: Sad,
+                anim: Sit,
                 say: [
                     "MESSLER_WIZARD_01",
                     "MESSLER_WIZARD_02",
@@ -614,6 +638,7 @@
             ),
             "cook": (
                 mood: Happy,
+                anim: Shrug,
                 say: [
                     "MESSLER_COOK_01",
                     "MESSLER_COOK_02",
@@ -638,11 +663,13 @@
             ),
             "fed_all": (
                 mood: Happy,
+                anim: Nod,
                 say: ["MESSLER_FED_ALL_01"],
                 then: "hub",
             ),
             "no_food": (
                 mood: Angry,
+                anim: HeadShake,
                 say: ["MESSLER_NO_FOOD_01"],
                 then: "hub",
             ),
@@ -655,6 +682,7 @@
         nodes: {
             "greet": (
                 mood: Curious,
+                anim: Think,
                 say: [
                     "ORRIN_GREET_01",
                     "ORRIN_GREET_02",
@@ -695,6 +723,7 @@
             ),
             "clouds": (
                 mood: Curious,
+                anim: Point,
                 say: [
                     "ORRIN_CLOUDS_01",
                     "ORRIN_CLOUDS_02",
@@ -703,6 +732,7 @@
             ),
             "alone": (
                 mood: Neutral,
+                anim: Sit,
                 say: [
                     "ORRIN_ALONE_01",
                     "ORRIN_ALONE_02",
@@ -722,6 +752,7 @@
             // Orrin reads the sky: {now}, {clears} and {next} come from the weather.
             "weather": (
                 mood: Curious,
+                anim: Nod,
                 say: ["ORRIN_WEATHER_01", "ORRIN_WEATHER_02"],
                 then: "hub",
             ),
@@ -739,6 +770,7 @@
         nodes: {
             "greet": (
                 mood: Neutral,
+                anim: Wave,
                 say: [
                     "BRINDLESPHEIMER_GREET_01",
                     "BRINDLESPHEIMER_GREET_02",
@@ -774,6 +806,7 @@
             ),
             "gate": (
                 mood: Neutral,
+                anim: Point,
                 say: [
                     "BRINDLESPHEIMER_GATE_01",
                     "BRINDLESPHEIMER_GATE_02",
@@ -782,6 +815,7 @@
             ),
             "well": (
                 mood: Neutral,
+                anim: Shrug,
                 say: [
                     "BRINDLESPHEIMER_WELL_01",
                     "BRINDLESPHEIMER_WELL_02",
@@ -805,6 +839,7 @@
         nodes: {
             "greet": (
                 mood: Angry,
+                anim: HeadShake,
                 say: ["C04_01"],
                 choices: [(text: "Goodbye.", end: true)],
             ),

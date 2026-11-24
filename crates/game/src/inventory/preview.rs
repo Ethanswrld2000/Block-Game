@@ -203,6 +203,7 @@ fn drive_preview(
         speaking: 0.0,
         arms,
         sway: [-0.08 * f * wiggle.cos(), 0.0],
+        act: None,
     };
     body::drive(&mut tf, &mut rig, &mut parts, dt, &drive);
 }

@@ -18,6 +18,7 @@
 pub mod body;
 pub mod data;
 pub mod dialogue;
+pub mod handover;
 pub mod motion;
 pub mod people;
 pub mod talk;
@@ -48,7 +49,7 @@ impl Plugin for NpcPlugin {
                 crate::menu::GameUpdate,
                 (spawn_key, settle, think, walk).chain().in_set(NpcSet).after(crate::player::PlayerSet),
             )
-            .add_plugins((body::BodyPlugin, talk::TalkPlugin, people::PeoplePlugin));
+            .add_plugins((body::BodyPlugin, talk::TalkPlugin, people::PeoplePlugin, handover::HandoverPlugin));
     }
 }
 
@@ -109,6 +110,8 @@ pub struct Npc {
     pub mouth: (f32, f32),
     pub speaking: f32,
     pub mood: Mood,
+    /// A body animation the talk asked for, and its number (`body::Drive::act`).
+    pub act: Option<(dialogue::Anim, u32)>,
     /// In a conversation: stands still and faces you.
     pub talking: bool,
     /// The place it keeps watch over (a dungeon's id for the gate guides).
@@ -135,6 +138,7 @@ impl Npc {
             mouth: (0.0, 0.8),
             speaking: 0.0,
             mood: Mood::Neutral,
+            act: None,
             talking: false,
             post: None,
             cue: None,

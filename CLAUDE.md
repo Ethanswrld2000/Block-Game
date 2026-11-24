@@ -288,7 +288,10 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `goto: "node"` works without `Some`; flags, `needs`/`without`, `once`, tone tags, `again` opening, acts
   Follow/Stay/Wander). `npc::body`: jointed box model (hips, knees, torso, shoulders, elbows, neck, head) with eye
   whites, iris + pupil that move, blinking lids, mood brows and a rectangular mouth with upper and lower teeth;
-  animates on real time. `npc::talk`: look at an NPC and press E: black bars, `Time<Virtual>` paused (so autoshot
+  animates on real time. No scarf. Looks `body: Human|Rat|Mushroom` (`data::Species`) picks the shape (`body::Frame` +
+  `human`/`rat`/`mushroom`: same joints, own boxes; rats have a swaying tail, mushrooms a built-in cap in `hair` colour).
+  Dialogue nodes can have `anim:` (`dialogue::Anim`: Wave, Nod, HeadShake, Shrug, Bow, Point, Cheer once; Sit, Think held
+  until another `anim`/`Stand` or the talk ends; poses in `motion::act`, layered in `body::step_act`). `npc::talk`: look at an NPC and press E: black bars, `Time<Virtual>` paused (so autoshot
   uses real time), HUD and arms hidden, camera eases to frame the speaker; click/Space/E/Enter continue, replies by
   mouse, 1-8 or W/S + Enter, Esc leaves. Not saved yet; no combat yet (room left in `npc::Order`).
   Screenshots: `BLOCKGAME_NPC=3` spawns one 3 blocks ahead, `BLOCKGAME_TALK=1` talks to it (`=replies` jumps to the replies).

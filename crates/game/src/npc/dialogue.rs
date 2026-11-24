@@ -26,6 +26,58 @@ pub enum Mood {
     Surprised,
 }
 
+/// A body animation a node starts as it begins (`motion::act`). The quick
+/// ones play once; `Sit` and `Think` are held until a later node starts
+/// another one (`Stand` gets up) or the talk ends.
+#[derive(Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Anim {
+    /// Raises the right hand and waves it.
+    Wave,
+    /// Nods yes twice.
+    Nod,
+    /// Shakes the head no.
+    HeadShake,
+    /// Shrugs, palms up.
+    Shrug,
+    /// Bows from the waist.
+    Bow,
+    /// Points ahead with the right arm.
+    Point,
+    /// Throws both arms up.
+    Cheer,
+    /// Holds the right hand out to you and lets go (`npc::handover` plays it,
+    /// with the item in the hand, whenever an NPC gives you something).
+    Give,
+    /// Sits down on the ground (held).
+    Sit,
+    /// Hand to the chin, thinking (held).
+    Think,
+    /// Back to standing after `Sit` or `Think`.
+    Stand,
+}
+
+impl Anim {
+    /// Held until something else starts (else it plays once).
+    pub fn held(self) -> bool {
+        matches!(self, Anim::Sit | Anim::Think)
+    }
+
+    /// How long a one-off lasts, seconds.
+    pub fn length(self) -> f32 {
+        match self {
+            Anim::Wave => 2.0,
+            Anim::Nod => 1.1,
+            Anim::HeadShake => 1.2,
+            Anim::Shrug => 1.3,
+            Anim::Bow => 1.8,
+            Anim::Point => 1.8,
+            Anim::Cheer => 1.6,
+            Anim::Give => 1.8,
+            Anim::Sit | Anim::Think | Anim::Stand => 0.0,
+        }
+    }
+}
+
 /// What a reply tells the NPC to do.
 #[derive(Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Act {
@@ -66,6 +118,9 @@ pub struct Node {
     pub say: Vec<String>,
     #[serde(default)]
     pub mood: Mood,
+    /// A body animation started as the node begins.
+    #[serde(default)]
+    pub anim: Option<Anim>,
     #[serde(default)]
     pub sets: Vec<String>,
     #[serde(default)]

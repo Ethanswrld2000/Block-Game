@@ -216,14 +216,20 @@ fn serve(
     (weather, kinds, clock): (Res<WeatherState>, Res<WeatherKinds>, Res<WorldClock>),
     player: Res<Player>,
     (mut spill, mut toast, mut story): (MessageWriter<Spill>, MessageWriter<Toast>, Option<ResMut<crate::cutscene::Story>>),
+    mut hand_over: MessageWriter<crate::npc::handover::HandOver>,
 ) {
     let Some(service) = talk.take_service() else { return };
     let Some(npc) = talk.with().and_then(|e| npcs.get(e).ok()) else { return };
     let Some(tree) = book.kinds.get(npc.kind).map(|k| k.dialogue.clone()) else { return };
     let title = |n: &str| items.id(n).map_or(n.to_string(), |i| items.get(i).title.clone());
     let have = |inv: &Inventory, n: &str| items.id(n).map_or(0, |i| inv.count(i));
+    // The NPC hands it over in person (`npc::handover`).
+    let giver = talk.with();
     let mut give = |inv: &mut Inventory, name: &str, count: u32| {
         let Some(id) = items.id(name) else { return };
+        if let Some(npc) = giver {
+            hand_over.write(crate::npc::handover::HandOver { npc, item: id });
+        }
         if let Some(left) = inv.add(&items, Stack::new(id, count as u16)) {
             spill.write(Spill { stack: left, at: player.pos + Vec3::Y });
         }
