@@ -144,6 +144,36 @@ impl World {
         Some(c.light.as_deref().map_or((voxel::light::MAX, 0), |l| voxel::light::coarse_at(l, x, y, z)))
     }
 
+    /// Every `block` in loaded chunks within the box `min..=max`. Chunks that
+    /// can't hold it are skipped without looking at their cells.
+    pub fn find_blocks(&self, min: BlockPos, max: BlockPos, block: BlockId) -> Vec<BlockPos> {
+        let mut found = Vec::new();
+        let (cmin, cmax) = (min.chunk(), max.chunk());
+        for cx in cmin.x..=cmax.x {
+            for cy in cmin.y..=cmax.y {
+                for cz in cmin.z..=cmax.z {
+                    let cp = ChunkPos { x: cx, y: cy, z: cz };
+                    let Some(c) = self.chunks.get(&cp) else { continue };
+                    if !c.data.may_contain(block) {
+                        continue;
+                    }
+                    let o = cp.origin();
+                    let lo = |m: i32, o: i32| (m - o).clamp(0, CHUNK_SIZE as i32 - 1) as usize;
+                    for y in lo(min.y, o.y)..=lo(max.y, o.y) {
+                        for z in lo(min.z, o.z)..=lo(max.z, o.z) {
+                            for x in lo(min.x, o.x)..=lo(max.x, o.x) {
+                                if c.data.get(x, y, z) == block {
+                                    found.push(BlockPos::new(o.x + x as i32, o.y + y as i32, o.z + z as i32));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        found
+    }
+
     pub fn block(&self, p: BlockPos) -> Option<BlockId> {
         let [x, y, z] = p.local();
         self.chunks.get(&p.chunk()).map(|c| c.data.get(x, y, z))

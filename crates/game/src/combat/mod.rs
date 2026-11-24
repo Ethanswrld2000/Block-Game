@@ -807,6 +807,9 @@ fn shoot(mut commands: Commands, mut shots: MessageReader<Shoot>, mut meshes: Re
             MeshMaterial3d(mat),
             Transform::from_translation(s.from).looking_to(s.vel.normalize_or(Vec3::Z), Vec3::Y),
             bevy::light::NotShadowCaster,
+            Visibility::default(),
+            // It lights the walls it flies past.
+            children![PointLight { color: Color::srgb(r, g, b), intensity: 12_000.0, range: 5.0, shadow_maps_enabled: false, ..default() }],
         ));
     }
 }

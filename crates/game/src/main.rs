@@ -25,6 +25,7 @@ mod progress;
 mod debug;
 mod delve;
 mod dungeon;
+mod glowcaps;
 mod hands;
 mod hud;
 mod cast;
@@ -95,6 +96,7 @@ fn main() {
             player::PlayerPlugin,
             hands::HandsPlugin,
             torches::TorchPlugin,
+            glowcaps::GlowcapPlugin,
             hud::HudPlugin,
             survival::SurvivalPlugin,
             inventory::InventoryPlugin,

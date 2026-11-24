@@ -93,6 +93,35 @@ pub struct Part {
     pub tilt: f32,
 }
 
+/// Glow (`Mat::look`) from which a part lights its surroundings.
+const LIGHT_FROM_GLOW: f32 = 1.0;
+/// Lumens per unit of glow, and the most one model gives.
+const GLOW_LUMENS: f32 = 4_000.0;
+const GLOW_LUMENS_MAX: f32 = 40_000.0;
+/// How far a model's glow reaches, in blocks.
+pub const GLOW_RANGE: f32 = 6.0;
+
+/// One light for a model's glowing parts (fire, crystals, spirit glass, brew,
+/// lit marks): where it sits (the glow-weighted middle), its colour and lumens.
+/// `None` if nothing glows enough.
+pub fn glow_light(parts: &[Part], urn: (f32, f32, f32)) -> Option<(Vec3, Color, f32)> {
+    let (mut at, mut rgb, mut total) = (Vec3::ZERO, Vec3::ZERO, 0.0);
+    for p in parts {
+        let (base, glow) = p.mat.look(urn);
+        if glow < LIGHT_FROM_GLOW {
+            continue;
+        }
+        let lin = base.to_linear();
+        at += p.at * glow;
+        rgb += Vec3::new(lin.red, lin.green, lin.blue) * glow;
+        total += glow;
+    }
+    (total > 0.0).then(|| {
+        let c = rgb / total;
+        (at / total, Color::linear_rgb(c.x, c.y, c.z), (total * GLOW_LUMENS).min(GLOW_LUMENS_MAX))
+    })
+}
+
 fn b(sx: f32, sy: f32, sz: f32, x: f32, y: f32, z: f32, mat: Mat) -> Part {
     Part { size: Vec3::new(sx, sy, sz), at: Vec3::new(x, y, z), mat, tilt: 0.0 }
 }

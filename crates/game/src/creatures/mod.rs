@@ -68,6 +68,10 @@ pub struct CreatureSet;
 
 /// Gravity on creatures, blocks/s².
 const GRAVITY: f32 = 25.0;
+/// Light from a glowing box (`glow: true` in creatures.ron, a firefly's lantern):
+/// a small pool on the ground and leaves close by.
+const GLOW_BOX_LUMENS: f32 = 6_000.0;
+const GLOW_BOX_RANGE: f32 = 4.0;
 /// Upward speed of a hop over a one-block step.
 const HOP: f32 = 7.6;
 /// Creatures further than this from you are removed.
@@ -314,13 +318,24 @@ pub fn spawn_creature(commands: &mut Commands, kinds: &Kinds, assets: &CreatureA
         let looks = &assets.looks[kind];
         let h = (pos.x.to_bits() ^ pos.z.to_bits().rotate_left(16) ^ yaw.to_bits().rotate_left(8)).wrapping_mul(0x9E37_79B9);
         for (index, part) in looks[(h >> 16) as usize % looks.len()].iter().enumerate() {
-            p.spawn((
+            let mut e = p.spawn((
                 Mesh3d(part.mesh.clone()),
                 MeshMaterial3d(part.normal.clone()),
                 Transform::from_translation(part.offset),
                 Part { normal: part.normal.clone(), hurt: part.hurt.clone(), index },
                 NotShadowCaster,
             ));
+            // A glowing box (a firefly's lantern) lights what's round it, and
+            // goes dark with it when it blinks (the light is its child).
+            if let Some(b) = k.model.get(index).filter(|b| b.glow) {
+                e.with_child(PointLight {
+                    color: Color::srgb(b.color.0, b.color.1, b.color.2),
+                    intensity: GLOW_BOX_LUMENS,
+                    range: GLOW_BOX_RANGE,
+                    shadow_maps_enabled: false,
+                    ..default()
+                });
+            }
         }
         if let Some(g) = k.glow {
             p.spawn((

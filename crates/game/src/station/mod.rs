@@ -643,6 +643,10 @@ fn place_stations(
                     })
                     .clone()
             };
+            // Fire, crystals and glowing marks light what's round the station.
+            if let Some((at, color, lumens)) = models::glow_light(&parts, color) {
+                c.spawn((PointLight { color, intensity: lumens, range: models::GLOW_RANGE, shadow_maps_enabled: false, ..default() }, Transform::from_translation(at)));
+            }
             for p in parts {
                 let mat = mat_for(&mut materials, p);
                 let key = [p.size.x.to_bits(), p.size.y.to_bits(), p.size.z.to_bits()];

@@ -142,6 +142,14 @@ fn spawn_spills(
                 }
             },
         }
+        // A torch on the ground still burns: a dimmer light than one in hand.
+        if matches!(item.kind, ItemKind::Torch) {
+            e.insert(Visibility::default()).with_child((
+                PointLight { intensity: crate::torches::TORCH_LUMENS * 0.35, range: crate::torches::TORCH_RANGE * 0.6, color: crate::torches::TORCH_COLOR, shadow_maps_enabled: false, ..default() },
+                crate::torches::Flicker { base: crate::torches::TORCH_LUMENS * 0.35, seed: at.x + at.z },
+                Transform::from_xyz(0.0, 0.3, 0.0),
+            ));
+        }
     }
 }
 

@@ -214,6 +214,11 @@ fn place_veils(
                         NotShadowCaster,
                     ));
                 }
+                // The veil's own blue light on the doorway round it.
+                c.spawn((
+                    PointLight { color: Color::srgb(VEIL_COLOR.0, VEIL_COLOR.1, VEIL_COLOR.2), intensity: 60_000.0, range: 9.0, shadow_maps_enabled: false, ..default() },
+                    Transform::from_xyz(0.0, 0.0, 0.6),
+                ));
             });
     }
 }

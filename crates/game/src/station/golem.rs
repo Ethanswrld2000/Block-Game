@@ -172,7 +172,11 @@ pub(super) fn golem_walk(
     let color = book.0.urns[station.urn].color;
     let hands = urns.has("golem_hands");
     commands.spawn((GolemBody, station, tf, Visibility::default())).with_children(|c| {
-        for p in models::parts(StationKind::Golem, &|s| s == "golem_hands" && hands, 0) {
+        let parts = models::parts(StationKind::Golem, &|s| s == "golem_hands" && hands, 0);
+        if let Some((at, color, lumens)) = models::glow_light(&parts, color) {
+            c.spawn((PointLight { color, intensity: lumens, range: models::GLOW_RANGE, shadow_maps_enabled: false, ..default() }, Transform::from_translation(at)));
+        }
+        for p in parts {
             let (base, glow) = p.mat.look(color);
             let lin = base.to_linear();
             let mat = materials.add(StandardMaterial {

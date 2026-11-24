@@ -532,6 +532,10 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   the light at their head (`World::light_at`, from each chunk's half-resolution `Light::coarse` kept after meshing):
   `body::match_light` dims their colours and shine by the sky level and adds warm torch glow, eased. Creatures and the
   first-person arm still use Bevy's lights only.
+- Moving and glowing lights use Bevy point lights (block light is for blocks): glowing creature boxes (`glow: true`,
+  firefly lanterns) carry a small light that blinks with them; `game::glowcaps` moves a pool of 12 cool lights to the
+  nearest glowcap patches at night (`World::find_blocks`); dropped torches, spore bolts, dungeon veils, and stations or
+  the golem with glowing parts (`station::models::glow_light`: fire, crystal, spirit glass, brew, lit marks) light up too.
 - Block textures: the terrain texture array has mipmaps (`blocks::mip_chain`: linear-light averages, cut-out tiles keep their
   coverage); `voxel.wesl` samples with `textureSampleGrad` from the unbroken quad UVs so levels don't jump at block edges, and
   picks a version and turn per block from `variants` in blocks.ron (`voxel::tiles::variant_table`, uniform 106). Variant tiles
