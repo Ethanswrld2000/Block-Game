@@ -46,21 +46,55 @@ def rect(x, y, w, h, c):
             put(i, j, c)
 
 
-def frame(x, y, w, h, outline, light, dark, face, inner=None, width=1):
-    """A bevelled box: outline, `width` px of light (top/left) and dark
-    (bottom/right) bevel, optional 1 px inner line, then the face."""
+# Palette: dark oak, wrought iron, brass and worn stone. Light falls from the
+# top left, so raised things are light there and dark at the bottom right;
+# sunken things (slots, meters) the other way round. Every frame has its
+# outer corner pixels cut, for the chunky rounded look of pixel-art windows.
+INK = hexc("0d0b09")
+CLEAR = (0, 0, 0, 0)
+OAK_HI, OAK, OAK_MID, OAK_LO, OAK_DEEP = hexc("b58955"), hexc("8a6238"), hexc("74512d"), hexc("4f361d"), hexc("33220f")
+IRON_HI, IRON, IRON_LO = hexc("c9ccce"), hexc("8a8f93"), hexc("4b4f53")
+STONE_HI, STONE, STONE_LO, STONE_DEEP = hexc("b9b4a8"), hexc("858075"), hexc("5a564e"), hexc("3a3732")
+BRASS, BRASS_HI, BRASS_LO = hexc("d9a93f"), hexc("ffe08a"), hexc("8c6218")
+PANEL_FACE = hexc("1d1813", 246)
+SHADE = hexc("120e0a", 246)
+GOLD = hexc("f0c040")
+
+
+def notch(x, y, w, h, c=CLEAR):
+    """Cut the four outer corner pixels."""
+    for cx, cy in [(x, y), (x + w - 1, y), (x, y + h - 1), (x + w - 1, y + h - 1)]:
+        put(cx, cy, c)
+
+
+def bevel(x, y, w, h, hi, lo, face, width=2, outline=INK, corner=None, inner=None):
+    """A chunky box: an outline with cut corners, `width` px of light
+    (top/left) and dark (bottom/right) bevel, an optional 1 px inner line, then
+    the face. Where light meets dark (top right, bottom left) the corner takes
+    `corner` (the face colour by default), as on carved pixel-art buttons."""
     rect(x, y, w, h, outline)
+    notch(x, y, w, h)
+    corner = face if corner is None else corner
     for k in range(width):
         o = 1 + k
-        rect(x + o, y + o, w - 2 * o, 1, light)            # top
-        rect(x + o, y + o, 1, h - 2 * o, light)            # left
-        rect(x + o, y + h - 1 - o, w - 2 * o, 1, dark)     # bottom
-        rect(x + w - 1 - o, y + o, 1, h - 2 * o, dark)     # right
+        rect(x + o, y + o, w - 2 * o, 1, hi)
+        rect(x + o, y + o, 1, h - 2 * o, hi)
+        rect(x + o, y + h - 1 - o, w - 2 * o, 1, lo)
+        rect(x + w - 1 - o, y + o, 1, h - 2 * o, lo)
+        put(x + w - 1 - o, y + o, corner)
+        put(x + o, y + h - 1 - o, corner)
     o = 1 + width
     if inner is not None:
         rect(x + o, y + o, w - 2 * o, h - 2 * o, inner)
         o += 1
     rect(x + o, y + o, w - 2 * o, h - 2 * o, face)
+
+
+def rivet(x, y):
+    put(x, y, IRON_HI)
+    put(x + 1, y, IRON)
+    put(x, y + 1, IRON)
+    put(x + 1, y + 1, IRON_LO)
 
 
 def add(name, x, y, w, h, sl=None):
@@ -69,73 +103,103 @@ def add(name, x, y, w, h, sl=None):
     sprites.append((name, x, y, w, h, sl))
 
 
-# Palette: swamp wood, moss and brass.
-INK = hexc("0b0d0a")
-WOOD_HI, WOOD, WOOD_LO = hexc("9a7646"), hexc("6e5130"), hexc("3d2a16")
-MOSS_HI, MOSS, MOSS_LO = hexc("86a36c"), hexc("55724a"), hexc("2d3f28")
-BRASS, BRASS_HI, BRASS_LO = hexc("d6ad55"), hexc("f4dc94"), hexc("8a6424")
-PANEL_FACE = hexc("141b17", 246)
-GOLD = hexc("e8bd52")
+def oak_frame(x, y, w, h, face, edge=4):
+    """A window frame of oak planks (`edge` px wide, grain running along each
+    plank so it stretches cleanly), mitred corners, an inked inner edge and a
+    shadowed face."""
+    rect(x, y, w, h, INK)
+    notch(x, y, w, h)
+    # Planks: rows from the outside in.
+    top = [OAK_HI, OAK, OAK_MID, OAK][:edge]
+    bot = [OAK_LO, OAK_MID, OAK_LO, OAK_DEEP][:edge]
+    for k in range(edge):
+        o = 1 + k
+        rect(x + o, y + o, w - 2 * o, 1, top[k])                     # top plank
+        rect(x + o, y + o, 1, h - 2 * o, top[k])                     # left plank
+        rect(x + o, y + h - 1 - o, w - 2 * o, 1, bot[k])             # bottom plank
+        rect(x + w - 1 - o, y + o, 1, h - 2 * o, bot[k])             # right plank
+    # Mitre joints: a dark seam on the diagonal of each corner.
+    for k in range(edge):
+        o = 1 + k
+        for cx, cy in [(x + o, y + o), (x + w - 1 - o, y + o), (x + o, y + h - 1 - o), (x + w - 1 - o, y + h - 1 - o)]:
+            put(cx, cy, OAK_DEEP)
+    o = 1 + edge
+    rect(x + o, y + o, w - 2 * o, h - 2 * o, INK)                    # inner ink line
+    o += 1
+    rect(x + o, y + o, w - 2 * o, h - 2 * o, face)
+    rect(x + o, y + o, w - 2 * o, 1, SHADE)                          # the frame's shadow on the face
+    rect(x + o, y + o, 1, h - 2 * o, SHADE)
+
 
 # --- Frames (row 0) -------------------------------------------------------
 
-# panel: the window frame (wood with brass corner studs).
+# panel: the window frame (oak planks, iron corner brackets with rivets).
 x, y = 0, 0
-frame(x, y, 24, 24, INK, WOOD_HI, WOOD_LO, PANEL_FACE, inner=INK, width=3)
-for i in range(4, 20, 3):  # wood grain on the top and left planks
-    put(x + i, y + 2, WOOD)
-    put(x + 2, y + i, WOOD)
-for cx, cy in [(1, 1), (20, 1), (1, 20), (20, 20)]:
-    rect(x + cx, y + cy, 3, 3, BRASS)
-    put(x + cx, y + cy, BRASS_HI)
-    put(x + cx + 2, y + cy + 2, BRASS_LO)
+oak_frame(x, y, 24, 24, PANEL_FACE)
+for cx, cy, sx, sy in [(1, 1, 1, 1), (22, 1, -1, 1), (1, 22, 1, -1), (22, 22, -1, -1)]:
+    # an L-shaped iron bracket, 5 px each way, 2 px thick
+    for k in range(5):
+        for t in range(2):
+            put(x + cx + sx * k, y + cy + sy * t, IRON if t == 0 else IRON_LO)
+            put(x + cx + sx * t, y + cy + sy * k, IRON if t == 0 else IRON_LO)
+    put(x + cx, y + cy, IRON_HI)
+    rivet(x + cx + (0 if sx > 0 else -1) + sx * 2, y + cy + (0 if sy > 0 else -1) + sy * 2)
+notch(x, y, 24, 24)
 add("panel", x, y, 24, 24, 8)
 
-# panel_light: a thinner frame for the HUD clusters.
+# panel_light: a thinner stone-edged frame for the HUD clusters.
 x = 24
-frame(x, y, 16, 16, INK, hexc("3f5244"), hexc("1a241d"), hexc("101612", 215))
+bevel(x, y, 16, 16, hexc("6b665b"), hexc("2b2824"), hexc("17130f", 220), width=1, inner=hexc("0d0b09", 230), corner=hexc("4a463f"))
 add("panel_light", x, y, 16, 16, 4)
 
-# inset: a sunken area inside a panel.
+# inset: a sunken well inside a panel (dark top/left, lit bottom/right).
 x = 40
-frame(x, y, 12, 12, hexc("0b0d0a", 0), hexc("070908"), hexc("34413a"), hexc("0b100d", 225))
+bevel(x, y, 12, 12, hexc("080706"), hexc("4a4238"), hexc("100d0a", 228), width=1, outline=hexc("0d0b09", 0), corner=hexc("2a241d"))
 add("inset", x, y, 12, 12, 3)
 
-# header: a wooden title strip.
+# header: an oak title board with plank seams.
 x = 52
-frame(x, y, 16, 14, INK, WOOD_HI, WOOD_LO, WOOD)
-for i in range(3, 13, 3):
-    put(x + i, y + 6, hexc("5d4327"))
-    put(x + i + 1, y + 8, hexc("5d4327"))
+bevel(x, y, 16, 14, OAK_HI, OAK_LO, OAK, width=1, corner=OAK_MID)
+rect(x + 2, y + 5, 12, 1, OAK_MID)
+rect(x + 2, y + 9, 12, 1, OAK_MID)
+put(x + 2, y + 2, IRON_HI)
+put(x + 13, y + 2, IRON_HI)
+put(x + 2, y + 11, IRON)
+put(x + 13, y + 11, IRON)
 add("header", x, y, 16, 14, 4)
 
-# tooltip: dark parchment with a brass rule.
+# tooltip: near-black vellum with a double brass rule.
 x = 68
-frame(x, y, 16, 16, INK, BRASS, BRASS_LO, hexc("1b1812", 248))
+bevel(x, y, 16, 16, BRASS, BRASS_LO, hexc("15100c", 250), width=1, inner=hexc("2a1f14"), corner=BRASS)
 add("tooltip", x, y, 16, 16, 4)
 
 # banner: the place title card, a dark ribbon with brass edges and notched ends.
 x = 84
 bw, bh = 40, 20
-rect(x, y + 2, bw, bh - 4, hexc("0e120f", 242))
-rect(x, y + 2, bw, 1, BRASS)
-rect(x, y + bh - 3, bw, 1, BRASS)
+rect(x, y + 2, bw, bh - 4, hexc("15100c", 242))
+rect(x, y + 2, bw, 1, INK)
+rect(x, y + 3, bw, 1, BRASS_HI)
 rect(x, y + 4, bw, 1, BRASS_LO)
-rect(x, y + bh - 5, bw, 1, BRASS_LO)
+rect(x, y + bh - 3, bw, 1, INK)
+rect(x, y + bh - 4, bw, 1, BRASS_LO)
+rect(x, y + bh - 5, bw, 1, BRASS)
 for j in range(bh):
     d = abs(j - (bh - 1) / 2)
     cut = max(0, 6 - int(d))  # V-shaped notch depth at the ends
     for k in range(cut):
-        put(x + k, y + j, (0, 0, 0, 0))
-        put(x + bw - 1 - k, y + j, (0, 0, 0, 0))
+        put(x + k, y + j, CLEAR)
+        put(x + bw - 1 - k, y + j, CLEAR)
 add("banner", x, y, bw, bh, (12, 6, 12, 6))
 
-# divider: a thin brass rule with studs at the ends.
+# divider: a brass rule with a dark groove and diamond studs at the ends.
 x = 124
-rect(x, y + 1, 32, 1, BRASS)
-rect(x, y + 2, 32, 1, BRASS_LO)
-rect(x, y, 2, 4, BRASS_HI)
-rect(x + 30, y, 2, 4, BRASS_HI)
+rect(x + 3, y + 1, 26, 1, BRASS)
+rect(x + 3, y + 2, 26, 1, BRASS_LO)
+for sx in (x, x + 29):
+    rect(sx + 1, y, 1, 4, BRASS)
+    rect(sx, y + 1, 3, 2, BRASS)
+    put(sx + 1, y + 1, BRASS_HI)
+    put(sx + 1, y + 2, BRASS_LO)
 add("divider", x, y, 32, 4, (4, 1, 4, 1))
 
 # white: a plain tintable pixel block (for fills and lines).
@@ -145,40 +209,54 @@ add("white", x, y, 4, 4, 1)
 
 # --- Slots and buttons (row 1, y = 24) -------------------------------------
 y = 24
-SLOT_FACE = hexc("1a221d", 225)
-frame(0, y, 16, 16, INK, hexc("070908"), hexc("3d4a40"), SLOT_FACE)
+# slot: a sunken square, dark at the top left, lit at the bottom right.
+bevel(0, y, 16, 16, hexc("0a0806"), hexc("5a5044"), hexc("221c16", 232), width=2, corner=hexc("2e271f"))
 add("slot", 0, y, 16, 16, 4)
-frame(16, y, 16, 16, INK, hexc("101410"), hexc("8aa58e"), hexc("27342b", 235))
+bevel(16, y, 16, 16, hexc("15110d"), hexc("a8987c"), hexc("3a3126", 240), width=2, corner=hexc("4a3f31"))
 add("slot_hover", 16, y, 16, 16, 4)
-frame(32, y, 16, 16, INK, GOLD, BRASS_LO, hexc("2b2919", 235), width=2)
-put(34, y + 2, BRASS_HI)
+# slot_selected: a gold frame round the slot, with bright corner pips.
+bevel(32, y, 16, 16, GOLD, BRASS_LO, hexc("2e2614", 238), width=2, corner=BRASS)
+rect(32 + 3, y + 3, 10, 1, hexc("0a0806"))
+rect(32 + 3, y + 3, 1, 10, hexc("0a0806"))
+for cx, cy in [(1, 1), (14, 1), (1, 14), (14, 14)]:
+    put(32 + cx, y + cy, BRASS_HI)
 add("slot_selected", 32, y, 16, 16, 5)
 
 # item: the raised tile an item sits on in a grid (tinted by the item's colour).
-frame(48, y, 16, 16, INK, hexc("d8d8d8"), hexc("7a7a7a"), hexc("a8a8a8"))
+bevel(48, y, 16, 16, hexc("f0f0f0"), hexc("6a6a6a"), hexc("ababab"), width=2, corner=hexc("9a9a9a"))
 add("item", 48, y, 16, 16, 4)
 
-# buttons: moss-green planks.
-frame(64, y, 16, 16, INK, MOSS_HI, MOSS_LO, MOSS)
+# buttons: carved stone blocks.
+bevel(64, y, 16, 16, STONE_HI, STONE_DEEP, STONE, width=2, corner=STONE_LO)
+rect(64 + 3, y + 12, 10, 1, STONE_LO)  # a worn lower lip
 add("button", 64, y, 16, 16, 4)
-frame(80, y, 16, 16, INK, hexc("a9c48e"), hexc("3a5233"), hexc("6b8a5c"))
+# hover: the stone lights up with a mossy-gold glow.
+bevel(80, y, 16, 16, hexc("f2e2a0"), hexc("5a4a22"), hexc("a8925a"), width=2, corner=hexc("8a763f"))
+rect(80 + 3, y + 12, 10, 1, hexc("8a763f"))
 add("button_hover", 80, y, 16, 16, 4)
-frame(96, y, 16, 16, INK, MOSS_LO, MOSS_HI, hexc("43603b"))
+# down: pressed in, light and dark swapped.
+bevel(96, y, 16, 16, STONE_DEEP, STONE_HI, STONE_LO, width=2, corner=STONE_LO)
 add("button_down", 96, y, 16, 16, 4)
-frame(112, y, 16, 16, INK, hexc("4a4f48"), hexc("252824"), hexc("33372f"))
+bevel(112, y, 16, 16, hexc("57534c"), hexc("2a2824"), hexc("3e3b35"), width=2, corner=hexc("35322d"))
 add("button_off", 112, y, 16, 16, 4)
 
-# bar: the frame round a meter. fill: what goes in it (tinted).
-frame(128, y, 12, 8, INK, hexc("050605"), hexc("2c352f"), hexc("070908", 235))
+# bar: the sunken trough round a meter. fill: what goes in it (tinted).
+bevel(128, y, 12, 8, hexc("050403"), hexc("4a4238"), hexc("0a0806", 238), width=1, corner=hexc("2a241d"))
 add("bar", 128, y, 12, 8, 2)
-rect(140, y, 6, 6, hexc("ffffff"))
-rect(140, y, 6, 1, hexc("ffffff"))
-rect(140, y + 4, 6, 2, hexc("c8c8c8"))  # darker lower edge gives the fill some depth
+rect(140, y, 6, 6, hexc("e2e2e2"))
+rect(140, y, 6, 1, hexc("ffffff"))          # a bright top edge
+rect(140, y + 4, 6, 1, hexc("b4b4b4"))      # shaded lower rows give it a rounded look
+rect(140, y + 5, 6, 1, hexc("8e8e8e"))
 add("fill", 140, y, 6, 6, (1, 1, 1, 2))
 
-# knob: a settings slider handle.
-frame(148, y, 8, 12, INK, BRASS_HI, BRASS_LO, BRASS)
+# knob: a settings slider handle, a brass-capped iron peg.
+bevel(148, y, 8, 12, IRON_HI, IRON_LO, IRON, width=1, corner=IRON)
+rect(148 + 2, y + 2, 4, 2, BRASS)
+put(148 + 2, y + 2, BRASS_HI)
+rect(148 + 2, y + 5, 4, 1, IRON_LO)
+rect(148 + 2, y + 7, 4, 1, IRON_LO)
 add("knob", 148, y, 8, 12)
+
 
 # --- Skill tree nodes (row 2, y = 44), grey so the game can tint them ------
 y = 44
@@ -724,33 +802,41 @@ for j in range(16):
             put(sx + k, y + j, c)
 add("sil_hand_left", sx, y, 16, 16)
 
-# tab: a folder tab on top of the window. tab_active: the open one, whose
-# face runs into the panel below it (no bottom edge).
+# tab: a folder tab on top of the window, an oak board with its top corners
+# cut. tab_active: the open one, the panel's own planks with no bottom edge,
+# so it runs into the window. tab_hover: a lighter, raised board.
 x = 176
-frame(x, y, 16, 14, INK, hexc("4a5a4c"), hexc("1d2620"), hexc("18201b", 240))
+bevel(x, y, 16, 14, hexc("6e5232"), hexc("2e2013"), hexc("2a2118", 242), width=2, corner=hexc("4a3622"))
 add("tab", x, y, 16, 14, 4)
 x = 192
 rect(x, y, 16, 14, INK)
-rect(x + 1, y + 1, 14, 2, WOOD_HI)
-rect(x + 1, y + 1, 2, 13, WOOD_HI)
-rect(x + 13, y + 1, 2, 13, WOOD_LO)
+put(x, y, CLEAR)
+put(x + 15, y, CLEAR)
+rect(x + 1, y + 1, 14, 1, OAK_HI)
+rect(x + 2, y + 2, 12, 1, OAK)
+rect(x + 1, y + 1, 1, 13, OAK_HI)
+rect(x + 2, y + 2, 1, 12, OAK)
+rect(x + 14, y + 1, 1, 13, OAK_LO)
+rect(x + 13, y + 2, 1, 12, OAK_MID)
 rect(x + 3, y + 3, 10, 11, PANEL_FACE)
-put(x + 1, y + 1, BRASS_HI)
-put(x + 14, y + 1, BRASS)
+rect(x + 3, y + 3, 10, 1, SHADE)
+rect(x + 1, y + 1, 2, 2, IRON)
+put(x + 1, y + 1, IRON_HI)
+rect(x + 13, y + 1, 2, 2, IRON)
+put(x + 14, y + 2, IRON_LO)
 add("tab_active", x, y, 16, 14, (4, 4, 4, 1))
-# tab_hover: a raised, lighter tab.
 x = 208
-frame(x, y, 16, 14, INK, hexc("7d9670"), hexc("2d3a28"), hexc("26332a", 245))
+bevel(x, y, 16, 14, hexc("c49a62"), hexc("4f361d"), hexc("3d2e1f", 248), width=2, corner=hexc("74512d"))
 add("tab_hover", x, y, 16, 14, 4)
-# slot_glow: a slot that takes what you carry (gold-green light round it).
+# slot_glow: a slot that takes what you carry (a green-gold light round it).
 x = 224
-frame(x, y, 16, 16, hexc("b8e07a"), hexc("e8f6a0"), hexc("6e9a3a"), hexc("1f2f1c", 235), inner=hexc("0b0d0a"))
+bevel(x, y, 16, 16, hexc("eaf7a8"), hexc("6e9a3a"), hexc("1f2a17", 238), width=2, outline=hexc("b8e07a"), corner=hexc("a8cc6a"), inner=hexc("0d0b09"))
 add("slot_glow", x, y, 16, 16, 4)
-# card: a quiet frame for the stats tab.
+# card: a quiet stone-edged frame for the stats tab, brass pins at the top.
 x = 240
-frame(x, y, 16, 16, hexc("0b0d0a", 255), hexc("2f3b33"), hexc("121813"), hexc("161e19", 235))
-put(x + 1, y + 1, BRASS)
-put(x + 14, y + 1, BRASS)
+bevel(x, y, 16, 16, hexc("4a4338"), hexc("15110d"), hexc("1c1712", 236), width=1, corner=hexc("2e281f"), inner=hexc("0d0b09", 200))
+put(x + 2, y + 2, BRASS)
+put(x + 13, y + 2, BRASS)
 add("card", x, y, 16, 16, 4)
 
 # plinth: the stone disc the player stands on in the equipment tab, with its
