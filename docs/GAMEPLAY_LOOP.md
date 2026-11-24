@@ -107,9 +107,7 @@ Each step is small enough for one pull request and makes the loop above more rea
 2. **Campfire block.** A placeable fire that warms a wide area much more than a torch, cooks food
    without a camp, and burns fuel (sticks, logs). Torches stay light, campfires become heat.
 3. **Better clothes ladder.** Done: linen robe and sun hat (cooling), fur boots, reed breather (air), at the sewing table.
-4. **Expedition goals.** A short list of things to find in each region (an ore, a creature, a
-   place), shown in the K map, each giving XP and pointing at the next region. Data in a new
-   `assets/data/journey.ron`.
+4. **Expedition goals.** Done: `game::journey`, `assets/data/journey.ron`, listed beside the map (M).
 5. **Sky island payoff.** Something only up there worth the trip: a rare ore, a shrine that teaches
    a spell, a view of the whole map.
 6. **Tuning pass.** Play a full in-game week from a new world and adjust `exposure.ron`,

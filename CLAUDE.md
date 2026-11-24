@@ -550,6 +550,12 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   wheel if allowed) turn the page: the leaf folds over the spine (`turn_leaves`). `book::paginate` splits entries into
   pages by size. Used by the bench recipe book (`station::book`, one page) and the journal (J, a spread).
   Screenshots: `BLOCKGAME_BOOKTURN=0.5` turns the first open book and holds the leaf there; `BLOCKGAME_JOURNAL=all` shows every clue.
+- Region goals: `game::journey` + `assets/data/journey.ron` (pure rules in `journey::rules`). Regions in order (swamp,
+  forests, desert, snowy mountains, deep caves, sky islands), each with goals: Mine, Slay (`journey::CreatureSlain` from
+  `creatures`), Make (`board::Crafted`), Reach (biome), Find (`progress.found` key prefix), Below (height), Sky. Goals of any
+  region count whenever done; each gives XP once. Finishing a region moves the list on and sets a waypoint at the nearest
+  ground of the next one (`journey::nearest`, on the `AsyncComputeTaskPool`; `target` in the data). The list shows beside the
+  map (M, `map::GoalsSlot`). Saved to `journey.ron`.
 - Region clothes: `Wear` items can have `cooling` (°C off felt heat, never below comfortable; `vitals::clothed`) and `air`
   (share of missing air made up, best worn piece counts; `vitals::helped`). Sewing table: `linen_robe`, `sun_hat` (desert),
   `fur_boots` (peaks), `reed_breather` (deep caves and sky; Head slot, so it trades against a hood).
