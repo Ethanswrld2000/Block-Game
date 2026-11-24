@@ -10,7 +10,7 @@ use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use super::models::{self, Mat};
+use super::models;
 use super::{Station, StationKind, UrnBook, Urns};
 use crate::blocks::Blocks;
 use crate::creatures::data::{Kinds, Temper};
@@ -101,7 +101,7 @@ pub(super) fn golem_walk(
     creatures: Query<(Entity, &Transform, &Creature), Without<GolemBody>>,
     kinds: Option<Res<Kinds>>,
     mut strikes: MessageWriter<Strike>,
-    (mut meshes, mut materials): (ResMut<Assets<Mesh>>, ResMut<Assets<StandardMaterial>>),
+    (mut meshes, mut materials, art): (ResMut<Assets<Mesh>>, ResMut<Assets<StandardMaterial>>, Option<Res<super::skin::StationArt>>),
 ) {
     let Some(book) = book else { return };
     let awake = urns.has("golem_heart");
@@ -177,25 +177,25 @@ pub(super) fn golem_walk(
             c.spawn((PointLight { color, intensity: lumens, range: models::GLOW_RANGE, shadow_maps_enabled: false, ..default() }, Transform::from_translation(at)));
         }
         for p in parts {
-            let (base, glow) = p.mat.look(color);
-            let lin = base.to_linear();
-            let mat = materials.add(StandardMaterial {
-                base_color: base,
-                emissive: LinearRgba::rgb(lin.red * glow, lin.green * glow, lin.blue * glow),
-                perceptual_roughness: if matches!(p.mat, Mat::Iron) { 0.5 } else { 0.95 },
-                ..default()
-            });
-            let mesh = meshes.add(Cuboid::new(p.size.x, p.size.y, p.size.z));
+            let mat = materials.add(super::skin::material(p.mat, color, art.as_deref()));
+            let mesh = meshes.add(super::skin::box_mesh(p.size));
             c.spawn((Mesh3d(mesh), MeshMaterial3d(mat), Transform::from_translation(p.at), NotShadowCaster));
         }
     });
 }
 
 /// Hands put on after it woke: rebuild its body.
-pub(super) fn golem_rebuild(urns: Res<Urns>, mut commands: Commands, body: Query<Entity, With<GolemBody>>, mut had: Local<bool>) {
-    let hands = urns.has("golem_hands");
-    if hands != *had {
-        *had = hands;
+pub(super) fn golem_rebuild(
+    urns: Res<Urns>,
+    art: Option<Res<super::skin::StationArt>>,
+    mut commands: Commands,
+    body: Query<Entity, With<GolemBody>>,
+    mut had: Local<(bool, bool)>,
+) {
+    // Hands put on, or the station textures arrived.
+    let now = (urns.has("golem_hands"), art.is_some_and(|a| a.ready()));
+    if now != *had {
+        *had = now;
         for e in &body {
             commands.entity(e).despawn();
         }
