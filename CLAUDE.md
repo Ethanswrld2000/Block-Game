@@ -591,6 +591,10 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   can't be broken) `SHRINE_OFFSET` (5) blocks east of their chest. Right click (`shrine::UseShrine` from `interact`) gives
   +1 skill point and XP once per shrine (`shrine:x,y,z` in `Progress.found`). Tiles `sky_shrine`, `sky_shrine_top` are
   appended after the variant tiles in `gen_placeholder_art.py` so nothing moves.
+- First-person feel: `game::pov` (`Pov`: eased `sprint`, `Spring`s for the hands' `drop` and look lag). Sprint widens
+  the FOV by `pov::SPRINT_FOV` (8°, negative narrows; skipped while `Menus.still`), hands sink while falling, are knocked
+  down on landing and spring back, hop on a jump, trail the mouse, and drop into a low tilted carry while sprinting
+  (`hands::pose_hands`, eased out during swings, guard and eating). Landing also nods the view down (`ride_camera`).
 - Next: see `docs/GAMEPLAY_LOOP.md`.
 
 ## Testing without a screen

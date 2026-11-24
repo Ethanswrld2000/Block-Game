@@ -437,7 +437,9 @@ fn ride_camera(time: Res<Time>, player: Res<Player>, body: Res<Body>, kick: Opti
     let dizzy_yaw = (t * 0.6).sin() * 0.05 * body.dizzy;
     let (kick_pitch, kick_roll) = kick.map_or((0.0, 0.0), |k| (k.pitch, k.roll));
     let roll = (p.bob_phase * 0.5).sin() * 0.012 * b + dizzy_roll + kick_roll;
-    let rotation = Quat::from_euler(EulerRot::YXZ, look.yaw + dizzy_yaw, look.pitch + s.abs() * 0.006 * b + kick_pitch, roll);
+    // Landing nods the view down with the dip, then it springs back.
+    let land_nod = p.dip * 0.15;
+    let rotation = Quat::from_euler(EulerRot::YXZ, look.yaw + dizzy_yaw, look.pitch + s.abs() * 0.006 * b + kick_pitch + land_nod, roll);
     let right = rotation * Vec3::X;
     tf.translation = p.pos + Vec3::Y * (p.eye + bob_y + p.dip) + Vec3::new(right.x, 0.0, right.z) * sway;
     tf.rotation = rotation;
