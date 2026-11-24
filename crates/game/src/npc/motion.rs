@@ -142,7 +142,7 @@ pub fn act(anim: Anim, t: f32, leg: f32) -> Pose {
     match anim {
         Anim::Wave => {
             // Hand up beside the head, swinging side to side.
-            let e = env(0.3);
+            let e = env(0.4);
             let sweep = (t * 2.6 * TAU).sin() * smooth((t - 0.2) / 0.2);
             Pose {
                 twist: -0.08,
@@ -163,7 +163,7 @@ pub fn act(anim: Anim, t: f32, leg: f32) -> Pose {
         Anim::Bow => Pose { lean: 0.65, nod: -0.35, shoulder: [-0.12, -0.12], knee: [0.08, 0.08], ..Pose::default() }.scale(env(0.45)),
         Anim::Point => Pose { twist: -0.15, shoulder: [0.0, 1.45], arm_out: [0.0, 0.08], elbow: [0.0, -0.1], ..Pose::default() }.scale(env(0.3)),
         Anim::Cheer => {
-            let e = env(0.25);
+            let e = env(0.4);
             let bounce = (t * 2.2 * TAU).sin();
             Pose {
                 arm_out: [2.5 + 0.15 * bounce, 2.5 + 0.15 * bounce],
