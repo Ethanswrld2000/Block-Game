@@ -18,6 +18,7 @@
 //! the bedframe and double bed change how you sleep (`survival::camp::Bed`).
 //! F9 opens the dev menu (`dev`) to hand out urns and skip steps.
 
+mod arrange;
 pub mod bench;
 pub mod board;
 mod book;
@@ -64,6 +65,7 @@ impl Plugin for StationPlugin {
             .init_resource::<tree::TreeUi>()
             .init_resource::<dev::DevMenu>()
             .init_resource::<telescope::Scope>()
+            .init_resource::<arrange::Arrange>()
             .add_message::<StepDone>()
             .add_message::<particles::Burst>()
             .add_message::<board::Cooked>()
@@ -84,6 +86,7 @@ impl Plugin for StationPlugin {
                     tree::spawn_tree_ui,
                     telescope::spawn_scope_ui,
                     dev::spawn_dev_ui,
+                    arrange::spawn_arrange_ui,
                     particles::setup_pixels,
                 )
                     .chain(),
@@ -131,6 +134,15 @@ impl Plugin for StationPlugin {
                     .before(crate::interact::InteractSet)
                     .after(crate::player::PlayerSet),
             )
+            .add_systems(
+                crate::menu::GameUpdate,
+                (arrange::arrange_start, arrange::arrange_input, arrange::arrange_camera, arrange::arrange_ghosts)
+                    .chain()
+                    .after(board::board_ui)
+                    .after(place_stations)
+                    .before(crate::interact::InteractSet)
+                    .after(crate::player::PlayerSet),
+            )
             .add_systems(crate::menu::GameUpdate, (save_urns, urns_for_screenshot, (particles::spawn_bubbles, particles::move_particles, particles::spawn_bursts).chain()))
             .add_systems(Last, (save_urns_on_exit, save_edges_on_exit, golem::save_golem_on_exit).run_if(crate::menu::in_game));
     }
@@ -167,6 +179,19 @@ pub struct Urns {
     /// Recipe keys people taught you (`messler:...`; benches.ron `unlock`).
     #[serde(default)]
     pub taught: std::collections::BTreeSet<String>,
+    /// Where you arranged each urn's stations (urn name -> station name -> spot), see `arrange`.
+    #[serde(default)]
+    pub arranged: BTreeMap<String, BTreeMap<String, Arranged>>,
+}
+
+/// A station moved by hand round its urn: how far along and to the side of
+/// the urn (in the urn's own frame, so it keeps its place if the urn moves),
+/// and how many quarter turns past its usual facing.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Arranged {
+    pub along: f32,
+    pub side: f32,
+    pub turns: u8,
 }
 
 /// Tools sharpened at the sharpening stone: item name -> seconds of edge left,
@@ -400,8 +425,8 @@ impl StationKind {
 pub struct Station {
     pub kind: StationKind,
     pub pos: Vec3,
-    /// Turned a quarter (long side along z).
-    pub turned: bool,
+    /// Quarter turns about y (odd: long side along z).
+    pub turns: u8,
     /// Which urn it belongs to (index into urns.ron).
     pub urn: usize,
 }
@@ -409,11 +434,15 @@ pub struct Station {
 impl Station {
     fn bounds(&self) -> (Vec3, Vec3) {
         let mut h = models::half(self.kind);
-        if self.turned {
+        if self.turns % 2 == 1 {
             h = Vec3::new(h.z, h.y, h.x);
         }
         let c = self.pos + Vec3::Y * h.y;
         (c - h, c + h)
+    }
+
+    pub fn rotation(&self) -> Quat {
+        Quat::from_rotation_y(std::f32::consts::FRAC_PI_2 * (self.turns % 4) as f32)
     }
 }
 
@@ -529,46 +558,79 @@ fn placed_facing(at: Vec3, forward: Vec3) -> Placed {
     Placed { pos: (at.x, at.y, at.z), along_x, back: if back == 0.0 { 1.0 } else { back } }
 }
 
+/// The frame an urn's stations are laid out in: where the urn stands, its
+/// "along" and "side" directions, and the quarter turns its stations face by default.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Frame {
+    pub at: Vec3,
+    pub along: Vec3,
+    pub side: Vec3,
+    pub turns: u8,
+}
+
+impl Frame {
+    /// The spot for an arranged station.
+    fn spot(&self, a: &Arranged) -> (Vec3, u8) {
+        (self.at + self.along * a.along + self.side * a.side, (self.turns + a.turns) % 4)
+    }
+
+    /// A station standing at `pos` with `turns`, written in this frame.
+    fn arranged(&self, pos: Vec3, turns: u8) -> Arranged {
+        let d = pos - self.at;
+        Arranged { along: d.dot(self.along), side: d.dot(self.side), turns: (turns + 4 - self.turns % 4) % 4 }
+    }
+}
+
+/// Where urn `def` stands and which way, if it stands anywhere.
+fn frame(camp: &Camp, urns: &Urns, def: &urns::UrnDef) -> Option<Frame> {
+    if def.item.is_none() {
+        // The ancestral urn: on the far side of the bedroll from where you wake.
+        let b = camp.bedroll?;
+        let (along, side) = if b.along_x { (Vec3::X, Vec3::Z) } else { (Vec3::Z, Vec3::X) };
+        Some(Frame { at: b.center() - side * 1.6, along, side, turns: u8::from(!b.along_x) })
+    } else {
+        let p = urns.placed.get(&def.name)?;
+        let (along, side) = if p.along_x { (Vec3::X, Vec3::Z * p.back) } else { (Vec3::Z, Vec3::X * p.back) };
+        Some(Frame { at: Vec3::new(p.pos.0, p.pos.1, p.pos.2), along, side, turns: u8::from(!p.along_x) })
+    }
+}
+
 /// Where everything stands: each urn, and the stations its finished steps placed.
 fn layout(camp: &Camp, world: &World, blocks: &Blocks, urns: &Urns, book: &UrnData) -> Vec<Station> {
     let mut out = Vec::new();
     for (i, def) in book.urns.iter().enumerate() {
         let progress = urns.of(&def.name);
-        let (urn_at, spots, turned): (Vec3, Vec<Vec3>, bool) = if def.item.is_none() {
-            // The ancestral urn: on the far side of the bedroll from where you
-            // wake, its stations along the bedroll on either side.
-            let Some(b) = camp.bedroll else { continue };
-            let (along, side) = if b.along_x { (Vec3::X, Vec3::Z) } else { (Vec3::Z, Vec3::X) };
-            let c = b.center();
-            let urn_at = c - side * 1.6;
+        let Some(f) = frame(camp, urns, def) else { continue };
+        let (urn_at, along, side) = (f.at, f.along, f.side);
+        let spots = if def.item.is_none() {
+            // The ancestral urn's stations go along the bedroll on either side.
+            let b = camp.bedroll.expect("the frame came from the bedroll");
             if urns.has("bedframe") {
-                out.push(Station { kind: StationKind::Bedframe, pos: c, turned: b.along_x, urn: i });
+                out.push(Station { kind: StationKind::Bedframe, pos: b.center(), turns: u8::from(b.along_x), urn: i });
             }
-            let spots = vec![urn_at + along * 1.7, urn_at - along * 2.0, urn_at - side * 1.6, urn_at - side * 1.6 + along * 1.8];
-            (urn_at, spots, !b.along_x)
+            vec![urn_at + along * 1.7, urn_at - along * 2.0, urn_at - side * 1.6, urn_at - side * 1.6 + along * 1.8]
         } else {
-            let Some(p) = urns.placed.get(&def.name) else {
-                continue;
-            };
-            let (along, side) = if p.along_x { (Vec3::X, Vec3::Z * p.back) } else { (Vec3::Z, Vec3::X * p.back) };
-            let urn_at = Vec3::new(p.pos.0, p.pos.1, p.pos.2);
-            let spots = vec![
+            vec![
                 urn_at + along * 1.9,
                 urn_at - along * 1.9,
                 urn_at + side * 1.9,
                 urn_at + side * 1.9 + along * 2.3,
                 urn_at + side * 1.9 - along * 2.3,
                 urn_at + side * 3.8,
-            ];
-            (urn_at, spots, !p.along_x)
+            ]
         };
-        out.push(Station { kind: StationKind::Urn, pos: ground(world, blocks, urn_at), turned: false, urn: i });
+        out.push(Station { kind: StationKind::Urn, pos: ground(world, blocks, urn_at), turns: 0, urn: i });
         let placed = progress.done.iter().filter_map(|d| def.step(d)).filter_map(|s| match &s.gives {
-            Gives::Station(name) => StationKind::from_name(name),
+            Gives::Station(name) => StationKind::from_name(name).map(|k| (name, k)),
             _ => None,
         });
-        for (kind, spot) in placed.zip(spots) {
-            out.push(Station { kind, pos: ground(world, blocks, spot), turned, urn: i });
+        let saved = urns.arranged.get(&def.name);
+        for ((name, kind), spot) in placed.zip(spots) {
+            let (spot, turns) = match saved.and_then(|m| m.get(name)) {
+                Some(a) => f.spot(a),
+                None => (spot, f.turns),
+            };
+            out.push(Station { kind, pos: ground(world, blocks, spot), turns, urn: i });
         }
     }
     out
@@ -576,15 +638,20 @@ fn layout(camp: &Camp, world: &World, blocks: &Blocks, urns: &Urns, book: &UrnDa
 
 /// The top of the ground under a spot, near the given height.
 fn ground(world: &World, blocks: &Blocks, at: Vec3) -> Vec3 {
+    ground_at(world, blocks, at).unwrap_or(at)
+}
+
+/// The top of the ground under a spot, if there is some within a few blocks of its height.
+fn ground_at(world: &World, blocks: &Blocks, at: Vec3) -> Option<Vec3> {
     let (x, z) = (at.x.floor() as i32, at.z.floor() as i32);
     let y0 = at.y.floor() as i32;
     for y in (y0 - 3..=y0 + 2).rev() {
         let solid = |y| world.block(BlockPos::new(x, y, z)).is_some_and(|b| blocks.registry.get(b).solid);
         if solid(y) && !solid(y + 1) {
-            return Vec3::new(at.x, (y + 1) as f32, at.z);
+            return Some(Vec3::new(at.x, (y + 1) as f32, at.z));
         }
     }
-    at
+    None
 }
 
 /// Keep the station models in step with the camp and the urns.
@@ -605,7 +672,7 @@ fn place_stations(
     let stations = layout(&camp, &world, &blocks, &urns, &book.0);
     let lit: Vec<u32> = book.0.urns.iter().map(|u| (urns.of(&u.name).next_fill(u) * MARKS as f32).floor() as u32).collect();
     // Rebuild when anything moved (the ground under a spot can still be loading) or a mark lit.
-    let key = format!("{:?}{lit:?}{:?}", stations.iter().map(|s| (s.kind, (s.pos * 4.0).round().as_ivec3(), s.turned)).collect::<Vec<_>>(), urns.progress);
+    let key = format!("{:?}{lit:?}{:?}", stations.iter().map(|s| (s.kind, (s.pos * 4.0).round().as_ivec3(), s.turns)).collect::<Vec<_>>(), urns.progress);
     if *last == key {
         return;
     }
@@ -618,7 +685,7 @@ fn place_stations(
     let has = |s: &str| urns.has(s);
     for st in stations {
         let color = book.0.urns[st.urn].color;
-        let rot = if st.turned { Quat::from_rotation_y(std::f32::consts::FRAC_PI_2) } else { Quat::IDENTITY };
+        let rot = st.rotation();
         let parts = models::parts(st.kind, &has, lit[st.urn]);
         commands.spawn((StationModels, st, Transform::from_translation(st.pos).with_rotation(rot), Visibility::default())).with_children(|c| {
             let mut mat_for = |materials: &mut Assets<StandardMaterial>, p: models::Part| {
