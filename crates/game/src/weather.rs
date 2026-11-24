@@ -160,6 +160,14 @@ pub struct Conditions {
     pub lightning: bool,
     /// Brightness of the current lightning flash, 0..1.
     pub flash: f32,
+    /// Counts lightning strikes (not the quick re-flickers of one strike), so
+    /// the bolt (`lightning`) and its thunder (`sound`) know a new one came.
+    pub strikes: u32,
+    /// How far off the latest strike is: 0 close by, 1 far away.
+    pub strike_far: f32,
+    /// Strength of the rainbow (0..1): shows for a while after rain stops.
+    /// The sky works out where it stands (opposite the sun) and hides it at night.
+    pub rainbow: f32,
     /// Below freezing here: precipitation falls as snow.
     pub snowing: bool,
     /// Felt temperature change, °C, and breathability (see `WeatherKind`).
@@ -178,6 +186,9 @@ impl Conditions {
             wind: k.wind,
             lightning: k.lightning,
             flash: 0.0,
+            strikes: 0,
+            strike_far: 0.0,
+            rainbow: 0.0,
             snowing: false,
             chill: k.chill,
             air: k.air,
@@ -385,11 +396,56 @@ fn blend_conditions(
     };
     c.clouds = clouds;
     c.cloud_shade = shade;
+
+    // Rainbow: rain (or a storm) has just given way to drier weather. It fades
+    // in as the rain eases off and is gone a couple of hours later.
+    let hours = ((clock.total_days() - state.since) * 24.0) as f32;
+    let after_rain = a.precipitation >= RAINBOW_RAIN && b.precipitation < RAINBOW_DRY && !c.snowing;
+    c.rainbow = if after_rain { rainbow_strength(state.blend, hours) } else { 0.0 };
+    if let Some(r) = forced_rainbow() {
+        c.rainbow = r;
+    }
+}
+
+/// Weather at least this wet beforehand can leave a rainbow...
+const RAINBOW_RAIN: f32 = 0.5;
+/// ...once the weather after it is at most this wet.
+const RAINBOW_DRY: f32 = 0.3;
+/// Game hours after the change the rainbow starts and finishes fading.
+const RAINBOW_FADE: (f32, f32) = (1.0, 2.5);
+
+/// How strong the rainbow is `hours` after rain stopped, while the change
+/// blends `blend` (0..1) of the way.
+pub fn rainbow_strength(blend: f32, hours: f32) -> f32 {
+    let rise = ((blend - 0.3) / 0.7).clamp(0.0, 1.0);
+    let fade = 1.0 - ((hours - RAINBOW_FADE.0) / (RAINBOW_FADE.1 - RAINBOW_FADE.0)).clamp(0.0, 1.0);
+    smooth(rise) * smooth(fade)
+}
+
+/// `BLOCKGAME_RAINBOW=1` (or a strength) holds a rainbow up for screenshots.
+fn forced_rainbow() -> Option<f32> {
+    static FORCED: std::sync::OnceLock<Option<f32>> = std::sync::OnceLock::new();
+    *FORCED.get_or_init(|| std::env::var("BLOCKGAME_RAINBOW").ok().map(|v| v.parse().unwrap_or(1.0)))
+}
+
+/// `BLOCKGAME_BOLT=1` (or a distance 0..1) strikes at once and holds the bolt
+/// lit, for screenshots.
+pub fn held_bolt() -> Option<f32> {
+    static HELD: std::sync::OnceLock<Option<f32>> = std::sync::OnceLock::new();
+    *HELD.get_or_init(|| std::env::var("BLOCKGAME_BOLT").ok().map(|v| v.parse().unwrap_or(0.3)))
 }
 
 fn lightning(time: Res<Time>, mut c: ResMut<Conditions>, mut next: Local<f32>, mut t: Local<f32>) {
     let dt = time.delta_secs();
     *t += dt;
+    if let Some(far) = held_bolt() {
+        if c.strikes == 0 {
+            c.strikes = 1;
+            c.strike_far = far;
+        }
+        c.flash = 0.7;
+        return;
+    }
     c.flash = (c.flash - dt * 4.0).max(0.0);
     if !c.lightning {
         *next = 0.0;
@@ -399,6 +455,11 @@ fn lightning(time: Res<Time>, mut c: ResMut<Conditions>, mut next: Local<f32>, m
         *next = *t + 4.0 + hash(t.to_bits() as u64, 7) * 14.0;
     }
     if *t >= *next {
+        // A flash with the bolt still lit is the same strike flickering again.
+        if c.flash < 0.05 {
+            c.strikes = c.strikes.wrapping_add(1);
+            c.strike_far = hash(t.to_bits() as u64, 11);
+        }
         c.flash = 1.0;
         // Often a second flicker a moment later.
         *next = if hash(t.to_bits() as u64, 3) < 0.5 { *t + 0.18 } else { 0.0 };
@@ -408,6 +469,14 @@ fn lightning(time: Res<Time>, mut c: ResMut<Conditions>, mut next: Local<f32>, m
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rainbow_rises_after_rain_then_fades() {
+        assert_eq!(rainbow_strength(0.0, 0.0), 0.0);
+        assert!(rainbow_strength(1.0, 0.5) > 0.99);
+        assert!(rainbow_strength(1.0, 1.8) < rainbow_strength(1.0, 1.2));
+        assert_eq!(rainbow_strength(1.0, 3.0), 0.0);
+    }
 
     #[test]
     fn weather_file_parses_and_seasons_name_real_weather() {

@@ -32,6 +32,8 @@ struct SkyParams {
     // z: fog veil (thick fog or mist hides the sky, sun, moon and stars),
     // w: telescope raised (0..1), which brings out fainter stars
     haze: vec4<f32>,
+    // Rainbow: xyz the point it circles (opposite the sun), w strength (0 = none)
+    bow: vec4<f32>,
     // Constellation stars in star-map space: xyz direction, w brightness (0 = none).
     named: array<vec4<f32>, 64>,
 }
@@ -94,6 +96,34 @@ fn star_field(rd: vec3<f32>, px: f32, t: f32, low: f32) -> vec3<f32> {
         }
     }
     return sum;
+}
+
+// Rainbow colours across a band: x 0 = violet (inner edge), 1 = red (outer).
+fn spectrum(x: f32) -> vec3<f32> {
+    let h = (1.0 - clamp(x, 0.0, 1.0)) * 0.78 * 6.0;
+    return clamp(vec3<f32>(abs(h - 3.0) - 1.0, 2.0 - abs(h - 2.0), 2.0 - abs(h - 4.0)), vec3<f32>(0.0), vec3<f32>(1.0));
+}
+
+// How much of a band shows at x (0..1 across it), soft at both edges.
+fn band(x: f32) -> f32 {
+    if (x <= 0.0 || x >= 1.0) { return 0.0; }
+    return sin(x * 3.14159265);
+}
+
+// A bow 40-42.5° round the point opposite the sun (violet inside, red outside),
+// a faint second bow at 50-54° with its colours the other way round, a little
+// light inside the main bow and a darker band between the two. Added to `col`,
+// scaled by how bright the sky is there; stops at the horizon.
+fn rainbow(col: vec3<f32>, dir: vec3<f32>, up: f32) -> vec3<f32> {
+    let deg = degrees(acos(clamp(dot(dir, sky.bow.xyz), -1.0, 1.0)));
+    let k = sky.bow.w * smoothstep(-0.01, 0.03, up);
+    let first = (deg - 40.2) / 2.4;
+    let second = (54.0 - deg) / 3.8;
+    let bows = spectrum(first) * band(first) + spectrum(second) * band(second) * 0.35;
+    let inside = (1.0 - smoothstep(37.0, 40.6, deg)) * 0.06;
+    let between = smoothstep(42.0, 43.0, deg) * (1.0 - smoothstep(49.5, 50.5, deg));
+    let light = max(dot(col, vec3<f32>(0.3, 0.55, 0.15)), 0.02);
+    return col * (1.0 - 0.1 * between * k) + (bows * 0.6 + vec3<f32>(inside)) * light * k;
 }
 
 @fragment
@@ -189,6 +219,10 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         }
     }
     col += vec3<f32>(0.5, 0.55, 0.7) * pow(max(md, 0.0), 300.0) * 0.25 * sky.moon_dir.w * sky.extra.y * clear;
+
+    if (sky.bow.w > 0.0) {
+        col = rainbow(col, dir, up);
+    }
 
     // Thick fog: the whole sky turns to the colour the land fogs into in this
     // direction (the horizon, with the same haze and glow), so nothing shows

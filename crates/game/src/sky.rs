@@ -63,6 +63,9 @@ pub struct SkyParams {
     /// (0 while [`MILKY_WAY`] is off).
     /// w: extra star brightness while looking through the telescope.
     pub haze: Vec4,
+    /// Rainbow: xyz the point the bow circles (opposite the sun, see
+    /// [`rainbow_centre`]), w its strength (0 = none).
+    pub bow: Vec4,
     /// Named stars (the constellations), in star-map space: xyz direction,
     /// w brightness (0 = unused).
     pub named: [Vec4; MAX_NAMED_STARS],
@@ -82,6 +85,7 @@ impl Default for SkyParams {
             star_z: Vec4::ZERO,
             mid: Vec4::ZERO,
             haze: Vec4::ZERO,
+            bow: Vec4::ZERO,
             named: [Vec4::ZERO; MAX_NAMED_STARS],
         }
     }
@@ -352,9 +356,18 @@ pub fn update_sky(
                 fog_veil(visibility),
                 sky_stars.scope,
             ),
+            bow: rainbow_centre(sun).extend(weather.rainbow * smoothstep(0.0, 0.08, sun.y) * (1.0 - 0.7 * cloudy)),
             named,
         };
     }
+}
+
+/// Where the rainbow is centred: the point opposite the sun. A real bow sinks
+/// below the horizon once the sun is over 42° up; here the centre never drops
+/// more than about 14° below it, so a bow after midday rain still shows (lower and flatter).
+pub fn rainbow_centre(sun: Vec3) -> Vec3 {
+    let anti = -sun;
+    Vec3::new(anti.x, anti.y.max(-0.25), anti.z).normalize_or(Vec3::NEG_Y)
 }
 
 fn follow_camera(cam: Query<&Transform, (With<FlyCamera>, Without<SkyDome>)>, mut dome: Query<&mut Transform, With<SkyDome>>) {
