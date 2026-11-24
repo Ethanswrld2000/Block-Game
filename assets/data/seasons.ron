@@ -2,7 +2,8 @@
 //   temperature: added to every biome's temperature; below 0 rain falls as snow
 //   daylight:    share of the day the sun is up (0.5 = 12 hours)
 //   foliage:     colour grass and leaves lean towards, and how far (0 = untouched)
-//   weather:     relative chance of each weather when the weather changes (see weather.ron)
+//   weather:     relative chance of each weather when the weather changes (see weather.ron);
+//                the extreme kinds (heatwave, downpour, ...) get small numbers so they're rare
 (
     days: 10,
     seasons: [
@@ -10,25 +11,29 @@
             name: "spring", title: "Spring",
             temperature: 0.0, daylight: 0.5,
             foliage: (color: (0.45, 0.85, 0.3), amount: 0.15),
-            weather: { "clear": 4, "overcast": 3, "rain": 4, "storm": 1, "mist": 2, "gale": 1 },
+            weather: { "clear": 4, "overcast": 3, "rain": 4, "storm": 1, "mist": 2, "gale": 1,
+                       "heavy_overcast": 0.3, "downpour": 0.4, "tempest": 0.15, "thick_fog": 0.25, "windstorm": 0.2 },
         ),
         (
             name: "summer", title: "Summer",
             temperature: 0.25, daylight: 0.6,
             foliage: (color: (0.6, 0.75, 0.25), amount: 0.0),
-            weather: { "clear": 7, "overcast": 2, "rain": 1, "storm": 2, "mist": 1 },
+            weather: { "clear": 7, "overcast": 2, "rain": 1, "storm": 2, "mist": 1,
+                       "heatwave": 0.8, "heavy_overcast": 0.2, "downpour": 0.15, "tempest": 0.3, "thick_fog": 0.1 },
         ),
         (
             name: "autumn", title: "Autumn",
             temperature: -0.15, daylight: 0.48,
             foliage: (color: (1.0, 0.42, 0.08), amount: 0.75),
-            weather: { "clear": 3, "overcast": 4, "rain": 3, "storm": 1, "mist": 3, "gale": 2, "cold_snap": 1 },
+            weather: { "clear": 3, "overcast": 4, "rain": 3, "storm": 1, "mist": 3, "gale": 2, "cold_snap": 1,
+                       "heavy_overcast": 0.4, "downpour": 0.3, "tempest": 0.15, "thick_fog": 0.4, "windstorm": 0.3, "deep_freeze": 0.15 },
         ),
         (
             name: "winter", title: "Winter",
             temperature: -0.45, daylight: 0.4,
             foliage: (color: (0.82, 0.86, 0.84), amount: 0.5),
-            weather: { "clear": 3, "overcast": 4, "rain": 4, "storm": 0, "mist": 2, "cold_snap": 3 },
+            weather: { "clear": 3, "overcast": 4, "rain": 4, "storm": 0, "mist": 2, "cold_snap": 3,
+                       "heavy_overcast": 0.4, "downpour": 0.5, "thick_fog": 0.25, "deep_freeze": 0.5 },
         ),
     ],
 )

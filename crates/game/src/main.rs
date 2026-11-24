@@ -54,6 +54,7 @@ mod torches;
 mod weather;
 mod weather_hud;
 mod wind;
+mod wind_streaks;
 mod world;
 
 use bevy::prelude::*;
@@ -87,6 +88,7 @@ fn main() {
             clock::ClockPlugin,
             weather::WeatherPlugin,
             wind::WindPlugin,
+            wind_streaks::WindStreaksPlugin,
             sky::SkyPlugin,
             atmosphere::AtmospherePlugin,
             clouds::CloudPlugin,

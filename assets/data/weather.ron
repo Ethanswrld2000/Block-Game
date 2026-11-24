@@ -34,4 +34,24 @@
     // Spring and autumn: a howling gale that pushes you about and steals your breath.
     (name: "gale", title: "Gale", hours: (3.0, 6.0), clouds: 0.85, cloud_shade: 0.6,
      visibility: 400.0, light: 0.45, precipitation: 0.2, wind: 24.0, lightning: false, chill: -5.0, air: 0.8),
+
+    // Extreme weather: a harsher version of each kind above. Rarer (small
+    // chances in seasons.ron) and shorter.
+    // Clear, in summer: a blazing sun and still, hot air.
+    (name: "heatwave", title: "Heatwave", hours: (4.0, 8.0), clouds: 0.03, cloud_shade: 1.0,
+     visibility: 1000.0, light: 1.15, precipitation: 0.0, wind: 1.0, lightning: false, chill: 14.0, air: 0.95),
+    (name: "heavy_overcast", title: "Heavy Overcast", hours: (3.0, 7.0), clouds: 1.0, cloud_shade: 0.55,
+     visibility: 600.0, light: 0.3, precipitation: 0.0, wind: 8.0, lightning: false, chill: -3.0),
+    // Snow below freezing: "Heavy Snow".
+    (name: "downpour", title: "Downpour", hours: (2.5, 5.0), clouds: 1.0, cloud_shade: 0.45,
+     visibility: 120.0, light: 0.25, precipitation: 1.0, wind: 10.0, lightning: false, chill: -8.0),
+    // Snow below freezing: "Blizzard".
+    (name: "tempest", title: "Tempest", hours: (2.5, 4.5), clouds: 1.0, cloud_shade: 0.25,
+     visibility: 90.0, light: 0.1, precipitation: 1.0, wind: 20.0, lightning: true, chill: -11.0, air: 0.85),
+    (name: "thick_fog", title: "Thick Fog", hours: (2.5, 5.0), clouds: 0.6, cloud_shade: 0.85,
+     visibility: 25.0, light: 0.5, precipitation: 0.0, wind: 0.5, lightning: false, chill: -3.0, air: 0.7),
+    (name: "deep_freeze", title: "Deep Freeze", hours: (4.0, 8.0), clouds: 0.04, cloud_shade: 1.0,
+     visibility: 1400.0, light: 1.0, precipitation: 0.0, wind: 6.0, lightning: false, chill: -28.0),
+    (name: "windstorm", title: "Windstorm", hours: (2.5, 4.5), clouds: 0.95, cloud_shade: 0.5,
+     visibility: 250.0, light: 0.35, precipitation: 0.3, wind: 34.0, lightning: false, chill: -9.0, air: 0.7),
 ]

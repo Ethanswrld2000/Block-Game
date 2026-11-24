@@ -8,13 +8,26 @@ RON files, update both.
 
 | weather | name in files | lasts (game hours) | lasts (real minutes) | cloud cover | cloud shade | low deck (y 200) | middle puffs (y 236) | high wisps (y 300) | visibility (blocks) | sunlight | rain/snow | wind (blocks/s) | lightning | felt chill (°C) | air | spring % | summer % | autumn % | winter % |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Clear | clear | 6-14 | 5.0-11.7 | 0.1 | 1.0 | 0% | 3% | 5% | 1400 | 1.0 | 0.0 | 3 | no | 0 | 1.0 | 27% | 54% | 18% | 19% |
-| Overcast | overcast | 4-10 | 3.3-8.3 | 0.75 | 0.8 | 50% | 87% | 74% | 900 | 0.55 | 0.0 | 5 | no | -1.0 | 1.0 | 20% | 15% | 24% | 25% |
-| Rain | rain | 3-8 | 2.5-6.7 | 0.9 | 0.6 | 88% | 100% | 89% | 260 | 0.35 | 0.7 | 6 | no | -4.0 | 1.0 | 27% | 8% | 18% | 25% |
-| Thunderstorm | storm | 3-6 | 2.5-5.0 | 1 | 0.4 | 100% | 100% | 100% | 170 | 0.2 | 1.0 | 12 | yes | -7.0 | 0.9 | 7% | 15% | 6% | - |
-| Mist | mist | 3-7 | 2.5-5.8 | 0.5 | 0.9 | 0% | 55% | 47% | 70 | 0.7 | 0.0 | 1 | no | -2.0 | 0.85 | 13% | 8% | 18% | 12% |
-| Cold Snap | cold_snap | 8-18 | 6.7-15.0 | 0.06 | 1.0 | 0% | 0% | 1% | 1400 | 1.0 | 0.0 | 4 | no | -16.0 | 1.0 | - | - | 6% | 19% |
-| Gale | gale | 3-6 | 2.5-5.0 | 0.85 | 0.6 | 75% | 100% | 84% | 400 | 0.45 | 0.2 | 24 | no | -5.0 | 0.8 | 7% | - | 12% | - |
+| Clear | clear | 6-14 | 5.0-11.7 | 0.1 | 1.0 | 0% | 3% | 5% | 1400 | 1.0 | 0.0 | 3 | no | 0 | 1.0 | 25% | 48% | 16% | 17% |
+| Overcast | overcast | 4-10 | 3.3-8.3 | 0.75 | 0.8 | 50% | 87% | 74% | 900 | 0.55 | 0.0 | 5 | no | -1.0 | 1.0 | 18% | 14% | 21% | 23% |
+| Rain | rain | 3-8 | 2.5-6.7 | 0.9 | 0.6 | 88% | 100% | 89% | 260 | 0.35 | 0.7 | 6 | no | -4.0 | 1.0 | 25% | 7% | 16% | 23% |
+| Thunderstorm | storm | 3-6 | 2.5-5.0 | 1 | 0.4 | 100% | 100% | 100% | 170 | 0.2 | 1.0 | 12 | yes | -7.0 | 0.9 | 6% | 14% | 5% | - |
+| Mist | mist | 3-7 | 2.5-5.8 | 0.5 | 0.9 | 0% | 55% | 47% | 70 | 0.7 | 0.0 | 1 | no | -2.0 | 0.85 | 12% | 7% | 16% | 11% |
+| Cold Snap | cold_snap | 8-18 | 6.7-15.0 | 0.06 | 1.0 | 0% | 0% | 1% | 1400 | 1.0 | 0.0 | 4 | no | -16.0 | 1.0 | - | - | 5% | 17% |
+| Gale | gale | 3-6 | 2.5-5.0 | 0.85 | 0.6 | 75% | 100% | 84% | 400 | 0.45 | 0.2 | 24 | no | -5.0 | 0.8 | 6% | - | 11% | - |
+| Heatwave | heatwave | 4-8 | 3.3-6.7 | 0.03 | 1.0 | 0% | 0% | 0% | 1000 | 1.15 | 0.0 | 1 | no | +14.0 | 0.95 | - | 5% | - | - |
+| Heavy Overcast | heavy_overcast | 3-7 | 2.5-5.8 | 1 | 0.55 | 100% | 100% | 100% | 600 | 0.3 | 0.0 | 8 | no | -3.0 | 1.0 | 2% | 1% | 2% | 2% |
+| Downpour | downpour | 2.5-5 | 2.1-4.2 | 1 | 0.45 | 100% | 100% | 100% | 120 | 0.25 | 1.0 | 10 | no | -8.0 | 1.0 | 2% | 1% | 2% | 3% |
+| Tempest | tempest | 2.5-4.5 | 2.1-3.8 | 1 | 0.25 | 100% | 100% | 100% | 90 | 0.1 | 1.0 | 20 | yes | -11.0 | 0.85 | <1% | 2% | <1% | - |
+| Thick Fog | thick_fog | 2.5-5 | 2.1-4.2 | 0.6 | 0.85 | 12% | 68% | 58% | 25 | 0.5 | 0.0 | 0.5 | no | -3.0 | 0.7 | 2% | <1% | 2% | 1% |
+| Deep Freeze | deep_freeze | 4-8 | 3.3-6.7 | 0.04 | 1.0 | 0% | 0% | 0% | 1400 | 1.0 | 0.0 | 6 | no | -28.0 | 1.0 | - | - | <1% | 3% |
+| Windstorm | windstorm | 2.5-4.5 | 2.1-3.8 | 0.95 | 0.5 | 100% | 100% | 95% | 250 | 0.35 | 0.3 | 34 | no | -9.0 | 0.7 | 1% | - | 2% | - |
+
+The last seven are the extreme versions of the first seven (Clear -> Heatwave,
+Overcast -> Heavy Overcast, Rain -> Downpour, Thunderstorm -> Tempest, Mist ->
+Thick Fog, Cold Snap -> Deep Freeze, Gale -> Windstorm): stronger numbers,
+shorter, and rare (small chances in seasons.ron). Below freezing a Downpour
+shows as "Heavy Snow" and a Tempest as "Blizzard".
 
 How to read it:
 
@@ -29,7 +42,12 @@ How to read it:
   sway with it; the clouds drift with its square root (about 1.7 blocks/s on a
   clear day, 5 in a gale). Its direction turns slowly on its own and veers a
   little with each new weather (`crates/game/src/wind.rs`), and the clouds
-  follow it round.
+  follow it round. Every 20-30 seconds a gust blows through (`wind::gust_shape`:
+  builds over 1.5 s, holds 2.5 s, dies over 3 s, up to 80% stronger); rain,
+  snow, plants and the wind streaks (thin white trails that blow past,
+  `crates/game/src/wind_streaks.rs`, more the harder it blows) follow it.
+  Over 10 blocks/s the wind nudges you when nothing is overhead: about 0.1
+  blocks/s in a gale, up to 0.4 at a gust's peak (`player::WIND_PUSH`).
 - **Visibility** is how far you see before fog, before biome haze. **Sunlight**
   multiplies the sun. **Rain/snow** falls as snow below freezing. **Air** below
   1 makes it harder to breathe. Under about 500 blocks of visibility the fog

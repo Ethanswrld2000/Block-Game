@@ -25,6 +25,10 @@ const JUMP_SPEED: f32 = 9.2;
 const WALK: f32 = 4.4;
 const SPRINT: f32 = 6.8;
 const CROUCH: f32 = 1.8;
+/// Wind (blocks per second) below which it doesn't push you at all.
+const WIND_PUSH_FROM: f32 = 10.0;
+/// Push in blocks per second for each block per second of wind over `WIND_PUSH_FROM`, at a gust's peak.
+const WIND_PUSH: f32 = 0.03;
 const SWIM: f32 = 2.6;
 const MAX_FALL: f32 = 60.0;
 /// Landing faster than this hurts (about a 3.5 block drop).
@@ -312,8 +316,9 @@ fn walk(
     // Quick to start and stop on the ground; little control in the air.
     let accel = if p.on_ground { 45.0 } else if p.in_water { 12.0 } else { 9.0 };
     let horiz = Vec2::new(p.vel.x, p.vel.z);
-    // Strong wind pushes you about when nothing overhead shelters you.
-    let gust = (wind.speed - 8.0).max(0.0) * 0.15;
+    // Strong wind nudges you when nothing overhead shelters you: a little in a
+    // steady wind, more while a gust blows (`wind::gust_shape`).
+    let gust = (wind.speed - WIND_PUSH_FROM).max(0.0) * WIND_PUSH * (0.25 + 0.75 * wind.gust);
     let sheltered = gust == 0.0
         || p.in_water
         || (2..26).any(|dy| matches!(cell(&world, &blocks, BlockPos::new(feet.x, feet.y + dy, feet.z), water), Cell::Solid | Cell::Unknown));
