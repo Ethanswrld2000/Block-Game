@@ -93,6 +93,8 @@
         "planks_2": 86,
         "planks_3": 87,
         "log_side_2": 88,
+        "sky_shrine": 89,
+        "sky_shrine_top": 90,
     },
     variants: {
         "grass_top": (tiles: ["grass_top_2", "grass_top_3", "grass_top_4"], turn: true),

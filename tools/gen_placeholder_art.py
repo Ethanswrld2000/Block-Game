@@ -534,6 +534,31 @@ for _base, (_n, _turn) in VARIANTS.items():
     _fn = dict(TILES)[_base]
     TILES += [(f"{_base}_{k + 2}", _fn) for k in range(_n)]
 
+# Added after the variants so no earlier tile moves.
+
+
+def sky_shrine(s):
+    # Pale carved stone with a glowing blue rune down the middle.
+    img = noisy(s, [(176, 184, 206), (204, 212, 232), (228, 234, 248)], (8, 4))
+    ys, xs = np.mgrid[0:T, 0:T]
+    img[(ys < 3) | (ys >= T - 3), :3] = (150, 158, 184)
+    rune = ((xs >= 15) & (xs < 17) & (ys >= 6) & (ys < 26)) | ((ys >= 10) & (ys < 12) & (xs >= 10) & (xs < 22)) \
+        | ((ys >= 20) & (ys < 22) & (xs >= 12) & (xs < 20))
+    img[rune, :3] = (120, 210, 255)
+    return img
+
+
+def sky_shrine_top(s):
+    img = noisy(s, [(176, 184, 206), (204, 212, 232)], (8, 4))
+    ys, xs = np.mgrid[0:T, 0:T]
+    d = np.sqrt((xs - 15.5) ** 2 + (ys - 15.5) ** 2)
+    img[(d > 8) & (d < 10), :3] = (120, 210, 255)
+    img[d < 3, :3] = (220, 245, 255)
+    return img
+
+
+TILES += [("sky_shrine", sky_shrine), ("sky_shrine_top", sky_shrine_top)]
+
 
 def main():
     root = os.path.join(os.path.dirname(__file__), "..", "assets", "textures")

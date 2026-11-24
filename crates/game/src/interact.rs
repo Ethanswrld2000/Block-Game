@@ -457,7 +457,7 @@ fn use_hands(
     (wielded, off): (Res<Wielded>, Res<OffHand>),
     items: Res<Items>,
     mut inv: ResMut<Inventory>,
-    (mut mined, mut blows, mut chops, mut open_chest, mut placed, mut strikes, mut toast): (
+    (mut mined, mut blows, mut chops, mut open_chest, mut placed, mut strikes, mut toast, mut shrine_use): (
         MessageWriter<Mined>,
         MessageWriter<Blow>,
         MessageWriter<crate::chop::Chop>,
@@ -465,6 +465,7 @@ fn use_hands(
         MessageWriter<Placed>,
         MessageWriter<Strike>,
         MessageWriter<crate::survival::Toast>,
+        MessageWriter<crate::shrine::UseShrine>,
     ),
     (aimed, cam, perks, station, edges, ship, guard, mut swung, generator): (
         Res<Aimed>,
@@ -548,6 +549,17 @@ fn use_hands(
         && world.block(hit.block) == chest
     {
         open_chest.write(OpenChest(hit.block));
+        return;
+    }
+
+    // Right click on a sky shrine (`shrine`).
+    if mouse.just_pressed(MouseButton::Right)
+        && !at_station
+        && let Some(hit) = target.hit
+        && let Some(b) = world.block(hit.block)
+        && blocks.registry.id("sky_shrine") == Some(b)
+    {
+        shrine_use.write(crate::shrine::UseShrine(hit.block));
         return;
     }
 

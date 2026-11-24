@@ -550,6 +550,10 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   wheel if allowed) turn the page: the leaf folds over the spine (`turn_leaves`). `book::paginate` splits entries into
   pages by size. Used by the bench recipe book (`station::book`, one page) and the journal (J, a spread).
   Screenshots: `BLOCKGAME_BOOKTURN=0.5` turns the first open book and holds the leaf there; `BLOCKGAME_JOURNAL=all` shows every clue.
+- Sky shrines: grid sky islands with radius >= `worldgen::islands::SHRINE_RADIUS` (40) keep a `sky_shrine` block (glows,
+  can't be broken) `SHRINE_OFFSET` (5) blocks east of their chest. Right click (`shrine::UseShrine` from `interact`) gives
+  +1 skill point and XP once per shrine (`shrine:x,y,z` in `Progress.found`). Tiles `sky_shrine`, `sky_shrine_top` are
+  appended after the variant tiles in `gen_placeholder_art.py` so nothing moves.
 - Next: see `docs/GAMEPLAY_LOOP.md`.
 
 ## Testing without a screen

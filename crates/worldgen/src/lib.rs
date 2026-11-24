@@ -110,6 +110,7 @@ struct Ids {
     planks: BlockId,
     torch: BlockId,
     chest: BlockId,
+    sky_shrine: BlockId,
     /// Vines clinging to the north, south, east and west side of their cell.
     vine: [BlockId; 4],
     /// Twigs poking out of the trunk beside them, by the side they're attached to.
@@ -211,6 +212,7 @@ impl WorldGen {
             planks: b("planks")?,
             torch: b("torch")?,
             chest: b("chest")?,
+            sky_shrine: b("sky_shrine")?,
         };
         use FractalType::{Ridged, FBm};
         let mut wg = Self {

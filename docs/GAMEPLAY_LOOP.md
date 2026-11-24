@@ -112,8 +112,7 @@ Each step is small enough for one pull request and makes the loop above more rea
 4. **Expedition goals.** A short list of things to find in each region (an ore, a creature, a
    place), shown in the K map, each giving XP and pointing at the next region. Data in a new
    `assets/data/journey.ron`.
-5. **Sky island payoff.** Something only up there worth the trip: a rare ore, a shrine that teaches
-   a spell, a view of the whole map.
+5. **Sky island payoff.** Done: sky shrines on the biggest islands give a skill point each.
 6. **Tuning pass.** Play a full in-game week from a new world and adjust `exposure.ron`,
    `weather.ron` and `food_tiers.ron` so day 1 is safe, day 3 has a hard night, and the first
    snowy trip needs preparation.
