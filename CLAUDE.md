@@ -604,6 +604,12 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   quad with `MouthMaterial` (`assets/shaders/urn_mouth.wesl`): the same dark as the tree's background, worked out per
   screen pixel from the same clock (`grab::void_clock`), so the hole grows out of it seamlessly. `void_inside` and its
   helpers are copied between `urn_void.wesl` and `urn_mouth.wesl` and must stay the same.
+- Rainbows and lightning bolts: after rain or a storm gives way to drier weather, `Conditions.rainbow` rises with the change
+  and fades 1-2.5 game hours later (`weather::rainbow_strength`); `sky.wesl` `rainbow` draws a main bow 40-42.5° and a faint
+  second bow round the point opposite the sun (`sky::rainbow_centre`, kept from sinking far below the horizon so midday bows
+  show), by day only. `game::lightning`: each strike (`Conditions.strikes`, distance `strike_far`, also used by the thunder)
+  draws a forked bolt (`bolt_shape`, pure) from the low cloud deck to the ground, mostly ahead of you, as camera-facing
+  additive ribbons that glow with the flash. Screenshots: `BLOCKGAME_RAINBOW=1`, `BLOCKGAME_BOLT=0.3` (holds a bolt that far off).
 - Next: see `docs/GAMEPLAY_LOOP.md`.
 
 ## Testing without a screen

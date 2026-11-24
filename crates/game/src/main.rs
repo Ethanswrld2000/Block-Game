@@ -14,6 +14,7 @@ mod clouds;
 mod combat;
 mod creatures;
 mod farming;
+mod lightning;
 mod lod;
 mod map;
 mod menu;
@@ -92,6 +93,7 @@ fn main() {
             clouds::CloudPlugin,
             weather_hud::WeatherHudPlugin,
             precipitation::PrecipitationPlugin,
+            lightning::LightningPlugin,
             lod::LodPlugin,
         ))
         .add_plugins((

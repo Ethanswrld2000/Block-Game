@@ -287,22 +287,16 @@ fn level_up(progress: Res<Progress>, mut out: MessageWriter<PlaySound>, mut last
     *last = Some(l);
 }
 
-/// Thunder follows each lightning flash after a delay, as if the strike were
-/// somewhere between close by and a few kilometres off: the further, the later,
+/// Thunder follows each lightning strike after a delay, as if the strike were
+/// as far off as its bolt (`Conditions::strike_far`): the further, the later,
 /// quieter and deeper.
-#[allow(clippy::type_complexity)]
-fn thunder(time: Res<Time>, conditions: Res<Conditions>, mut out: MessageWriter<PlaySound>, mut state: Local<(bool, Vec<(f32, f32)>, u64)>) {
-    let (was, pending, seed) = &mut *state;
-    if *seed == 0 {
-        *seed = 0x7A1D_0E57;
-    }
-    let flash = conditions.flash > 0.5;
-    if flash && !*was {
-        // 0 = overhead, 1 = far away.
-        let far = (jitter(seed) - 0.9) * 5.0;
+fn thunder(time: Res<Time>, conditions: Res<Conditions>, mut out: MessageWriter<PlaySound>, mut state: Local<(u32, Vec<(f32, f32)>)>) {
+    let (seen, pending) = &mut *state;
+    if conditions.strikes != *seen {
+        *seen = conditions.strikes;
+        let far = conditions.strike_far;
         pending.push((thunder_delay(far), far));
     }
-    *was = flash;
     let dt = time.delta_secs();
     pending.retain_mut(|(wait, far)| {
         *wait -= dt;
