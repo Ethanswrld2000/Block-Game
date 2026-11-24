@@ -2,10 +2,17 @@
 //! spells and levelling up, critters calling (panned to where they are), and
 //! looping wind, rain and levitation sounds, thunder after lightning, and music now and then. Which material sounds like what is in `assets/data/sounds.ron`;
 //! the files are in `assets/sounds/`.
+//!
+//! Sounds from a place are panned between the ears and fade with distance; a
+//! solid block between it and your ears muffles it a little (a low-pass), and
+//! with your head under water everything but the music is muffled hard
+//! (`Muffled`, `muffle`).
 
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
-use bevy::audio::{AudioSinkPlayback, SpatialScale, Volume};
+use bevy::audio::{AddAudioSource, AudioSinkPlayback, Decodable, SpatialListener, SpatialScale, Volume};
 use bevy::prelude::*;
 use serde::Deserialize;
 use voxel::BlockPos;
@@ -25,11 +32,12 @@ impl Plugin for SoundPlugin {
     fn build(&self, app: &mut App) {
         let spec: SoundSpec = ron::from_str(include_str!("../../../assets/data/sounds.ron")).unwrap_or_else(|e| panic!("sounds.ron: {e}"));
         app.insert_resource(spec)
+            .add_audio_source::<Muffled>()
             .add_message::<PlaySound>()
-            .add_systems(crate::menu::GameStartup, (load_bank, start_loops).chain())
+            .add_systems(crate::menu::GameStartup, load_bank)
             .add_systems(
                 crate::menu::GameUpdate,
-                (footsteps, mining, fights, spells, level_up, thunder, spirits, play, loops, music)
+                (footsteps, mining, fights, spells, level_up, thunder, spirits, play, loops, muffle, music)
                     .chain()
                     .after(crate::creatures::CreatureSet)
                     .after(crate::survival::SurvivalSet),
@@ -103,6 +111,12 @@ impl PlaySound {
         self
     }
 
+    /// From this place in the world: panned, faded with distance, muffled behind walls.
+    pub fn at(mut self, at: Vec3) -> Self {
+        self.at = Some(at);
+        self
+    }
+
     /// An ambient sound from a place in the world.
     pub fn ambient_at(name: impl Into<String>, at: Vec3, gain: f32) -> Self {
         Self { name: name.into(), gain, at: Some(at), ambient: true, speed: None }
@@ -151,12 +165,167 @@ impl Loop {
     }
 }
 
-fn start_loops(mut commands: Commands, bank: Res<Bank>) {
-    for l in [Loop::Wind, Loop::Rain, Loop::Levitate] {
-        if let Some(h) = bank.handles.get(l.file()) {
-            commands.spawn((l, AudioPlayer(h.clone()), PlaybackSettings::LOOP.with_volume(Volume::Linear(0.0))));
-        }
+/// A sound with its own low-pass filter, whose cutoff can change while it
+/// plays (`Filter` holds the other end). Made per sound from a loaded `AudioSource`.
+#[derive(Asset, TypePath)]
+struct Muffled {
+    source: AudioSource,
+    cutoff: Arc<AtomicU32>,
+}
+
+impl Decodable for Muffled {
+    type Decoder = LowPass<<AudioSource as Decodable>::Decoder>;
+
+    fn decoder(&self) -> Self::Decoder {
+        LowPass::new(self.source.decoder(), self.cutoff.clone())
     }
+}
+
+/// The game's end of a playing sound's filter: where it comes from (if
+/// anywhere) and how much the blocks in the way muffle it, eased.
+#[derive(Component)]
+struct Filter {
+    cutoff: Arc<AtomicU32>,
+    at: Option<Vec3>,
+    blocked: f32,
+}
+
+/// Cutoff (Hz) with a wall between you and the sound: a slight muffle.
+const WALL_CUTOFF: f32 = 1800.0;
+/// Cutoff (Hz) with your head under water.
+const WATER_CUTOFF: f32 = 450.0;
+/// No filter at all (cutoff 0 = off).
+const OPEN: f32 = 0.0;
+
+/// Two one-pole low-passes in a row (12 dB per octave), per channel. The
+/// cutoff is read from `cutoff` (f32 bits, Hz; 0 = off) every few samples.
+struct LowPass<S> {
+    inner: S,
+    cutoff: Arc<AtomicU32>,
+    alpha: f32,
+    state: [[f32; 2]; 8],
+    channel: usize,
+    count: u32,
+}
+
+impl<S: bevy::audio::Source> LowPass<S> {
+    fn new(inner: S, cutoff: Arc<AtomicU32>) -> Self {
+        let mut f = Self { inner, cutoff, alpha: 1.0, state: [[0.0; 2]; 8], channel: 0, count: 0 };
+        f.refresh();
+        f
+    }
+
+    fn refresh(&mut self) {
+        let hz = f32::from_bits(self.cutoff.load(Ordering::Relaxed));
+        self.alpha = lowpass_alpha(hz, self.inner.sample_rate().get() as f32);
+    }
+}
+
+/// The one-pole smoothing factor for a cutoff at a sample rate (1 = pass everything).
+fn lowpass_alpha(cutoff: f32, rate: f32) -> f32 {
+    if cutoff <= 0.0 || cutoff >= rate * 0.5 {
+        return 1.0;
+    }
+    1.0 - (-std::f32::consts::TAU * cutoff / rate).exp()
+}
+
+impl<S: bevy::audio::Source> Iterator for LowPass<S> {
+    type Item = bevy::audio::Sample;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let x = self.inner.next()?;
+        if self.count == 0 {
+            self.refresh();
+        }
+        self.count = (self.count + 1) % 256;
+        let channels = (self.inner.channels().get() as usize).clamp(1, 8);
+        self.channel = (self.channel + 1) % channels;
+        let [a, b] = &mut self.state[self.channel];
+        *a += self.alpha * (x - *a);
+        *b += self.alpha * (*a - *b);
+        Some(*b)
+    }
+}
+
+impl<S: bevy::audio::Source> bevy::audio::Source for LowPass<S> {
+    fn current_span_len(&self) -> Option<usize> {
+        self.inner.current_span_len()
+    }
+
+    fn channels(&self) -> bevy::audio::ChannelCount {
+        self.inner.channels()
+    }
+
+    fn sample_rate(&self) -> bevy::audio::SampleRate {
+        self.inner.sample_rate()
+    }
+
+    fn total_duration(&self) -> Option<std::time::Duration> {
+        self.inner.total_duration()
+    }
+}
+
+/// A filtered player for a loaded sound, and the filter's handle.
+fn muffled(assets: &mut Assets<Muffled>, source: &AudioSource, at: Option<Vec3>) -> (AudioPlayer<Muffled>, Filter) {
+    let cutoff = Arc::new(AtomicU32::new(OPEN.to_bits()));
+    let h = assets.add(Muffled { source: source.clone(), cutoff: cutoff.clone() });
+    (AudioPlayer(h), Filter { cutoff, at, blocked: 0.0 })
+}
+
+/// Whether a solid block stands between the ears and a sound (the block the
+/// sound comes from doesn't count: a dig knock comes from inside its block).
+fn walled(world: &World, blocks: &Blocks, ears: Vec3, at: Vec3) -> bool {
+    let to = at - ears;
+    let dist = to.length();
+    if dist < 1.0 {
+        return false;
+    }
+    let source = BlockPos::from_world(at.to_array());
+    voxel::raycast::raycast(ears.to_array(), to.to_array(), dist, |p| {
+        p != source && world.block(p).is_some_and(|b| {
+            let def = blocks.registry.get(b);
+            def.solid && def.opaque
+        })
+    })
+    .is_some()
+}
+
+/// Sets every playing sound's filter: hard under water, a little for each sound
+/// with a wall between it and your ears (eased so it doesn't click).
+fn muffle(
+    time: Res<Time>,
+    player: Res<Player>,
+    world: Res<World>,
+    blocks: Res<Blocks>,
+    ears: Query<&GlobalTransform, With<SpatialListener>>,
+    mut q: Query<&mut Filter>,
+) {
+    let ears = ears.iter().next().map_or(player.pos, |g| g.translation());
+    let ease = (time.delta_secs() * 8.0).min(1.0);
+    for mut f in &mut q {
+        if let Some(at) = f.at {
+            let target = if walled(&world, &blocks, ears, at) { 1.0 } else { 0.0 };
+            f.blocked += (target - f.blocked) * ease;
+        }
+        let cutoff = if player.head_in_water {
+            WATER_CUTOFF
+        } else if f.blocked > 0.01 {
+            // Eases from fully open (20 kHz) down to the wall cutoff.
+            20000.0 * (WALL_CUTOFF / 20000.0).powf(f.blocked)
+        } else {
+            OPEN
+        };
+        f.cutoff.store(cutoff.to_bits(), Ordering::Relaxed);
+    }
+}
+
+/// Positioned sounds (not ambient ones, whose callers fade them) are full
+/// within `NEAR` blocks of your ears and gone at `FAR`.
+const NEAR: f32 = 4.0;
+const FAR: f32 = 40.0;
+
+fn distance_fade(d: f32) -> f32 {
+    (1.0 - (d - NEAR) / (FAR - NEAR)).clamp(0.0, 1.0)
 }
 
 /// Small random variation so repeats don't sound identical.
@@ -171,34 +340,56 @@ fn jitter(seed: &mut u64) -> f32 {
 /// fall-off (1 / distance²) never bites, and callers fade them with distance themselves.
 const PAN_ONLY: SpatialScale = SpatialScale::new(0.001);
 
+/// Plays each `PlaySound` once its file has loaded (until then it waits, for
+/// up to `LOAD_WAIT` seconds).
 #[allow(clippy::too_many_arguments)]
 fn play(
     mut commands: Commands,
+    time: Res<Time<Real>>,
     mut msgs: MessageReader<PlaySound>,
     bank: Option<ResMut<Bank>>,
     server: Res<AssetServer>,
+    sources: Res<Assets<AudioSource>>,
+    mut muffled_sounds: ResMut<Assets<Muffled>>,
     spec: Res<SoundSpec>,
     settings: Res<Settings>,
+    player: Res<Player>,
+    ears: Query<&GlobalTransform, With<SpatialListener>>,
+    mut waiting: Local<Vec<(PlaySound, f32)>>,
     mut seed: Local<u64>,
 ) {
+    const LOAD_WAIT: f32 = 5.0;
     let Some(mut bank) = bank else { return };
     if *seed == 0 {
         *seed = 0x5EED_50DD;
     }
-    for m in msgs.read() {
+    let ears = ears.iter().next().map_or(player.pos, |g| g.translation());
+    let dt = time.delta_secs();
+    let mut queue: Vec<(PlaySound, f32)> = std::mem::take(&mut *waiting);
+    queue.extend(msgs.read().map(|m| (m.clone(), 0.0)));
+    for (m, age) in queue {
         let mut v = spec.volume(&m.name) * m.gain * settings.volume;
         if m.ambient {
             v *= settings.ambience;
+        } else if let Some(at) = m.at {
+            v *= distance_fade(at.distance(ears));
         }
         if v <= 0.001 {
             continue;
         }
         let h = bank.handles.entry(m.name.clone()).or_insert_with(|| server.load(format!("sounds/{}.ogg", m.name))).clone();
+        let Some(source) = sources.get(&h) else {
+            if age < LOAD_WAIT {
+                waiting.push((m, age + dt));
+            }
+            continue;
+        };
         let speed = m.speed.unwrap_or_else(|| jitter(&mut seed));
         let playback = PlaybackSettings::DESPAWN.with_volume(Volume::Linear(v)).with_speed(speed);
+        let (sound, filter) = muffled(&mut muffled_sounds, source, m.at);
         match m.at {
-            Some(at) => commands.spawn((AudioPlayer(h), playback.with_spatial(true).with_spatial_scale(PAN_ONLY), Transform::from_translation(at))),
-            None => commands.spawn((AudioPlayer(h), playback)),
+            Some(at) => commands.spawn((sound, filter, playback.with_spatial(true).with_spatial_scale(PAN_ONLY), Transform::from_translation(at))),
+            None => commands.spawn((sound, filter, playback)),
         };
     }
 }
@@ -255,10 +446,11 @@ fn mining(
     }
 }
 
-fn fights(mut strikes: MessageReader<Strike>, mut hurts: MessageReader<Damage>, mut out: MessageWriter<PlaySound>) {
-    for _ in strikes.read() {
-        out.write(PlaySound::new("hit"));
-        out.write(PlaySound::new("creature_hurt"));
+fn fights(mut strikes: MessageReader<Strike>, mut hurts: MessageReader<Damage>, bodies: Query<&GlobalTransform>, mut out: MessageWriter<PlaySound>) {
+    for s in strikes.read() {
+        let at = bodies.get(s.entity).ok().map(|g| g.translation() + Vec3::Y * 0.5);
+        out.write(PlaySound { at, ..PlaySound::new("hit") });
+        out.write(PlaySound { at, ..PlaySound::new("creature_hurt") });
     }
     for d in hurts.read() {
         if d.amount > 0.5 {
@@ -398,8 +590,25 @@ fn loops(
     spells: Res<Spells>,
     settings: Res<Settings>,
     spec: Res<SoundSpec>,
+    mut commands: Commands,
+    bank: Option<Res<Bank>>,
+    sources: Res<Assets<AudioSource>>,
+    mut muffled_sounds: ResMut<Assets<Muffled>>,
+    mut started: Local<[bool; 3]>,
     mut q: Query<(&Loop, &mut AudioSink)>,
 ) {
+    // Each loop starts once its file has loaded (it needs the samples for its filter).
+    if let Some(bank) = bank {
+        for (i, l) in [Loop::Wind, Loop::Rain, Loop::Levitate].into_iter().enumerate() {
+            if let Some(source) = bank.handles.get(l.file()).and_then(|h| sources.get(h))
+                && !started[i]
+            {
+                started[i] = true;
+                let (sound, filter) = muffled(&mut muffled_sounds, source, None);
+                commands.spawn((l, sound, filter, PlaybackSettings::LOOP.with_volume(Volume::Linear(0.0))));
+            }
+        }
+    }
     let dt = time.delta_secs();
     let high = ((player.pos.y - 80.0) / 200.0).clamp(0.0, 1.0);
     let rain = if conditions.snowing { 0.0 } else { conditions.precipitation.clamp(0.0, 1.0) };
@@ -428,6 +637,38 @@ fn loops(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn low_pass_cuts_highs_and_keeps_lows() {
+        let rate = 44100.0;
+        assert_eq!(lowpass_alpha(OPEN, rate), 1.0);
+        let wall = lowpass_alpha(WALL_CUTOFF, rate);
+        let water = lowpass_alpha(WATER_CUTOFF, rate);
+        assert!(water < wall && wall < 1.0);
+        // Run a tone through the two-stage filter and measure what comes out.
+        let gain = |alpha: f32, hz: f32| {
+            let (mut a, mut b, mut peak) = (0.0f32, 0.0f32, 0.0f32);
+            for i in 0..44100 {
+                let x = (std::f32::consts::TAU * hz * i as f32 / rate).sin();
+                a += alpha * (x - a);
+                b += alpha * (a - b);
+                if i > 22050 {
+                    peak = peak.max(b.abs());
+                }
+            }
+            peak
+        };
+        assert!(gain(water, 100.0) > 0.8, "lows pass under water");
+        assert!(gain(water, 4000.0) < 0.05, "highs gone under water");
+        assert!(gain(wall, 4000.0) > gain(water, 4000.0) * 5.0, "a wall muffles less than water");
+    }
+
+    #[test]
+    fn positioned_sounds_fade_with_distance() {
+        assert_eq!(distance_fade(2.0), 1.0);
+        assert!(distance_fade(20.0) > 0.0 && distance_fade(20.0) < 1.0);
+        assert_eq!(distance_fade(FAR + 1.0), 0.0);
+    }
 
     #[test]
     fn far_thunder_comes_later() {

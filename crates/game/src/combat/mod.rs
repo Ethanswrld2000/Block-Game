@@ -354,14 +354,14 @@ fn hit_foe(tf: &Transform, foe: &mut Foe, k: &FoeKind, from: Vec3, damage: f32, 
     let push = -to_you.normalize_or_zero();
     match foe.brain.struck(facing, &traits(k), dice) {
         Took::Blocked => {
-            sound.write(PlaySound::new("clash").gain(0.9));
+            sound.write(PlaySound::new("clash").gain(0.9).at(chest));
             bursts.write(Burst::new(chest, BurstKind::Sparks, 10));
             foe.vel += push * 2.5;
             0.25
         }
         Took::GuardBroken => {
-            sound.write(PlaySound::new("clash").speed(0.8));
-            sound.write(PlaySound::new("hit"));
+            sound.write(PlaySound::new("clash").speed(0.8).at(chest));
+            sound.write(PlaySound::new("hit").at(chest));
             bursts.write(Burst::new(chest, BurstKind::Sparks, 18));
             foe.vel += push * 5.0 + Vec3::Y * 2.5;
             foe.flinch = 1.0;
@@ -374,12 +374,12 @@ fn hit_foe(tf: &Transform, foe: &mut Foe, k: &FoeKind, from: Vec3, damage: f32, 
             foe.flinch = 1.0;
             let killed = foe.health <= 0.0;
             // A low thud under every hit, deeper on the killing blow.
-            sound.write(PlaySound::new("hit").speed(if killed { 0.6 } else { 0.85 }).gain(0.8));
+            sound.write(PlaySound::new("hit").speed(if killed { 0.6 } else { 0.85 }).gain(0.8).at(chest));
             if k.ghost {
-                sound.write(PlaySound::new("spirit").speed(1.7).gain(0.7));
+                sound.write(PlaySound::new("spirit").speed(1.7).gain(0.7).at(chest));
                 bursts.write(Burst::new(chest, BurstKind::Wisp, if killed { 18 } else { 10 }));
             } else {
-                sound.write(PlaySound::new("creature_hurt").speed(0.75));
+                sound.write(PlaySound::new("creature_hurt").speed(0.75).at(chest));
                 bursts.write(Burst::new(chest, BurstKind::Bits, if killed { 14 } else { 6 }));
             }
             if killed { 1.0 } else { 0.55 }
@@ -549,7 +549,7 @@ fn think(
                 let target = player.pos + Vec3::Y * 1.1;
                 let vel = (target - from).normalize_or_zero() * r.speed;
                 shots.write(Shoot { from, vel, damage: k.damage * foe.boost, cause: k.cause, color: r.color });
-                sound.write(PlaySound::new("knife").speed(0.7));
+                sound.write(PlaySound::new("knife").speed(0.7).at(from));
             }
         } else if lands
             && fightable
