@@ -595,6 +595,12 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   the FOV by `pov::SPRINT_FOV` (8°, negative narrows; skipped while `Menus.still`), hands sink while falling, are knocked
   down on landing and spring back, hop on a jump, trail the mouse, and drop into a low tilted carry while sprinting
   (`hands::pose_hands`, eased out during swings, guard and eating). Landing also nods the view down (`ride_camera`).
+- Urn grab: `station::grab`. Right click an urn with an empty hand: both first-person hands take its shoulders
+  (`Grab.grips`, used by `hands::pose_hands`) and the camera leans over its mouth (`grab::lean_view`) over
+  `REACH_SECONDS`; at `OPEN_AT` the tree opens from the mouth. Closing the tree lets go and leans back. The mouth is a
+  quad with `MouthMaterial` (`assets/shaders/urn_mouth.wesl`): the same dark as the tree's background, worked out per
+  screen pixel from the same clock (`grab::void_clock`), so the hole grows out of it seamlessly. `void_inside` and its
+  helpers are copied between `urn_void.wesl` and `urn_mouth.wesl` and must stay the same.
 - Next: see `docs/GAMEPLAY_LOOP.md`.
 
 ## Testing without a screen
