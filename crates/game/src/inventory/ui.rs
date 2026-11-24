@@ -1102,9 +1102,15 @@ fn describe(items: &Items, id: ItemId) -> (String, String, Vec<Line>) {
     let it = items.get(id);
     let mut lines: Vec<Line> = Vec::new();
     let kind = match &it.kind {
-        ItemKind::Wear { slot, insulation, protection } => {
+        ItemKind::Wear { slot, insulation, protection, cooling, air } => {
             if *insulation > 0.0 {
                 lines.push((Some("icon_warmth"), format!("Warmth +{}", crate::settings::temp_diff(*insulation, 0, false)), colors::GOOD));
+            }
+            if *cooling > 0.0 {
+                lines.push((None, format!("Cooler in heat -{}", crate::settings::temp_diff(*cooling, 0, false)), colors::GOOD));
+            }
+            if *air > 0.0 {
+                lines.push((None, format!("Thin air: makes up {:.0}% of what's missing", air * 100.0), colors::GOOD));
             }
             for l in Layer::ALL {
                 if let Some(p) = protection.get(&l) {

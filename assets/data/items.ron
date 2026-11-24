@@ -4,6 +4,7 @@
 //   kind:   Tool(speeds: {material: multiplier}), Block("block name"), Torch,
 //           Food(tier: 1-4, satiety: 0-100) (tiers are in food_tiers.ron),
 //           Wear(slot: Head|HeadArmor|Body|BodyArmor|Legs|Feet, insulation: °C,
+//                cooling: °C taken off when it's hot, air: 0..0.9 share of missing air made up,
 //                protection: {Damage: 0.2, Blood: 0.1, Injuries: 0.1}) - the share of a blow kept
 //                off the bar where it lands,
 //           Bag(grid: (w, h)) - worn on the back, holds a grid of that size,
@@ -121,6 +122,11 @@
             name: "hide_leggings", title: "Hide Leggings", mass: 1.5, size: (2, 2),
             kind: Wear(slot: Legs, insulation: 5.0, protection: { Damage: 0.05 }),
         ),
+        // Region kit: light clothes for the desert, fur boots for the peaks, a breather for deep caves.
+        (name: "linen_robe", title: "Linen Robe", mass: 0.6, size: (2, 3), kind: Wear(slot: Body, cooling: 6.0)),
+        (name: "sun_hat", title: "Sun Hat", mass: 0.3, size: (2, 1), kind: Wear(slot: Head, cooling: 4.0)),
+        (name: "fur_boots", title: "Fur Boots", mass: 1.0, size: (2, 1), kind: Wear(slot: Feet, insulation: 4.0, protection: { Damage: 0.03 })),
+        (name: "reed_breather", title: "Reed Breather", mass: 0.4, size: (1, 2), kind: Wear(slot: Head, air: 0.4)),
         (
             name: "bark_helm", title: "Bark Helm", mass: 1.5, size: (2, 2),
             kind: Wear(slot: HeadArmor, protection: { Damage: 0.15, Injuries: 0.1 }),

@@ -84,6 +84,10 @@
         (station: "sewing_table", slots: {"top": ("hide", 2), "joint": ("cordage", 1)}, work: 4, makes: ("hide_leggings", 1)),
         (station: "sewing_table", slots: {"top": ("fur", 1), "joint": ("cordage", 1)}, work: 3, makes: ("fur_hood", 1)),
         (station: "sewing_table", slots: {"top": ("fur", 3), "joint": ("cordage", 2)}, work: 5, makes: ("fur_coat", 1)),
+        (station: "sewing_table", slots: {"top": ("plant_fiber", 5), "joint": ("swamp_reed", 2)}, work: 4, makes: ("linen_robe", 1)),
+        (station: "sewing_table", slots: {"top": ("swamp_reed", 4), "joint": ("cordage", 1)}, work: 3, makes: ("sun_hat", 1)),
+        (station: "sewing_table", slots: {"top": ("fur", 2), "joint": ("cordage", 1)}, work: 3, makes: ("fur_boots", 1)),
+        (station: "sewing_table", slots: {"top": ("hide", 1), "joint": ("swamp_reed", 3)}, work: 4, makes: ("reed_breather", 1)),
         // Armor stand (gear station): bark and leather armor; iron once taught.
         (station: "armor_stand", slots: {"top": ("log", 2), "joint": ("cordage", 2)}, work: 4, makes: ("bark_helm", 1)),
         (station: "armor_stand", slots: {"top": ("log", 4), "joint": ("cordage", 3)}, work: 5, makes: ("bark_vest", 1)),

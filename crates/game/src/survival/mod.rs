@@ -302,7 +302,7 @@ fn tick_body(
     let raw = feels_like(&climate, &conditions, weather, sun, player.in_water, eye, &torches, holding_torch, s.cover, &mut parts);
     let underwater = player.head_in_water;
     let mut air = if underwater { 0.0 } else { vitals::air_at(if worldgen::in_pocket(eye.x as i32, eye.z as i32) { 0.0 } else { eye.y }) * conditions.air };
-    let dressed = vitals::clothed(raw, inv.insulation(&items));
+    let dressed = vitals::clothed(raw, inv.insulation(&items), inv.cooling(&items));
     parts.push(("Clothes".into(), dressed - raw));
     let mut feels = perks.feel(dressed, vitals::COMFORT_LOW + 6.0);
     parts.push(("Skills".into(), feels - dressed));
@@ -321,7 +321,7 @@ fn tick_body(
     }
     let env = Env {
         air,
-        breathe: perks.breathe(air),
+        breathe: vitals::helped(perks.breathe(air), inv.air_help(&items)),
         underwater,
         feels,
         sprinting: player.sprinting && *mode == MoveMode::Walk,

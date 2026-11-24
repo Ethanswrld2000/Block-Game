@@ -580,6 +580,9 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   one repeating texture per material once loaded; boxes are meshed by `skin::box_mesh` with world-scale UVs (one tile per block,
   `TILES_PER_BLOCK`), so the pixel size matches the terrain whatever the box size. Glowing and liquid materials stay flat.
   Used by `place_stations` and the golem.
+- Region clothes: `Wear` items can have `cooling` (°C off felt heat, never below comfortable; `vitals::clothed`) and `air`
+  (share of missing air made up, best worn piece counts; `vitals::helped`). Sewing table: `linen_robe`, `sun_hat` (desert),
+  `fur_boots` (peaks), `reed_breather` (deep caves and sky; Head slot, so it trades against a hood).
 - Next: see `docs/GAMEPLAY_LOOP.md`.
 
 ## Testing without a screen

@@ -125,13 +125,20 @@ pub fn air_at(y: f32) -> f32 {
 }
 
 /// Felt temperature with clothes on: they warm you up to the top of the
-/// comfortable range in the cold, and make heat worse (by half) when it's hot.
-pub fn clothed(feels: f32, insulation: f32) -> f32 {
+/// comfortable range in the cold, and make heat worse (by half) when it's hot,
+/// less `cooling` from light clothes and shade (never below comfortable).
+pub fn clothed(feels: f32, insulation: f32, cooling: f32) -> f32 {
     if feels >= COMFORT_HIGH {
-        feels + insulation * 0.5
+        (feels + insulation * 0.5 - cooling).max(COMFORT_HIGH)
     } else {
         (feels + insulation).min(COMFORT_HIGH.max(feels))
     }
+}
+
+/// Air the body gets with worn help (a breather) making up a share of what's missing.
+/// No help without any air at all (under water).
+pub fn helped(breathe: f32, help: f32) -> f32 {
+    if breathe <= 0.0 { breathe } else { (breathe + (1.0 - breathe) * help).min(1.0) }
 }
 
 impl Vitals {
@@ -436,13 +443,20 @@ mod tests {
 
     #[test]
     fn clothes_warm_you_in_the_cold_and_cook_you_in_the_heat() {
-        assert_eq!(clothed(-10.0, 12.0), 2.0);
-        assert_eq!(clothed(20.0, 12.0), COMFORT_HIGH);
-        assert_eq!(clothed(34.0, 12.0), 40.0);
+        assert_eq!(clothed(-10.0, 12.0, 0.0), 2.0);
+        assert_eq!(clothed(20.0, 12.0, 0.0), COMFORT_HIGH);
+        assert_eq!(clothed(34.0, 12.0, 0.0), 40.0);
+        // Light clothes take the heat off, but never cool you below comfortable or warm you in the cold.
+        assert_eq!(clothed(36.0, 1.0, 10.0), 26.5);
+        assert_eq!(clothed(28.0, 0.0, 10.0), COMFORT_HIGH);
+        assert_eq!(clothed(-10.0, 2.0, 10.0), -8.0);
+        assert_eq!(helped(0.5, 0.4), 0.7);
+        assert_eq!(helped(0.0, 0.4), 0.0);
+        assert_eq!(helped(1.0, 0.4), 1.0);
         // A fur coat turns a freezing night into a merely chilly one.
         let rules = crate::survival::exposure::tests::rules();
         assert_eq!(rules.temperature(-10.0).unwrap().1.stage.name, "Freezing");
-        assert_eq!(rules.temperature(clothed(-10.0, 16.0)).unwrap().1.stage.name, "Chilly");
+        assert_eq!(rules.temperature(clothed(-10.0, 16.0, 0.0)).unwrap().1.stage.name, "Chilly");
     }
 
     #[test]
