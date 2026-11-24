@@ -194,6 +194,28 @@ impl Inventory {
             .sum()
     }
 
+    /// How much worn clothes cool you when it's hot (°C).
+    pub fn cooling(&self, items: &Items) -> f32 {
+        self.worn
+            .values()
+            .map(|i| match &items.get(*i).kind {
+                ItemKind::Wear { cooling, .. } => *cooling,
+                _ => 0.0,
+            })
+            .sum()
+    }
+
+    /// Share of missing air that worn things make up (the best one counts).
+    pub fn air_help(&self, items: &Items) -> f32 {
+        self.worn
+            .values()
+            .map(|i| match &items.get(*i).kind {
+                ItemKind::Wear { air, .. } => *air,
+                _ => 0.0,
+            })
+            .fold(0.0, f32::max)
+    }
+
     /// Share of a blow landing on `layer` that armor and clothes keep off.
     pub fn protection(&self, items: &Items, layer: Layer) -> f32 {
         let p: f32 = self

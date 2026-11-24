@@ -157,9 +157,15 @@ fn gear_row(p: &mut ChildSpawnerCommands, view: &SlotView, d: &Data, slot: WearS
             let it = d.items.get(id);
             let mut parts = Vec::new();
             match &it.kind {
-                ItemKind::Wear { insulation, protection, .. } => {
+                ItemKind::Wear { insulation, protection, cooling, air, .. } => {
                     if *insulation > 0.0 {
                         parts.push(format!("+{}", crate::settings::temp_diff(*insulation, 0, false)));
+                    }
+                    if *cooling > 0.0 {
+                        parts.push(format!("heat -{}", crate::settings::temp_diff(*cooling, 0, false)));
+                    }
+                    if *air > 0.0 {
+                        parts.push(format!("air +{:.0}%", air * 100.0));
                     }
                     for l in Layer::ALL {
                         if let Some(v) = protection.get(&l) {

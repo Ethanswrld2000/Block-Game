@@ -81,6 +81,10 @@ enum KindSpec {
         insulation: f32,
         #[serde(default)]
         protection: HashMap<Layer, f32>,
+        #[serde(default)]
+        cooling: f32,
+        #[serde(default)]
+        air: f32,
     },
     Bag { grid: (u8, u8) },
     Material,
@@ -126,7 +130,8 @@ pub enum ItemKind {
     /// Eaten by holding right click. `tier` is a tier in food_tiers.ron.
     Food { tier: u8, satiety: f32 },
     /// Clothes and armor: warmth in °C, and the share of a blow kept off each health bar.
-    Wear { slot: WearSlot, insulation: f32, protection: HashMap<Layer, f32> },
+    /// `cooling` (°C) takes heat off when it's hot; `air` (0..1) is the share of missing air it makes up.
+    Wear { slot: WearSlot, insulation: f32, protection: HashMap<Layer, f32>, cooling: f32, air: f32 },
     /// Worn on the back; holds a grid of this size.
     Bag { grid: (u8, u8) },
     /// Crafting materials.
@@ -195,11 +200,11 @@ impl Items {
                 ),
                 KindSpec::Torch => ItemKind::Torch,
                 KindSpec::Food { tier, satiety } => ItemKind::Food { tier, satiety },
-                KindSpec::Wear { slot, insulation, protection } => {
+                KindSpec::Wear { slot, insulation, protection, cooling, air } => {
                     if slot == WearSlot::Back {
                         return Err(format!("item '{}': things worn on the back are Bag items", s.name));
                     }
-                    ItemKind::Wear { slot, insulation, protection }
+                    ItemKind::Wear { slot, insulation, protection, cooling, air: air.clamp(0.0, 0.9) }
                 }
                 KindSpec::Bag { grid } => ItemKind::Bag { grid },
                 KindSpec::Material => ItemKind::Material,
