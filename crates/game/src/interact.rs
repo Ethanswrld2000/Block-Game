@@ -157,6 +157,8 @@ pub struct Strike {
     pub damage: f32,
     /// Which way the blow pushes it.
     pub dir: Vec3,
+    /// Your blow (not the golem's): it gets the hit feel.
+    pub yours: bool,
 }
 
 /// A fighting swing (a sword's) reached its contact moment: whatever is in
@@ -525,7 +527,7 @@ fn use_hands(
             let damage = item.map_or(crate::items::FIST_DAMAGE, |i| items.get(i).damage) * (1.0 + perks.damage);
             let mut dir = cam.forward().as_vec3();
             dir.y = 0.0;
-            strikes.write(Strike { entity: e, damage, dir: dir.normalize_or_zero() });
+            strikes.write(Strike { entity: e, damage, dir: dir.normalize_or_zero(), yours: true });
         }
         return;
     }

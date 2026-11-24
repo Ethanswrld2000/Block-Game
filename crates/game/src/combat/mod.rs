@@ -12,6 +12,7 @@
 
 pub mod ai;
 pub mod data;
+pub mod feel;
 pub mod guns;
 pub mod path;
 mod saved;
@@ -50,6 +51,7 @@ impl Plugin for CombatPlugin {
             .add_message::<SpawnFoe>()
             .add_message::<Shoot>()
             .add_message::<FoeSlain>()
+            .add_plugins(feel::FeelPlugin)
             .add_systems(crate::menu::GamePostStartup, saved::load)
             .add_systems(crate::menu::GameUpdate, saved::save_now_and_then)
             .add_systems(Last, saved::save_on_exit.run_if(crate::menu::in_game))
@@ -61,10 +63,19 @@ impl Plugin for CombatPlugin {
                 crate::menu::GameUpdate,
                 (spawn_key, spawn, take_swings, guns::fire, take_strikes, shove, think, shoot, fly_bolts, walk, animate, haunt, fall)
                     .chain()
+                    .in_set(FallSet)
                     .after(InteractSet)
                     .after(crate::npc::NpcSet),
             );
     }
+}
+
+/// The foe systems, through `fall` (hit feel runs after them).
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FallSet;
+
+fn fall_set() -> FallSet {
+    FallSet
 }
 
 /// How far a sword cut reaches from your eyes.
@@ -177,6 +188,8 @@ pub struct Foe {
     pub boost: f32,
     /// `SpawnFoe::tag`.
     pub tag: u32,
+    /// 1 when hit, eases to 0: the body rocks back.
+    pub flinch: f32,
 }
 
 /// A spirit's look: its own materials (made see-through and blue once its
@@ -316,6 +329,7 @@ fn spawn(
             guard: 0.0,
             boost: m.boost,
             tag: m.tag,
+            flinch: 0.0,
         };
         commands.entity(root).insert((Name::new(k.title.clone()), foe, rig));
         if k.ghost {
@@ -332,7 +346,8 @@ fn spawn(
 
 /// What a blow on a foe does: blocked on its blade, its guard broken, or a wound.
 #[allow(clippy::too_many_arguments)]
-fn hit_foe(tf: &Transform, foe: &mut Foe, k: &FoeKind, from: Vec3, damage: f32, dice: &mut Rng, sound: &mut MessageWriter<PlaySound>, bursts: &mut MessageWriter<Burst>) {
+/// A blow lands on a foe. Returns how hard it landed for the hit feel (`feel::Impact`).
+fn hit_foe(tf: &Transform, foe: &mut Foe, k: &FoeKind, from: Vec3, damage: f32, dice: &mut Rng, sound: &mut MessageWriter<PlaySound>, bursts: &mut MessageWriter<Burst>) -> f32 {
     let to_you = flat(from - tf.translation);
     let facing = ahead_of(Vec3::new(-foe.yaw.sin(), 0.0, -foe.yaw.cos()), to_you, ai::GUARD_ARC);
     let chest = tf.translation + Vec3::Y * 1.3 + to_you.normalize_or_zero() * 0.4;
@@ -342,24 +357,32 @@ fn hit_foe(tf: &Transform, foe: &mut Foe, k: &FoeKind, from: Vec3, damage: f32, 
             sound.write(PlaySound::new("clash").gain(0.9));
             bursts.write(Burst::new(chest, BurstKind::Sparks, 10));
             foe.vel += push * 2.5;
+            0.25
         }
         Took::GuardBroken => {
             sound.write(PlaySound::new("clash").speed(0.8));
             sound.write(PlaySound::new("hit"));
             bursts.write(Burst::new(chest, BurstKind::Sparks, 18));
             foe.vel += push * 5.0 + Vec3::Y * 2.5;
+            foe.flinch = 1.0;
+            0.8
         }
         Took::Hurt => {
             foe.health -= damage;
             foe.vel += push * 5.0 + Vec3::Y * 3.0;
             foe.on_ground = false;
+            foe.flinch = 1.0;
+            let killed = foe.health <= 0.0;
+            // A low thud under every hit, deeper on the killing blow.
+            sound.write(PlaySound::new("hit").speed(if killed { 0.6 } else { 0.85 }).gain(0.8));
             if k.ghost {
                 sound.write(PlaySound::new("spirit").speed(1.7).gain(0.7));
-                bursts.write(Burst::new(chest, BurstKind::Wisp, 10));
+                bursts.write(Burst::new(chest, BurstKind::Wisp, if killed { 18 } else { 10 }));
             } else {
                 sound.write(PlaySound::new("creature_hurt").speed(0.75));
-                bursts.write(Burst::new(chest, BurstKind::Bits, 6));
+                bursts.write(Burst::new(chest, BurstKind::Bits, if killed { 14 } else { 6 }));
             }
+            if killed { 1.0 } else { 0.55 }
         }
     }
 }
@@ -377,6 +400,7 @@ fn take_swings(
     mut strikes: MessageWriter<Strike>,
     mut sound: MessageWriter<PlaySound>,
     mut bursts: MessageWriter<Burst>,
+    mut impact: MessageWriter<feel::Impact>,
 ) {
     for s in swung.read() {
         sound.write(PlaySound::new("swing").speed(1.25).gain(0.7));
@@ -387,13 +411,14 @@ fn take_swings(
                 continue;
             }
             let k = &book.kinds[foe.kind];
-            hit_foe(tf, &mut foe, k, s.origin, s.damage, &mut dice.0, &mut sound, &mut bursts);
+            let strength = hit_foe(tf, &mut foe, k, s.origin, s.damage, &mut dice.0, &mut sound, &mut bursts);
+            impact.write(feel::Impact { strength });
         }
         if let Some(e) = aimed.entity
             && creatures.contains(e)
             && aimed.dist <= s.reach
         {
-            strikes.write(Strike { entity: e, damage: s.damage, dir: flat(s.dir).normalize_or_zero() });
+            strikes.write(Strike { entity: e, damage: s.damage, dir: flat(s.dir).normalize_or_zero(), yours: true });
         }
     }
 }
@@ -408,11 +433,15 @@ fn take_strikes(
     mut dice: ResMut<FoeDice>,
     mut sound: MessageWriter<PlaySound>,
     mut bursts: MessageWriter<Burst>,
+    mut impact: MessageWriter<feel::Impact>,
 ) {
     for s in strikes.read() {
         let Ok((_, tf, mut foe)) = foes.get_mut(s.entity) else { continue };
         let k = &book.kinds[foe.kind];
-        hit_foe(tf, &mut foe, k, cam.translation, s.damage, &mut dice.0, &mut sound, &mut bursts);
+        let strength = hit_foe(tf, &mut foe, k, cam.translation, s.damage, &mut dice.0, &mut sound, &mut bursts);
+        if s.yours {
+            impact.write(feel::Impact { strength });
+        }
     }
 }
 
@@ -664,21 +693,23 @@ fn walk(time: Res<Time>, world: Res<World>, blocks: Res<Blocks>, mut q: Query<(&
 
 /// Bodies: walking, facing, and the sword arm (held ready, raised to
 /// block, or cutting on the same keys as yours).
-fn animate(real: Res<Time<Real>>, game: Res<Time>, book: Res<FoeBook>, cam: Single<&GlobalTransform, With<FlyCamera>>, mut foes: Query<(&mut Transform, &Foe, &mut Rig)>, mut parts: Parts) {
+fn animate(real: Res<Time<Real>>, game: Res<Time>, book: Res<FoeBook>, cam: Single<&GlobalTransform, With<FlyCamera>>, mut foes: Query<(&mut Transform, &mut Foe, &mut Rig)>, mut parts: Parts) {
     let dt = real.delta_secs().min(0.05);
     let gdt = game.delta_secs().min(0.05);
     let eye = cam.translation();
-    for (mut tf, foe, mut rig) in &mut foes {
+    for (mut tf, mut foe, mut rig) in &mut foes {
+        foe.flinch = (foe.flinch - gdt * 5.0).max(0.0);
         let k = &book.kinds[foe.kind];
         let d = eye - (tf.translation + Vec3::Y * EYES);
         let focus = foe.brain.aware.then(|| [crate::npc::motion::wrap(yaw_of(d) - rig.facing()), d.y.atan2(Vec2::new(d.x, d.z).length())]);
         let tactic = foe.brain.tactic;
         let arms = if tactic == Tactic::Attack { Swing::Slash.limbs(foe.brain.swing.min(1.0)) } else { Limbs::hold().lerp(Limbs::guard(), foe.guard) };
-        let sway = match tactic {
+        let mut sway = match tactic {
             Tactic::Stagger => [-0.28, 0.08],
             Tactic::Guard => [0.08, 0.0],
             _ => [0.0; 2],
         };
+        sway[0] -= 0.45 * foe.flinch;
         let drive = Drive {
             yaw: foe.yaw,
             turn: 0.14,

@@ -383,6 +383,7 @@ fn take_strikes(
     mut toast: MessageWriter<crate::survival::Toast>,
     mut dice: ResMut<Dice>,
     (mut gain, prog): (MessageWriter<crate::progress::GainXp>, Res<crate::progress::xp::Progression>),
+    mut impact: MessageWriter<crate::combat::feel::Impact>,
 ) {
     let Some(kinds) = kinds else { return };
     for s in strikes.read() {
@@ -393,6 +394,9 @@ fn take_strikes(
         let k = kinds.get(c.kind);
         c.health -= s.damage;
         c.hurt = 0.3;
+        if s.yours {
+            impact.write(crate::combat::feel::Impact { strength: if c.health <= 0.0 { 0.9 } else { 0.45 } });
+        }
         c.vel += s.dir * 6.0 + Vec3::Y * if k.temper == Temper::Spirit { 0.0 } else { 4.5 };
         c.on_ground = false;
         match k.temper {

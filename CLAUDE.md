@@ -550,6 +550,10 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   wheel if allowed) turn the page: the leaf folds over the spine (`turn_leaves`). `book::paginate` splits entries into
   pages by size. Used by the bench recipe book (`station::book`, one page) and the journal (J, a spread).
   Screenshots: `BLOCKGAME_BOOKTURN=0.5` turns the first open book and holds the leaf there; `BLOCKGAME_JOURNAL=all` shows every clue.
+- Hit feel: `combat::feel`. Your blows that land (`feel::Impact`, strength 0..1 from `hit_foe`: blocked 0.25, hurt 0.55,
+  guard break 0.8, kill 1.0; creature hits too; `Strike.yours` is false for the golem) stop the game briefly
+  (`Time<Virtual>` at 4% speed for 0.03-0.1 real seconds) and nod the camera; `player::Damage` jolts it (`feel::Kick`, a
+  spring added in `player::ride_camera`). Foes rock back when hit (`Foe.flinch`), and every hurting blow adds a low `hit` thud.
 - Next: see `docs/GAMEPLAY_LOOP.md`.
 
 ## Testing without a screen
