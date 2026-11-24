@@ -604,6 +604,11 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   quad with `MouthMaterial` (`assets/shaders/urn_mouth.wesl`): the same dark as the tree's background, worked out per
   screen pixel from the same clock (`grab::void_clock`), so the hole grows out of it seamlessly. `void_inside` and its
   helpers are copied between `urn_void.wesl` and `urn_mouth.wesl` and must stay the same.
+- Extreme weather and gusts: weather.ron has an extreme version of each kind (`heatwave`, `heavy_overcast`, `downpour`,
+  `tempest`, `thick_fog`, `deep_freeze`, `windstorm`), rare via small seasons.ron chances. `wind::Wind` gusts every
+  `GUST_EVERY` (20-30 s, `gust_shape`); `Wind::gusting()`/`velocity()` include the gust. `game::wind_streaks`: gizmo line
+  trails that ride the wind, more the harder it blows, none under a roof. Wind push on the player is small
+  (`player::WIND_PUSH`, from 10 blocks/s, mostly during gusts).
 - Next: see `docs/GAMEPLAY_LOOP.md`.
 
 ## Testing without a screen

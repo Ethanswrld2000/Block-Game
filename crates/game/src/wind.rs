@@ -10,7 +10,8 @@
 //!
 //! Foliage sways in the vertex shader (`assets/shaders/voxel_vertex.wesl`);
 //! this module hands it the direction and how hard to sway through the voxel
-//! material's `wind` uniform. Gusts come and go on top of the steady wind.
+//! material's `wind` uniform. Every 20-30 seconds a gust blows through
+//! (`gust_shape`): the wind picks up for a few seconds and dies back.
 
 use bevy::prelude::*;
 
@@ -28,6 +29,14 @@ const MAX_VEER: f32 = 0.9;
 const CLOUD_DRIFT: f32 = 1.0;
 /// Wind (blocks per second) at which plants lean as far as they go.
 const FULL_SWAY_WIND: f32 = 16.0;
+/// Seconds from one gust to the next (random between the two).
+pub const GUST_EVERY: (f32, f32) = (20.0, 30.0);
+/// A gust builds over `GUST_RISE` seconds, holds for `GUST_HOLD`, dies over `GUST_FALL`.
+const GUST_RISE: f32 = 1.5;
+const GUST_HOLD: f32 = 2.5;
+const GUST_FALL: f32 = 3.0;
+/// At its peak a gust blows this much harder than the steady wind (0.8 = 80% more).
+pub const GUST_BOOST: f32 = 0.8;
 
 pub struct WindPlugin;
 
@@ -44,8 +53,12 @@ pub struct Wind {
     pub angle: f32,
     /// Blocks per second.
     pub speed: f32,
-    /// 0..1, how gusty it is right now.
+    /// 0..1, how far into a gust it is right now (0 between gusts).
     pub gust: f32,
+    /// When the current gust started and when the next one comes (in `time`).
+    gust_at: f32,
+    next_gust: f32,
+    gusts_so_far: u64,
     /// Seconds of wind so far (drives the slow wander and the gusts).
     time: f32,
     /// Phase of the gust wave that runs across the foliage, radians (0..τ). Summed
@@ -63,7 +76,7 @@ pub struct Wind {
 
 impl Default for Wind {
     fn default() -> Self {
-        Self { angle: 0.33, speed: 0.0, gust: 0.0, time: 0.0, wave: 0.0, base: 0.33, veer: 0.0, weather: None, started: false }
+        Self { angle: 0.33, speed: 0.0, gust: 0.0, gust_at: -100.0, next_gust: 8.0, gusts_so_far: 0, time: 0.0, wave: 0.0, base: 0.33, veer: 0.0, weather: None, started: false }
     }
 }
 
@@ -73,9 +86,14 @@ impl Wind {
         Vec2::from_angle(self.angle)
     }
 
-    /// Wind velocity, blocks per second, as (x, z).
+    /// Wind velocity with the gust, blocks per second, as (x, z).
     pub fn velocity(&self) -> Vec2 {
-        self.dir() * self.speed
+        self.dir() * self.gusting()
+    }
+
+    /// Strength right now, gust included, blocks per second.
+    pub fn gusting(&self) -> f32 {
+        self.speed * (1.0 + GUST_BOOST * self.gust)
     }
 
     /// How fast the clouds drift, blocks per second (before each layer's own speed).
@@ -112,11 +130,24 @@ pub fn wander(t: f32) -> f32 {
     0.9 * (t * TAU / 1200.0).sin() + 0.4 * (t * TAU / 480.0 + 2.1).sin()
 }
 
-/// Gustiness, 0..1, `t` seconds in: a couple of slow beats that line up now and then.
-pub fn gusts(t: f32) -> f32 {
-    let a = (t * 0.37).sin() * 0.5 + 0.5;
-    let b = (t * 0.13 + 1.0).sin() * 0.5 + 0.5;
-    (a * b).powf(1.5)
+/// How strong a gust is, 0..1, `t` seconds after it started (0 before and after it).
+pub fn gust_shape(t: f32) -> f32 {
+    let x = if t < 0.0 {
+        0.0
+    } else if t < GUST_RISE {
+        t / GUST_RISE
+    } else if t < GUST_RISE + GUST_HOLD {
+        1.0
+    } else {
+        1.0 - (t - GUST_RISE - GUST_HOLD) / GUST_FALL
+    };
+    let x = x.clamp(0.0, 1.0);
+    x * x * (3.0 - 2.0 * x)
+}
+
+/// Seconds from one gust to the next, for a random `roll` in 0..1.
+pub fn gust_gap(roll: f32) -> f32 {
+    GUST_EVERY.0 + (GUST_EVERY.1 - GUST_EVERY.0) * roll.clamp(0.0, 1.0)
 }
 
 fn hash(a: u64, b: u64) -> f32 {
@@ -146,7 +177,13 @@ fn blow(time: Res<Time>, conditions: Res<Conditions>, state: Res<WeatherState>, 
     wind.veer += (target - wind.veer) * (1.0 - (-dt / VEER_EASE).exp());
     wind.speed += (conditions.wind - wind.speed) * (1.0 - (-dt / SPEED_EASE).exp());
     wind.angle = wind.base + wind.veer + wander(wind.time);
-    wind.gust = gusts(wind.time);
+    if wind.time >= wind.next_gust {
+        wind.gust_at = wind.time;
+        wind.gusts_so_far += 1;
+        let roll = hash(seed ^ 0x6057, wind.gusts_so_far);
+        wind.next_gust = wind.time + gust_gap(roll);
+    }
+    wind.gust = gust_shape(wind.time - wind.gust_at);
     let sway = wind.sway();
     wind.wave = (wind.wave + dt * (0.8 + sway * 1.6)).rem_euclid(std::f32::consts::TAU);
 }
@@ -194,8 +231,19 @@ mod tests {
         assert!(sway(0.0) > 0.0, "a little breeze always");
         assert!(sway(3.0) < sway(12.0) && sway(12.0) < sway(24.0));
         assert!(sway(100.0) <= 1.3);
-        for t in 0..1000 {
-            let g = gusts(t as f32 * 0.7);
+    }
+
+    #[test]
+    fn gusts_come_every_twenty_to_thirty_seconds() {
+        assert_eq!(gust_gap(0.0), 20.0);
+        assert_eq!(gust_gap(1.0), 30.0);
+        // Over before the next one can start, and quiet in between.
+        assert_eq!(gust_shape(-1.0), 0.0);
+        assert_eq!(gust_shape(GUST_RISE + 0.5), 1.0);
+        assert_eq!(gust_shape(GUST_RISE + GUST_HOLD + GUST_FALL), 0.0);
+        assert!(GUST_RISE + GUST_HOLD + GUST_FALL < GUST_EVERY.0);
+        for i in 0..200 {
+            let g = gust_shape(i as f32 * 0.05);
             assert!((0.0..=1.0).contains(&g));
         }
     }

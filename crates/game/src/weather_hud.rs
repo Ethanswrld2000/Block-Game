@@ -66,6 +66,8 @@ pub fn title(name: &str, title: &str, snowing: bool, precipitation: f32) -> Stri
     match name {
         "rain" => "Snow".into(),
         "storm" => "Snowstorm".into(),
+        "downpour" => "Heavy Snow".into(),
+        "tempest" => "Blizzard".into(),
         _ => format!("{title} (snow)"),
     }
 }

@@ -32,6 +32,13 @@
         "mist": (contrast: 0.88, saturation: 0.8, mist: 1.0),
         "cold_snap": (saturation: 0.86, warmth: -0.1),
         "gale": (contrast: 0.96, saturation: 0.8, warmth: -0.03),
+        "heatwave": (contrast: 1.06, saturation: 1.05, warmth: 0.1, exposure: 0.08),
+        "heavy_overcast": (contrast: 0.92, saturation: 0.75, exposure: -0.12),
+        "downpour": (contrast: 0.92, saturation: 0.62, warmth: -0.03, exposure: -0.2, mist: 0.45),
+        "tempest": (contrast: 1.06, saturation: 0.5, warmth: -0.03, exposure: -0.45, mist: 0.45),
+        "thick_fog": (contrast: 0.85, saturation: 0.72, mist: 1.0),
+        "deep_freeze": (saturation: 0.78, warmth: -0.16),
+        "windstorm": (contrast: 0.96, saturation: 0.72, warmth: -0.04, exposure: -0.1),
     },
     // By biome name (biomes.ron).
     biomes: {
