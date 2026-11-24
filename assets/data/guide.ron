@@ -1,0 +1,99 @@
+// The getting-started guide (game::guide). After the opening (C01 sets the flag `guide_on`),
+// the journal (J) walks you through these steps one at a time, top to bottom: the step under
+// way shows with what to do, finished ones are ticked off. Each step is done once its goal
+// holds (the story flag `guide:<id>` is set, so story beats can wait on it).
+//
+//   id, title, text: the journal entry
+//   goal:
+//     Have([("stick", 5), ("small_rock", 2)])  in your pockets; "log|swamp_log" counts any of them
+//     Camp                                     your bedroll is laid out (B)
+//     Step("camp_mat")                          an urn step is done
+//     Made("rough_axe")                         made at a bench
+//     Home                                      you stand in a proper home: a closed room with a door
+//                                               in its walls and a torch (or any light) inside
+//     Urn                                       you have an urn of your own (carried or set down)
+//     UrnPlaced                                 you have set one down
+//   marks: waypoints to the nearest of these blocks in the loaded world, until you have enough:
+//     (name: "Sticks", blocks: ["twig_*", "dry_brush"], until: ("stick", 5)); `*` ends a name prefix
+//   cutscene: played when the step comes up (cutscenes.ron)
+(
+    steps: [
+        (
+            id: "gather",
+            title: "Sticks and stones",
+            text: "Bram says to start with sticks and stones. Right click twigs on tree trunks to snap them off, and pebbles on the ground to pick them up. The marks at the top of the screen point to the nearest ones.",
+            goal: Have([("stick", 5), ("small_rock", 2)]),
+            marks: [
+                (name: "Sticks", blocks: ["twig_*", "dry_brush"], until: ("stick", 5)),
+                (name: "Stones", blocks: ["pebble"], until: ("small_rock", 2)),
+            ],
+        ),
+        (
+            id: "fiber",
+            title: "Plant fiber",
+            text: "Pull up tall grass and reeds for plant fiber. You need four to weave a camp mat.",
+            goal: Have([("plant_fiber", 4)]),
+            marks: [
+                (name: "Grass", blocks: ["tall_grass", "reeds", "fern"], until: ("plant_fiber", 4)),
+            ],
+        ),
+        (
+            id: "camp",
+            title: "Make camp",
+            text: "Press B to unroll your bedroll. The Ancestral Urn stands beside it: everything you build grows from urns.",
+            goal: Camp,
+        ),
+        (
+            id: "camp_mat",
+            title: "The camp mat",
+            text: "Hold sticks or plant fiber and right click the Ancestral Urn to put them in (Shift puts in all it wants). Four of each finish the Camp Mat.",
+            goal: Step("camp_mat"),
+        ),
+        (
+            id: "axe",
+            title: "A rough axe",
+            text: "Right click the camp mat. Lay 2 small rocks on the base and a stick in the tie, then knock the stone until the axe comes together.",
+            goal: Made("rough_axe"),
+        ),
+        (
+            id: "wood",
+            title: "Chop wood",
+            text: "Bare hands can't cut logs, but the axe can. Chop a tree for at least 4 logs, and grab more sticks and fiber while you're at it.",
+            goal: Have([("log|swamp_log|redwood_log", 4)]),
+        ),
+        (
+            id: "torch",
+            title: "Light",
+            text: "Dig peat from the soft swamp ground. At the camp mat, peat on the base and a stick in the tie make torches.",
+            goal: Made("torch"),
+            marks: [
+                (name: "Peat", blocks: ["peat"], until: ("peat", 1)),
+            ],
+        ),
+        (
+            id: "door",
+            title: "A door",
+            text: "At the camp mat, twist 3 plant fiber into cordage. Then 3 logs on the base and the cordage in the tie make a door.",
+            goal: Made("wooden_door"),
+        ),
+        (
+            id: "home",
+            title: "A home",
+            text: "Build a small shelter: walls all round, a floor and a roof (dirt or stone will do), the door in one wall and a torch inside. Stand in it to check it holds.",
+            goal: Home,
+            cutscene: "C01b",
+        ),
+        (
+            id: "tool_urn",
+            title: "Your first urn",
+            text: "Feed the Ancestral Urn its next step, the Tool Urn: 6 small rocks, 6 sticks and 1 cordage.",
+            goal: Urn,
+        ),
+        (
+            id: "place_urn",
+            title: "Set it down",
+            text: "Hold the Tool Urn and right click the floor of your home to set it down. From here on, the urns' trees show what comes next.",
+            goal: UrnPlaced,
+        ),
+    ],
+)

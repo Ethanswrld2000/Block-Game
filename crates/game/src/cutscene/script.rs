@@ -23,6 +23,8 @@ pub enum Anchor {
     Actor(String),
     /// A named place: camp, gate, sporrow, castle, forge, spawn.
     Place(String),
+    /// A cutscene airship (`Step::Ship`), wherever it has flown to (offset in world x, y, z).
+    Ship(String),
 }
 
 /// What the camera or an actor looks at.
@@ -31,6 +33,17 @@ pub enum Target {
     Player,
     Actor(String),
     Mark(Mark),
+    /// A cutscene airship.
+    Ship(String),
+}
+
+/// What a cutscene airship looks like.
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShipLook {
+    /// Your own airship, you at the helm.
+    Ours,
+    /// A court warship (red envelope).
+    Court,
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
@@ -81,6 +94,39 @@ pub enum Step {
     Follow(String),
     /// An actor leaves the world for good.
     Remove(String),
+
+    // ---- Free cameras and effects ----
+    /// Put the camera at a mark at once, looking straight at a target.
+    Cut(Mark, Target),
+    /// Circle the camera round a target: distance, height above it, the angle to start
+    /// from and how far to turn (degrees; 0 = behind the target as you faced at the start,
+    /// positive turns to the right), over seconds. Doesn't wait (follow it with a `Wait`).
+    Orbit { around: Target, radius: f32, height: f32, from: f32, turn: f32, secs: f32 },
+    /// Fall: the camera drops to a mark, faster and faster, looking at a target, over seconds. Doesn't wait.
+    Dive(Mark, Target, f32),
+    /// Field of view to this many degrees over seconds (0 = back to the setting). Doesn't wait.
+    Zoom(f32, f32),
+    /// Shake the camera this hard (about 1 = a big blast) for seconds, dying away. Doesn't wait.
+    Shake(f32, f32),
+    /// Tip the camera sideways to this many degrees over seconds. Doesn't wait.
+    Roll(f32, f32),
+    /// A white flash that fades over seconds. Doesn't wait.
+    Flash(f32),
+    /// Eyelids: 0 shut, 1 open, over seconds. Doesn't wait.
+    Lids(f32, f32),
+    /// Play a sound (sounds.ron / assets/sounds name).
+    Sound(String),
+
+    // ---- Airships (props that only live in the cutscene) ----
+    /// An airship appears: name, mark, which way the bow points (degrees from the way you
+    /// faced at the start, positive to the right), and its look.
+    Ship { name: String, at: Mark, yaw: f32, look: ShipLook },
+    /// A ship flies to a mark over seconds, nose along its way. Doesn't wait.
+    ShipTo(String, Mark, f32),
+    /// One ship fires at another: a bolt flies, the target is hit (blast, then it burns). Doesn't wait.
+    Fire(String, String),
+    /// A ship goes.
+    Unship(String),
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
@@ -122,6 +168,11 @@ pub fn load(text: &str) -> Result<Vec<Cutscene>, String> {
 
 /// The actor name for you.
 pub const PLAYER: &str = "player";
+
+/// The `Places` key a cutscene airship's position is kept under.
+pub fn ship_key(name: &str) -> String {
+    format!("ship:{name}")
+}
 
 // ---- Triggers ----
 
@@ -200,7 +251,27 @@ pub fn until(s: &Step) -> Until {
         Step::Camera(_, t) | Step::CameraMove(_, _, t) | Step::Wait(t) | Step::Fade(_, t) => Until::Seconds(*t),
         Step::Walk(..) => Until::Arrived,
         Step::Encounter(_) => Until::Cleared,
-        Step::Face(..) | Step::Flag(_) | Step::Clue(_) | Step::Give(..) | Step::Swap { .. } | Step::Place(..) | Step::Follow(_) | Step::Remove(_) => Until::Now,
+        Step::Face(..)
+        | Step::Flag(_)
+        | Step::Clue(_)
+        | Step::Give(..)
+        | Step::Swap { .. }
+        | Step::Place(..)
+        | Step::Follow(_)
+        | Step::Remove(_)
+        | Step::Cut(..)
+        | Step::Orbit { .. }
+        | Step::Dive(..)
+        | Step::Zoom(..)
+        | Step::Shake(..)
+        | Step::Roll(..)
+        | Step::Flash(_)
+        | Step::Lids(..)
+        | Step::Sound(_)
+        | Step::Ship { .. }
+        | Step::ShipTo(..)
+        | Step::Fire(..)
+        | Step::Unship(_) => Until::Now,
     }
 }
 
@@ -277,7 +348,29 @@ pub fn resolve(m: &Mark, player: Vec3, forward: Vec3, actor: impl Fn(&str) -> Op
         }
         Anchor::Actor(n) => actor(n).map(|p| p + Vec3::new(a, b, c)),
         Anchor::Place(n) => place(n).map(|p| p + Vec3::new(a, b, c)),
+        Anchor::Ship(n) => place(&ship_key(n)).map(|p| p + Vec3::new(a, b, c)),
     }
+}
+
+/// The way a yaw (degrees, positive to the right) turns from `forward` (flat).
+pub fn turned(forward: Vec3, degrees: f32) -> Vec3 {
+    let fwd = Vec3::new(forward.x, 0.0, forward.z).normalize_or(Vec3::NEG_Z);
+    let right = Vec3::new(-fwd.z, 0.0, fwd.x);
+    let a = degrees.to_radians();
+    fwd * a.cos() + right * a.sin()
+}
+
+/// Where an orbiting camera is `k` (0..1) of the way round: `from`/`turn` in degrees,
+/// 0 = behind the centre as seen along `forward`, positive to the right.
+pub fn orbit_point(center: Vec3, forward: Vec3, radius: f32, height: f32, from: f32, turn: f32, k: f32) -> Vec3 {
+    let behind = -turned(forward, from + turn * k.clamp(0.0, 1.0));
+    center + behind * radius + Vec3::Y * height
+}
+
+/// How far a fall has come at `k` (0..1) of its time: slow at first, fastest at the end.
+pub fn fall(k: f32) -> f32 {
+    let k = k.clamp(0.0, 1.0);
+    k * k
 }
 
 #[cfg(test)]
@@ -383,6 +476,52 @@ mod tests {
         let m = Mark { from: Anchor::Place("camp".into()), offset: (0.0, 1.0, 0.0) };
         assert_eq!(resolve(&m, p, Vec3::NEG_Z, |_| None, |_| Some(Vec3::ONE)), Some(Vec3::new(1.0, 2.0, 1.0)));
         assert_eq!(resolve(&m, p, Vec3::NEG_Z, |_| None, |_| None), None);
+    }
+
+    #[test]
+    fn orbits_go_round_and_falls_speed_up() {
+        let c = Vec3::new(0.0, 50.0, 0.0);
+        // Facing -z, angle 0 is behind (+z), 90 to the right... seen from the left (-x).
+        let p0 = orbit_point(c, Vec3::NEG_Z, 10.0, 2.0, 0.0, 180.0, 0.0);
+        assert!((p0 - Vec3::new(0.0, 52.0, 10.0)).length() < 1e-4);
+        let half = orbit_point(c, Vec3::NEG_Z, 10.0, 2.0, 0.0, 180.0, 0.5);
+        assert!((half - Vec3::new(-10.0, 52.0, 0.0)).length() < 1e-3);
+        let end = orbit_point(c, Vec3::NEG_Z, 10.0, 2.0, 0.0, 180.0, 1.0);
+        assert!((end - Vec3::new(0.0, 52.0, -10.0)).length() < 1e-3);
+        // Every point keeps its distance.
+        assert!(((half - c - Vec3::Y * 2.0).length() - 10.0).abs() < 1e-3);
+        // A fall covers a quarter of the way in half the time, and all of it at the end.
+        assert_eq!(fall(0.5), 0.25);
+        assert_eq!(fall(1.0), 1.0);
+        // Ships are found as places.
+        let m = Mark { from: Anchor::Ship("ours".into()), offset: (0.0, 3.0, 0.0) };
+        let place = |k: &str| (k == "ship:ours").then_some(Vec3::new(5.0, 60.0, 5.0));
+        assert_eq!(resolve(&m, Vec3::ZERO, Vec3::NEG_Z, |_| None, place), Some(Vec3::new(5.0, 63.0, 5.0)));
+    }
+
+    /// The opening: the ships fly, ours is shot down, you fall, black, wake, Bram talks,
+    /// and the guide starts.
+    #[test]
+    fn the_opening_has_its_parts() {
+        let list = load(include_str!("../../../../assets/data/cutscenes.ron")).unwrap();
+        let c = list.iter().find(|c| c.id == "C01").unwrap();
+        let has = |f: &dyn Fn(&Step) -> bool| c.steps.iter().position(f);
+        let ours = has(&|s| matches!(s, Step::Ship { look: ShipLook::Ours, .. })).expect("our ship");
+        let court = has(&|s| matches!(s, Step::Ship { look: ShipLook::Court, .. })).expect("the court ship");
+        let orbit = has(&|s| matches!(s, Step::Orbit { .. })).expect("the camera circles");
+        let fire = has(&|s| matches!(s, Step::Fire(a, b) if a == "court" && b == "ours")).expect("shot down");
+        let dive = has(&|s| matches!(s, Step::Dive(..))).expect("the fall");
+        let black = dive + c.steps[dive..].iter().position(|s| matches!(s, Step::Fade(x, t) if *x >= 1.0 && *t <= 0.01)).expect("black");
+        let lids = has(&|s| matches!(s, Step::Lids(x, _) if *x >= 1.0)).expect("eyes open");
+        let bram = has(&|s| matches!(s, Step::Say(a, _) if a == "bram")).expect("Bram talks");
+        let guide = has(&|s| matches!(s, Step::Flag(f) if f == "guide_on")).expect("the guide starts");
+        assert!(ours < orbit && court < fire && orbit < fire && fire < dive && dive < black && black < lids && lids < bram && bram < guide);
+        assert!(has(&|s| matches!(s, Step::Zoom(..))).is_some() && has(&|s| matches!(s, Step::Shake(..))).is_some());
+        // The black comes as the fall ends, before the ground: only a wait between.
+        let Step::Dive(_, _, secs) = &c.steps[dive] else { unreachable!() };
+        let waited: f32 = c.steps[dive + 1..black].iter().map(|s| if let Step::Wait(t) = s { *t } else { 0.0 }).sum();
+        assert!(waited < *secs && waited > secs - 0.3, "black just before the ground");
+        assert!(c.steps[dive + 1..black].iter().all(|s| until(s) == Until::Now || matches!(s, Step::Wait(_))));
     }
 
     #[test]

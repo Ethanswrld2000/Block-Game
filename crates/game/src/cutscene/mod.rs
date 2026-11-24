@@ -9,9 +9,13 @@
 //! and subtitle, your input locked and the HUD hidden; the world keeps running.
 //! Click ends a line; holding Esc skips the cutscene (what it gives or changes
 //! still happens). Each plays once per world (`Story.played`, saved to `story.ron`).
+//! The camera can also leave you: cut to a spot, circle a target, fall, zoom, shake,
+//! tip, flash white, or close and open your eyelids; airships that only live in the
+//! cutscene (`props`) fly, fire and burn (the opening, C01).
 //! The step runner and the trigger checks are pure, in `script`.
 //! `BLOCKGAME_CUTSCENE=C02` plays one for screenshots.
 
+pub mod props;
 pub mod script;
 
 use std::collections::{BTreeSet, HashMap};
@@ -35,6 +39,7 @@ use crate::player::Player;
 use crate::save::SaveDir;
 use crate::sound::PlaySound;
 use crate::world::{Generator, World};
+use props::PropCmd;
 use script::{Cutscene, Facts, Mark, Runner, Status, Step, Target, PLAYER};
 
 pub struct CutscenePlugin;
@@ -47,9 +52,10 @@ impl Plugin for CutscenePlugin {
             .init_resource::<Playing>()
             .init_resource::<Places>()
             .add_message::<StartCutscene>()
+            .add_message::<PropCmd>()
             .add_systems(crate::menu::GameStartup, spawn_fade)
             .add_systems(crate::menu::GamePostStartup, load)
-            .add_systems(crate::menu::GameUpdate, (refresh_places, record, begin, direct, camera, show, apply_edits).chain().after(crate::npc::talk::TalkSet))
+            .add_systems(crate::menu::GameUpdate, (refresh_places, record, begin, direct, props::run, camera, show, apply_edits).chain().after(crate::npc::talk::TalkSet))
             .add_systems(crate::menu::GameUpdate, save_now_and_then)
             .add_systems(Last, save_on_exit.run_if(crate::menu::in_game));
     }
@@ -157,6 +163,33 @@ struct Scene {
     ending: bool,
     /// Input is locked by us (false while you fight an encounter).
     locked: bool,
+    /// The camera away from you: circling or falling (`None`: `cam_move` and `look` place it).
+    free: Option<Free>,
+    /// Where the camera was last put by the cutscene (a new move starts there).
+    cam_at: Option<Vec3>,
+    /// Turn to `look` at once this frame (a cut) instead of easing.
+    snap: bool,
+    /// Field of view in degrees (0 = the setting): from, to, seconds in, seconds.
+    zoom: (f32, f32, f32, f32),
+    /// Shake: strength, seconds in, seconds.
+    shake: (f32, f32, f32),
+    /// Sideways tip in degrees: from, to, seconds in, seconds.
+    roll: (f32, f32, f32, f32),
+    /// White flash: seconds in, seconds.
+    flash: (f32, f32),
+    /// Eyelids (1 open): from, to, seconds in, seconds.
+    lids: (f32, f32, f32, f32),
+}
+
+#[derive(Clone, Debug)]
+enum Free {
+    Orbit { around: Target, radius: f32, height: f32, from: f32, turn: f32, t: f32, secs: f32 },
+    Dive { from: Vec3, to: Vec3, t: f32, secs: f32 },
+}
+
+/// An eased value: (from, to, seconds in, seconds) at its current point.
+fn eased((a, b, t, s): (f32, f32, f32, f32)) -> f32 {
+    if s <= 0.0 { b } else { a + (b - a) * smooth(t / s) }
 }
 
 struct Said {
@@ -195,6 +228,14 @@ impl Scene {
             bars: Spring::default(),
             ending: false,
             locked: false,
+            free: None,
+            cam_at: None,
+            snap: false,
+            zoom: (0.0, 0.0, 0.0, 0.0),
+            shake: (0.0, 0.0, 0.0),
+            roll: (0.0, 0.0, 0.0, 0.0),
+            flash: (0.0, 0.0),
+            lids: (1.0, 1.0, 0.0, 0.0),
         }
     }
 
@@ -224,6 +265,13 @@ fn load(mut story: ResMut<Story>, dir: Res<SaveDir>) {
 #[derive(Component)]
 struct FadeUi;
 
+#[derive(Component)]
+struct FlashUi;
+
+/// An eyelid (top or bottom).
+#[derive(Component)]
+struct LidUi;
+
 fn spawn_fade(mut commands: Commands) {
     commands.spawn((
         Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
@@ -233,6 +281,30 @@ fn spawn_fade(mut commands: Commands) {
         KeepShown,
         FadeUi,
     ));
+    commands.spawn((
+        Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
+        BackgroundColor(Color::WHITE.with_alpha(0.0)),
+        GlobalZIndex(61),
+        Pickable::IGNORE,
+        KeepShown,
+        FlashUi,
+    ));
+    for top in [true, false] {
+        let mut node = Node { position_type: PositionType::Absolute, left: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Percent(0.0), ..default() };
+        if top {
+            node.top = Val::Px(0.0);
+        } else {
+            node.bottom = Val::Px(0.0);
+        }
+        commands.spawn((node, BackgroundColor(Color::BLACK), Visibility::Hidden, GlobalZIndex(59), Pickable::IGNORE, KeepShown, LidUi));
+    }
+}
+
+/// How much of the screen each eyelid covers (percent) when they are `open` (0 shut, 1 open):
+/// the lids meet a little past the middle so no line shows, and ease off the last bit.
+pub fn lid_cover(open: f32) -> f32 {
+    let open = open.clamp(0.0, 1.0);
+    52.0 * (1.0 - open * open * (3.0 - 2.0 * open))
 }
 
 /// Remembers what was made and placed, for the `Made` and `Placed` triggers.
@@ -363,7 +435,12 @@ fn begin(
     }
     let Some(def) = pick else { return };
     info!("cutscene {} starts", book.0[def].id);
-    playing.0 = Some(Scene::new(def, player.pos, cam.forward().as_vec3()));
+    let mut scene = Scene::new(def, player.pos, cam.forward().as_vec3());
+    // Opening on a fade to black: black from the first frame, not after the actors gather.
+    if let Some(Step::Fade(to, _)) = book.0[def].steps.first() {
+        scene.fade = (*to, *to, 0.0, 0.0);
+    }
+    playing.0 = Some(scene);
 }
 
 /// NPCs near you by dialogue key: where they stand, and whether you can see them.
@@ -437,7 +514,7 @@ fn direct(
     (player, mut menus, keys, mouse): (Res<Player>, ResMut<Menus>, Res<ButtonInput<KeyCode>>, Res<ButtonInput<MouseButton>>),
     mut npcs: Query<(Entity, &mut Transform, &mut Npc), Without<FlyCamera>>,
     mut cursor: Single<&mut CursorOptions, With<PrimaryWindow>>,
-    (mut spawn, mut sounds, mut cleared): (MessageWriter<SpawnNpc>, MessageWriter<PlaySound>, MessageReader<EncounterCleared>),
+    (mut spawn, mut sounds, mut cleared, mut ships): (MessageWriter<SpawnNpc>, MessageWriter<PlaySound>, MessageReader<EncounterCleared>, MessageWriter<PropCmd>),
     (mut commands, server, settings, places): (Commands, Res<AssetServer>, Option<Res<crate::settings::Settings>>, Res<Places>),
     mut fx: Effects,
 ) {
@@ -589,11 +666,68 @@ fn direct(
             }
             Step::CameraMove(mark, target, secs) => {
                 if let Some(to) = resolve(mark, &where_is) {
-                    let from = scene.cam_move.map_or(player.pos + Vec3::Y * player.eye, |(a, b, t, s)| a.lerp(b, smooth(t / s.max(0.01))));
+                    let from = scene.cam_at.unwrap_or(player.pos + Vec3::Y * player.eye);
                     scene.cam_move = Some((from, to, 0.0, secs.max(0.01)));
+                    scene.free = None;
                 }
                 scene.look = Some(target.clone());
                 scene.look_time = *secs;
+            }
+            Step::Cut(mark, target) => {
+                if let Some(to) = resolve(mark, &where_is) {
+                    scene.cam_move = Some((to, to, 0.0, 0.01));
+                    scene.cam_at = Some(to);
+                    scene.free = None;
+                }
+                scene.look = Some(target.clone());
+                scene.snap = true;
+            }
+            Step::Orbit { around, radius, height, from, turn, secs } => {
+                scene.free = Some(Free::Orbit { around: around.clone(), radius: *radius, height: *height, from: *from, turn: *turn, t: 0.0, secs: secs.max(0.01) });
+                scene.look = Some(around.clone());
+                scene.snap = true;
+            }
+            Step::Dive(mark, target, secs) => {
+                if let Some(to) = resolve(mark, &where_is) {
+                    let from = scene.cam_at.unwrap_or(player.pos + Vec3::Y * player.eye);
+                    scene.free = Some(Free::Dive { from, to, t: 0.0, secs: secs.max(0.01) });
+                }
+                scene.look = Some(target.clone());
+                scene.snap = true;
+            }
+            Step::Zoom(deg, secs) => {
+                scene.zoom = (eased(scene.zoom), *deg, 0.0, *secs);
+            }
+            Step::Shake(strength, secs) => {
+                scene.shake = (*strength, 0.0, secs.max(0.01));
+            }
+            Step::Roll(deg, secs) => {
+                scene.roll = (eased(scene.roll), *deg, 0.0, *secs);
+            }
+            Step::Flash(secs) => {
+                scene.flash = (0.0, secs.max(0.01));
+            }
+            Step::Lids(open, secs) => {
+                scene.lids = (eased(scene.lids), *open, 0.0, *secs);
+            }
+            Step::Sound(name) => {
+                sounds.write(PlaySound::new(name.clone()));
+            }
+            Step::Ship { name, at, yaw, look } => {
+                if let Some(at) = resolve(at, &where_is) {
+                    ships.write(PropCmd::Ship { name: name.clone(), at, dir: script::turned(forward, *yaw), look: *look });
+                }
+            }
+            Step::ShipTo(name, mark, secs) => {
+                if let Some(to) = resolve(mark, &where_is) {
+                    ships.write(PropCmd::To { name: name.clone(), to, secs: *secs });
+                }
+            }
+            Step::Fire(from, to) => {
+                ships.write(PropCmd::Fire { from: from.clone(), to: to.clone() });
+            }
+            Step::Unship(name) => {
+                ships.write(PropCmd::Remove(name.clone()));
             }
             Step::Walk(actor, mark) => {
                 let to = resolve(mark, &where_is).map(|p| ground_near(&fx.world, &fx.blocks, p + Vec3::Y * 2.0).unwrap_or(p));
@@ -610,6 +744,7 @@ fn direct(
                     Target::Player => Some(player.pos),
                     Target::Actor(a) => where_is.get(a).copied(),
                     Target::Mark(m) => resolve(m, &where_is),
+                    Target::Ship(n) => place_at.get(&script::ship_key(n)).copied(),
                 };
                 if let (Some(e), Some(at)) = (scene.actors.get(actor), at)
                     && let Ok((_, _, mut npc)) = npcs.get_mut(*e)
@@ -664,6 +799,15 @@ fn direct(
     if let Some(m) = scene.cam_move.as_mut() {
         m.2 += dt;
     }
+    scene.zoom.2 += dt;
+    scene.shake.1 += dt;
+    scene.roll.2 += dt;
+    scene.flash.0 += dt;
+    scene.lids.2 += dt;
+    match scene.free.as_mut() {
+        Some(Free::Orbit { t, .. }) | Some(Free::Dive { t, .. }) => *t += dt,
+        None => {}
+    }
 
     if !scene.ending && scene.runner.over(steps) {
         scene.ending = true;
@@ -672,6 +816,9 @@ fn direct(
         scene.line = None;
         if scene.fade.1 > 0.0 {
             scene.fade = (scene.fade_now(), 0.0, 0.0, 0.6);
+        }
+        if scene.lids.1 < 1.0 {
+            scene.lids = (eased(scene.lids), 1.0, 0.0, 0.4);
         }
         if scene.bars.x < 0.02 && scene.fade_now() < 0.02 {
             // Over: everyone back to what they were doing.
@@ -691,6 +838,7 @@ fn direct(
             }
             info!("cutscene {} done", def.id);
             fx.story.played.insert(def.id.clone());
+            ships.write(PropCmd::Clear);
             playing.0 = None;
         }
     }
@@ -729,7 +877,7 @@ fn smooth(t: f32) -> f32 {
     t * t * (3.0 - 2.0 * t)
 }
 
-/// Turns (and moves) the camera to what the cutscene looks at.
+/// Turns (and moves) the camera to what the cutscene looks at, then zooms, tips and shakes it.
 #[allow(clippy::too_many_arguments)]
 fn camera(
     time: Res<Time<Real>>,
@@ -737,46 +885,117 @@ fn camera(
     mut playing: ResMut<Playing>,
     player: Res<Player>,
     npcs: Query<&Transform, (With<Npc>, Without<FlyCamera>)>,
-    cam: Single<(&mut Transform, &mut FlyCamera)>,
+    cam: Single<(&mut Transform, &mut FlyCamera, &mut Projection)>,
     places: Res<Places>,
+    settings: Option<Res<crate::settings::Settings>>,
+    mut zoomed: Local<bool>,
 ) {
-    let Some(scene) = playing.0.as_mut() else { return };
+    let (mut tf, mut fly, mut proj) = cam.into_inner();
+    let setting = settings.as_ref().map_or(70.0, |s| s.fov);
+    let set_fov = |proj: &mut Projection, deg: f32| {
+        if let Projection::Perspective(p) = proj {
+            p.fov = deg.to_radians();
+        }
+    };
+    let Some(scene) = playing.0.as_mut() else {
+        if *zoomed {
+            *zoomed = false;
+            set_fov(&mut proj, setting);
+        }
+        return;
+    };
+    // The field of view eases between zooms; 0 is the setting.
+    let fov = |v: f32| if v <= 0.0 { setting } else { v };
+    let (z0, z1, zt, zs) = scene.zoom;
+    if z0 > 0.0 || z1 > 0.0 || *zoomed {
+        let k = if zs <= 0.0 { 1.0 } else { smooth(zt / zs) };
+        set_fov(&mut proj, fov(z0) + (fov(z1) - fov(z0)) * k);
+        *zoomed = true;
+    }
     if scene.gathering.is_some() && scene.look.is_none() || scene.fighting(&book.0[scene.def].steps) {
         scene.cam = None;
         return;
     }
     let dt = time.delta_secs().min(0.05);
-    let (mut tf, mut fly) = cam.into_inner();
-    if let Some((a, b, t, s)) = scene.cam_move {
-        tf.translation = a.lerp(b, smooth(t / s));
-    }
     let at = |key: &str| scene.actors.get(key).and_then(|e| npcs.get(*e).ok()).map(|t| t.translation);
     let place_at = &places.0;
-    let point = match &scene.look {
-        None => return,
-        Some(Target::Player) => Some(player.pos + Vec3::Y * 1.4),
-        Some(Target::Actor(a)) => at(a).map(|p| p + Vec3::Y * (EYES - 0.08)),
-        Some(Target::Mark(m)) => script::resolve(m, scene.origin, scene.forward, |a| at(a), |p| place_at.get(p).copied()),
+    let aim = |t: &Target| match t {
+        Target::Player => Some(player.pos + Vec3::Y * 1.4),
+        Target::Actor(a) => at(a).map(|p| p + Vec3::Y * (EYES - 0.08)),
+        Target::Mark(m) => script::resolve(m, scene.origin, scene.forward, |a| at(a), |p| place_at.get(p).copied()),
+        Target::Ship(n) => place_at.get(&script::ship_key(n)).copied(),
     };
-    let Some(point) = point else { return };
-    let d = point - tf.translation;
-    if d.length_squared() < 0.01 {
-        return;
+    // Where the camera is: circling, falling, moving, or left where it was.
+    let pos = match &scene.free {
+        Some(Free::Orbit { around, radius, height, from, turn, t, secs }) => aim(around).map(|c| script::orbit_point(c, scene.forward, *radius, *height, *from, *turn, t / secs)),
+        Some(Free::Dive { from, to, t, secs }) => Some(from.lerp(*to, script::fall(t / secs))),
+        None => scene.cam_move.map(|(a, b, t, s)| a.lerp(b, smooth(t / s))),
+    };
+    if let Some(p) = pos {
+        tf.translation = p;
+        scene.cam_at = Some(p);
     }
-    let yaw = yaw_of(d);
-    let pitch = d.y.atan2(Vec2::new(d.x, d.z).length()).clamp(-1.2, 1.2);
-    let springs = scene.cam.get_or_insert_with(|| [Spring { x: fly.yaw, v: 0.0 }, Spring { x: fly.pitch, v: 0.0 }]);
-    let ease = (scene.look_time * 0.35).max(0.15);
-    let y = springs[0].step_angle(yaw, ease, dt);
-    let p = springs[1].step(pitch, ease, dt);
-    fly.yaw += crate::npc::motion::wrap(y - fly.yaw);
-    fly.pitch = p;
-    tf.rotation = Quat::from_euler(EulerRot::YXZ, fly.yaw, fly.pitch, 0.0);
+    let point = scene.look.as_ref().and_then(aim);
+    if let Some(point) = point {
+        let d = point - tf.translation;
+        if d.length_squared() >= 0.01 {
+            let yaw = yaw_of(d);
+            let pitch = d.y.atan2(Vec2::new(d.x, d.z).length()).clamp(-1.5, 1.5);
+            // Cuts, orbits and falls look straight at it; otherwise the view eases round.
+            if scene.snap || scene.free.is_some() {
+                scene.snap = false;
+                scene.cam = Some([Spring { x: yaw, v: 0.0 }, Spring { x: pitch, v: 0.0 }]);
+                fly.yaw += crate::npc::motion::wrap(yaw - fly.yaw);
+                fly.pitch = pitch.clamp(-1.54, 1.54);
+            } else {
+                let springs = scene.cam.get_or_insert_with(|| [Spring { x: fly.yaw, v: 0.0 }, Spring { x: fly.pitch, v: 0.0 }]);
+                let ease = (scene.look_time * 0.35).max(0.15);
+                let y = springs[0].step_angle(yaw, ease, dt);
+                let p = springs[1].step(pitch, ease, dt);
+                fly.yaw += crate::npc::motion::wrap(y - fly.yaw);
+                fly.pitch = p.clamp(-1.54, 1.54);
+            }
+        }
+    }
+    // Tip and shake on top.
+    let roll = eased(scene.roll).to_radians();
+    let (strength, st, ss) = scene.shake;
+    let k = if st < ss { strength * (1.0 - st / ss) } else { 0.0 };
+    let w = time.elapsed_secs() * 31.0;
+    let jolt = Vec3::new((w * 1.3).sin() + (w * 0.7).cos() * 0.5, (w * 1.7).cos() + (w * 0.9).sin() * 0.5, (w * 1.1).sin()) * k;
+    tf.rotation = Quat::from_euler(EulerRot::YXZ, fly.yaw + jolt.x * 0.03, fly.pitch + jolt.y * 0.03, roll + jolt.z * 0.04);
+    if k > 0.0 {
+        tf.translation += jolt * 0.12;
+    }
 }
 
-/// Bars and subtitle (through the talk's), and the fade.
-fn show(time: Res<Time<Real>>, book: Res<CutsceneBook>, mut playing: ResMut<Playing>, mut talk: ResMut<Talk>, mut fade: Single<&mut BackgroundColor, With<FadeUi>>) {
+/// Bars and subtitle (through the talk's), the fade, the flash and the eyelids.
+#[allow(clippy::type_complexity)]
+fn show(
+    time: Res<Time<Real>>,
+    book: Res<CutsceneBook>,
+    mut playing: ResMut<Playing>,
+    mut talk: ResMut<Talk>,
+    mut fade: Single<&mut BackgroundColor, (With<FadeUi>, Without<FlashUi>)>,
+    mut flash: Single<&mut BackgroundColor, (With<FlashUi>, Without<FadeUi>)>,
+    mut lids: Query<(&mut Node, &mut Visibility), With<LidUi>>,
+) {
     let dt = time.delta_secs().min(0.05);
+    let cover = playing.0.as_ref().map_or(0.0, |s| lid_cover(eased(s.lids)));
+    for (mut node, mut vis) in &mut lids {
+        let want = if cover > 0.01 { Visibility::Inherited } else { Visibility::Hidden };
+        if *vis != want {
+            *vis = want;
+        }
+        if node.height != Val::Percent(cover) {
+            node.height = Val::Percent(cover);
+        }
+    }
+    let white = playing.0.as_ref().map_or(0.0, |s| if s.flash.1 > 0.0 { (1.0 - s.flash.0 / s.flash.1).clamp(0.0, 1.0) } else { 0.0 });
+    let white = white * 0.9;
+    if flash.0.alpha() != white {
+        flash.0 = Color::WHITE.with_alpha(white);
+    }
     let Some(scene) = playing.0.as_mut() else {
         if talk.scene.is_some() {
             talk.scene = None;
@@ -888,6 +1107,16 @@ fn save_on_exit(mut exit: MessageReader<AppExit>, dir: Res<SaveDir>, story: Res<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn eyelids_and_easing() {
+        assert_eq!(lid_cover(1.0), 0.0);
+        assert!(lid_cover(0.0) > 50.0, "shut lids overlap");
+        assert!(lid_cover(0.5) > 0.0 && lid_cover(0.5) < 50.0);
+        assert_eq!(eased((0.0, 10.0, 0.0, 0.0)), 10.0, "no time: straight there");
+        assert_eq!(eased((0.0, 10.0, 1.0, 2.0)), 5.0);
+        assert_eq!(eased((0.0, 10.0, 3.0, 2.0)), 10.0);
+    }
 
     #[test]
     fn names_for_speakers_without_an_npc() {

@@ -288,7 +288,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
 - Rooms: `voxel::room::find_room` (pure) fills outward from a cell through open cells; walls (`BlockDef::is_wall`:
   solid full cubes that aren't `plant` material; leaves, plants, water, torches are holes) stop it. Closed within
   `MAX_ROOM` (4096) cells = a `Room` (`cells`, `shell`); otherwise `NotRoom::Open`/`InWall`/`Unknown` (unloaded).
-  `station::room_at` runs it on the world. A carried urn can only be set down inside a closed room with no other
+  `station::room_at` runs it on the world. A carried urn can only be set down inside a closed room with a door and a torch (a proper home) and no other
   urn in it (the ancestral urn by the bedroll is exempt but takes up its room). Insulation tiers, doors and the
   shelter panel from the house plan aren't built yet.
 - Floating world: `worldgen::floating`. The land is one island, `MAIN_RADIUS` 2000 blocks (about 2.5 miles across,
@@ -550,6 +550,19 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   wheel if allowed) turn the page: the leaf folds over the spine (`turn_leaves`). `book::paginate` splits entries into
   pages by size. Used by the bench recipe book (`station::book`, one page) and the journal (J, a spread).
   Screenshots: `BLOCKGAME_BOOKTURN=0.5` turns the first open book and holds the leaf there; `BLOCKGAME_JOURNAL=all` shows every clue.
+- Opening and guide: C01 (cutscenes.ron) is the opening: you fly in on your airship (camera circling it), a court
+  warship closes in (zoom), shoots you down, you fall in first person, black just before the ground, then you wake on
+  your back (eyelids open, the view tips upright, you sit up) and Bram walks up and talks; it ends on flag `guide_on`.
+  Cutscene camera steps (none of them wait; follow with `Wait`): `Cut`, `Orbit`, `Dive` (fall, speeding up), `Zoom`,
+  `Shake`, `Roll`, `Flash`, `Lids`, `Sound`; cutscene-only airships in `cutscene::props` (`Ship`, `ShipTo`, `Fire`,
+  `Unship`; your ship is `airship::build_model` with your body at the helm, the court ship `cast::wren::build_ship`);
+  marks and targets can follow them (`Ship("ours")`, kept in `Places` as `ship:<name>`). `game::guide`
+  (`assets/data/guide.ron`, pure rules in `guide::rules`): one step at a time (sticks and stones, fiber, camp, camp mat,
+  rough axe, logs, torch, door, home, Tool Urn, set it down), done = story flag `guide:<id>`; the journal (J) lists
+  them first; guide waypoints (`map::Waypoints::guide`, not saved, cyan) point at the nearest matching blocks in the
+  loaded world. A proper home = a closed room with a door in its walls and a torch (any light) inside
+  (`guide::home_missing`); carried urns can only be set down in one. The home step plays C01b (Bram explains it).
+  Doors are also made at the camp mat (3 logs + 1 cordage) and the carpentry bench (6 planks + 2 sticks).
 - Next: see `docs/GAMEPLAY_LOOP.md`.
 
 ## Testing without a screen

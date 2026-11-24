@@ -40,6 +40,10 @@
         (station: "camp_mat", slots: {"base": ("coal", 1), "tie": ("stick", 1)}, work: 1, makes: ("torch", 4)),
         (station: "camp_mat", slots: {"base": ("peat", 1), "tie": ("stick", 1)}, work: 1, makes: ("torch", 2)),
         (station: "camp_mat", slots: {"base": ("spirit_ember", 3), "tie": ("plant_fiber", 2)}, work: 3, makes: ("ember_herb", 1)),
+        // A door to get started with (also at the carpentry bench and the door frame).
+        (station: "camp_mat", slots: {"base": ("log", 3), "tie": ("cordage", 1)}, work: 4, makes: ("wooden_door", 1)),
+        (station: "camp_mat", slots: {"base": ("swamp_log", 3), "tie": ("cordage", 1)}, work: 4, makes: ("wooden_door", 1)),
+        (station: "camp_mat", slots: {"base": ("redwood_log", 3), "tie": ("cordage", 1)}, work: 4, makes: ("wooden_door", 1)),
         (station: "camp_mat", slots: {"base": ("hide", 2), "tie": ("cordage", 3)}, work: 4, makes: ("portable_bedroll", 1), unlock: "portable_bedroll"),
         (station: "camp_mat", slots: {"base": ("hide", 4), "tie": ("stick", 8)}, work: 6, makes: ("portable_tent", 1), unlock: "portable_tent"),
 
@@ -56,6 +60,7 @@
         (station: "carpentry_bench", slots: {"bed": ("redwood_log", 1)}, work: 4, makes: ("planks", 4)),
         (station: "carpentry_bench", slots: {"bed": ("planks", 2)}, work: 2, makes: ("stick", 4)),
         (station: "carpentry_bench", slots: {"bed": ("planks", 8)}, work: 6, makes: ("chest", 1)),
+        (station: "carpentry_bench", slots: {"bed": ("planks", 6), "vise": ("stick", 2)}, work: 6, makes: ("wooden_door", 1)),
 
         // Carpentry table (carpentry station): building supplies, knocked together with the mallet.
         (station: "carpentry_table", slots: {"top": ("planks", 4), "joint": ("stick", 2)}, work: 4, makes: ("floorboards", 4)),

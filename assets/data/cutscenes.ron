@@ -5,7 +5,15 @@
 //
 // Marks: (from: Player, offset: (right, up, ahead)) of where you faced at the start;
 // (from: Actor("bram"), offset: (x, y, z)); (from: Place("gate"), offset: (x, y, z)).
-// Places: camp, gate, sporrow, castle, forge.
+// Places: camp, gate, sporrow, castle, forge. (from: Ship("ours"), offset: (x, y, z)) follows a cutscene airship.
+//
+// Camera and effects (these don't wait; follow them with Wait): Cut(mark, target) jumps the camera;
+// Orbit(around: target, radius, height, from: degrees, turn: degrees, secs) circles it;
+// Dive(mark, target, secs) falls to a mark, speeding up; Zoom(degrees, secs) (0 = the setting);
+// Shake(strength, secs); Roll(degrees, secs); Flash(secs); Lids(open 0-1, secs); Sound("name").
+// Targets: Player, Actor("bram"), Mark(mark), Ship("ours").
+// Airships that live only in the cutscene: Ship(name, at: mark, yaw: degrees from where you faced,
+// look: Ours | Court), ShipTo(name, mark, secs), Fire(from, to) (bolt, blast, then it burns), Unship(name).
 // Targets: Player, Actor("bram"), Mark((from: .., offset: ..)).
 // Steps: Say(actor, line id) ("player" = you), Camera(target, secs),
 // CameraMove(mark, target, secs), Walk(actor, mark), Face(actor, target), Wait(secs),
@@ -15,17 +23,101 @@
 [
     (
         id: "C01",
-        title: "The crash",
+        title: "Shot down",
+        actors: {
+            "bram": (from: Player, offset: (6.0, 0.0, 9.0)),
+        },
         steps: [
+            // Flying in over the island, the camera circling your ship.
             Fade(1.0, 0.0),
-            Wait(0.8),
-            Say("player", "C01_01"),
-            Say("player", "C01_02"),
+            Ship(name: "ours", at: (from: Player, offset: (-10.0, 70.0, -150.0)), yaw: 0.0, look: Ours),
+            ShipTo("ours", (from: Player, offset: (-4.0, 68.0, -40.0)), 30.0),
+            Ship(name: "court", at: (from: Player, offset: (150.0, 90.0, 10.0)), yaw: -110.0, look: Court),
+            Zoom(62.0, 0.0),
+            Orbit(around: Ship("ours"), radius: 16.0, height: 4.0, from: 200.0, turn: 110.0, secs: 11.0),
             Fade(0.0, 2.5),
+            Say("player", "C01_01"),
+            // A court warship comes out of the haze: zoom in on it.
+            ShipTo("court", (from: Player, offset: (40.0, 80.0, -70.0)), 9.0),
+            Cut((from: Player, offset: (-14.0, 72.0, -95.0)), Ship("court")),
+            Zoom(28.0, 2.0),
+            Wait(2.5),
+            Say("player", "C01_02"),
+            Zoom(62.0, 0.6),
+            Orbit(around: Ship("ours"), radius: 14.0, height: 3.0, from: 60.0, turn: 40.0, secs: 6.0),
+            // Hit.
+            Fire("court", "ours"),
+            Wait(0.7),
+            Flash(0.4),
+            Shake(1.0, 1.2),
+            Wait(1.2),
             Say("player", "C01_03"),
+            Fire("court", "ours"),
+            Wait(0.7),
+            Shake(0.8, 1.0),
+            ShipTo("ours", (from: Player, offset: (10.0, 18.0, 25.0)), 7.0),
+            Orbit(around: Ship("ours"), radius: 20.0, height: 6.0, from: 300.0, turn: 60.0, secs: 4.0),
+            Wait(2.5),
+            // Thrown off: the fall through your own eyes. Black just before the ground.
+            Cut((from: Ship("ours"), offset: (0.0, 1.0, 0.0)), Mark((from: Player, offset: (0.0, 0.0, 6.0)))),
+            Zoom(82.0, 0.8),
+            Roll(25.0, 1.5),
+            Shake(0.5, 3.4),
+            Dive((from: Player, offset: (0.0, 2.5, 0.0)), Mark((from: Player, offset: (0.0, 0.0, 6.0))), 3.2),
+            Wait(3.05),
+            Fade(1.0, 0.0),
+            Sound("hit"),
+            Unship("ours"),
+            Unship("court"),
+            Zoom(0.0, 0.0),
+            Wait(2.0),
+            // Waking up on your back, eyes opening, then sitting up.
+            Lids(0.0, 0.0),
+            Roll(30.0, 0.0),
+            Cut((from: Player, offset: (0.0, 0.3, 0.0)), Mark((from: Player, offset: (1.0, 20.0, 4.0)))),
+            Fade(0.0, 0.2),
+            Wait(1.2),
+            Lids(0.3, 0.8),
+            Wait(0.9),
+            Lids(0.0, 0.3),
+            Wait(0.6),
+            Lids(0.6, 0.9),
+            Wait(1.0),
+            Lids(0.15, 0.25),
+            Wait(0.35),
+            Lids(1.0, 1.2),
+            Roll(0.0, 2.5),
+            Wait(1.0),
             Say("player", "C01_04"),
-            Say("player", "C01_05"),
+            CameraMove((from: Player, offset: (0.0, 0.9, 0.3)), Mark((from: Player, offset: (0.0, 0.8, 8.0))), 1.6),
+            CameraMove((from: Player, offset: (0.0, 1.62, 0.0)), Actor("bram"), 1.0),
+            // Bram saw it all.
+            Walk("bram", (from: Player, offset: (0.5, 0.0, 2.6))),
+            Face("bram", Player),
+            Say("bram", "C01_05"),
+            Say("player", "C01_06"),
+            Say("bram", "C01_07"),
+            Say("bram", "C01_08"),
+            Say("bram", "C01_09"),
+            Flag("met_bram"),
             Flag("world_begun"),
+            Flag("guide_on"),
+        ],
+    ),
+    (
+        // Played by the guide (guide.ron) when your first shelter is next.
+        id: "C01b",
+        title: "A proper home",
+        actors: {
+            "bram": (from: Player, offset: (3.0, 0.0, 7.0)),
+        },
+        steps: [
+            Camera(Actor("bram"), 0.8),
+            Walk("bram", (from: Player, offset: (0.5, 0.0, 2.6))),
+            Face("bram", Player),
+            Say("bram", "C01_10"),
+            Say("bram", "C01_11"),
+            Say("bram", "C01_12"),
         ],
     ),
     (

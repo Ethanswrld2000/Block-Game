@@ -26,6 +26,7 @@ mod debug;
 mod delve;
 mod dungeon;
 mod glowcaps;
+mod guide;
 mod hands;
 mod hud;
 mod cast;
@@ -102,7 +103,7 @@ fn main() {
             inventory::InventoryPlugin,
         ))
         .add_plugins((creatures::CreaturesPlugin, places::PlacesPlugin, progress::ProgressPlugin, station::StationPlugin, airship::AirshipPlugin, settings::SettingsPlugin, sound::SoundPlugin, bench::BenchPlugin, npc::NpcPlugin, avatar::AvatarPlugin, combat::CombatPlugin, dungeon::DungeonPlugin))
-        .add_plugins((delve::DelvePlugin, cast::CastPlugin, lines::LinesPlugin, encounter::EncounterPlugin, cutscene::CutscenePlugin, story::StoryPlugin, map::MapPlugin, farming::FarmingPlugin, book::BookPlugin))
+        .add_plugins((delve::DelvePlugin, cast::CastPlugin, lines::LinesPlugin, encounter::EncounterPlugin, cutscene::CutscenePlugin, story::StoryPlugin, map::MapPlugin, farming::FarmingPlugin, book::BookPlugin, guide::GuidePlugin))
         .run();
     menu::relaunch_to_title();
 }
