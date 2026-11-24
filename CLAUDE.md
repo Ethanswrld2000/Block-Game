@@ -536,6 +536,12 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   coverage); `voxel.wesl` samples with `textureSampleGrad` from the unbroken quad UVs so levels don't jump at block edges, and
   picks a version and turn per block from `variants` in blocks.ron (`voxel::tiles::variant_table`, uniform 106). Variant tiles
   must sit at consecutive indices (`<tile>_2`, `<tile>_3`, ...).
+- Books: `game::book` is the one book UI (leather cover, gilt corners, paper pages, page numbers, ribbon). `book::build`
+  makes one (`BookLook`: 1 page or a 2-page spread, page size, wheel); the owner calls `Book::set_pages`, and when
+  `Book::take_refill` is true fills `Book::shown()` (page entities + page numbers). Corner arrows, Left/Right (and the
+  wheel if allowed) turn the page: the leaf folds over the spine (`turn_leaves`). `book::paginate` splits entries into
+  pages by size. Used by the bench recipe book (`station::book`, one page) and the journal (J, a spread).
+  Screenshots: `BLOCKGAME_BOOKTURN=0.5` turns the first open book and holds the leaf there; `BLOCKGAME_JOURNAL=all` shows every clue.
 - Next: see `docs/GAMEPLAY_LOOP.md`.
 
 ## Testing without a screen
