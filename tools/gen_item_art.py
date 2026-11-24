@@ -794,6 +794,33 @@ def iron_mail(c):
     c.rect(6, 50, 34, 53, HIDE_D)
 
 
+def linen_robe(c):
+    c.poly([(11, 3), (16, 3), (20, 8), (24, 3), (29, 3), (38, 14), (33, 19), (30, 15), (34, 57), (6, 57), (10, 15), (7, 19), (2, 14)], hexc("e4dcc4"))
+    c.line(20, 9, 20, 57, 1, hexc("c8bea2"))
+    c.rect(9, 30, 31, 33, hexc("b09060"))
+
+
+def sun_hat(c):
+    c.ellipse(20, 14, 19, 5, hexc("d8c078"))
+    c.poly([(12, 13), (15, 4), (25, 4), (28, 13)], hexc("c4a860"))
+    c.rect(12, 10, 28, 12, hexc("8a3a2a"))
+
+
+def fur_boots(c):
+    for x in (1, 21):
+        c.poly([(x + 2, 1), (x + 10, 1), (x + 10, 11), (x + 17, 13), (x + 17, 18), (x + 1, 18)], FUR)
+        c.rect(x + 1, 1, x + 11, 4, FUR_L)
+
+
+def reed_breather(c):
+    c.rect(8, 2, 12, 26, REED)
+    c.line(10, 3, 10, 25, 1, REED_D)
+    c.ellipse(10, 30, 8, 7, HIDE)
+    c.ellipse(10, 31, 4, 3, hexc("2a201a"))
+    c.line(2, 30, 0, 26, 1, CORD)
+    c.line(18, 30, 20, 26, 1, CORD)
+
+
 DRAW = {f.__name__: f for f in [
     stone_pickaxe, stone_axe, stone_shovel, flint_spear, iron_sword, steel_sword, spirit_sword, torch, marsh_berries, swamp_reed, smoked_fish, bread, peat_stew,
     cured_meat, feast_platter, ember_herb, stick, plant_fiber, cordage, coal, raw_iron, flint, hide, fur, linen_shirt,
@@ -804,7 +831,7 @@ DRAW = {f.__name__: f for f in [
     levitation_draught, light_draught, warmth_draught, focus_tonic,
     tool_urn, hearth_urn, star_urn, golem_urn, portable_bedroll, portable_tent, airship,
     carpentry_urn, gear_urn, vehicle_urn, iron_dagger, rapier, makeshift_pistol, rifle, iron_helm, iron_mail,
-    mold_bloom, deepstone_shard, warden_sigil,
+    mold_bloom, deepstone_shard, warden_sigil, linen_robe, sun_hat, fur_boots, reed_breather,
 ]}
 
 

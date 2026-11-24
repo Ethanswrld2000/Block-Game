@@ -106,9 +106,7 @@ Each step is small enough for one pull request and makes the loop above more rea
    around" check from the voxel world.)
 2. **Campfire block.** A placeable fire that warms a wide area much more than a torch, cooks food
    without a camp, and burns fuel (sticks, logs). Torches stay light, campfires become heat.
-3. **Better clothes ladder.** Light clothes for heat (low insulation, shade), layered furs for cold,
-   and a breathing item for deep caves (a reed breathing tube under water, an ember lamp that warns
-   of bad air). Each region's answer becomes something you craft.
+3. **Better clothes ladder.** Done: linen robe and sun hat (cooling), fur boots, reed breather (air), at the sewing table.
 4. **Expedition goals.** Done: `game::journey`, `assets/data/journey.ron`, listed beside the map (M).
 5. **Sky island payoff.** Something only up there worth the trip: a rare ore, a shrine that teaches
    a spell, a view of the whole map.

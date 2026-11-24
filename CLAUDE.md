@@ -556,6 +556,9 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   region count whenever done; each gives XP once. Finishing a region moves the list on and sets a waypoint at the nearest
   ground of the next one (`journey::nearest`, on the `AsyncComputeTaskPool`; `target` in the data). The list shows beside the
   map (M, `map::GoalsSlot`). Saved to `journey.ron`.
+- Region clothes: `Wear` items can have `cooling` (°C off felt heat, never below comfortable; `vitals::clothed`) and `air`
+  (share of missing air made up, best worn piece counts; `vitals::helped`). Sewing table: `linen_robe`, `sun_hat` (desert),
+  `fur_boots` (peaks), `reed_breather` (deep caves and sky; Head slot, so it trades against a hood).
 - Next: see `docs/GAMEPLAY_LOOP.md`.
 
 ## Testing without a screen
