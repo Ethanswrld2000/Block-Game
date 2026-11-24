@@ -201,7 +201,10 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `later: true` steps fill and place their model but their use isn't built yet. The ancestral urn (sleeping station)
   stands by the bedroll; carried urns are set down with right click on the ground and picked up by crouching and
   right clicking with an empty hand. Hold an item + right click an urn to put one in (Shift: all it wants); empty hand
-  opens its tree (`station::tree`, "Put in" per step). Models are boxes in `station::models` (upgrades change them);
+  opens its tree (`station::tree`: you look into the urn and its dark opens from the mouth over the screen, a
+  UI shader `assets/shaders/urn_void.wesl` (`UrnVoid` UiMaterial); steps stand as a tree growing upward, each above the
+  steps it comes after (`tree_layout`, pure); pointing at a step shows on the right what it gives, what it takes and
+  "Put in"; `BLOCKGAME_URNOPEN=0.4` holds the opening that far for screenshots). Models are boxes in `station::models` (upgrades change them);
   concept sheets for real art in `docs/stations/` (`python3 tools/gen_station_concepts.py`). Personal storage is a
   chest at `inventory::STORAGE_AT` (not in the world; 8x5, 8x7 with the extra shelf). Saved to `urns.ron` (the old
   fusion `urn.ron` is gone). F9 = dev menu (`station::dev`: give/set down urns, items for the next step, finish
