@@ -621,6 +621,12 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   show), by day only. `game::lightning`: each strike (`Conditions.strikes`, distance `strike_far`, also used by the thunder)
   draws a forked bolt (`bolt_shape`, pure) from the low cloud deck to the ground, mostly ahead of you, as camera-facing
   additive ribbons that glow with the flash. Screenshots: `BLOCKGAME_RAINBOW=1`, `BLOCKGAME_BOLT=0.3` (holds a bolt that far off).
+- Weather dial: `game::weather_dial` (UI shader `assets/shaders/weather_dial.wesl`) at the top middle. Inner sky disc turns with
+  the time of day (top = now, clockwise = later: sun at noon, moon with its phase at midnight, stars at night); the ring is a
+  one-day forecast (`weather_dial::forecast`, worked out like `change_weather`), each weather's colour, pattern and picture
+  from its numbers (`look`). Storm warning: `WARN_SECONDS` (60) before a `severe` weather (lightning, wind >= 12, chill <= -10,
+  downpour) a red countdown line shows under the dial, the rim pulses red and Bram (within 40 blocks) barks `storm_coming`.
+  The map's waypoint strip sits below it (`DIAL_SPACE`).
 - Next: see `docs/GAMEPLAY_LOOP.md`.
 
 ## Testing without a screen

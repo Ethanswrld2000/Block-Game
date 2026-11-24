@@ -54,6 +54,7 @@ mod survival;
 mod swing;
 mod torches;
 mod weather;
+mod weather_dial;
 mod weather_hud;
 mod wind;
 mod wind_streaks;
@@ -95,6 +96,7 @@ fn main() {
             atmosphere::AtmospherePlugin,
             clouds::CloudPlugin,
             weather_hud::WeatherHudPlugin,
+            weather_dial::WeatherDialPlugin,
             precipitation::PrecipitationPlugin,
             cover::CoverPlugin,
             lightning::LightningPlugin,
