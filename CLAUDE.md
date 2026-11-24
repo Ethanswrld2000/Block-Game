@@ -604,6 +604,12 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   quad with `MouthMaterial` (`assets/shaders/urn_mouth.wesl`): the same dark as the tree's background, worked out per
   screen pixel from the same clock (`grab::void_clock`), so the hole grows out of it seamlessly. `void_inside` and its
   helpers are copied between `urn_void.wesl` and `urn_mouth.wesl` and must stay the same.
+- Snow cover and puddles: `game::cover` (`assets/data/cover.ron`; pure rules in `cover::rules`). Every `every` seconds
+  `columns` random columns within `radius` of you whose top is open to the sky get a look: snowfall adds a
+  `snow_layer_1..8` (`voxel::Shape::Layer`, `level` eighths high; drifts to the lowest spot beside it first; buries the
+  small plants in `buries`; layer 8 is solid), warm weather melts it a layer at a time. Rain adds `puddle_1..8` (translucent
+  layers, drawn with the water) where walls hold water on two sides or more; water runs to lower puddles, onto flat ground
+  beside it (level 2+), off edges and into real water; puddles dry after the rain. Only near you in loaded chunks.
 - Next: see `docs/GAMEPLAY_LOOP.md`.
 
 ## Testing without a screen

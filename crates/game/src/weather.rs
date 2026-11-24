@@ -27,7 +27,7 @@ const BLEND_SECONDS: f32 = 60.0;
 pub const CLOUD_LEAD_SECONDS: f32 = 60.0;
 /// Once snowing, it keeps snowing until the temperature (biome scale, about
 /// -1..1) climbs this far above freezing.
-const SNOW_STOPS_ABOVE: f32 = 0.06;
+pub const SNOW_STOPS_ABOVE: f32 = 0.06;
 
 pub struct WeatherPlugin;
 

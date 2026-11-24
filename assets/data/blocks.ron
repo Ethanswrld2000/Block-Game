@@ -12,6 +12,8 @@
 //   shape:       cube (default), torch (drawn as its own model with a light) or plant
 //                (two crossed quads that sway in the wind; worldgen scatters them by
 //                `plants` in biomes.ron, and they go when the block below them is mined)
+//                or layer (a flat layer `level` eighths high on the block below: snow cover
+//                and puddles, built up and worn away by the weather in game::cover)
 [
     (name: "air", solid: false, opaque: false, hardness: 0.0),
     (name: "stone", top: "stone", hardness: 3.0, material: "stone"),
@@ -97,4 +99,20 @@
     (name: "glowcap", top: "glowcap", solid: false, opaque: false, hardness: 0.05, material: "plant", shape: plant),
     (name: "redwood_log", top: "redwood_log_top", side: "redwood_log_side", hardness: 3.0, material: "log"),
     (name: "redwood_leaves", top: "redwood_leaves", opaque: false, foliage: true, hardness: 0.3, material: "plant"),
+    (name: "snow_layer_1", top: "snow", solid: false, opaque: false, hardness: 0.1, material: "soil", shape: layer, level: 1),
+    (name: "snow_layer_2", top: "snow", solid: false, opaque: false, hardness: 0.1, material: "soil", shape: layer, level: 2),
+    (name: "snow_layer_3", top: "snow", solid: false, opaque: false, hardness: 0.1, material: "soil", shape: layer, level: 3),
+    (name: "snow_layer_4", top: "snow", solid: false, opaque: false, hardness: 0.1, material: "soil", shape: layer, level: 4),
+    (name: "snow_layer_5", top: "snow", solid: false, opaque: false, hardness: 0.1, material: "soil", shape: layer, level: 5),
+    (name: "snow_layer_6", top: "snow", solid: false, opaque: false, hardness: 0.1, material: "soil", shape: layer, level: 6),
+    (name: "snow_layer_7", top: "snow", solid: false, opaque: false, hardness: 0.1, material: "soil", shape: layer, level: 7),
+    (name: "snow_layer_8", top: "snow", solid: true, opaque: false, hardness: 0.1, material: "soil", shape: layer, level: 8),
+    (name: "puddle_1", top: "water", solid: false, opaque: false, translucent: true, hardness: -1.0, shape: layer, level: 1),
+    (name: "puddle_2", top: "water", solid: false, opaque: false, translucent: true, hardness: -1.0, shape: layer, level: 2),
+    (name: "puddle_3", top: "water", solid: false, opaque: false, translucent: true, hardness: -1.0, shape: layer, level: 3),
+    (name: "puddle_4", top: "water", solid: false, opaque: false, translucent: true, hardness: -1.0, shape: layer, level: 4),
+    (name: "puddle_5", top: "water", solid: false, opaque: false, translucent: true, hardness: -1.0, shape: layer, level: 5),
+    (name: "puddle_6", top: "water", solid: false, opaque: false, translucent: true, hardness: -1.0, shape: layer, level: 6),
+    (name: "puddle_7", top: "water", solid: false, opaque: false, translucent: true, hardness: -1.0, shape: layer, level: 7),
+    (name: "puddle_8", top: "water", solid: false, opaque: false, translucent: true, hardness: -1.0, shape: layer, level: 8),
 ]

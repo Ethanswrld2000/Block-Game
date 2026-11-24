@@ -349,11 +349,11 @@ fn find_target(
     let origin = cam.translation.to_array();
     let dir = cam.forward().as_vec3().to_array();
     let reach = if *mode == MoveMode::Fly { FLY_REACH } else { REACH };
-    // Aim through air and water; stop at anything solid, or a torch.
+    // Aim through air, water and puddles; stop at anything solid, or a torch.
     target.hit = raycast(origin, dir, reach, |p| {
         world.block(p).is_some_and(|b| {
             let d = blocks.registry.get(b);
-            d.solid || d.shape != voxel::Shape::Cube
+            d.solid || (d.shape != voxel::Shape::Cube && !d.translucent)
         })
     });
 }
