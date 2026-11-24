@@ -54,8 +54,13 @@ fn turn(v: vec2<f32>, r: u32) -> vec2<f32> {
 // The block's tile, in this block's version and turn. Greedy quads span many
 // blocks, so the block comes from the world position, and the mip level from
 // the unbroken quad UVs (`fract` would jump a level at every block edge).
-fn sample_tile(base: u32, uv: vec2<f32>, world: vec3<f32>, normal: vec3<f32>) -> vec4<f32> {
-    let packed = variants[base / 4u][base % 4u];
+// A loose block (`fixed`: held or dropped) moves through the world, so it keeps
+// the base tile unturned instead of flickering between versions.
+fn sample_tile(base: u32, uv: vec2<f32>, world: vec3<f32>, normal: vec3<f32>, fixed: bool) -> vec4<f32> {
+    var packed = variants[base / 4u][base % 4u];
+    if fixed {
+        packed = 0u;
+    }
     let count = (packed >> 10u) & 15u;
     let h = cell_hash(vec3<i32>(floor(world - normal * 0.5)));
     var layer = base;
@@ -217,7 +222,10 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     let layer = u32(floor(in.uv_b.x));
     // Corner shading: 0 in the open, 1 deep in a crease.
     let crease = clamp((fract(in.uv_b.x) - 0.05) / 0.9, 0.0, 1.0);
-    let texel = sample_tile(layer, in.uv, in.world_position.xyz, in.world_normal);
+    // Chunk meshes keep the fraction at 0.05 or more (`chunk_mesh::pack_layer`);
+    // loose blocks (`hands::block_mesh`) leave it at 0.
+    let fixed = fract(in.uv_b.x) < 0.025;
+    let texel = sample_tile(layer, in.uv, in.world_position.xyz, in.world_normal, fixed);
     // Cut-out for leaves and plants (alpha 0); water and ice keep their alpha
     // and are drawn by the blended material.
     if texel.a < 0.1 {

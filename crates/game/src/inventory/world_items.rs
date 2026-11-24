@@ -171,8 +171,10 @@ fn fall_and_spin(
             continue;
         }
         tf.rotate_y(dt * 1.2);
-        // Rest on the block below; unloaded ground counts as solid.
-        let below = BlockPos::from_world((tf.translation - Vec3::Y * 0.15).to_array());
+        // Rest on the block below; unloaded ground counts as solid. Look a bit
+        // deeper than the resting height (1.15 over the block), so a resting
+        // item doesn't find air, drop a frame and get pushed back up (jitter).
+        let below = BlockPos::from_world((tf.translation - Vec3::Y * 0.25).to_array());
         let solid = world.block(below).is_none_or(|b| blocks.registry.get(b).solid);
         if solid {
             wi.vel = 0.0;

@@ -164,7 +164,7 @@ fn update_held(
         let item = items.get(id);
         commands.entity(e).with_children(|c| match &item.kind {
             ItemKind::Block(b) => {
-                let mesh = meshes.add(block_mesh(blocks.registry.get(*b), 0.36));
+                let mesh = meshes.add(block_mesh(blocks.registry.get(*b), 0.26));
                 c.spawn((
                     Mesh3d(mesh),
                     MeshMaterial3d::<VoxelMaterial>(voxel_mat.clone()),
