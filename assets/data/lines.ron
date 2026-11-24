@@ -156,6 +156,8 @@
     (id: "BARK_BRAM_02", speaker: "bram", trigger: "dusk", text: "Strange things come out at night. Keep a torch close."),
     (id: "BARK_BRAM_03", speaker: "bram", trigger: "talk_no_goal", text: "That gate won't clear itself."),
     (id: "BARK_BRAM_04", speaker: "bram", trigger: "talk", text: "You ran from them. Good. Now let's make sure you stay gone."),
+    (id: "BARK_BRAM_05", speaker: "bram", trigger: "storm_coming", text: "Sky's turning. Get under a roof, quick."),
+    (id: "BARK_BRAM_06", speaker: "bram", trigger: "storm_coming", text: "Feel that wind? Something nasty's rolling in."),
     (id: "BARK_GILM_01", speaker: "gilm", trigger: "talk", text: "Bring me ore. I'll make it worth carrying."),
     (id: "BARK_GILM_02", speaker: "gilm", trigger: "worn_tool", text: "That pick is a disgrace. Give it here."),
     (id: "BARK_GILM_03", speaker: "gilm", trigger: "tool_made", text: "Done. Don't break it."),

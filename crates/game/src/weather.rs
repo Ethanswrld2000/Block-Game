@@ -118,7 +118,7 @@ pub struct WeatherState {
 }
 
 impl WeatherState {
-    fn new(first: usize, forced: bool) -> Self {
+    pub(crate) fn new(first: usize, forced: bool) -> Self {
         Self { current: first, previous: first, blend: 1.0, next: None, since: 0.0, until: None, cloud_previous: first, cloud_blend: 1.0, forced }
     }
 

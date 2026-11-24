@@ -604,6 +604,12 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   quad with `MouthMaterial` (`assets/shaders/urn_mouth.wesl`): the same dark as the tree's background, worked out per
   screen pixel from the same clock (`grab::void_clock`), so the hole grows out of it seamlessly. `void_inside` and its
   helpers are copied between `urn_void.wesl` and `urn_mouth.wesl` and must stay the same.
+- Weather dial: `game::weather_dial` (UI shader `assets/shaders/weather_dial.wesl`) at the top middle. Inner sky disc turns with
+  the time of day (top = now, clockwise = later: sun at noon, moon with its phase at midnight, stars at night); the ring is a
+  one-day forecast (`weather_dial::forecast`, worked out like `change_weather`), each weather's colour, pattern and picture
+  from its numbers (`look`). Storm warning: `WARN_SECONDS` (60) before a `severe` weather (lightning, wind >= 12, chill <= -10,
+  downpour) a red countdown line shows under the dial, the rim pulses red and Bram (within 40 blocks) barks `storm_coming`.
+  The map's waypoint strip sits below it (`DIAL_SPACE`).
 - Next: see `docs/GAMEPLAY_LOOP.md`.
 
 ## Testing without a screen

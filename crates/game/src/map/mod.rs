@@ -180,7 +180,7 @@ fn spawn_ui(mut commands: Commands, theme: Res<Theme>) {
                 });
         });
     commands.spawn((
-        Node { position_type: PositionType::Absolute, top: Val::Px(6.0), left: Val::Percent(20.0), width: Val::Percent(60.0), height: Val::Px(40.0), ..default() },
+        Node { position_type: PositionType::Absolute, top: Val::Px(crate::weather_dial::DIAL_SPACE), left: Val::Percent(20.0), width: Val::Percent(60.0), height: Val::Px(40.0), ..default() },
         Strip,
     ));
 }
