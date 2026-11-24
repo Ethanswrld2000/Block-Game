@@ -101,13 +101,14 @@ pub fn build(chunk: &PaddedChunk, light: &Light, registry: &BlockRegistry, opaqu
         push_quad(q, registry, b);
     }
     let mut plants = Buffers::default();
-    push_plants(chunk, light, registry, &mut plants);
+    push_plants(chunk, light, registry, &mut plants, &mut clear);
     ChunkMeshes { opaque: solid.into_mesh(), translucent: clear.into_mesh(), plants: plants.into_mesh(), light: Some(light.coarse()) }
 }
 
 /// Two crossed quads per plant block, each drawn from both sides. Normals
 /// point up so a tuft is lit like the ground it stands on. The top edge sways.
-fn push_plants(chunk: &PaddedChunk, light: &Light, registry: &BlockRegistry, b: &mut Buffers) {
+/// Snow layers go in with the details; puddles go in `clear` with the water.
+fn push_plants(chunk: &PaddedChunk, light: &Light, registry: &BlockRegistry, b: &mut Buffers, clear: &mut Buffers) {
     let n = voxel::CHUNK_SIZE;
     for y in 1..=n {
         for z in 1..=n {
@@ -141,6 +142,19 @@ fn push_plants(chunk: &PaddedChunk, light: &Light, registry: &BlockRegistry, b: 
                             }
                         }
                         fill(b);
+                        continue;
+                    }
+                    voxel::Shape::Layer => {
+                        let near = |dx: i32, dy: i32, dz: i32| {
+                            let n = chunk.get((x as i32 + dx) as usize, (y as i32 + dy) as usize, (z as i32 + dz) as usize);
+                            let nd = registry.get(n);
+                            // Hidden by an opaque block or an as-high layer of the same kind.
+                            nd.opaque || (nd.shape == voxel::Shape::Layer && nd.translucent == def.translucent && nd.level >= def.level)
+                        };
+                        let out = if def.translucent { &mut *clear } else { &mut *b };
+                        let start = out.pos.len();
+                        push_layer(def, cell, near, out);
+                        out.light.resize(out.pos.len().max(start), lit);
                         continue;
                     }
                     _ => continue,
@@ -290,6 +304,36 @@ pub fn model_boxes(m: voxel::Model, walls: Walls) -> Vec<([f32; 3], [f32; 3])> {
         // Swung open on the west (or north) edge, standing along the other axis.
         Model::DoorOpen if across_x => vec![([0.0, 0.0, 0.0], [t, 1.0, 1.0])],
         Model::DoorOpen => vec![([0.0, 0.0, 0.0], [1.0, 1.0, t])],
+    }
+}
+
+/// A snow layer or puddle: its top at `level` eighths (water a little lower,
+/// like a real waterline) and the sides that `hidden` doesn't cover.
+fn push_layer(def: &voxel::BlockDef, cell: [f32; 3], hidden: impl Fn(i32, i32, i32) -> bool, b: &mut Buffers) {
+    let mut h = def.level as f32 / 8.0;
+    if def.translucent {
+        h -= 0.06;
+    }
+    let tex = def.textures[voxel::Face::PosY as usize] as f32;
+    let mut one = Buffers::default();
+    push_box(&mut one, cell, [0.0; 3], [1.0, h, 1.0], tex, 0.0);
+    // push_box writes the faces in `Face::ALL` order, four corners and six indices each.
+    for (i, face) in voxel::Face::ALL.into_iter().enumerate() {
+        let n = face.normal();
+        let show = match face {
+            voxel::Face::NegY => false,
+            voxel::Face::PosY => def.level < 8 || !hidden(0, 1, 0),
+            _ => !hidden(n[0], n[1], n[2]),
+        };
+        if !show {
+            continue;
+        }
+        let start = b.pos.len() as u32;
+        b.pos.extend_from_slice(&one.pos[i * 4..i * 4 + 4]);
+        b.nor.extend_from_slice(&one.nor[i * 4..i * 4 + 4]);
+        b.uv.extend_from_slice(&one.uv[i * 4..i * 4 + 4]);
+        b.layer.extend_from_slice(&one.layer[i * 4..i * 4 + 4]);
+        b.idx.extend(one.idx[i * 6..i * 6 + 6].iter().map(|k| k - i as u32 * 4 + start));
     }
 }
 

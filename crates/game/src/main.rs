@@ -22,6 +22,7 @@ mod places;
 mod player;
 mod pov;
 mod precipitation;
+mod cover;
 mod progress;
 mod debug;
 mod delve;
@@ -94,6 +95,7 @@ fn main() {
             clouds::CloudPlugin,
             weather_hud::WeatherHudPlugin,
             precipitation::PrecipitationPlugin,
+            cover::CoverPlugin,
             lod::LodPlugin,
         ))
         .add_plugins((

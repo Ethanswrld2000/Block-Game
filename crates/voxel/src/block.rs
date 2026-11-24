@@ -50,6 +50,9 @@ struct BlockSpec {
     /// Block light it gives off, 0..=15 (torches, campfires).
     #[serde(default)]
     light: u8,
+    /// For `shape: layer`: how many eighths of the cell it fills (1..=8).
+    #[serde(default)]
+    level: u8,
 }
 
 /// Small furniture drawn as a few boxes in the chunk's detail mesh
@@ -121,6 +124,10 @@ pub enum Shape {
     /// Furniture (`model`: chair, table, door): a few boxes meshed with the
     /// details; it collides as a whole block if `solid`.
     Model,
+    /// A flat layer on the block below, `level` eighths of the cell high:
+    /// snow cover (drawn with the details) and puddles (`translucent`, drawn
+    /// with the water). See `game::cover`.
+    Layer,
 }
 
 impl Shape {
@@ -158,6 +165,8 @@ pub struct BlockDef {
     pub model: Option<Model>,
     /// Block light it gives off, 0..=15 (see `crate::light`).
     pub light: u8,
+    /// `shape: layer`: eighths of the cell filled, 1..=8 (0 for other shapes).
+    pub level: u8,
 }
 
 impl BlockDef {
@@ -172,7 +181,7 @@ impl BlockDef {
     /// vines the attached side or the vine above. Empty = needs no support.
     pub fn supports(&self) -> Vec<[i32; 3]> {
         match (self.shape, self.attach) {
-            (Shape::Plant | Shape::Pebble, _) => vec![[0, -1, 0]],
+            (Shape::Plant | Shape::Pebble | Shape::Layer, _) => vec![[0, -1, 0]],
             (Shape::Twig, Some(a)) => vec![a.offset()],
             (Shape::Vine, Some(a)) => vec![a.offset(), [0, 1, 0]],
             _ => Vec::new(),
@@ -249,6 +258,7 @@ impl BlockRegistry {
                 attach: s.attach,
                 model: s.model,
                 light: s.light.min(crate::light::MAX),
+                level: if s.shape == Shape::Layer { s.level.clamp(1, 8) } else { 0 },
             });
         }
         Ok(Self { defs, by_name })

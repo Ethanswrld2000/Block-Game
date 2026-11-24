@@ -1,0 +1,19 @@
+// Snow cover and puddles (game::cover).
+// Every `every` seconds, `columns` random columns within `radius` blocks of you
+// (loaded chunks, open to the sky) are looked at; each chance below is per look,
+// so a column is looked at about every radius^2 * 3.14 / columns * every seconds.
+(
+    every: 2.0,
+    columns: 256,
+    radius: 48,
+    // Snowfall at full strength adds a layer with this chance (times precipitation).
+    snow: 1.0,
+    // Above freezing a snow layer melts away with this chance (doubled in rain).
+    melt: 0.5,
+    // Rain at full strength adds a level of water to a low spot with this chance.
+    rain: 0.8,
+    // After the rain a puddle loses a level with this chance.
+    dry: 0.35,
+    // Small plants that snow covers (and that are gone when it melts).
+    buries: ["tall_grass", "shrub", "dry_brush", "fern"],
+)
