@@ -160,7 +160,7 @@ pub(super) fn golem_walk(
         }
     }
     g.pos = Some((pos.x, pos.y, pos.z));
-    let station = Station { kind: StationKind::Golem, pos, turned: false, urn: book.0.urns.iter().position(|u| u.name == "golem").unwrap_or(0) };
+    let station = Station { kind: StationKind::Golem, pos, turns: 0, urn: book.0.urns.iter().position(|u| u.name == "golem").unwrap_or(0) };
     let bob = (g.walked * 3.0).sin().abs() * 0.05;
     let tf = Transform::from_translation(pos + Vec3::Y * bob).with_rotation(Quat::from_rotation_y(g.yaw));
     if let Ok((_, mut st, mut t)) = body.single_mut() {

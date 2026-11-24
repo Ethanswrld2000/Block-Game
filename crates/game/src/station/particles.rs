@@ -269,7 +269,7 @@ pub(super) fn spawn_bubbles(
             n -= 1.0;
             room -= 1;
             let off = Vec3::new((rnd(&mut seed) * 2.0 - 1.0) * half * 0.85, -0.04 - rnd(&mut seed) * 0.1, (rnd(&mut seed) * 2.0 - 1.0) * half * 0.85);
-            let rot = if st.turned { Quat::from_rotation_y(std::f32::consts::FRAC_PI_2) } else { Quat::IDENTITY };
+            let rot = st.rotation();
             let at = st.pos + rot * (mid + off);
             let speed = if cauldron { 0.22 } else { 0.16 };
             commands.spawn((

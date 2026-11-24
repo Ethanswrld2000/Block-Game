@@ -499,7 +499,7 @@ const fn view(name: &'static str, at: Vec3, eye: Vec3) -> View {
 }
 
 fn rotation(st: &Station) -> Quat {
-    if st.turned { Quat::from_rotation_y(std::f32::consts::FRAC_PI_2) } else { Quat::IDENTITY }
+    st.rotation()
 }
 
 fn to_world(st: &Station, local: Vec3) -> Vec3 {
@@ -669,13 +669,14 @@ pub(super) fn board_camera(
 pub(super) fn board_hides(
     at: Res<AtBench>,
     scope: Res<super::telescope::Scope>,
-    mut roots: Query<&mut Visibility, (With<Node>, Without<ChildOf>, Without<BoardUi>, Without<super::telescope::ScopeUi>)>,
+    arrange: Res<super::arrange::Arrange>,
+    mut roots: Query<&mut Visibility, (With<Node>, Without<ChildOf>, Without<BoardUi>, Without<super::telescope::ScopeUi>, Without<super::arrange::ArrangeUi>)>,
     mut hands: Query<&mut Visibility, (With<crate::hands::HandRoot>, Without<Node>)>,
-    all: Query<Entity, (With<Node>, Without<ChildOf>, Without<BoardUi>, Without<super::telescope::ScopeUi>)>,
+    all: Query<Entity, (With<Node>, Without<ChildOf>, Without<BoardUi>, Without<super::telescope::ScopeUi>, Without<super::arrange::ArrangeUi>)>,
     mut hidden: Local<Vec<(Entity, Visibility)>>,
 ) {
-    // Looking through the telescope puts the HUD away too.
-    let away = at.blend > 0.02 || scope.open;
+    // Looking through the telescope, or arranging an urn's stations, puts the HUD away too.
+    let away = at.blend > 0.02 || scope.open || arrange.blend > 0.02 || arrange.open.is_some();
     if away && hidden.is_empty() {
         for e in &all {
             if let Ok(mut v) = roots.get_mut(e)
@@ -1858,8 +1859,8 @@ mod tests {
 
     #[test]
     fn the_view_looks_down_at_the_board_from_your_side() {
-        for turned in [false, true] {
-            let st = Station { kind: StationKind::ToolBench, pos: Vec3::new(10.0, 5.0, -3.0), turned, urn: 0 };
+        for turns in 0..4 {
+            let st = Station { kind: StationKind::ToolBench, pos: Vec3::new(10.0, 5.0, -3.0), turns, urn: 0 };
             for side in [-1.0, 1.0] {
                 let v = board_view(&st, side, 0);
                 let f = v.forward().as_vec3();
@@ -1874,7 +1875,7 @@ mod tests {
 
     #[test]
     fn clicks_find_slots_and_the_stone() {
-        let st = Station { kind: StationKind::ToolBench, pos: Vec3::new(0.0, 0.0, 0.0), turned: true, urn: 0 };
+        let st = Station { kind: StationKind::ToolBench, pos: Vec3::new(0.0, 0.0, 0.0), turns: 1, urn: 0 };
         let down = Vec3::NEG_Y;
         let from = |x: f32, z: f32| to_world(&st, Vec3::new(x, 2.0, z));
         let name = |s: Option<Spot>| match s {

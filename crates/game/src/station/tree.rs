@@ -81,6 +81,10 @@ pub(super) struct NodeFrame(String);
 #[derive(Component)]
 pub(super) struct Breathe;
 
+/// "Arrange": move the urn's stations round it (`arrange`).
+#[derive(Component)]
+pub(super) struct ArrangeButton;
+
 /// "Put in" on a step.
 #[derive(Component)]
 pub(super) struct PutIn(String);
@@ -279,7 +283,8 @@ pub(super) fn tree_click(
     mouse: Res<ButtonInput<MouseButton>>,
     window: Single<&Window, With<PrimaryWindow>>,
     theme: Res<Theme>,
-    mut buttons: Query<(&PutIn, &ComputedNode, &UiGlobalTransform, &InheritedVisibility, &mut ImageNode), Without<NodeFrame>>,
+    mut buttons: Query<(Option<&PutIn>, &ComputedNode, &UiGlobalTransform, &InheritedVisibility, &mut ImageNode), (Or<(With<PutIn>, With<ArrangeButton>)>, Without<NodeFrame>)>,
+    mut arrange: ResMut<super::arrange::Arrange>,
     nodes: Query<(&TreeNode, &ComputedNode, &UiGlobalTransform, &InheritedVisibility)>,
     mut frames: Query<(&NodeFrame, &mut ImageNode), Without<PutIn>>,
     (book, items): (Option<Res<UrnBook>>, Res<Items>),
@@ -333,10 +338,18 @@ pub(super) fn tree_click(
             *img = skin;
         }
         if over && mouse.just_pressed(MouseButton::Left) {
-            clicked = Some(b.0.clone());
+            clicked = Some(b.map(|b| b.0.clone()));
         }
     }
     let Some(step) = clicked else { return };
+    let Some(step) = step else {
+        // Arrange: the tree closes and the camera lifts out over the urn.
+        tree.open = None;
+        tree.at = None;
+        tree.dirty = true;
+        arrange.start = Some(i);
+        return;
+    };
     let Some(s) = def.step(&step) else { return };
     let mut put = 0;
     let missing = urns.of(&def.name).missing(s);
@@ -479,7 +492,19 @@ pub(super) fn tree_build(
                 r.spawn((text(def.station.clone(), sizes::LABEL, colors::MUTED), Node { margin: UiRect::bottom(Val::Px(4.0)), ..default() }));
             });
             let n = def.steps.iter().filter(|s| p.is_done(&s.name)).count();
-            r.spawn(text(format!("{n} / {} steps", def.steps.len()), sizes::LABEL, if n == def.steps.len() { colors::GOOD } else { colors::TEXT }));
+            // Arrange shows once a step has placed a station by the urn.
+            let placed = def.steps.iter().any(|s| p.is_done(&s.name) && matches!(&s.gives, Gives::Station(_)));
+            r.spawn(Node { column_gap: Val::Px(16.0), align_items: AlignItems::Center, ..default() }).with_children(|r| {
+                if placed {
+                    r.spawn((
+                        ArrangeButton,
+                        Node { padding: UiRect::axes(Val::Px(14.0), Val::Px(3.0)), justify_content: JustifyContent::Center, ..default() },
+                        theme.skin("button"),
+                        children![text("Arrange", sizes::LABEL, colors::TEXT)],
+                    ));
+                }
+                r.spawn(text(format!("{n} / {} steps", def.steps.len()), sizes::LABEL, if n == def.steps.len() { colors::GOOD } else { colors::TEXT }));
+            });
         });
         c.spawn(text(def.how.clone(), sizes::SMALL, colors::MUTED));
         c.spawn(Node { column_gap: Val::Px(20.0), align_items: AlignItems::Center, ..default() }).with_children(|row| {
@@ -519,7 +544,7 @@ pub(super) fn tree_build(
             .with_children(|c| details(c, theme, &items, &art, &benches, &book, &inv, def, p, &selected));
         });
         c.spawn(text(
-            "Point at a step to see what it gives  ·  Put in: everything you carry for that step  ·  Hold an item and right click the urn to put it in  ·  Esc: close",
+            "Point at a step to see what it gives  ·  Put in: everything you carry for that step  ·  Hold an item and right click the urn to put it in  ·  Arrange: move its stations  ·  Esc: close",
             sizes::SMALL,
             colors::FAINT,
         ));

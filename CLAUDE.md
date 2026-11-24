@@ -256,6 +256,12 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   right click follow/stay), `golem_hands` gives it a pack (crouch + right click) and it strikes hostile creatures
   near it; saved to `golem.ron`. Cooking moved out of the Tab list (roast meat, peat stew).
   `BLOCKGAME_BOARD=<station name>:...` opens any bench for screenshots (`pot:`, `cut:` short forms).
+- Arranging stations: `station::arrange`. "Arrange" in an urn's tree (shows once a step has placed a station) lifts the
+  camera out above the urn; that urn's stations (not the urn, bedframe or golem) show as blue see-through ghosts. Click one
+  to pick it up, it follows the mouse over the ground (0.5-block snap), Q / E turn it a quarter, click sets it down. Red =
+  can't stand there (solid block inside, off the ground, overlapping a station, over `ARRANGE_RADIUS` 10 from the urn).
+  Enter places all, Esc cancels. Saved in `Urns.arranged` (urn -> station -> along/side in the urn's frame + extra turns),
+  so the layout follows a moved urn. `Station.turns` (0-3 quarter turns) replaced `turned`.
 - Bench tools are their own models (`models::tool`, `board::BenchTool` children of the station): click the tool
   to lift it, it follows the cursor; click to swing it down (hammerstones, anvil hammer, knife, fan; one go when it
   lands, `board::swing_pose`; the tool bench's hammer hangs on a rack, the knife drops edge-down), hold the button and
