@@ -150,6 +150,10 @@ struct MapNote;
 #[derive(Component)]
 struct Strip;
 
+/// The column beside the map where `journey` lists the region goals.
+#[derive(Component)]
+pub struct GoalsSlot;
+
 fn spawn_ui(mut commands: Commands, theme: Res<Theme>) {
     commands
         .spawn((
@@ -162,8 +166,11 @@ fn spawn_ui(mut commands: Commands, theme: Res<Theme>) {
             root.spawn((Node { flex_direction: FlexDirection::Column, align_items: AlignItems::Center, padding: UiRect::axes(Val::Px(20.0), Val::Px(16.0)), row_gap: Val::Px(10.0), ..default() }, theme.skin("panel")))
                 .with_children(|p| {
                     p.spawn((theme.bold(sizes::TITLE), Text::new("Map"), TextColor(colors::HEADING)));
-                    p.spawn((Node { width: Val::Vh(SHOWN), height: Val::Vh(SHOWN), ..default() }, BackgroundColor(Color::srgb(0.06, 0.07, 0.1)), MapPicture)).with_children(|m| {
-                        m.spawn((Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() }, MapMarks));
+                    p.spawn(Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(18.0), ..default() }).with_children(|row| {
+                        row.spawn((Node { width: Val::Vh(SHOWN), height: Val::Vh(SHOWN), ..default() }, BackgroundColor(Color::srgb(0.06, 0.07, 0.1)), MapPicture)).with_children(|m| {
+                            m.spawn((Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() }, MapMarks));
+                        });
+                        row.spawn((Node { flex_direction: FlexDirection::Column, width: Val::Px(300.0), row_gap: Val::Px(4.0), ..default() }, GoalsSlot));
                     });
                     p.spawn((text("", sizes::SMALL, colors::MUTED), MapNote));
                     p.spawn(text("Click: add waypoint   Space: mark where you stand   Right click: remove   M or Esc: close", sizes::SMALL, colors::MUTED));

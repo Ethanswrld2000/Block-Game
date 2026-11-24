@@ -382,7 +382,7 @@ fn take_strikes(
     mut spill: MessageWriter<crate::inventory::Spill>,
     mut toast: MessageWriter<crate::survival::Toast>,
     mut dice: ResMut<Dice>,
-    (mut gain, prog): (MessageWriter<crate::progress::GainXp>, Res<crate::progress::xp::Progression>),
+    (mut gain, prog, mut slain): (MessageWriter<crate::progress::GainXp>, Res<crate::progress::xp::Progression>, MessageWriter<crate::journey::CreatureSlain>),
     mut impact: MessageWriter<crate::combat::feel::Impact>,
 ) {
     let Some(kinds) = kinds else { return };
@@ -411,6 +411,7 @@ fn take_strikes(
                 }
             }
             toast.write(crate::survival::Toast(format!("{} slain", k.title)));
+            slain.write(crate::journey::CreatureSlain(k.name.clone()));
             gain.write(crate::progress::GainXp { xp: k.health * prog.xp.kill, why: String::new() });
             commands.entity(s.entity).despawn();
         }
