@@ -583,6 +583,10 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
 - Region clothes: `Wear` items can have `cooling` (°C off felt heat, never below comfortable; `vitals::clothed`) and `air`
   (share of missing air made up, best worn piece counts; `vitals::helped`). Sewing table: `linen_robe`, `sun_hat` (desert),
   `fur_boots` (peaks), `reed_breather` (deep caves and sky; Head slot, so it trades against a hood).
+- Hit feel: `combat::feel`. Your blows that land (`feel::Impact`, strength 0..1 from `hit_foe`: blocked 0.25, hurt 0.55,
+  guard break 0.8, kill 1.0; creature hits too; `Strike.yours` is false for the golem) stop the game briefly
+  (`Time<Virtual>` at 4% speed for 0.03-0.1 real seconds) and nod the camera; `player::Damage` jolts it (`feel::Kick`, a
+  spring added in `player::ride_camera`). Foes rock back when hit (`Foe.flinch`), and every hurting blow adds a low `hit` thud.
 - Next: see `docs/GAMEPLAY_LOOP.md`.
 
 ## Testing without a screen

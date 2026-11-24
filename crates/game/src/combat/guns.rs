@@ -61,7 +61,7 @@ pub(super) fn fire(
     mut foes: Query<(Entity, &Transform, &mut Foe)>,
     creatures: Query<(Entity, &Transform, &Creature), Without<Foe>>,
     mut dice: ResMut<FoeDice>,
-    (mut strikes, mut sound, mut bursts, mut toast): (MessageWriter<Strike>, MessageWriter<PlaySound>, MessageWriter<Burst>, MessageWriter<Toast>),
+    (mut strikes, mut sound, mut bursts, mut toast, mut impact): (MessageWriter<Strike>, MessageWriter<PlaySound>, MessageWriter<Burst>, MessageWriter<Toast>, MessageWriter<super::feel::Impact>),
     mut reload: Local<f32>,
 ) {
     *reload -= time.delta_secs();
@@ -118,11 +118,12 @@ pub(super) fn fire(
         Some((_, Target::Foe(e))) => {
             if let Ok((_, tf, mut foe)) = foes.get_mut(e) {
                 let k = &book.kinds[foe.kind];
-                hit_foe(tf, &mut foe, k, origin, gun.damage, &mut dice.0, &mut sound, &mut bursts);
+                let strength = hit_foe(tf, &mut foe, k, origin, gun.damage, &mut dice.0, &mut sound, &mut bursts);
+                impact.write(super::feel::Impact { strength: strength * 0.6 });
             }
         }
         Some((_, Target::Creature(e))) => {
-            strikes.write(Strike { entity: e, damage: gun.damage, dir: Vec3::new(dir.x, 0.0, dir.z).normalize_or_zero() });
+            strikes.write(Strike { entity: e, damage: gun.damage, dir: Vec3::new(dir.x, 0.0, dir.z).normalize_or_zero(), yours: true });
         }
         None if wall < gun.range => {
             bursts.write(Burst::new(origin + dir * (wall - 0.05), BurstKind::Chips, 6));

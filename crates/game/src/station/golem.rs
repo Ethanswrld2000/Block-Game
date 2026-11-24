@@ -153,7 +153,7 @@ pub(super) fn golem_walk(
             } else if g.cooldown <= 0.0 {
                 g.cooldown = BLOW_SECONDS;
                 let dir = (at - pos).with_y(0.0).normalize_or(Vec3::X);
-                strikes.write(Strike { entity: e, damage: DAMAGE, dir });
+                strikes.write(Strike { entity: e, damage: DAMAGE, dir, yours: false });
             }
             let d = at - pos;
             g.yaw = (-d.x).atan2(-d.z);

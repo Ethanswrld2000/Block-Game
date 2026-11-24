@@ -424,7 +424,7 @@ fn walk(
 }
 
 /// Put the camera at the player's eyes, with bob, sway and landing dip.
-fn ride_camera(time: Res<Time>, player: Res<Player>, body: Res<Body>, mut cam: Query<(&mut Transform, &FlyCamera)>) {
+fn ride_camera(time: Res<Time>, player: Res<Player>, body: Res<Body>, kick: Option<Res<crate::combat::feel::Kick>>, mut cam: Query<(&mut Transform, &FlyCamera)>) {
     let Ok((mut tf, look)) = cam.single_mut() else { return };
     let p = &*player;
     let (s, b) = (p.bob_phase.sin(), p.bob);
@@ -435,8 +435,9 @@ fn ride_camera(time: Res<Time>, player: Res<Player>, body: Res<Body>, mut cam: Q
     let t = time.elapsed_secs();
     let dizzy_roll = (t * 0.9).sin() * 0.09 * body.dizzy;
     let dizzy_yaw = (t * 0.6).sin() * 0.05 * body.dizzy;
-    let roll = (p.bob_phase * 0.5).sin() * 0.012 * b + dizzy_roll;
-    let rotation = Quat::from_euler(EulerRot::YXZ, look.yaw + dizzy_yaw, look.pitch + s.abs() * 0.006 * b, roll);
+    let (kick_pitch, kick_roll) = kick.map_or((0.0, 0.0), |k| (k.pitch, k.roll));
+    let roll = (p.bob_phase * 0.5).sin() * 0.012 * b + dizzy_roll + kick_roll;
+    let rotation = Quat::from_euler(EulerRot::YXZ, look.yaw + dizzy_yaw, look.pitch + s.abs() * 0.006 * b + kick_pitch, roll);
     let right = rotation * Vec3::X;
     tf.translation = p.pos + Vec3::Y * (p.eye + bob_y + p.dip) + Vec3::new(right.x, 0.0, right.z) * sway;
     tf.rotation = rotation;
