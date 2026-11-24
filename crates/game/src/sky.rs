@@ -31,12 +31,19 @@ pub const MILKY_WAY: bool = false;
 const SUN_TILT: f32 = 0.38;
 /// The moon's path leans differently, so it crosses a different part of the sky.
 const MOON_TILT: f32 = 0.62;
+/// How much of a turn the stars make in a day. Much slower than the sun (one
+/// turn) and the moon (a little under one): over a night they wheel about 40°.
+/// The turn is counted from midnight, so each night shows the same sky at the
+/// same hour; the jump back happens at noon, when no stars show.
+pub const STAR_TURNS_PER_DAY: f32 = 0.25;
+/// Most named (constellation) stars the sky dome can draw.
+pub const MAX_NAMED_STARS: usize = 64;
 /// Days from one full moon to the next. The moon rises 24/8 = 3 hours later each day.
 pub const LUNAR_DAYS: f64 = 8.0;
 
 pub type SkyMaterial = ExtendedMaterial<StandardMaterial, SkyExtension>;
 
-#[derive(ShaderType, Clone, Copy, Debug, Default)]
+#[derive(ShaderType, Clone, Copy, Debug)]
 pub struct SkyParams {
     pub zenith: Vec4,
     pub horizon: Vec4,
@@ -54,7 +61,39 @@ pub struct SkyParams {
     /// x: daytime haze brightening towards the sun (same as the fog's),
     /// y: brightness of the band of faint stars across the night sky
     /// (0 while [`MILKY_WAY`] is off).
+    /// w: extra star brightness while looking through the telescope.
     pub haze: Vec4,
+    /// Named stars (the constellations), in star-map space: xyz direction,
+    /// w brightness (0 = unused).
+    pub named: [Vec4; MAX_NAMED_STARS],
+}
+
+impl Default for SkyParams {
+    fn default() -> Self {
+        Self {
+            zenith: Vec4::ZERO,
+            horizon: Vec4::ZERO,
+            sun_dir: Vec4::ZERO,
+            sun_color: Vec4::ZERO,
+            moon_dir: Vec4::ZERO,
+            extra: Vec4::ZERO,
+            star_x: Vec4::ZERO,
+            star_y: Vec4::ZERO,
+            star_z: Vec4::ZERO,
+            mid: Vec4::ZERO,
+            haze: Vec4::ZERO,
+            named: [Vec4::ZERO; MAX_NAMED_STARS],
+        }
+    }
+}
+
+/// The constellation stars the dome draws (filled by the telescope from
+/// constellations.ron, so the telescope looks at the same stars), and how far
+/// the telescope is raised (0..1), which brings out fainter stars.
+#[derive(Resource, Default)]
+pub struct SkyStars {
+    pub named: Vec<Vec4>,
+    pub scope: f32,
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -74,6 +113,7 @@ pub struct SkyPlugin;
 impl Plugin for SkyPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<SkyMaterial>::default())
+            .init_resource::<SkyStars>()
             .insert_resource(ClearColor(Color::srgb(0.46, 0.53, 0.47)))
             .insert_resource(GlobalAmbientLight { color: Color::WHITE, brightness: 400.0, ..default() })
             .add_systems(crate::menu::GameStartup, spawn_sky)
@@ -130,9 +170,11 @@ fn sky_axis() -> Vec3 {
     Vec3::new(0.0, -SUN_TILT.sin(), SUN_TILT.cos())
 }
 
-/// How the sky has turned at this time of day (stars), one turn per day.
-pub fn sky_rotation(time: f32) -> Quat {
-    Quat::from_axis_angle(sky_axis(), (time - 0.25) * TAU)
+/// How the stars have turned at this time of day: none at midnight, a
+/// [`STAR_TURNS_PER_DAY`] share of a turn per day either side of it.
+pub fn star_rotation(time: f32) -> Quat {
+    let from_midnight = (time + 0.5).rem_euclid(1.0) - 0.5;
+    Quat::from_axis_angle(sky_axis(), from_midnight * TAU * STAR_TURNS_PER_DAY)
 }
 
 /// Moon phase, 0..1: 0 new moon, 0.5 full moon.
@@ -189,6 +231,7 @@ pub fn update_sky(
     dome: Query<&MeshMaterial3d<SkyMaterial>, With<SkyDome>>,
     mut materials: ResMut<Assets<SkyMaterial>>,
     mut atmos: ResMut<Atmos>,
+    sky_stars: Res<SkyStars>,
 ) {
     let season = seasons.at(&clock);
     let daylight_share = seasons.blended(season, |s| s.daylight);
@@ -287,7 +330,11 @@ pub fn update_sky(
         && let Some(mut mat) = materials.get_mut(&handle.0)
     {
         // Inverse rotation, as columns; the shader uses them as rows (transpose = inverse).
-        let inv = Mat3::from_quat(sky_rotation(clock.time));
+        let inv = Mat3::from_quat(star_rotation(clock.time));
+        let mut named = [Vec4::ZERO; MAX_NAMED_STARS];
+        for (n, s) in named.iter_mut().zip(&sky_stars.named) {
+            *n = *s;
+        }
         mat.extension.params = SkyParams {
             zenith: zenith.extend(1.0),
             horizon: horizon.extend(1.0),
@@ -303,8 +350,9 @@ pub fn update_sky(
                 day_haze,
                 if MILKY_WAY { 1.0 - smoothstep(-0.3, 0.0, sun.y) } else { 0.0 },
                 fog_veil(visibility),
-                0.0,
+                sky_stars.scope,
             ),
+            named,
         };
     }
 }
@@ -385,13 +433,20 @@ mod tests {
     }
 
     #[test]
-    fn stars_turn_with_the_sun() {
-        // At the equinox the sun is a point fixed on the star map: turning
-        // the sky carries it exactly along the sun's path.
-        for t in [0.3, 0.5, 0.7] {
-            let sun_on_map = sky_rotation(t).inverse() * sun_direction(t, 0.5);
-            assert!((sun_on_map - Vec3::X).length() < 1e-4, "{t}: {sun_on_map}");
-        }
+    fn stars_turn_much_slower_than_the_sun() {
+        // Over the two hours after dusk, a star on the sky's equator moves a
+        // quarter as far as the sun does.
+        let (a, b) = (20.0 / 24.0, 22.0 / 24.0);
+        let star = |t| star_rotation(t) * Vec3::X;
+        let sun_moved = sun_direction(a, 0.5).angle_between(sun_direction(b, 0.5));
+        let star_moved = star(a).angle_between(star(b));
+        assert!((star_moved - sun_moved * STAR_TURNS_PER_DAY).abs() < 1e-3, "{star_moved} vs {sun_moved}");
+        // The moon keeps near the sun's pace (it slips back a little each day
+        // through `moon_phase`), far quicker than the stars.
+        let moon_moved = moon_direction(a, 0.3).angle_between(moon_direction(b, 0.3));
+        assert!(moon_moved > star_moved * 2.0);
+        // Same sky at midnight every night.
+        assert!(star_rotation(0.0).angle_between(Quat::IDENTITY) < 1e-6);
     }
 
     #[test]
