@@ -172,7 +172,7 @@ fn update_overlay(
              move   {state}\n\
              F3 hide | click: capture mouse | Esc: release | hold T: fast time\n\
              1-9 or wheel: pick item | left click: mine | right click: place, open chest, hold to eat | Shift: sprint | Ctrl/C: crouch\n\
-             Tab: inventory | B: make or pack up camp | Z: sleep at camp | test: F7 stab, F8 club blow, F9 one of everything",
+             Tab: inventory | B: make or pack up camp | Z: sleep at camp | test: F7 stab, F8 club blow, F9 dev menu",
             p.x, p.y, p.z, chunk.x, chunk.y, chunk.z,
             sky.describe(),
             stats.loaded, stats.meshed, stats.queued, stats.unsaved,

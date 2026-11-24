@@ -7,8 +7,8 @@
 //! what is in it is out of the pockets and held. The weapon slot (`weapon`)
 //! holds one weapon, drawn into the right hand with R (`interact`).
 //!
-//! Tab opens the inventory screen (`ui`). F9 is a test key that hands you one
-//! of everything. `BLOCKGAME_INVENTORY=1` opens the screen at start, for
+//! Tab opens the inventory screen (`ui`). Test items come from the F9 dev
+//! menu (`station::dev`). `BLOCKGAME_INVENTORY=1` opens the screen at start, for
 //! screenshots.
 
 pub mod crafting;
@@ -80,7 +80,7 @@ impl Plugin for InventoryPlugin {
             .add_systems(crate::menu::GamePostStartup, (setup_data, load_inventory).chain())
             .add_systems(
                 crate::menu::GameUpdate,
-                (collect_mined, auto_bind, supply_key).chain().after(crate::interact::InteractSet),
+                (collect_mined, auto_bind).chain().after(crate::interact::InteractSet),
             )
             .add_systems(crate::menu::GameUpdate, save_inventory)
             .add_systems(Last, save_inventory_on_exit.run_if(crate::menu::in_game))
@@ -162,6 +162,16 @@ impl Inventory {
             Some(b) => b.add(items, left),
             None => Some(left),
         }
+    }
+
+    /// Empty the pockets, the bag, the left hand and the weapon slot (clothes stay on).
+    pub fn empty_carried(&mut self) {
+        self.pockets.items.clear();
+        if let Some(b) = &mut self.bag {
+            b.items.clear();
+        }
+        self.left = None;
+        self.weapon = None;
     }
 
     /// Everything you carry and wear, kg.
@@ -316,29 +326,6 @@ fn auto_bind(inv: Res<Inventory>, items: Res<Items>, mut hotbar: ResMut<Hotbar>)
             hotbar.slots[free] = Some(id);
         }
     }
-}
-
-/// F9: one stack of everything (test key). What doesn't fit lands at your feet.
-fn supply_key(
-    keys: Res<ButtonInput<KeyCode>>,
-    items: Res<Items>,
-    player: Res<crate::player::Player>,
-    mut inv: ResMut<Inventory>,
-    mut spill: MessageWriter<world_items::Spill>,
-    mut toast: MessageWriter<crate::survival::Toast>,
-) {
-    if !keys.just_pressed(KeyCode::F9) {
-        return;
-    }
-    let mut dropped = 0;
-    for id in items.ids() {
-        let n = items.get(id).stack.min(8);
-        if let Some(left) = inv.add(&items, Stack::new(id, n)) {
-            dropped += 1;
-            spill.write(world_items::Spill { stack: left, at: player.pos + Vec3::Y * 0.5 });
-        }
-    }
-    toast.write(crate::survival::Toast(format!("Test supplies: one of everything ({dropped} kinds on the ground)")));
 }
 
 /// What `inventory.ron` holds.

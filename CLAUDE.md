@@ -204,10 +204,11 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   opens its tree (`station::tree`, "Put in" per step). Models are boxes in `station::models` (upgrades change them);
   concept sheets for real art in `docs/stations/` (`python3 tools/gen_station_concepts.py`). Personal storage is a
   chest at `inventory::STORAGE_AT` (not in the world; 8x5, 8x7 with the extra shelf). Saved to `urns.ron` (the old
-  fusion `urn.ron` is gone). F9 = dev menu (`station::dev`: give/set down urns, items for the next step, finish
-  steps, reset). Screenshots: `BLOCKGAME_CAMP=1` unrolls the bedroll in front of you, `BLOCKGAME_URNS=tool,hearth`
+  fusion `urn.ron` is gone). F9 = dev menu (`station::dev`, tabs: Urns (give/set down urns, items for the next step, finish
+  steps, reset), Items (every item by kind, paged; click gives 1, 8 or a stack; Empty pockets), NPCs (spawn any kind
+  ahead of you via `npc::SpawnKind`)); F9 no longer hands out one of everything. Screenshots: `BLOCKGAME_CAMP=1` unrolls the bedroll in front of you, `BLOCKGAME_URNS=tool,hearth`
   sets urns down in a row ahead, `BLOCKGAME_URN=camp_mat,tool_bench` finishes steps, `BLOCKGAME_URNTREE=tool`
-  opens a tree, `BLOCKGAME_DEVMENU=1` the dev menu. The planning sheet is the Claude Sheet "Station Urn Trees".
+  opens a tree, `BLOCKGAME_DEVMENU=1|urns|items|npcs` the dev menu on that tab. The planning sheet is the Claude Sheet "Station Urn Trees".
 - Hands-on benches: `station::board` (no menu: right click a bench and the camera glides down over its top,
   the HUD and arms step aside (`board_hides`), a strip of your things sits at the bottom; click one to pick it up,
   it hangs under the cursor; click a slot to set it down; knock the stone to work it; A/D next bench, Esc
