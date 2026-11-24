@@ -1,0 +1,72 @@
+// Region goals (game::journey). Regions come in order; finishing every goal of one
+// sets a waypoint to the next (its `target`) and moves the list on. Goals of any
+// region count whenever you do them, so nothing done early is lost.
+//
+// when: Mine([blocks]) | Slay(creature) | Make(item made at a bench) | Reach([biomes])
+//       | Find("barrow" | "dungeon") | Below(height) | Sky (stand on a sky island)
+// count: how many times (default 1). xp: given when the goal is done.
+// target: None | Biomes([biomes]) (nearest main-island ground) | SkyIsland
+(
+    regions: [
+        (
+            name: "swamp", title: "Swamp",
+            hint: "Wet and chilly at night. Keep a torch and get your first tools.",
+            goals: [
+                (key: "swamp_reeds", text: "Cut reeds", when: Mine(["reeds"]), count: 8, xp: 20.0),
+                (key: "swamp_axe", text: "Make a rough axe", when: Make("rough_axe"), xp: 30.0),
+                (key: "swamp_boar", text: "Hunt a marsh boar", when: Slay("marsh_boar"), xp: 40.0),
+            ],
+        ),
+        (
+            name: "forest", title: "Forests",
+            hint: "Mild ground with wood, stone and game. Barrows hide in the hills.",
+            target: Biomes(["mossy_woods", "pine_hills", "redwood_forest"]),
+            goals: [
+                (key: "forest_reach", text: "Reach a forest", when: Reach(["mossy_woods", "pine_hills", "redwood_forest"]), xp: 30.0),
+                (key: "forest_logs", text: "Chop logs", when: Mine(["log", "redwood_log"]), count: 12, xp: 30.0),
+                (key: "forest_pick", text: "Make a stone pickaxe", when: Make("stone_pickaxe"), xp: 40.0),
+                (key: "forest_stag", text: "Hunt a fen stag", when: Slay("fen_stag"), xp: 40.0),
+                (key: "forest_barrow", text: "Find a barrow", when: Find("barrow"), xp: 50.0),
+            ],
+        ),
+        (
+            name: "desert", title: "Desert",
+            hint: "Hot by day, worse at noon. Wear light clothes and travel at dawn.",
+            target: Biomes(["dunes"]),
+            goals: [
+                (key: "desert_reach", text: "Reach the desert", when: Reach(["dunes"]), xp: 50.0),
+                (key: "desert_sand", text: "Dig sand", when: Mine(["sand"]), count: 12, xp: 30.0),
+                (key: "desert_coal", text: "Mine coal", when: Mine(["coal_ore"]), count: 6, xp: 40.0),
+            ],
+        ),
+        (
+            name: "mountains", title: "Snowy Mountains",
+            hint: "Freezing, deadly on winter nights. Furs, fire and the Warmth spell.",
+            target: Biomes(["frost_peaks"]),
+            goals: [
+                (key: "peaks_reach", text: "Reach the snowy mountains", when: Reach(["frost_peaks"]), xp: 60.0),
+                (key: "peaks_snow", text: "Dig snow", when: Mine(["snow"]), count: 10, xp: 30.0),
+                (key: "peaks_hood", text: "Make a fur hood", when: Make("fur_hood"), xp: 50.0),
+            ],
+        ),
+        (
+            name: "caves", title: "Deep Caves",
+            hint: "The air thins below y -150. Go in short trips and light the way back.",
+            goals: [
+                (key: "caves_deep", text: "Go below y -150", when: Below(-150.0), xp: 60.0),
+                (key: "caves_iron", text: "Mine iron ore", when: Mine(["iron_ore"]), count: 6, xp: 50.0),
+                (key: "caves_pick", text: "Make an iron pickaxe", when: Make("iron_pickaxe"), xp: 60.0),
+            ],
+        ),
+        (
+            name: "sky", title: "Sky Islands",
+            hint: "Thin air and bitter cold together, and a long fall.",
+            target: SkyIsland,
+            goals: [
+                (key: "sky_stand", text: "Stand on a sky island", when: Sky, xp: 100.0),
+                (key: "sky_stone", text: "Mine skystone", when: Mine(["skystone"]), count: 8, xp: 50.0),
+                (key: "sky_moss", text: "Gather cloud moss", when: Mine(["cloud_moss"]), count: 4, xp: 50.0),
+            ],
+        ),
+    ],
+)

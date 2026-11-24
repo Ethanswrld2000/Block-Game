@@ -109,9 +109,7 @@ Each step is small enough for one pull request and makes the loop above more rea
 3. **Better clothes ladder.** Light clothes for heat (low insulation, shade), layered furs for cold,
    and a breathing item for deep caves (a reed breathing tube under water, an ember lamp that warns
    of bad air). Each region's answer becomes something you craft.
-4. **Expedition goals.** A short list of things to find in each region (an ore, a creature, a
-   place), shown in the K map, each giving XP and pointing at the next region. Data in a new
-   `assets/data/journey.ron`.
+4. **Expedition goals.** Done: `game::journey`, `assets/data/journey.ron`, listed beside the map (M).
 5. **Sky island payoff.** Something only up there worth the trip: a rare ore, a shrine that teaches
    a spell, a view of the whole map.
 6. **Tuning pass.** Play a full in-game week from a new world and adjust `exposure.ron`,

@@ -34,6 +34,7 @@ mod interact;
 mod inventory;
 mod item_art;
 mod items;
+mod journey;
 mod lines;
 mod cutscene;
 mod story;
@@ -102,7 +103,7 @@ fn main() {
             inventory::InventoryPlugin,
         ))
         .add_plugins((creatures::CreaturesPlugin, places::PlacesPlugin, progress::ProgressPlugin, station::StationPlugin, airship::AirshipPlugin, settings::SettingsPlugin, sound::SoundPlugin, bench::BenchPlugin, npc::NpcPlugin, avatar::AvatarPlugin, combat::CombatPlugin, dungeon::DungeonPlugin))
-        .add_plugins((delve::DelvePlugin, cast::CastPlugin, lines::LinesPlugin, encounter::EncounterPlugin, cutscene::CutscenePlugin, story::StoryPlugin, map::MapPlugin, farming::FarmingPlugin, book::BookPlugin))
+        .add_plugins((delve::DelvePlugin, cast::CastPlugin, lines::LinesPlugin, encounter::EncounterPlugin, cutscene::CutscenePlugin, story::StoryPlugin, map::MapPlugin, farming::FarmingPlugin, book::BookPlugin, journey::JourneyPlugin))
         .run();
     menu::relaunch_to_title();
 }
