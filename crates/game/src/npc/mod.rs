@@ -41,7 +41,8 @@ impl Plugin for NpcPlugin {
     fn build(&self, app: &mut App) {
         let kinds = data::load(include_str!("../../../../assets/data/npcs.ron")).unwrap_or_else(|e| panic!("npcs.ron: {e}"));
         let trees = dialogue::load(include_str!("../../../../assets/data/dialogue.ron")).unwrap_or_else(|e| panic!("dialogue.ron: {e}"));
-        app.insert_resource(NpcBook { kinds, trees, lines: crate::lines::load() })
+        app.add_message::<SpawnKind>()
+            .insert_resource(NpcBook { kinds, trees, lines: crate::lines::load() })
             .insert_resource(NpcDice(Rng(0x0DD_BA11_5EED)))
             .add_systems(
                 crate::menu::GameUpdate,
@@ -165,6 +166,11 @@ pub(crate) fn ground_near(world: &World, blocks: &Blocks, at: Vec3) -> Option<Ve
     })
 }
 
+/// Spawn this kind (index into `NpcBook::kinds`) in front of you, following
+/// you, the way Ctrl+Shift+N does (the F9 dev menu sends it).
+#[derive(Message, Debug, Clone, Copy)]
+pub struct SpawnKind(pub usize);
+
 /// Ctrl+Shift+N (or Cmd+Shift+N) spawns an NPC a few blocks in front of you,
 /// facing you, following you: the first kind, then the next one each press.
 #[allow(clippy::too_many_arguments)]
@@ -177,11 +183,13 @@ fn spawn_key(
     cam: Single<&Transform, With<FlyCamera>>,
     talk: Res<talk::Talk>,
     mut spawn: MessageWriter<body::SpawnNpc>,
+    mut asked: MessageReader<SpawnKind>,
     (mut auto_done, mut next): (Local<bool>, Local<usize>),
 ) {
+    let asked = asked.read().last().map(|k| k.0).filter(|&k| k < book.kinds.len());
     let held = |a, b| keys.pressed(a) || keys.pressed(b);
     let combo = held(KeyCode::ControlLeft, KeyCode::ControlRight) || held(KeyCode::SuperLeft, KeyCode::SuperRight);
-    let pressed = combo && held(KeyCode::ShiftLeft, KeyCode::ShiftRight) && keys.just_pressed(KeyCode::KeyN);
+    let pressed = asked.is_some() || (combo && held(KeyCode::ShiftLeft, KeyCode::ShiftRight) && keys.just_pressed(KeyCode::KeyN));
     // `BLOCKGAME_NPC=3` spawns one that many blocks ahead once the world is in (screenshots).
     let auto = if *auto_done || !player.ready { None } else { std::env::var("BLOCKGAME_NPC").ok() };
     if (!pressed && auto.is_none()) || talk.active() || book.kinds.is_empty() {
@@ -198,14 +206,16 @@ fn spawn_key(
         None if auto.is_some() => return,
         None => at,
     };
-    *auto_done = true;
+    if asked.is_none() {
+        *auto_done = true;
+    }
     // `BLOCKGAME_NPC_KIND=gilm` picks the kind for `BLOCKGAME_NPC` (by name, any case).
     let named = auto.is_some().then(|| std::env::var("BLOCKGAME_NPC_KIND").ok()).flatten().and_then(|want| {
         let want = want.to_lowercase();
         book.kinds.iter().position(|k| k.name.to_lowercase().contains(&want) || k.dialogue == want)
     });
-    let kind = named.unwrap_or(*next % book.kinds.len());
-    if named.is_none() {
+    let kind = asked.or(named).unwrap_or(*next % book.kinds.len());
+    if asked.is_none() && named.is_none() {
         *next = (*next + 1) % book.kinds.len();
     }
     let mut npc = Npc::new(kind, yaw_of(-fwd));
