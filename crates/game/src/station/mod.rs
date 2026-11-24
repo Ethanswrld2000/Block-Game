@@ -24,6 +24,7 @@ pub mod board;
 mod book;
 mod float;
 mod forge;
+pub mod grab;
 pub mod particles;
 mod dev;
 pub mod golem;
@@ -64,6 +65,7 @@ impl Plugin for StationPlugin {
             .init_resource::<StationAim>()
             .init_resource::<board::AtBench>()
             .init_resource::<tree::TreeUi>()
+            .init_resource::<grab::Grab>()
             .init_resource::<dev::DevMenu>()
             .init_resource::<telescope::Scope>()
             .init_resource::<arrange::Arrange>()
@@ -72,6 +74,7 @@ impl Plugin for StationPlugin {
             .add_message::<board::Cooked>()
             .add_message::<board::Crafted>()
             .add_plugins(MaterialPlugin::<forge::GlintMaterial>::default())
+            .add_plugins(MaterialPlugin::<grab::MouthMaterial>::default())
             .add_plugins(bevy::ui_render::UiMaterialPlugin::<tree::UrnVoid>::default())
             .add_systems(
                 crate::menu::GameStartup,
@@ -99,6 +102,7 @@ impl Plugin for StationPlugin {
                     aim,
                     place_urn,
                     use_station,
+                    grab::grab_update,
                     steps_done,
                     sync_learned,
                     skin::slice_station_art,
@@ -108,6 +112,7 @@ impl Plugin for StationPlugin {
                     tree::tree_click,
                     tree::tree_build,
                     tree::tree_animate,
+                    grab::mouth_look,
                     dev::dev_keys,
                     dev::dev_click,
                     dev::dev_build,
@@ -669,6 +674,7 @@ fn place_stations(
     existing: Query<Entity, With<StationModels>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut mouths: ResMut<Assets<grab::MouthMaterial>>,
     art: Option<Res<skin::StationArt>>,
     mut last: Local<String>,
 ) {
@@ -705,6 +711,11 @@ fn place_stations(
                 let key = [p.size.x.to_bits(), p.size.y.to_bits(), p.size.z.to_bits()];
                 let mesh = cubes.entry(key).or_insert_with(|| meshes.add(skin::box_mesh(p.size))).clone();
                 c.spawn((Mesh3d(mesh), MeshMaterial3d(mat), Transform::from_translation(p.at).with_rotation(Quat::from_rotation_z(p.tilt)), NotShadowCaster));
+            }
+            // The urn's mouth shows the dark its tree opens from (`grab`).
+            if st.kind == StationKind::Urn {
+                let quad = meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(grab::MOUTH_HALF)));
+                c.spawn((grab::Mouth, Mesh3d(quad), MeshMaterial3d(mouths.add(grab::mouth_material(color))), Transform::from_xyz(0.0, grab::MOUTH_Y, 0.0), NotShadowCaster));
             }
             // The bench's tool is its own thing, so it can be lifted or turned (`board`).
             if let Some(tool) = models::tool(st.kind) {
@@ -823,7 +834,7 @@ fn use_station(
     (mut menus, mut at_bench, mode, player): (ResMut<Menus>, ResMut<board::AtBench>, Res<crate::player::MoveMode>, Res<crate::player::Player>),
     (aimed, target, cam): (Res<StationAim>, Res<crate::interact::Target>, Single<&Transform, With<FlyCamera>>),
     (book, wielded, items): (Option<Res<UrnBook>>, Res<Wielded>, Res<Items>),
-    (mut inv, mut chests, mut urns, mut tree): (ResMut<Inventory>, ResMut<Chests>, ResMut<Urns>, ResMut<tree::TreeUi>),
+    (mut inv, mut chests, mut urns, mut grab): (ResMut<Inventory>, ResMut<Chests>, ResMut<Urns>, ResMut<grab::Grab>),
     (mut toast, mut done, mut open_chest, mut spill): (MessageWriter<Toast>, MessageWriter<StepDone>, MessageWriter<crate::interact::OpenChest>, MessageWriter<Spill>),
     (mut scope, mut golem, clock, conditions): (ResMut<telescope::Scope>, ResMut<golem::Golem>, Res<crate::clock::WorldClock>, Res<crate::weather::Conditions>),
 ) {
@@ -856,11 +867,10 @@ fn use_station(
                     toast.write(Toast(format!("Picked up the {}", def.title)));
                     return;
                 }
-                tree.open = Some(st.urn);
-                // Look into its mouth.
-                tree.at = Some(st.pos + Vec3::Y * 0.9);
-                tree.dirty = true;
+                // Take hold of it and lean in; the tree opens from its mouth (`grab`).
+                grab.start(st.urn, st.pos, cam.translation);
                 menus.open = true;
+                menus.still = true;
                 return;
             };
             let name = items.get(item).name.clone();

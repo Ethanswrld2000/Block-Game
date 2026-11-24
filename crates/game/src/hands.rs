@@ -221,6 +221,7 @@ pub(crate) fn pose_hands(
     items: Res<Items>,
     view: Res<crate::camera::View>,
     guard: Res<crate::combat::Guard>,
+    grab: Res<crate::station::grab::Grab>,
     mut frozen: Local<Option<Option<f32>>>,
     mut roots: Query<(&HandRoot, &mut Transform, &mut Visibility)>,
 ) {
@@ -230,7 +231,9 @@ pub(crate) fn pose_hands(
         let hand = root.0;
         // In third person your body holds things instead; the left arm only
         // comes up while it holds something.
-        let shown = !view.pulled && (hand == Hand::Right || off.0.is_some());
+        // Both come up to hold an urn (`station::grab`).
+        let held = grab.blend();
+        let shown = !view.pulled && (hand == Hand::Right || off.0.is_some() || held > 0.001);
         let want = if shown { Visibility::Inherited } else { Visibility::Hidden };
         if *vis != want {
             *vis = want;
@@ -277,5 +280,13 @@ pub(crate) fn pose_hands(
         let lag_rot = Quat::from_rotation_y(ly) * Quat::from_rotation_x(lp) * Quat::from_rotation_z(-ly * 0.6);
         tf.translation = base_position(hand) + sway + to_mouth + Vec3::Y * (lift + drop) + swing_pos * mirror + sprint_pos + lag_pos;
         tf.rotation = lag_rot * drop_rot * sprint_rot * swing_rot * Quat::from_rotation_x(0.5 * e) * Quat::from_rotation_y(side * 0.5 * e);
+        // Holding an urn by its shoulders: the hands go to its sides, the
+        // arms angled out and the fists turned in against the clay.
+        if held > 0.001 {
+            let grip = grab.grips[if hand == Hand::Right { 0 } else { 1 }];
+            let hold = Quat::from_rotation_y(side * 0.45) * Quat::from_rotation_z(side * 0.5) * Quat::from_rotation_x(-0.2);
+            tf.translation = tf.translation.lerp(grip, held);
+            tf.rotation = tf.rotation.slerp(hold, held);
+        }
     }
 }
