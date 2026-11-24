@@ -13,6 +13,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
 | `crates/game` | The Bevy client; one plugin per system | Gameplay state separate from rendering, so multiplayer can come later. |
 | `assets/textures/blocks.png` | 16x16 grid of 32x32 tiles | Placeholder art; Ethan repaints it. Keep tile positions stable. |
 | `assets/textures/blocks.ron` | Tile name -> index, plus `variants` (extra versions per tile, `turn` = random quarter turn) | Regenerate with `python3 tools/gen_placeholder_art.py` (overwrites the PNG; `--only <tiles>` adds tiles without touching the rest). Core ground/wood/leaf tiles are drawn in `tools/drawn_tiles.py` (shapes, hue-shifted palettes, top-left light). |
+| `assets/textures/stations.png` | One 32x32 tile per station material (`stations.ron`: name -> index) | Ethan repaints it; tiles must repeat seamlessly; `urn` is grey (tinted per urn). `tools/gen_station_art.py` overwrites it. |
 | `assets/textures/ui.png` | UI sprite sheet, 2x pixels | Ethan repaints it; `ui.ron` lists each sprite's rect and slice. `tools/gen_ui_art.py` overwrites it. |
 | `assets/textures/icons/` | Item sprites: `items`, `weapons` (tools), `blocks` (.png + .ron) | 20 px per inventory cell; Ethan repaints them. `tools/gen_item_art.py` only adds missing sprites (`--reset <sheet>` redraws). |
 | `assets/fonts/` | Jersey 15 (OFL) | Compiled in; swap the `.ttf` files to change the font. |
@@ -550,6 +551,10 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   wheel if allowed) turn the page: the leaf folds over the spine (`turn_leaves`). `book::paginate` splits entries into
   pages by size. Used by the bench recipe book (`station::book`, one page) and the journal (J, a spread).
   Screenshots: `BLOCKGAME_BOOKTURN=0.5` turns the first open book and holds the leaf there; `BLOCKGAME_JOURNAL=all` shows every clue.
+- Station textures: `station::skin`. Each `models::Mat` with a tile (`Mat::tile_name`) gets its tile from `stations.png`, cut into
+  one repeating texture per material once loaded; boxes are meshed by `skin::box_mesh` with world-scale UVs (one tile per block,
+  `TILES_PER_BLOCK`), so the pixel size matches the terrain whatever the box size. Glowing and liquid materials stay flat.
+  Used by `place_stations` and the golem.
 - Next: see `docs/GAMEPLAY_LOOP.md`.
 
 ## Testing without a screen

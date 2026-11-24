@@ -27,6 +27,7 @@ pub mod particles;
 mod dev;
 pub mod golem;
 pub mod models;
+pub mod skin;
 pub mod telescope;
 mod tree;
 pub mod urns;
@@ -51,7 +52,7 @@ use crate::survival::camp::Camp;
 use crate::survival::Toast;
 use crate::theme::{colors, sizes, Theme};
 use crate::world::World;
-use models::{Mat, MARKS};
+use models::MARKS;
 use urns::{Gives, Progress, UrnData};
 
 pub struct StationPlugin;
@@ -85,6 +86,7 @@ impl Plugin for StationPlugin {
                     telescope::spawn_scope_ui,
                     dev::spawn_dev_ui,
                     particles::setup_pixels,
+                    skin::load_station_art,
                 )
                     .chain(),
             )
@@ -96,6 +98,7 @@ impl Plugin for StationPlugin {
                     use_station,
                     steps_done,
                     sync_learned,
+                    skin::slice_station_art,
                     place_stations,
                     show_label,
                     tree::tree_keys,
@@ -599,13 +602,15 @@ fn place_stations(
     existing: Query<Entity, With<StationModels>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    art: Option<Res<skin::StationArt>>,
     mut last: Local<String>,
 ) {
     let Some(book) = book else { return };
     let stations = layout(&camp, &world, &blocks, &urns, &book.0);
     let lit: Vec<u32> = book.0.urns.iter().map(|u| (urns.of(&u.name).next_fill(u) * MARKS as f32).floor() as u32).collect();
     // Rebuild when anything moved (the ground under a spot can still be loading) or a mark lit.
-    let key = format!("{:?}{lit:?}{:?}", stations.iter().map(|s| (s.kind, (s.pos * 4.0).round().as_ivec3(), s.turned)).collect::<Vec<_>>(), urns.progress);
+    let ready = art.as_ref().is_some_and(|a| a.ready());
+    let key = format!("{ready}{:?}{lit:?}{:?}", stations.iter().map(|s| (s.kind, (s.pos * 4.0).round().as_ivec3(), s.turned)).collect::<Vec<_>>(), urns.progress);
     if *last == key {
         return;
     }
@@ -622,28 +627,7 @@ fn place_stations(
         let parts = models::parts(st.kind, &has, lit[st.urn]);
         commands.spawn((StationModels, st, Transform::from_translation(st.pos).with_rotation(rot), Visibility::default())).with_children(|c| {
             let mut mat_for = |materials: &mut Assets<StandardMaterial>, p: models::Part| {
-                cache
-                    .entry((st.urn, p.mat as u8))
-                    .or_insert_with(|| {
-                        let (base, glow) = p.mat.look(color);
-                        let lin = base.to_linear();
-                        let alpha = p.mat.alpha();
-                        materials.add(StandardMaterial {
-                            base_color: base.with_alpha(alpha.unwrap_or(1.0)),
-                            emissive: LinearRgba::rgb(lin.red * glow, lin.green * glow, lin.blue * glow),
-                            perceptual_roughness: if alpha.is_some() {
-                                0.08
-                            } else if matches!(p.mat, Mat::Steel | Mat::Brass | Mat::Iron) {
-                                0.5
-                            } else {
-                                0.95
-                            },
-                            reflectance: if alpha.is_some() { 0.6 } else { 0.5 },
-                            alpha_mode: if alpha.is_some() { AlphaMode::Blend } else { AlphaMode::Opaque },
-                            ..default()
-                        })
-                    })
-                    .clone()
+                cache.entry((st.urn, p.mat as u8)).or_insert_with(|| materials.add(skin::material(p.mat, color, art.as_deref()))).clone()
             };
             // Fire, crystals and glowing marks light what's round the station.
             if let Some((at, color, lumens)) = models::glow_light(&parts, color) {
@@ -652,7 +636,7 @@ fn place_stations(
             for p in parts {
                 let mat = mat_for(&mut materials, p);
                 let key = [p.size.x.to_bits(), p.size.y.to_bits(), p.size.z.to_bits()];
-                let mesh = cubes.entry(key).or_insert_with(|| meshes.add(Cuboid::new(p.size.x, p.size.y, p.size.z))).clone();
+                let mesh = cubes.entry(key).or_insert_with(|| meshes.add(skin::box_mesh(p.size))).clone();
                 c.spawn((Mesh3d(mesh), MeshMaterial3d(mat), Transform::from_translation(p.at).with_rotation(Quat::from_rotation_z(p.tilt)), NotShadowCaster));
             }
             // The bench's tool is its own thing, so it can be lifted or turned (`board`).
@@ -661,7 +645,7 @@ fn place_stations(
                     for p in tool.parts {
                         let mat = mat_for(&mut materials, p);
                         let key = [p.size.x.to_bits(), p.size.y.to_bits(), p.size.z.to_bits()];
-                        let mesh = cubes.entry(key).or_insert_with(|| meshes.add(Cuboid::new(p.size.x, p.size.y, p.size.z))).clone();
+                        let mesh = cubes.entry(key).or_insert_with(|| meshes.add(skin::box_mesh(p.size))).clone();
                         t.spawn((Mesh3d(mesh), MeshMaterial3d(mat), Transform::from_translation(p.at).with_rotation(Quat::from_rotation_z(p.tilt)), NotShadowCaster));
                     }
                 });
