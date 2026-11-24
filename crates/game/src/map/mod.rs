@@ -64,6 +64,9 @@ pub struct Waypoints {
     pub list: Vec<Waypoint>,
     /// Numbers the next waypoint's name.
     pub next: u32,
+    /// Where the guide points (nearest sticks, stones...): not saved, worked out again.
+    #[serde(skip)]
+    pub guide: Vec<Waypoint>,
 }
 
 impl Waypoints {
@@ -354,7 +357,7 @@ fn strip(
     root: Single<(Entity, &mut Visibility), With<Strip>>,
 ) {
     let (root, mut vis) = root.into_inner();
-    let want = if menus.open || view.open || waypoints.list.is_empty() { Visibility::Hidden } else { Visibility::Inherited };
+    let want = if menus.open || view.open || (waypoints.list.is_empty() && waypoints.guide.is_empty()) { Visibility::Hidden } else { Visibility::Inherited };
     if *vis != want {
         *vis = want;
     }
@@ -366,7 +369,9 @@ fn strip(
     *wait = 0.1;
     commands.entity(root).despawn_related::<Children>();
     commands.entity(root).with_children(|s| {
-        for w in &waypoints.list {
+        let gold = Color::srgb(1.0, 0.82, 0.25);
+        let guide = Color::srgb(0.45, 0.9, 1.0);
+        for (w, color) in waypoints.list.iter().map(|w| (w, gold)).chain(waypoints.guide.iter().map(|w| (w, guide))) {
             let to = Vec3::from_array(w.pos);
             let a = bearing(player.pos, cam.yaw, to);
             if a.abs() > STRIP_ANGLE {
@@ -383,7 +388,7 @@ fn strip(
                 ..default()
             })
             .with_children(|m| {
-                m.spawn((Node { width: Val::Px(8.0), height: Val::Px(8.0), border: UiRect::all(Val::Px(1.0)), ..default() }, BackgroundColor(Color::srgb(1.0, 0.82, 0.25)), BorderColor::all(Color::BLACK)));
+                m.spawn((Node { width: Val::Px(8.0), height: Val::Px(8.0), border: UiRect::all(Val::Px(1.0)), ..default() }, BackgroundColor(color), BorderColor::all(Color::BLACK)));
                 m.spawn(text(format!("{} {:.0}m", w.name, d), sizes::SMALL, colors::TEXT));
             });
         }

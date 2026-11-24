@@ -761,7 +761,7 @@ pub fn room_at(world: &World, blocks: &Blocks, at: BlockPos) -> Result<Room, Not
 }
 
 /// Right click the ground with an urn in hand: set it down there, if it
-/// stands in a closed room that has no other urn.
+/// stands in a closed room with a door and a torch, and no other urn.
 #[allow(clippy::too_many_arguments)]
 fn place_urn(
     mouse: Res<ButtonInput<MouseButton>>,
@@ -805,6 +805,12 @@ fn place_urn(
             return;
         }
     };
+    // ...and a proper home: a door in its walls and a torch inside.
+    let missing = crate::guide::home_missing(&room, &world, &blocks);
+    if !missing.is_empty() {
+        toast.write(Toast(format!("The {} needs a proper home: this room still needs {}", def.title, missing.join(" and "))));
+        return;
+    }
     let me = book.0.urns.iter().position(|u| u.name == def.name);
     let taken = layout(&camp, &world, &blocks, &urns, &book.0)
         .into_iter()

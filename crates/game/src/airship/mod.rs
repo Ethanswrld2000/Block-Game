@@ -29,7 +29,8 @@ use crate::player::{Body, MoveMode, Player};
 use crate::save::SaveDir;
 use crate::survival::Toast;
 use crate::world::World;
-use flight::{Controls, Machines, Ship, HALF, HEIGHT, HELM};
+use flight::{Controls, Machines, Ship, HALF, HEIGHT};
+pub use flight::HELM;
 
 pub struct AirshipPlugin;
 
@@ -433,7 +434,7 @@ struct ShipModel(usize);
 
 /// The propeller at the stern, spun by the engine.
 #[derive(Component)]
-struct Propeller;
+pub struct Propeller;
 
 /// Keep a model on every ship, where the ship is, its propeller turning.
 #[allow(clippy::too_many_arguments)]
@@ -452,7 +453,9 @@ fn draw_ships(
             commands.entity(e).despawn();
         }
         for (i, s) in ships.ships.iter().enumerate() {
-            spawn_model(&mut commands, &mut meshes, &mut materials, i, s);
+            let tf = Transform::from_translation(s.pos).with_rotation(s.rotation());
+            let e = build_model(&mut commands, &mut meshes, &mut materials, tf);
+            commands.entity(e).insert(ShipModel(i));
         }
         return;
     }
@@ -473,8 +476,9 @@ fn draw_ships(
     }
 }
 
-/// The ship's boxes, in its own frame (bow toward -z, keel bottom at y 0).
-fn spawn_model(commands: &mut Commands, meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, i: usize, s: &Ship) {
+/// The ship's boxes, in its own frame (bow toward -z, keel bottom at y 0). Also used
+/// for the cutscene airship (`cutscene::props`).
+pub fn build_model(commands: &mut Commands, meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, tf: Transform) -> Entity {
     let mut mat = |r: f32, g: f32, b: f32, metal: bool| {
         materials.add(StandardMaterial {
             base_color: Color::srgb(r, g, b),
@@ -525,8 +529,9 @@ fn spawn_model(commands: &mut Commands, meshes: &mut Assets<Mesh>, materials: &m
     ];
     let blade = meshes.add(Cuboid::new(1.5, 0.16, 0.05));
     let cross = meshes.add(Cuboid::new(0.16, 1.5, 0.05));
-    let tf = Transform::from_translation(s.pos).with_rotation(s.rotation());
-    commands.spawn((ShipModel(i), tf, Visibility::default())).with_children(|c| {
+    commands
+        .spawn((tf, Visibility::default()))
+        .with_children(|c| {
         for (size, at, m) in parts {
             c.spawn((Mesh3d(meshes.add(Cuboid::new(size.x, size.y, size.z))), MeshMaterial3d(m), Transform::from_translation(at)));
         }
@@ -534,7 +539,8 @@ fn spawn_model(commands: &mut Commands, meshes: &mut Assets<Mesh>, materials: &m
             p.spawn((Mesh3d(blade), MeshMaterial3d(wood.clone()), Transform::default(), NotShadowCaster));
             p.spawn((Mesh3d(cross), MeshMaterial3d(wood.clone()), Transform::default(), NotShadowCaster));
         });
-    });
+        })
+        .id()
 }
 
 #[cfg(test)]

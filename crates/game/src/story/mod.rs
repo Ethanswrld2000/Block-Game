@@ -170,6 +170,25 @@ pub fn prison_spot(floor: &worldgen::Floor, boss_room: bool) -> Option<[f32; 3]>
 
 // ---- The journal ----
 
+/// The guide's journal entries (title, text): each step done ("(done)", no text), then
+/// the one under way. Empty until the guide starts.
+pub fn guide_entries(data: &crate::guide::rules::GuideData, flags: &BTreeSet<String>) -> Vec<(String, String)> {
+    use crate::guide::rules;
+    if !flags.contains(rules::ON) {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for s in &data.steps {
+        if flags.contains(&rules::flag(&s.id)) {
+            out.push((format!("{} (done)", s.title), String::new()));
+        } else {
+            out.push((s.title.clone(), s.text.clone()));
+            break;
+        }
+    }
+    out
+}
+
 /// J opens the journal: the clues found so far, in a `crate::book` you page through.
 #[derive(Resource, Default)]
 pub struct Journal {
@@ -221,6 +240,7 @@ fn journal(
     mut books: Query<&mut Book>,
     mut cursor: Single<&mut CursorOptions, With<PrimaryWindow>>,
     mut forced: Local<bool>,
+    guide: Res<crate::guide::GuideBook>,
 ) {
     let combo = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight, KeyCode::SuperLeft, KeyCode::SuperRight]);
     let auto = !*forced && std::env::var_os("BLOCKGAME_JOURNAL").is_some();
@@ -249,13 +269,18 @@ fn journal(
     // The clues, split into pages by how much they say.
     // `BLOCKGAME_JOURNAL=all` shows every clue (screenshots).
     let all: Vec<String> = if std::env::var("BLOCKGAME_JOURNAL").is_ok_and(|v| v == "all") { data.0.clues.keys().cloned().collect() } else { story.clues.clone() };
-    let clues: Vec<(String, String)> = all.iter().map(|id| data.0.clues.get(id).map_or((id.clone(), String::new()), |c| (c.title.clone(), c.text.clone()))).collect();
+    let mut clues: Vec<(String, String)> = all.iter().map(|id| data.0.clues.get(id).map_or((id.clone(), String::new()), |c| (c.title.clone(), c.text.clone()))).collect();
+    // The guide's steps come first: the ones done, ticked off, then the one under way.
+    let guide_steps = guide_entries(&guide.0, &story.flags);
+    let progress = guide_steps.len();
+    clues.splice(0..0, guide_steps);
     let costs: Vec<usize> = clues.iter().map(|(t, b)| 80 + t.len() + b.len()).collect();
     let pages = crate::book::paginate(&costs, JOURNAL_PAGE);
     book.set_pages(pages.len().max(1));
-    if j.shown != all.len() {
-        // Newly opened or a clue was found: open at the last page written.
-        j.shown = all.len();
+    let written = all.len() + progress * 1000;
+    if j.shown != written {
+        // Newly opened, a clue found or a step done: open at the last page written.
+        j.shown = written;
         book.open_at(usize::MAX);
         book.refill();
     }
@@ -345,6 +370,21 @@ mod tests {
         for b in ["burnt_stem", "burnt_cap", "grave"] {
             assert!(blocks.contains(&format!("name: \"{b}\"")), "no block {b}");
         }
+    }
+
+    #[test]
+    fn the_journal_walks_through_the_guide_one_step_at_a_time() {
+        let data = crate::guide::rules::load(include_str!("../../../../assets/data/guide.ron")).unwrap();
+        let mut flags = BTreeSet::new();
+        assert!(guide_entries(&data, &flags).is_empty(), "nothing before the opening");
+        flags.insert("guide_on".to_string());
+        let e = guide_entries(&data, &flags);
+        assert_eq!(e.len(), 1);
+        assert_eq!(e[0].0, data.steps[0].title);
+        flags.insert(crate::guide::rules::flag(&data.steps[0].id));
+        let e = guide_entries(&data, &flags);
+        assert_eq!(e.len(), 2);
+        assert!(e[0].0.ends_with("(done)") && e[1].0 == data.steps[1].title && !e[1].1.is_empty());
     }
 
     #[test]
