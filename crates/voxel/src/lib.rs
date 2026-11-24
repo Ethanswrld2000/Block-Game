@@ -6,6 +6,7 @@
 pub mod block;
 pub mod chunk;
 pub mod coords;
+pub mod light;
 pub mod mesher;
 pub mod raycast;
 pub mod room;

@@ -113,8 +113,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   guides in `assets/textures/creatures/guides/`. No skin or missing PNG = flat `color`s. Hurt tints
   the skin red; spirits blend the PNG's alpha. `--features dev` hot-reloads PNGs (`bevy/file_watcher`).
   A PNG may be painted at 2x/4x as long as its shape matches (tested).
-- Known gaps: vertices are 40 bytes, not the packed 8-byte format (performance pass); no snow cover yet; no block light propagation (torches are real point lights; only the `torches::MAX_LIGHTS` (24) placed fires nearest the
-  camera shine, the furthest few fade, `share_lights`); Wild creatures find
+- Known gaps: vertices are 40 bytes, not the packed 8-byte format (performance pass); no snow cover yet; Wild creatures find
   their way with `combat::path` (`creatures::steer`) when chasing or wandering; boxes named `leg_*` swing in diagonal
   pairs and `tail*` sways as they walk (`creatures::limb_swing`, driven by `Creature.stride`).
 - Phase 10 (UI overhaul): done. `game::theme`: UI sprite sheet `assets/textures/ui.png` + `ui.ron`
@@ -519,6 +518,20 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   (`WorldGen::island_chest`), filled from loot.ron `sky_island` the first time it's opened.
 - The Tab crafting list is empty (recipes.ron kept for later): cordage, torches and ember herbs are made on the camp mat;
   the Crafting side tab hides while the list is empty.
+- Lighting: block-based (`voxel::light`, pure). Per chunk at mesh time, over the chunk plus 16 blocks each side
+  (its 26 neighbours) and the `world::SKY_REACH` (3) chunks above them: sky light (15 straight down open columns,
+  then spreading sideways and down, one level per step) and block light (`light` in blocks.ron: torch 14, campfire
+  15). Opaque blocks and shut doors stop it (`BlockRegistry::light_tables`). `voxel::mesher::mesh_lit` bakes smooth
+  corner light into `Quad.light` (faces merge only where it matches); `chunk_mesh` puts it in the vertex colour
+  (r sky, g torch). `voxel.wesl`: sun and sky (ambient) scale with the sky level, Bevy point lights (held torch,
+  Light spell) are kept apart (`point_lights`) so they still shine underground, torch light is added warm, and fog
+  in sealed places goes dark (`apply_atmosphere_lit`). Edits remesh the chunks whose light changes
+  (`World::set_block`). Placed torches have no point lights any more; they get a textured stick, a stacked flickering
+  flame and fire particles (flame licks, embers, smoke; `torches::spawn_fire_particles`). Bodies built with
+  `npc::body::build` (NPCs, foes, your third-person body; not ghosts or the inventory picture, `Rig.follows_light`) take
+  the light at their head (`World::light_at`, from each chunk's half-resolution `Light::coarse` kept after meshing):
+  `body::match_light` dims their colours and shine by the sky level and adds warm torch glow, eased. Creatures and the
+  first-person arm still use Bevy's lights only.
 - Block textures: the terrain texture array has mipmaps (`blocks::mip_chain`: linear-light averages, cut-out tiles keep their
   coverage); `voxel.wesl` samples with `textureSampleGrad` from the unbroken quad UVs so levels don't jump at block edges, and
   picks a version and turn per block from `variants` in blocks.ron (`voxel::tiles::variant_table`, uniform 106). Variant tiles

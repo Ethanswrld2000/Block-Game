@@ -5,10 +5,15 @@
 //! UV_1.y carries two things for the shader: the season tint strength (0, 0.5
 //! or 1) plus `2 * k`, where `k / SWAY_STEPS` is how far the vertex sways in
 //! the wind (`voxel_vertex.wesl` splits them apart again).
+//!
+//! The vertex colour carries the baked light (`voxel::light`): red = sky
+//! light, green = block (torch) light, both 0..1. `voxel.wesl` turns them
+//! into brightness.
 
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
+use voxel::light::Light;
 use voxel::{BlockRegistry, PaddedChunk, Quad};
 
 /// The meshes for one chunk. Either may be missing if nothing of that kind is visible.
@@ -18,6 +23,8 @@ pub struct ChunkMeshes {
     pub translucent: Option<Mesh>,
     /// Grass, reeds and the like: drawn with the opaque material, but cast no shadow.
     pub plants: Option<Mesh>,
+    /// The chunk's light at half resolution (`voxel::light::Light::coarse`), for lighting NPCs.
+    pub light: Option<Vec<u8>>,
 }
 
 impl ChunkMeshes {
@@ -32,6 +39,7 @@ struct Buffers {
     nor: Vec<[f32; 3]>,
     uv: Vec<[f32; 2]>,
     layer: Vec<[f32; 2]>,
+    light: Vec<[f32; 4]>,
     idx: Vec<u32>,
 }
 
@@ -43,6 +51,7 @@ impl Buffers {
                 .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, self.nor)
                 .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, self.uv)
                 .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, self.layer)
+                .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, self.light)
                 .with_inserted_indices(Indices::U32(self.idx))
         })
     }
@@ -65,11 +74,23 @@ pub fn unpack_tint_sway(packed: f32) -> (f32, f32) {
     (packed - 2.0 * k, k / SWAY_STEPS)
 }
 
+/// Vertex colour for light in quarter levels (sky, block), as the mesher gives it.
+fn light_color(l: [u8; 2]) -> [f32; 4] {
+    let full = (voxel::light::MAX * 4) as f32;
+    [l[0] as f32 / full, l[1] as f32 / full, 0.0, 1.0]
+}
+
+/// Vertex colour for a whole cell's light (plants, details, furniture).
+fn cell_color(light: &Light, x: usize, y: usize, z: usize) -> [f32; 4] {
+    let (s, b) = light.padded(x, y, z);
+    light_color([s * 4, b * 4])
+}
+
 /// Mesh a padded chunk. Position, normal, UV (0..size, repeated per block in
 /// the shader), UV_1.x = texture layer plus corner shading (see [`pack_layer`]),
-/// UV_1.y = season tint and sway (see [`pack_tint_sway`]).
-pub fn build(chunk: &PaddedChunk, registry: &BlockRegistry, opaque: &[bool]) -> ChunkMeshes {
-    let quads = voxel::mesher::mesh(chunk, opaque);
+/// UV_1.y = season tint and sway (see [`pack_tint_sway`]), colour = light.
+pub fn build(chunk: &PaddedChunk, light: &Light, registry: &BlockRegistry, opaque: &[bool]) -> ChunkMeshes {
+    let quads = voxel::mesher::mesh_lit(chunk, opaque, Some(light));
     let (mut solid, mut clear) = (Buffers::default(), Buffers::default());
     for q in &quads {
         // Torches and other shaped blocks are drawn as their own models.
@@ -80,13 +101,13 @@ pub fn build(chunk: &PaddedChunk, registry: &BlockRegistry, opaque: &[bool]) -> 
         push_quad(q, registry, b);
     }
     let mut plants = Buffers::default();
-    push_plants(chunk, registry, &mut plants);
-    ChunkMeshes { opaque: solid.into_mesh(), translucent: clear.into_mesh(), plants: plants.into_mesh() }
+    push_plants(chunk, light, registry, &mut plants);
+    ChunkMeshes { opaque: solid.into_mesh(), translucent: clear.into_mesh(), plants: plants.into_mesh(), light: Some(light.coarse()) }
 }
 
 /// Two crossed quads per plant block, each drawn from both sides. Normals
 /// point up so a tuft is lit like the ground it stands on. The top edge sways.
-fn push_plants(chunk: &PaddedChunk, registry: &BlockRegistry, b: &mut Buffers) {
+fn push_plants(chunk: &PaddedChunk, light: &Light, registry: &BlockRegistry, b: &mut Buffers) {
     let n = voxel::CHUNK_SIZE;
     for y in 1..=n {
         for z in 1..=n {
@@ -97,10 +118,15 @@ fn push_plants(chunk: &PaddedChunk, registry: &BlockRegistry, b: &mut Buffers) {
                 }
                 let def = registry.get(id);
                 let cell = [(x - 1) as f32, (y - 1) as f32, (z - 1) as f32];
+                let lit = cell_color(light, x, y, z);
+                let before = b.pos.len();
+                // Whatever this cell adds is lit by the cell's own light.
+                let fill = |b: &mut Buffers| b.light.resize(b.pos.len().max(before), lit);
                 match def.shape {
                     voxel::Shape::Plant => {}
                     voxel::Shape::Vine | voxel::Shape::Twig | voxel::Shape::Pebble => {
                         push_detail(def, cell, [x as u32, y as u32, z as u32], b);
+                        fill(b);
                         continue;
                     }
                     voxel::Shape::Model => {
@@ -114,6 +140,7 @@ fn push_plants(chunk: &PaddedChunk, registry: &BlockRegistry, b: &mut Buffers) {
                                 push_box(b, cell, lo, hi, def.textures[voxel::Face::PosX as usize] as f32, 0.0);
                             }
                         }
+                        fill(b);
                         continue;
                     }
                     _ => continue,
@@ -144,6 +171,7 @@ fn push_plants(chunk: &PaddedChunk, registry: &BlockRegistry, b: &mut Buffers) {
                     b.idx.extend_from_slice(&[start, start + 1, start + 2, start, start + 2, start + 3]);
                     b.idx.extend_from_slice(&[start, start + 2, start + 1, start, start + 3, start + 2]);
                 }
+                fill(b);
             }
         }
     }
@@ -337,6 +365,7 @@ fn push_quad(q: &Quad, registry: &BlockRegistry, b: &mut Buffers) {
     };
     // Corner shading in `corners` order; none on water and ice.
     let ao = if def.translucent { [0; 4] } else { [q.ao[0], q.ao[1], q.ao[3], q.ao[2]] };
+    let lit = [q.light[0], q.light[1], q.light[3], q.light[2]];
     // Leaves (see-through foliage) rustle a little.
     let sway = if def.foliage && !def.opaque { LEAF_SWAY } else { 0.0 };
     let start = b.pos.len() as u32;
@@ -354,6 +383,7 @@ fn push_quad(q: &Quad, registry: &BlockRegistry, b: &mut Buffers) {
             _ => [c[0], -c[1]],
         });
         b.layer.push([pack_layer(tex, ao[i]), pack_tint_sway(foliage, sway)]);
+        b.light.push(light_color(lit[i]));
     }
     // u x v points along +axis for x and z faces, and along -axis for y faces.
     let flip = (axis == 1) == q.face.is_positive();

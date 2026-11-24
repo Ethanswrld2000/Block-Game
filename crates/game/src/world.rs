@@ -87,6 +87,8 @@ struct LoadedChunk {
     drawn: bool,
     /// Edited by the player since it was last saved.
     modified: bool,
+    /// Light from its last mesh (`ChunkMeshes::light`), for lighting NPCs.
+    light: Option<Vec<u8>>,
 }
 
 type MeshResult = (ChunkPos, u32, ChunkMeshes);
@@ -105,6 +107,8 @@ pub struct World {
     y_range: (i32, i32),
     /// Per block id: drawn as its own model (torches), not in the chunk mesh.
     shaped: Arc<Vec<bool>>,
+    /// Per block id: stops light (`voxel::light`).
+    stops_light: Arc<Vec<bool>>,
     /// Shaped blocks that appeared or went away, for the systems that draw them.
     pub shape_events: Vec<ShapeEvent>,
 }
@@ -130,6 +134,14 @@ pub struct WorldStats {
 impl World {
     pub fn is_loaded(&self, c: ChunkPos) -> bool {
         self.chunks.contains_key(&c)
+    }
+
+    /// (sky, block) light at `p`, 0..=15, from its chunk's last mesh. Full sky
+    /// where a loaded chunk has no light worked out (open air chunks); `None` if not loaded.
+    pub fn light_at(&self, p: BlockPos) -> Option<(u8, u8)> {
+        let c = self.chunks.get(&p.chunk())?;
+        let [x, y, z] = p.local();
+        Some(c.light.as_deref().map_or((voxel::light::MAX, 0), |l| voxel::light::coarse_at(l, x, y, z)))
     }
 
     pub fn block(&self, p: BlockPos) -> Option<BlockId> {
@@ -169,6 +181,23 @@ impl World {
             }
             touched.push(ChunkPos::new(cp.x + d[0], cp.y + d[1], cp.z + d[2]));
         }
+        // Light reaches 15 blocks: the neighbours on the near side of each
+        // axis; and if the block opened or shut a way for the sky, the chunks below too.
+        let stops = |b: BlockId| self.stops_light.get(b.0 as usize).copied().unwrap_or(false);
+        let sky = stops(old) != stops(block);
+        let near = |l: usize| -> (i32, i32) {
+            if l < voxel::light::MARGIN { (-1, 0) } else { (0, 1) }
+        };
+        let ((x0, x1), (z0, z1)) = (near(x), near(z));
+        let (y0, y1) = near(y);
+        let y0 = if sky { -1 - SKY_REACH } else { y0 };
+        for dy in y0..=y1 {
+            for dz in z0..=z1 {
+                for dx in x0..=x1 {
+                    touched.push(ChunkPos::new(cp.x + dx, cp.y + dy, cp.z + dz));
+                }
+            }
+        }
         for t in touched {
             if let Some(n) = self.chunks.get_mut(&t) {
                 if t != cp {
@@ -181,11 +210,11 @@ impl World {
     }
 
     /// Mesh a chunk on this thread (used for player edits, which must be instant).
-    pub fn mesh_now(&mut self, pos: ChunkPos, registry: &BlockRegistry, opaque: &[bool]) {
+    pub fn mesh_now(&mut self, pos: ChunkPos, blocks: &Blocks) {
         if let Some(input) = self.mesh_input(pos) {
             let version = self.chunks[&pos].version;
             self.mesh_tasks.remove(&pos);
-            self.finished_meshes.insert(0, (pos, version, chunk_mesh::build(&input.pad(), registry, opaque)));
+            self.finished_meshes.insert(0, (pos, version, input.build(&blocks.registry, &blocks.opaque, &blocks.light)));
         }
     }
 
@@ -224,33 +253,89 @@ impl World {
             .collect()
     }
 
-    /// The chunk and its six neighbours, if all that are in range are loaded.
+    /// The chunk, its 26 neighbours and the chunks over them (for sky light),
+    /// if all that are in the loaded band are loaded.
     fn mesh_input(&self, pos: ChunkPos) -> Option<MeshInput> {
-        let center = self.chunks.get(&pos)?.data.clone();
-        let mut neighbours: [Option<Arc<Chunk>>; 6] = Default::default();
-        for face in Face::ALL {
-            let n = face.normal();
-            let np = ChunkPos::new(pos.x + n[0], pos.y + n[1], pos.z + n[2]);
-            if np.y < self.y_range.0 || np.y > self.y_range.1 {
-                continue; // outside the loaded band: treat as air
+        let in_band = |y: i32| y >= self.y_range.0 && y <= self.y_range.1;
+        let mut chunks: [Option<Arc<Chunk>>; 27] = Default::default();
+        for dy in -1..=1 {
+            for dz in -1..=1 {
+                for dx in -1..=1 {
+                    let np = ChunkPos::new(pos.x + dx, pos.y + dy, pos.z + dz);
+                    if (dx, dy, dz) != (0, 0, 0) && !in_band(np.y) {
+                        continue; // outside the loaded band: treat as air
+                    }
+                    chunks[voxel::light::neighbour_index(dx, dy, dz)] = Some(self.chunks.get(&np)?.data.clone());
+                }
             }
-            neighbours[face as usize] = Some(self.chunks.get(&np)?.data.clone());
         }
-        Some(MeshInput { center, neighbours })
+        let mut above: [Vec<Arc<Chunk>>; 9] = Default::default();
+        for dz in -1..=1 {
+            for dx in -1..=1 {
+                for up in 2..2 + SKY_REACH {
+                    let np = ChunkPos::new(pos.x + dx, pos.y + up, pos.z + dz);
+                    if !in_band(np.y) {
+                        break; // open sky assumed above the band
+                    }
+                    above[voxel::light::column_index(dx, dz)].push(self.chunks.get(&np)?.data.clone());
+                }
+            }
+        }
+        Some(MeshInput { chunks, above })
+    }
+
+    /// A chunk arrived or changed: mark the meshed chunks whose light it can
+    /// change (its neighbours and, if `sky`, the chunks below it) for remeshing.
+    fn touch_light(&mut self, c: ChunkPos, sky: bool) {
+        let lowest = if sky { -1 - SKY_REACH } else { -1 };
+        for dy in lowest..=1 {
+            for dz in -1..=1 {
+                for dx in -1..=1 {
+                    if (dx, dy, dz) == (0, 0, 0) {
+                        continue;
+                    }
+                    if let Some(n) = self.chunks.get_mut(&ChunkPos::new(c.x + dx, c.y + dy, c.z + dz))
+                        && n.meshed_version.is_some()
+                    {
+                        n.version += 1;
+                        n.meshed_version = None;
+                    }
+                }
+            }
+        }
     }
 }
 
+/// Chunks over the 3x3x3 neighbourhood looked through for sky light: a spot
+/// with this many chunks (plus part of one) of open air above counts as
+/// under open sky.
+const SKY_REACH: i32 = 3;
+
 struct MeshInput {
-    center: Arc<Chunk>,
-    neighbours: [Option<Arc<Chunk>>; 6],
+    chunks: [Option<Arc<Chunk>>; 27],
+    above: [Vec<Arc<Chunk>>; 9],
 }
 
 impl MeshInput {
-    /// Copy the chunk and a 1-block border from each neighbour into a padded array.
+    fn center(&self) -> &Chunk {
+        self.chunks[voxel::light::neighbour_index(0, 0, 0)].as_deref().expect("mesh input has its chunk")
+    }
+
+    /// Light the chunk and mesh it.
+    fn build(&self, registry: &BlockRegistry, opaque: &[bool], tables: &voxel::light::Tables) -> ChunkMeshes {
+        let hood = voxel::light::Neighbourhood {
+            chunks: std::array::from_fn(|i| self.chunks[i].as_deref()),
+            above: std::array::from_fn(|i| self.above[i].iter().map(|c| &**c).collect()),
+        };
+        let light = voxel::light::compute(&hood, tables);
+        chunk_mesh::build(&self.pad(), &light, registry, opaque)
+    }
+
+    /// Copy the chunk and a 1-block border from each face neighbour into a padded array.
     fn pad(&self) -> PaddedChunk {
         let mut p = PaddedChunk::default();
         let n = CHUNK_SIZE;
-        let dense = self.center.to_dense();
+        let dense = self.center().to_dense();
         for y in 0..n {
             for z in 0..n {
                 for x in 0..n {
@@ -259,7 +344,8 @@ impl MeshInput {
             }
         }
         for face in Face::ALL {
-            let Some(nb) = &self.neighbours[face as usize] else { continue };
+            let d = face.normal();
+            let Some(nb) = &self.chunks[voxel::light::neighbour_index(d[0], d[1], d[2])] else { continue };
             let axis = face.axis();
             // Padded slice to fill, and the neighbour's layer that touches us.
             let (pad_d, src_d) = if face.is_positive() { (n + 1, 0) } else { (0, n - 1) };
@@ -283,12 +369,15 @@ impl MeshInput {
 
     /// Chunks that cannot have any visible face.
     fn trivially_empty(&self, opaque: &[bool]) -> bool {
-        match self.center.is_uniform() {
+        match self.center().is_uniform() {
             Some(b) if b.is_air() => true,
-            Some(b) if opaque[b.0 as usize] => self
-                .neighbours
-                .iter()
-                .all(|n| n.as_ref().and_then(|c| c.is_uniform()).is_some_and(|nb| opaque[nb.0 as usize])),
+            Some(b) if opaque[b.0 as usize] => Face::ALL.iter().all(|f| {
+                let d = f.normal();
+                self.chunks[voxel::light::neighbour_index(d[0], d[1], d[2])]
+                    .as_ref()
+                    .and_then(|c| c.is_uniform())
+                    .is_some_and(|nb| opaque[nb.0 as usize])
+            }),
             _ => false,
         }
     }
@@ -310,6 +399,7 @@ pub fn setup_generator(
         info!("{} at {} {} (radius {})", wg.biomes.get(z.biome).title, z.x, z.z, z.radius);
     }
     world.shaped = Arc::new(blocks.registry.iter().map(|(_, d)| d.shape == voxel::Shape::Torch).collect());
+    world.stops_light = Arc::new(blocks.light.blocks.clone());
     player.pos = Vec3::new(x as f32 + 0.5, y as f32, z as f32 + 0.5);
     for mut tf in &mut cam {
         tf.translation = player.pos + Vec3::Y * crate::player::EYE;
@@ -432,18 +522,11 @@ fn collect_generated(mut world: ResMut<World>) {
         }
         world.chunks.insert(
             p,
-            LoadedChunk { data: Arc::new(chunk), entities: Vec::new(), version: 0, meshed_version: None, drawn: false, modified: false },
+            LoadedChunk { data: Arc::new(chunk), entities: Vec::new(), version: 0, meshed_version: None, drawn: false, modified: false, light: None },
         );
-        // A neighbour meshed while this chunk was outside the vertical band
-        // treated it as air; remesh it now that the real blocks are here.
-        for face in Face::ALL {
-            let n = face.normal();
-            if let Some(nb) = world.chunks.get_mut(&ChunkPos::new(p.x + n[0], p.y + n[1], p.z + n[2]))
-                && nb.meshed_version.is_some()
-            {
-                nb.version += 1;
-            }
-        }
+        // Neighbours meshed while this chunk was outside the vertical band
+        // treated it as air (and open sky); remesh them now that the real blocks are here.
+        world.touch_light(p, true);
     }
 }
 
@@ -476,8 +559,8 @@ fn schedule_meshing(mut world: ResMut<World>, blocks: Res<Blocks>, cam: Single<&
             world.finished_meshes.push((p, version, ChunkMeshes::default()));
             continue;
         }
-        let (registry, opaque) = (blocks.registry.clone(), blocks.opaque.clone());
-        let task = pool.spawn(async move { chunk_mesh::build(&input.pad(), &registry, &opaque) });
+        let (registry, opaque, tables) = (blocks.registry.clone(), blocks.opaque.clone(), blocks.light.clone());
+        let task = pool.spawn(async move { input.build(&registry, &opaque, &tables) });
         world.mesh_tasks.insert(p, (version, task));
     }
 }
@@ -508,7 +591,7 @@ fn collect_meshes(
     // real meshes are capped per frame and the rest wait for the next frame.
     let mut uploads = 0;
     let mut later = Vec::new();
-    for (p, version, m) in std::mem::take(&mut world.finished_meshes) {
+    for (p, version, mut m) in std::mem::take(&mut world.finished_meshes) {
         if !m.is_empty() && uploads >= MAX_UPLOADS_PER_FRAME {
             later.push((p, version, m));
             continue;
@@ -519,6 +602,7 @@ fn collect_meshes(
         }
         chunk.meshed_version = Some(version);
         chunk.drawn = true;
+        chunk.light = m.light.take();
         for e in chunk.entities.drain(..) {
             commands.entity(e).despawn();
         }

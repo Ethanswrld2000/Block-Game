@@ -83,6 +83,8 @@ fn vertex(vertex_in: Vertex) -> VertexOutput {
     out.world_normal = mesh_functions::mesh_normal_local_to_world(vertex.normal, vertex_in.instance_index);
     out.uv = vertex.uv;
     out.uv_b = vec2<f32>(vertex.uv_b.x, tint);
+@if(VERTEX_COLORS)
+    out.color = vertex.color;
 
 @if(VERTEX_OUTPUT_INSTANCE_INDEX)
     out.instance_index = vertex_in.instance_index;

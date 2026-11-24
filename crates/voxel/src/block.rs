@@ -47,6 +47,9 @@ struct BlockSpec {
     /// For `shape: model`: which box model it is drawn as.
     #[serde(default)]
     model: Option<Model>,
+    /// Block light it gives off, 0..=15 (torches, campfires).
+    #[serde(default)]
+    light: u8,
 }
 
 /// Small furniture drawn as a few boxes in the chunk's detail mesh
@@ -153,6 +156,8 @@ pub struct BlockDef {
     pub attach: Option<Side>,
     /// `shape: model`: which model.
     pub model: Option<Model>,
+    /// Block light it gives off, 0..=15 (see `crate::light`).
+    pub light: u8,
 }
 
 impl BlockDef {
@@ -243,6 +248,7 @@ impl BlockRegistry {
                 shape: s.shape,
                 attach: s.attach,
                 model: s.model,
+                light: s.light.min(crate::light::MAX),
             });
         }
         Ok(Self { defs, by_name })
@@ -276,6 +282,15 @@ impl BlockRegistry {
     /// Per-block opaque flags, indexed by id. Cheap lookup table for the mesher.
     pub fn opaque_table(&self) -> Vec<bool> {
         self.defs.iter().map(|d| d.opaque).collect()
+    }
+
+    /// Per-block tables for the light flood fill (`crate::light`).
+    pub fn light_tables(&self) -> crate::light::Tables {
+        crate::light::Tables {
+            // Opaque blocks and shut doors stop light; glass, leaves, water and plants let it through.
+            blocks: self.defs.iter().map(|d| d.opaque || (d.solid && d.model == Some(Model::Door))).collect(),
+            emit: self.defs.iter().map(|d| d.light).collect(),
+        }
     }
 }
 

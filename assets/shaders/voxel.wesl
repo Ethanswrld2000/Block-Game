@@ -4,12 +4,21 @@
 // uv_b.x carries the texture layer (tile index in blocks.png) in its whole
 // part and corner shading in its fraction (`chunk_mesh::pack_layer`); uv_b.y
 // is how strongly the season tints the face (leaves 1, grass tops 0.5).
+// The vertex colour is the baked light (`voxel::light`, `chunk_mesh`): red =
+// sky light, green = torch light, 0..1. Sunlight and sky light are scaled by
+// the sky level, so a sealed cave is dark at noon; torch light is added by the
+// torch level. Bevy's point lights (a held torch, the Light spell) still light
+// everything near them.
 
 import bevy_pbr::render::{
     mesh_view_bindings::{view, globals},
+    pbr_types::PbrInput,
+    pbr_lighting as lighting,
+    pbr_lighting::LAYER_BASE,
+    clustered_forward as clustering,
     pbr_fragment::pbr_input_from_standard_material,
     forward_io::{VertexOutput, FragmentOutput},
-    pbr_functions::{apply_pbr_lighting, main_pass_post_lighting_processing},
+    pbr_functions::{apply_pbr_lighting, main_pass_post_lighting_processing, calculate_diffuse_color, calculate_F0_dielectric},
 };
 
 @group(constants::MATERIAL_BIND_GROUP) @binding(100) var block_textures: texture_2d_array<f32>;
@@ -64,6 +73,62 @@ fn sample_tile(base: u32, uv: vec2<f32>, world: vec3<f32>, normal: vec3<f32>) ->
     return textureSampleGrad(block_textures, block_sampler, p, layer, turn(dpdx(uv), r), turn(dpdy(uv), r));
 }
 
+// Torch light: colour and strength at full level (lux-like, before exposure).
+const TORCH_RGB: vec3<f32> = vec3<f32>(1.0, 0.62, 0.3);
+const TORCH_STRENGTH: f32 = 2200.0;
+// What's left of sunlight and sky light with no sky light at all (0 = black).
+const CAVE_FLOOR: f32 = 0.0;
+
+// Light level 0..1 to brightness: falls off quickly away from full, so a few
+// blocks into a cave mouth is already dim (level 8 is about a fifth).
+fn level_brightness(l: f32) -> f32 {
+    let x = clamp(l, 0.0, 1.0);
+    return x / (4.0 - 3.0 * x);
+}
+
+// Light from Bevy's point lights on this fragment, with the exposure applied:
+// the part of `apply_pbr_lighting` that isn't sun or sky, so it is kept out
+// of the sky scaling. Set up the same way Bevy sets up its own loop.
+fn point_lights(in: PbrInput) -> vec3<f32> {
+    let base = in.material.base_color.rgb;
+    let metallic = in.material.metallic;
+    let pr = in.material.perceptual_roughness;
+    let NdotV = max(dot(in.N, in.V), 0.0001);
+    var li: lighting::LightingInput;
+    li.layers[LAYER_BASE].NdotV = NdotV;
+    li.layers[LAYER_BASE].N = in.N;
+    li.layers[LAYER_BASE].R = reflect(-in.V, in.N);
+    li.layers[LAYER_BASE].perceptual_roughness = pr;
+    li.layers[LAYER_BASE].roughness = lighting::perceptualRoughnessToRoughness(pr);
+    li.P = in.world_position.xyz;
+    li.V = in.V;
+    li.diffuse_color = calculate_diffuse_color(base, metallic, in.material.specular_transmission, in.material.diffuse_transmission);
+    li.metallic = metallic;
+    li.F0_dielectric = calculate_F0_dielectric(in.material.reflectance);
+    li.F0_metallic = base;
+    li.F_ab = lighting::F_AB(pr, NdotV);
+    let view_z = dot(vec4<f32>(
+        view.view_from_world[0].z,
+        view.view_from_world[1].z,
+        view.view_from_world[2].z,
+        view.view_from_world[3].z
+    ), in.world_position);
+    let cluster_index = clustering::view_fragment_cluster_index(in.frag_coord.xy, view_z, in.is_orthographic);
+    let ranges = clustering::unpack_clusterable_object_index_ranges(cluster_index);
+    var sum = vec3<f32>(0.0);
+    for (var i: u32 = ranges.first_point_light_index_offset; i < ranges.first_spot_light_index_offset; i = i + 1u) {
+        sum += lighting::point_light(clustering::get_clusterable_object_id(i), &li, true, true);
+    }
+    return sum * view.exposure;
+}
+
+// A slow, gentle flicker of torch light, the same over a few blocks.
+fn torch_flicker(world: vec3<f32>, t: f32) -> f32 {
+    let c = floor(world / 3.0);
+    let ph = c.x * 1.7 + c.y * 2.3 + c.z * 1.1;
+    return 1.0 + 0.05 * sin(t * 7.0 + ph) + 0.03 * sin(t * 17.0 + ph * 1.9);
+}
+
 // --- Sky-matched fog and ground mist. Kept the same in voxel.wesl and
 // lod.wesl; the horizon formula matches sky.wesl at the horizon. Fields: see
 // `atmosphere::AtmosParams`.
@@ -102,6 +167,15 @@ fn apply_atmosphere(a: Atmos, color: vec3<f32>, world: vec3<f32>, cam: vec3<f32>
     return mix(color, horizon_color(a, dir), amount);
 }
 // --- end of shared fog
+
+// `apply_atmosphere`, with the haze and mist colour dimmed to `lit` (the
+// sky light here): mist in a sealed cave is dark, not sky-coloured.
+fn apply_atmosphere_lit(a: Atmos, color: vec3<f32>, world: vec3<f32>, cam: vec3<f32>, lit: f32) -> vec3<f32> {
+    let fogged = apply_atmosphere(a, color, world, cam);
+    let clear = apply_atmosphere(a, vec3<f32>(0.0), world, cam);
+    // `clear` is horizon * amount; take back the part the sky can't reach.
+    return fogged - clear * (1.0 - lit);
+}
 
 // Water surface: gentle waves drifting with the wind plus small ripples. Only
 // the lighting normal moves (greedy quads have too few corners to bend), so
@@ -159,12 +233,19 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
     // Creases go darker: a little for direct light (the classic block look),
     // more for sky light, which a crease really does shut out.
     rgb *= 1.0 - 0.35 * crease;
-    pbr_input.material.base_color = vec4<f32>(rgb * pbr_input.material.base_color.rgb, texel.a);
+    // (The base colour is white; with light baked in, Bevy has put the vertex colour here.)
+    pbr_input.material.base_color = vec4<f32>(rgb, texel.a);
     pbr_input.diffuse_occlusion *= vec3<f32>(1.0 - 0.6 * crease);
-    // Glowcaps light up at night (bloom picks the glow up).
+    // Baked light: (sky, torch). Meshes without it (a held block) are in the open.
+    var baked = vec2<f32>(1.0, 0.0);
+@if(VERTEX_COLORS) {
+    baked = in.color.rg;
+}
+    let sky_light = mix(CAVE_FLOOR, 1.0, level_brightness(baked.x));
+    // Glowcaps light up at night (bloom picks the glow up), whatever the light.
+    var glow = vec3<f32>(0.0);
     if plant_glow.y > 0.0 && plant_glow.x >= 0.0 && layer == u32(plant_glow.x) {
-        // (alpha 0: not scaled by the camera exposure.)
-        pbr_input.material.emissive = vec4<f32>(rgb * 3.0 * plant_glow.y, 0.0);
+        glow = rgb * 3.0 * plant_glow.y * texel.a;
     }
     let water = is_water_top(in.world_position.xyz, in.world_normal, texel.a);
     var wave_n = vec3<f32>(0.0, 1.0, 0.0);
@@ -177,6 +258,11 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
 
     var out: FragmentOutput;
     out.color = apply_pbr_lighting(pbr_input);
+    // Sun and sky by the sky level; point lights as they are; torches by the torch level.
+    let points = point_lights(pbr_input);
+    let torch = rgb * TORCH_RGB * TORCH_STRENGTH * level_brightness(baked.y) * torch_flicker(in.world_position.xyz, globals.time)
+        * (1.0 - 0.5 * crease) * view.exposure * texel.a;
+    out.color = vec4<f32>((out.color.rgb - points) * sky_light + points + torch + glow, out.color.a);
     // Tonemapping and the like (Bevy's fog is off for this material).
     out.color = main_pass_post_lighting_processing(pbr_input, out.color);
     if water && is_front {
@@ -190,6 +276,6 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> Fragment
         let rgb = mix(out.color.rgb, sky, clamp(fresnel * 0.7, 0.0, 0.6)) + vec3<f32>(glint);
         out.color = vec4<f32>(rgb, max(out.color.a, clamp(fresnel, 0.0, 1.0)));
     }
-    out.color = vec4<f32>(apply_atmosphere(atmos, out.color.rgb, in.world_position.xyz, view.world_position.xyz), out.color.a);
+    out.color = vec4<f32>(apply_atmosphere_lit(atmos, out.color.rgb, in.world_position.xyz, view.world_position.xyz, sky_light), out.color.a);
     return out;
 }

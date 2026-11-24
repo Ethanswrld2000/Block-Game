@@ -72,6 +72,8 @@ fn glow_layer(tiles: &TileSheet) -> Vec4 {
 pub struct Blocks {
     pub registry: Arc<BlockRegistry>,
     pub opaque: Arc<Vec<bool>>,
+    /// What stops light and what gives it off (`voxel::light`).
+    pub light: Arc<voxel::light::Tables>,
     pub tiles: TileSheet,
     pub sheet: Handle<Image>,
     pub material: Option<Handle<VoxelMaterial>>,
@@ -98,6 +100,7 @@ pub fn load_blocks(mut commands: Commands, assets: Res<AssetServer>) {
         .unwrap_or_else(|e| panic!("{e}"));
     commands.insert_resource(Blocks {
         opaque: Arc::new(registry.opaque_table()),
+        light: Arc::new(registry.light_tables()),
         registry: Arc::new(registry),
         tiles,
         sheet: assets.load("textures/blocks.png"),
