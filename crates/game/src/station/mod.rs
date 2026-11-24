@@ -69,6 +69,7 @@ impl Plugin for StationPlugin {
             .add_message::<board::Cooked>()
             .add_message::<board::Crafted>()
             .add_plugins(MaterialPlugin::<forge::GlintMaterial>::default())
+            .add_plugins(bevy::ui_render::UiMaterialPlugin::<tree::UrnVoid>::default())
             .add_systems(
                 crate::menu::GameStartup,
                 (
@@ -100,6 +101,7 @@ impl Plugin for StationPlugin {
                     tree::tree_keys,
                     tree::tree_click,
                     tree::tree_build,
+                    tree::tree_animate,
                     dev::dev_keys,
                     dev::dev_click,
                     dev::dev_build,
@@ -794,6 +796,8 @@ fn use_station(
                     return;
                 }
                 tree.open = Some(st.urn);
+                // Look into its mouth.
+                tree.at = Some(st.pos + Vec3::Y * 0.9);
                 tree.dirty = true;
                 menus.open = true;
                 return;
