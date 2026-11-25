@@ -11,6 +11,9 @@
         "plant": (step: "step_plant", dig: "dig_plant"),
     },
     fallback: (step: "step_soft", dig: "dig_soft"),
+    // Footsteps while wading (not swimming): splashes in water, an icy crunch in thin snow,
+    // a slosh in snow `deep_from` eighths deep or more. Louder the deeper the water.
+    wade: (water: "step_splash", snow: "step_snow", deep_snow: "step_slosh", deep_from: 4),
     // Loudness of each sound before the volume setting, 0..1.
     volumes: {
         "step": 0.35,

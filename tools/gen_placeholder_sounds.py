@@ -93,6 +93,16 @@ def main():
         save(f"step_hard_{i}", highpass(thud(0.14, 0.35 + 0.05 * i, 0.025), 0.05))
         save(f"step_wood_{i}", thud(0.16, 0.12, 0.035, pitch=180 + 25 * i))
         save(f"step_plant_{i}", highpass(noise(0.2), 0.2) * env(int(RATE * 0.2), 0.02, 0.05))
+        # Wading through shallow water: a splash with a watery wobble.
+        sp = lowpass(noise(0.32), 0.25 + 0.05 * i) * env(int(RATE * 0.32), 0.01, 0.09)
+        sp += np.sin(2 * np.pi * (420 + 60 * i) * t(0.32) * (1 + 0.6 * t(0.32))) * env(int(RATE * 0.32), 0.005, 0.05) * 0.25
+        save(f"step_splash_{i}", sp)
+        # Thin snow: a short icy crunch (bright grains).
+        cr = highpass(noise(0.16), 0.35) * env(int(RATE * 0.16), 0.003, 0.03)
+        cr *= (np.random.rand(len(cr)) < 0.35 + 0.05 * i)
+        save(f"step_snow_{i}", cr)
+        # Deep snow: a soft, dull slosh.
+        save(f"step_slosh_{i}", lowpass(noise(0.34), 0.06 + 0.01 * i) * env(int(RATE * 0.34), 0.04, 0.1))
     # Tool hits while mining, and the block giving way.
     save("dig_soft", thud(0.14, 0.08, 0.05))
     save("dig_hard", highpass(thud(0.12, 0.6, 0.02), 0.1) + np.pad(np.sin(2 * np.pi * 1900 * t(0.08)) * env(int(RATE * 0.08), 0.001, 0.015) * 0.5, (0, int(RATE * 0.04))))

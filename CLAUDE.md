@@ -624,6 +624,9 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   change move (`World::changed` from `set_block`, `cover::Flowing`). Water washes away plants and pebbles; puddles aren't
   held up (they run). Puddles stay while it rains; once it stops, water short of a full block dries a level at a time
   (`Flowing::shallow`, chance `dry` per second; not saved, older puddles dry through the column looks).
+  Wading (`player::Wading`, feet cell when not swimming): puddles and water slow you by depth (`WADE_DRAG`), snow layers
+  more (`SNOW_DRAG`); footsteps splash in water, crunch in thin snow, slosh from `deep_from` eighths (sounds.ron `wade`;
+  `step_splash/snow/slosh_0..2`, `gen_placeholder_sounds.py --only step_splash step_snow step_slosh`).
   F9 dev menu, World tab: pick a season (`Seasons::next_start` jumps the day forward to its first day).
 - Rainbows and lightning bolts: after rain or a storm gives way to drier weather, `Conditions.rainbow` rises with the change
   and fades 1-2.5 game hours later (`weather::rainbow_strength`); `sky.wesl` `rainbow` draws a main bow 40-42.5° and a faint
