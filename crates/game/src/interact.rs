@@ -363,7 +363,8 @@ fn find_target(
 /// hanging below those. Returns false if nothing was there to break.
 fn break_block(world: &mut World, blocks: &Blocks, mined: &mut MessageWriter<Mined>, p: BlockPos) -> bool {
     let Some(b) = world.block(p).filter(|b| !b.is_air()) else { return false };
-    if !world.set_block(p, BlockId::AIR) {
+    // Digging snow away leaves the plant or pebble that stood in it.
+    if !world.set_block(p, blocks.registry.get(b).inside.unwrap_or(BlockId::AIR)) {
         return false;
     }
     mined.write(Mined { pos: p, block: b });

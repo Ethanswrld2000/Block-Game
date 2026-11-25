@@ -1,45 +1,63 @@
 //! Pure rules for snow cover and puddles (see the module above).
 
+use std::collections::HashMap;
 use voxel::{BlockId, BlockPos, BlockRegistry, Shape};
+
+use super::flow::Waters;
 
 /// The blocks cover is made of.
 #[derive(Debug, Clone)]
 pub struct Kinds {
-    /// `snow_layer_1..=8`: index = level - 1.
-    pub snow: [BlockId; 8],
-    /// `puddle_1..=8`: index = level - 1.
-    pub puddle: [BlockId; 8],
-    pub water: Option<BlockId>,
-    /// Small plants snow covers.
-    pub buries: Vec<BlockId>,
+    /// Per block id: snow level and what stands in the snow (air if nothing).
+    snow: Vec<Option<(u8, BlockId)>>,
+    /// (level, what stands in it) -> snow block.
+    snowy: HashMap<(u8, BlockId), BlockId>,
+    /// Water levels.
+    pub water: Waters,
 }
 
 impl Kinds {
-    pub fn new(reg: &BlockRegistry, buries: &[String]) -> Self {
-        Self {
-            snow: std::array::from_fn(|i| reg.expect(&format!("snow_layer_{}", i + 1))),
-            puddle: std::array::from_fn(|i| reg.expect(&format!("puddle_{}", i + 1))),
-            water: reg.id("water"),
-            buries: buries.iter().filter_map(|n| reg.id(n)).collect(),
-        }
+    pub fn new(reg: &BlockRegistry) -> Self {
+        let mut snowy = HashMap::new();
+        let snow = reg
+            .iter()
+            .map(|(id, d)| {
+                (d.shape == Shape::Layer && !d.translucent).then(|| {
+                    let s = (d.level, d.inside.unwrap_or(BlockId::AIR));
+                    snowy.insert(s, id);
+                    s
+                })
+            })
+            .collect();
+        Self { snow, snowy, water: Waters::new(reg) }
     }
 
-    /// Snow level of a block, 0 if it isn't a snow layer.
+    /// Snow level of a block, 0 if it isn't snow.
     pub fn snow_level(&self, b: BlockId) -> u8 {
-        self.snow.iter().position(|s| *s == b).map_or(0, |i| i as u8 + 1)
+        self.snow.get(b.0 as usize).copied().flatten().map_or(0, |s| s.0)
     }
 
-    /// Water level of a block, 0 if it isn't a puddle.
+    /// Water level of a block below a full block (a puddle), 0 otherwise.
     pub fn puddle_level(&self, b: BlockId) -> u8 {
-        self.puddle.iter().position(|s| *s == b).map_or(0, |i| i as u8 + 1)
+        self.water.level(b) % 8
     }
 
-    fn snow_at(&self, level: u8) -> BlockId {
-        if level == 0 { BlockId::AIR } else { self.snow[level as usize - 1] }
+    /// What stands in the cell apart from snow (air, a plant or a pebble).
+    fn under_snow(&self, b: BlockId) -> BlockId {
+        self.snow.get(b.0 as usize).copied().flatten().map_or(b, |s| s.1)
     }
 
-    fn puddle_at(&self, level: u8) -> BlockId {
-        if level == 0 { BlockId::AIR } else { self.puddle[level as usize - 1] }
+    /// Snow can fill up around it (a plant or pebble).
+    pub fn fills_around(&self, b: BlockId) -> bool {
+        !b.is_air() && self.snowy.contains_key(&(1, b))
+    }
+
+    /// The block for `level` eighths of snow around `inside` (0 = just `inside`).
+    pub fn snow_at(&self, level: u8, inside: BlockId) -> BlockId {
+        if level == 0 {
+            return inside;
+        }
+        self.snowy.get(&(level, inside)).or_else(|| self.snowy.get(&(level, BlockId::AIR))).copied().unwrap_or(BlockId::AIR)
     }
 }
 
@@ -52,7 +70,7 @@ pub struct Sky {
     pub rain: f32,
     /// Melt a snow layer.
     pub melt: f32,
-    /// Dry a puddle a level.
+    /// Dry a still puddle under four eighths a level.
     pub dry: f32,
 }
 
@@ -87,15 +105,10 @@ fn holds_snow(reg: &BlockRegistry, b: BlockId) -> bool {
     d.solid && d.shape == Shape::Cube && !d.translucent
 }
 
-/// Water can stand on it: a wall block (ground, stone, planks; not leaves).
-fn holds_water(reg: &BlockRegistry, b: BlockId) -> bool {
-    reg.get(b).is_wall()
-}
-
 /// The cell where cover goes in column (x, z), searching down from `top` to
-/// `bottom`: the snow layer, puddle or small plant on top of the column, or
-/// the air over its top block. `None` if the top is something else (water,
-/// a torch, a vine), nothing is found, or the column isn't loaded.
+/// `bottom`: the snow, puddle, plant or pebble on top of the column, or the
+/// air over its top block. `None` if the top is something else (water, a
+/// torch, a vine), nothing is found, or the column isn't loaded.
 pub fn surface(get: &impl Fn(BlockPos) -> Option<BlockId>, reg: &BlockRegistry, kinds: &Kinds, x: i32, z: i32, top: i32, bottom: i32) -> Option<BlockPos> {
     for y in (bottom..=top).rev() {
         let p = BlockPos::new(x, y, z);
@@ -103,7 +116,7 @@ pub fn surface(get: &impl Fn(BlockPos) -> Option<BlockId>, reg: &BlockRegistry, 
         if b.is_air() {
             continue;
         }
-        if kinds.snow_level(b) > 0 || kinds.puddle_level(b) > 0 || kinds.buries.contains(&b) {
+        if kinds.snow_level(b) > 0 || kinds.puddle_level(b) > 0 || kinds.fills_around(b) {
             return Some(p);
         }
         let d = reg.get(b);
@@ -113,89 +126,66 @@ pub fn surface(get: &impl Fn(BlockPos) -> Option<BlockId>, reg: &BlockRegistry, 
 }
 
 /// What one look at the cover cell `at` changes, given the weather's chances.
-pub fn step(get: &impl Fn(BlockPos) -> Option<BlockId>, reg: &BlockRegistry, kinds: &Kinds, at: BlockPos, sky: &Sky, seed: &mut u64) -> Vec<(BlockPos, BlockId)> {
+/// `moving` says whether water there is still flowing (it doesn't dry then).
+/// Water only gathers and dries here; `super::flow` moves it.
+pub fn step(
+    get: &impl Fn(BlockPos) -> Option<BlockId>,
+    reg: &BlockRegistry,
+    kinds: &Kinds,
+    at: BlockPos,
+    sky: &Sky,
+    moving: &impl Fn(BlockPos) -> bool,
+    seed: &mut u64,
+) -> Vec<(BlockPos, BlockId)> {
     let Some(here) = get(at) else { return Vec::new() };
     let Some(under) = get(below(at)) else { return Vec::new() };
     let snow = kinds.snow_level(here);
     let water = kinds.puddle_level(here);
+    // Snow goes in air, on snow, or round a plant or pebble.
+    let takes_snow = |b: BlockId| b.is_air() || kinds.snow_level(b) > 0 || kinds.fills_around(b);
 
     // Snowfall: a layer goes on the lowest spot here or beside here.
     if sky.snow > 0.0 && rand(seed) < sky.snow {
-        if water > 0 || !(here.is_air() || snow > 0 || kinds.buries.contains(&here)) || !holds_snow(reg, under) {
+        if !takes_snow(here) || !holds_snow(reg, under) {
             return Vec::new();
         }
-        let mut best = (at, snow);
+        let mut best = (at, snow, here);
         for d in SIDES {
             let n = add(at, d);
             let (Some(nb), Some(nu)) = (get(n), get(below(n))) else { continue };
             let level = kinds.snow_level(nb);
-            let takes = nb.is_air() || level > 0 || kinds.buries.contains(&nb);
-            if takes && holds_snow(reg, nu) && level < best.1 {
-                best = (n, level);
+            if takes_snow(nb) && holds_snow(reg, nu) && level < best.1 {
+                best = (n, level, nb);
             }
         }
         if best.1 >= 8 {
             return Vec::new();
         }
-        return vec![(best.0, kinds.snow_at(best.1 + 1))];
+        return vec![(best.0, kinds.snow_at(best.1 + 1, kinds.under_snow(best.2)))];
     }
     if snow > 0 {
         if sky.melt > 0.0 && rand(seed) < sky.melt {
-            return vec![(at, kinds.snow_at(snow - 1))];
+            return vec![(at, kinds.snow_at(snow - 1, kinds.under_snow(here)))];
         }
         return Vec::new();
     }
 
-    // Rain: water gathers where walls hold it on two sides or more.
+    // Rain: water gathers where walls hold it on two sides or more (`flow` runs it from there).
     let mut level = water;
-    if sky.rain > 0.0 && (here.is_air() || water > 0) && holds_water(reg, under) && rand(seed) < sky.rain {
+    if sky.rain > 0.0 && (here.is_air() || water > 0) && reg.get(under).is_wall() && rand(seed) < sky.rain {
         let walls = SIDES.iter().filter(|d| get(add(at, **d)).is_some_and(|b| reg.get(b).is_wall())).count();
         if water > 0 || walls >= 2 {
-            level = (level + 1).min(8);
+            level += 1;
         }
     }
-    if level == 0 {
-        return Vec::new();
-    }
-    if sky.dry > 0.0 && rand(seed) < sky.dry {
+    // A shallow puddle that has stopped running dries a little.
+    if water > 0 && water < 4 && level == water && sky.dry > 0.0 && !moving(at) && rand(seed) < sky.dry {
         level -= 1;
     }
-    let mut out = Vec::new();
-    // Water runs: into real water, off an edge, or to a lower neighbour (one move per look).
-    let first = (rand(seed) * 4.0) as usize;
-    for k in 0..4 {
-        if level == 0 {
-            break;
-        }
-        let n = add(at, SIDES[(first + k) % 4]);
-        let Some(nb) = get(n) else { continue };
-        if Some(nb) == kinds.water {
-            level -= 1;
-            break;
-        }
-        let nl = kinds.puddle_level(nb);
-        if nb.is_air() {
-            let Some(nu) = get(below(n)) else { continue };
-            if !holds_water(reg, nu) && kinds.puddle_level(nu) == 0 {
-                // Spills over the edge and is gone.
-                level -= 1;
-                break;
-            }
-            if holds_water(reg, nu) && level >= 2 {
-                out.push((n, kinds.puddle_at(1)));
-                level -= 1;
-                break;
-            }
-        } else if nl > 0 && nl + 1 < level {
-            out.push((n, kinds.puddle_at(nl + 1)));
-            level -= 1;
-            break;
-        }
+    if level == water {
+        return Vec::new();
     }
-    if level != water {
-        out.push((at, kinds.puddle_at(level)));
-    }
-    out
+    vec![(at, kinds.water.block(level))]
 }
 
 #[cfg(test)]
@@ -225,7 +215,7 @@ mod tests {
                 let (x, z) = cols[i % cols.len()];
                 let get = |p: BlockPos| self.get(p);
                 let Some(at) = surface(&get, reg, kinds, x, z, 10, -10) else { continue };
-                let changes = step(&get, reg, kinds, at, sky, &mut seed);
+                let changes = step(&get, reg, kinds, at, sky, &|_| false, &mut seed);
                 for (p, b) in changes {
                     self.cells.insert(p, b);
                 }
@@ -235,7 +225,7 @@ mod tests {
 
     fn setup() -> (BlockRegistry, Kinds, Grid) {
         let reg = registry();
-        let kinds = Kinds::new(&reg, &["tall_grass".to_string()]);
+        let kinds = Kinds::new(&reg);
         let grid = Grid { cells: HashMap::new(), ground: reg.expect("dirt") };
         (reg, kinds, grid)
     }
@@ -248,21 +238,38 @@ mod tests {
     fn snow_piles_up_evenly_to_a_full_layer_and_melts_away() {
         let (reg, kinds, mut g) = setup();
         let cols = area(3);
-        g.cells.insert(BlockPos::new(1, 0, 1), reg.expect("tall_grass"));
         let snowing = Sky { snow: 1.0, ..Default::default() };
         g.run(&reg, &kinds, &snowing, &cols, 49 * 3);
         // Spread out: no column is more than a couple of layers off another.
         let levels: Vec<u8> = cols.iter().map(|&(x, z)| kinds.snow_level(g.get(BlockPos::new(x, 0, z)).unwrap())).collect();
         let (lo, hi) = (*levels.iter().min().unwrap(), *levels.iter().max().unwrap());
         assert!(lo >= 1 && hi - lo <= 2, "levels {lo}..{hi}");
-        // Grass got buried.
-        assert!(kinds.snow_level(g.get(BlockPos::new(1, 0, 1)).unwrap()) > 0);
         g.run(&reg, &kinds, &snowing, &cols, 49 * 20);
-        assert!(cols.iter().all(|&(x, z)| g.get(BlockPos::new(x, 0, z)) == Some(kinds.snow[7])), "tops out at 8");
+        assert!(cols.iter().all(|&(x, z)| kinds.snow_level(g.get(BlockPos::new(x, 0, z)).unwrap()) == 8), "tops out at 8");
         assert!(cols.iter().all(|&(x, z)| g.get(BlockPos::new(x, 1, z)) == Some(BlockId::AIR)), "never more than a block");
         let thaw = Sky { melt: 1.0, ..Default::default() };
         g.run(&reg, &kinds, &thaw, &cols, 49 * 8);
         assert!(cols.iter().all(|&(x, z)| g.get(BlockPos::new(x, 0, z)) == Some(BlockId::AIR)));
+    }
+
+    #[test]
+    fn snow_fills_up_around_plants_and_pebbles_and_leaves_them_when_it_melts() {
+        let (reg, kinds, mut g) = setup();
+        let things = [(0, 0, "reeds"), (1, 0, "pebble"), (0, 1, "bog_bloom")];
+        for (x, z, n) in things {
+            g.cells.insert(BlockPos::new(x, 0, z), reg.expect(n));
+        }
+        let cols = area(2);
+        g.run(&reg, &kinds, &Sky { snow: 1.0, ..Default::default() }, &cols, 25 * 4);
+        for (x, z, n) in things {
+            let b = g.get(BlockPos::new(x, 0, z)).unwrap();
+            assert!(kinds.snow_level(b) > 0, "{n} snowed in");
+            assert_eq!(reg.get(b).inside, Some(reg.expect(n)), "{n} still there");
+        }
+        g.run(&reg, &kinds, &Sky { melt: 1.0, ..Default::default() }, &cols, 25 * 8);
+        for (x, z, n) in things {
+            assert_eq!(g.get(BlockPos::new(x, 0, z)), Some(reg.expect(n)), "{n} back after the thaw");
+        }
     }
 
     #[test]
@@ -274,7 +281,7 @@ mod tests {
     }
 
     #[test]
-    fn rain_fills_a_pit_but_not_flat_ground_and_it_dries_after() {
+    fn rain_fills_a_pit_but_not_flat_ground() {
         let (reg, kinds, mut g) = setup();
         // A 2x2 pit one deep.
         let pit = [(0, 0), (1, 0), (0, 1), (1, 1)];
@@ -289,27 +296,24 @@ mod tests {
         }
         let flat = cols.iter().filter(|&&(x, z)| g.get(BlockPos::new(x, 0, z)) != Some(BlockId::AIR)).count();
         assert_eq!(flat, 0, "flat ground stays dry");
-        let dry = Sky { dry: 1.0, ..Default::default() };
-        g.run(&reg, &kinds, &dry, &pit, 4 * 20);
-        for (x, z) in pit {
-            assert_eq!(g.get(BlockPos::new(x, -1, z)), Some(BlockId::AIR));
-        }
+        g.run(&reg, &kinds, &rain, &pit, 4 * 20);
+        assert_eq!(g.get(BlockPos::new(0, -1, 0)), Some(reg.expect("water")), "a full pit is a water block");
     }
 
     #[test]
-    fn water_runs_off_an_edge() {
+    fn only_still_shallow_puddles_dry() {
         let (reg, kinds, mut g) = setup();
-        // A trench (walls north and south) open at its east end onto a drop.
-        for x in 0..3 {
-            g.cells.insert(BlockPos::new(x, -1, 0), BlockId::AIR);
+        let p = BlockPos::new(0, -1, 0);
+        let dry = Sky { dry: 1.0, ..Default::default() };
+        let mut seed = 99;
+        for (level, moving, dries) in [(3, false, true), (4, false, false), (2, true, false)] {
+            g.cells.insert(p, kinds.water.block(level));
+            let get = |q: BlockPos| g.get(q);
+            let out = step(&get, &reg, &kinds, p, &dry, &|_| moving, &mut seed);
+            assert_eq!(!out.is_empty(), dries, "level {level}, moving {moving}");
+            if dries {
+                assert_eq!(out[0].1, kinds.water.block(level - 1));
+            }
         }
-        for y in -5..=-1 {
-            g.cells.insert(BlockPos::new(3, y, 0), BlockId::AIR);
-        }
-        g.cells.insert(BlockPos::new(2, -1, 0), kinds.puddle[3]);
-        let dry_still = Sky::default();
-        g.run(&reg, &kinds, &dry_still, &[(2, 0)], 20);
-        let total: u32 = (0..3).map(|x| kinds.puddle_level(g.get(BlockPos::new(x, -1, 0)).unwrap()) as u32).sum();
-        assert!(total < 4, "some ran off ({total} left)");
     }
 }

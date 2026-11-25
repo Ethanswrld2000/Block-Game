@@ -111,6 +111,9 @@ pub struct World {
     stops_light: Arc<Vec<bool>>,
     /// Shaped blocks that appeared or went away, for the systems that draw them.
     pub shape_events: Vec<ShapeEvent>,
+    /// Every cell `set_block` changed since `game::cover` last looked (water
+    /// next to it may start to flow).
+    pub changed: Vec<BlockPos>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -196,6 +199,9 @@ impl World {
         }
         let Some(c) = self.chunks.get_mut(&cp) else { return false };
         Arc::make_mut(&mut c.data).set(x, y, z, block);
+        if self.changed.len() < 65_536 {
+            self.changed.push(p);
+        }
         c.version += 1;
         c.modified = true;
         // Faces on a chunk border belong to the neighbour's mesh too.
