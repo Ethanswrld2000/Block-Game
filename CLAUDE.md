@@ -627,6 +627,13 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   from its numbers (`look`). Storm warning: `WARN_SECONDS` (60) before a `severe` weather (lightning, wind >= 12, chill <= -10,
   downpour) a red countdown line shows under the dial, the rim pulses red and Bram (within 40 blocks) barks `storm_coming`.
   The map's waypoint strip sits below it (`DIAL_SPACE`).
+- Tool-based mining: bare hands can't break stone, ore, logs or wood (items.ron `hand` speeds 0; giant mushrooms are wood);
+  hardness went up 1.5x (base tools take about 12 swings). Soil dug without a tool that lists its material (a shovel) goes
+  down a quarter at a time: blocks.ron `dig_to` (dirt/grass/moss -> `dirt_layer_6` -> 4 -> 2 -> gone; sand, mud, gravel,
+  clay, peat have their own layers; snow -> `snow_layer_6`), `Items::dug_to`, `interact::dig_down`; the last layer drops
+  the block. Shovels swing `Dig` (thrust and scoop, `swing::DIG`/`BODY_DIG`) and take the whole block. Leaves and brush
+  take a few punches; blocks.ron `slows` (brush, reeds, ferns, tall grass) cuts walking speed (`player::brush`). Stone and
+  deeprock drop small rocks; 4 small rocks make cobblestone at the tool bench, and stick + 2 small rocks a stone shovel.
 - Next: see `docs/GAMEPLAY_LOOP.md`.
 
 ## Testing without a screen
