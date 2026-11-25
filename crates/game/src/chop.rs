@@ -86,7 +86,12 @@ struct Falling {
     fall: Fall,
     t: f32,
     swing: f32,
+    /// When it was set down as blocks (the mesh stays until they show).
+    landed_at: Option<f32>,
 }
+
+/// Longest the falling mesh waits for the landed blocks to be meshed (seconds).
+const LAND_WAIT: f32 = 1.0;
 
 /// Blocks felling took out of the world without placing back (crushed logs,
 /// twigs and vines that lost their hold), sent as `Mined` so they drop.
@@ -103,6 +108,11 @@ fn room_for(world: &World, blocks: &Blocks, p: BlockPos) -> bool {
 
 fn is_trunk(blocks: &Blocks, b: BlockId) -> bool {
     blocks.registry.get(b).tree == Some(TreePart::Trunk)
+}
+
+/// A log, standing or lying: worth dropping when it can't be placed.
+fn is_log(blocks: &Blocks, b: BlockId) -> bool {
+    is_trunk(blocks, b) || blocks.registry.get(b).axis != voxel::Axis::Y
 }
 
 /// A trunk block was cut: whatever no longer stands starts to fall away from the player.
@@ -124,22 +134,19 @@ fn fell_trees(
                 world.set_block(p, BlockId::AIR);
             }
             for &(p, b) in &fall.lost {
-                if is_trunk(&blocks, b) {
+                if is_log(&blocks, b) {
                     fallout.0.push((p, b));
                 }
             }
             let around: Vec<BlockPos> = fall.removed.iter().flat_map(|r| crate::interact::neighbours(r.0)).collect();
             let budget = around.len() + 256;
             crate::interact::drop_unsupported(&mut world, &blocks, around, budget, |q, qb| fallout.0.push((q, qb)));
-            for &(p, _) in &fall.removed {
-                crate::interact::remesh_around(&mut world, &blocks, p);
-            }
             let cells: Vec<([i32; 3], BlockId)> = fall.removed.iter().map(|&(p, b)| ([p.x - cut.x, p.y - cut.y, p.z - cut.z], b)).collect();
             let height = cells.iter().map(|c| c.0[1]).max().unwrap_or(0).max(1) as f32;
             let swing = (SWING_BASE + SWING_PER_BLOCK * height).min(SWING_MOST);
             match (crate::chunk_mesh::loose(&cells, &blocks.registry), &blocks.material) {
                 (Some(mesh), Some(mat)) => {
-                    let falling = Falling { fall, t: 0.0, swing };
+                    let falling = Falling { fall, t: 0.0, swing, landed_at: None };
                     let tf = falling.transform();
                     commands.spawn((Mesh3d(meshes.add(mesh)), MeshMaterial3d::<VoxelMaterial>(mat.clone()), tf, falling));
                 }
@@ -181,27 +188,35 @@ fn swing_falling(
 ) {
     for (e, mut tree, mut tf) in &mut trees {
         tree.t += time.delta_secs();
-        *tf = tree.transform();
-        if tree.t >= tree.swing + tree.drop_time() {
-            land(&mut world, &blocks, &player, &tree.fall, &mut fallout);
+        if tree.landed_at.is_none() {
+            *tf = tree.transform();
+            if tree.t >= tree.swing + tree.drop_time() {
+                land(&mut world, &blocks, &player, &tree.fall, &mut fallout);
+                tree.landed_at = Some(tree.t);
+            }
+            continue;
+        }
+        // Keep drawing the tree until the ground it landed on has been
+        // remeshed in the background, so nothing blinks out (but not forever).
+        let waited = tree.t - tree.landed_at.unwrap_or(tree.t);
+        let pending = tree.fall.placed.iter().any(|(p, _)| world.needs_mesh(p.chunk()));
+        if !pending || waited > LAND_WAIT {
             commands.entity(e).despawn();
         }
     }
 }
 
 /// Set the fallen tree down. A spot taken meanwhile (by you, or something
-/// placed there) loses that block; a log lost that way still drops.
+/// placed there) loses that block; a log lost that way still drops. The
+/// chunks remesh in the background (no meshing on this frame).
 fn land(world: &mut World, blocks: &Blocks, player: &Player, fall: &Fall, fallout: &mut Fallout) {
     for &(p, b) in &fall.placed {
         if room_for(world, blocks, p) && !player.overlaps(p) && world.set_block(p, b) {
             continue;
         }
-        if is_trunk(blocks, b) {
+        if is_log(blocks, b) {
             fallout.0.push((p, b));
         }
-    }
-    for &(p, _) in &fall.placed {
-        crate::interact::remesh_around(world, blocks, p);
     }
 }
 
@@ -233,7 +248,7 @@ mod tests {
         for dir in [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]] {
             let pivot = BlockPos::new(4, 10, -7);
             let fall = Fall { pivot, dir, removed: vec![], placed: vec![], lost: vec![], drop: 3 };
-            let mut f = Falling { fall, t: 0.0, swing: 1.5 };
+            let mut f = Falling { fall, t: 0.0, swing: 1.5, landed_at: None };
             let middle = |f: &Falling, o: [i32; 3]| f.transform().transform_point(Vec3::new(o[0] as f32, o[1] as f32, o[2] as f32) + 0.5);
             let o = [1, 4, -2];
             let start = middle(&f, o);

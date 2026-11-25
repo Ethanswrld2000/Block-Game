@@ -371,15 +371,20 @@ fn break_block(world: &mut World, blocks: &Blocks, mined: &mut MessageWriter<Min
     mined.write(Mined { pos: p, block: b, felled: false });
     remesh_around(world, blocks, p);
     // A long vine can drop a strand at a time; keep it bounded.
+    let mut fell = Vec::new();
     drop_unsupported(world, blocks, neighbours(p).collect(), 256, |q, qb| {
         mined.write(Mined { pos: q, block: qb, felled: false });
+        fell.push(q);
     });
+    for q in fell {
+        remesh_around(world, blocks, q);
+    }
     true
 }
 
 /// Take away every block among `check` (and, as they go, their neighbours)
 /// that has lost what held it up (twigs, vines, plants), up to `budget` looks;
-/// `gone` hears of each one.
+/// `gone` hears of each one. Their chunks are left to remesh in the background.
 pub(crate) fn drop_unsupported(world: &mut World, blocks: &Blocks, mut check: Vec<BlockPos>, mut budget: usize, mut gone: impl FnMut(BlockPos, BlockId)) {
     while let Some(q) = check.pop() {
         budget -= 1;
@@ -394,7 +399,6 @@ pub(crate) fn drop_unsupported(world: &mut World, blocks: &Blocks, mut check: Ve
         }
         if world.set_block(q, BlockId::AIR) {
             gone(q, qb);
-            remesh_around(world, blocks, q);
             check.extend(neighbours(q));
         }
     }

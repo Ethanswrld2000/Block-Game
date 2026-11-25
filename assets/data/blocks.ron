@@ -119,11 +119,12 @@
     (name: "puddle_6", top: "water", solid: false, opaque: false, translucent: true, hardness: -1.0, shape: layer, level: 6),
     (name: "puddle_7", top: "water", solid: false, opaque: false, translucent: true, hardness: -1.0, shape: layer, level: 7),
     (name: "puddle_8", top: "water", solid: false, opaque: false, translucent: true, hardness: -1.0, shape: layer, level: 8),
-    // Logs lying on their side: what a felled trunk turns into (voxel::fell).
-    (name: "log_x", top: "log_top", side: "log_side", hardness: 2.5, material: "log", tree: trunk, axis: x),
-    (name: "log_z", top: "log_top", side: "log_side", hardness: 2.5, material: "log", tree: trunk, axis: z),
-    (name: "swamp_log_x", top: "swamp_log_top", side: "swamp_log_side", hardness: 2.5, material: "log", tree: trunk, axis: x),
-    (name: "swamp_log_z", top: "swamp_log_top", side: "swamp_log_side", hardness: 2.5, material: "log", tree: trunk, axis: z),
-    (name: "redwood_log_x", top: "redwood_log_top", side: "redwood_log_side", hardness: 3.0, material: "log", tree: trunk, axis: x),
-    (name: "redwood_log_z", top: "redwood_log_top", side: "redwood_log_side", hardness: 3.0, material: "log", tree: trunk, axis: z),
+    // Logs lying on their side: what a felled trunk turns into (voxel::fell). Not `tree`:
+    // they never fall again, and mining one just gives a log.
+    (name: "log_x", top: "log_top", side: "log_side", hardness: 2.5, material: "log", axis: x),
+    (name: "log_z", top: "log_top", side: "log_side", hardness: 2.5, material: "log", axis: z),
+    (name: "swamp_log_x", top: "swamp_log_top", side: "swamp_log_side", hardness: 2.5, material: "log", axis: x),
+    (name: "swamp_log_z", top: "swamp_log_top", side: "swamp_log_side", hardness: 2.5, material: "log", axis: z),
+    (name: "redwood_log_x", top: "redwood_log_top", side: "redwood_log_side", hardness: 3.0, material: "log", axis: x),
+    (name: "redwood_log_z", top: "redwood_log_top", side: "redwood_log_side", hardness: 3.0, material: "log", axis: z),
 ]
