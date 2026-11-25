@@ -75,7 +75,7 @@ pub(super) struct TreeNode(String);
 
 /// The frame round a step's picture.
 #[derive(Component)]
-pub(super) struct NodeFrame(String);
+pub(super) struct NodeFrame(pub(super) String);
 
 /// A halo that breathes behind steps you can fill now.
 #[derive(Component)]
@@ -294,6 +294,7 @@ pub(super) fn tree_click(
     mut urns: ResMut<Urns>,
     mut done: MessageWriter<StepDone>,
     mut toast: MessageWriter<Toast>,
+    mut fly: MessageWriter<super::fly_in::FlyIn>,
 ) {
     let (Some(i), Some(book)) = (tree.open, book) else { return };
     let def = &book.0.urns[i];
@@ -365,6 +366,10 @@ pub(super) fn tree_click(
             inv.add(&items, Stack::new(id, (n - went) as u16));
         }
         put += went;
+        if went > 0 {
+            // It flies up from below the screen into its picture.
+            fly.write(super::fly_in::FlyIn { item: name.clone(), step: step.clone() });
+        }
         for f in finished {
             done.write(StepDone(f));
         }
@@ -730,8 +735,9 @@ fn details(
                 let carry = inv.count(id);
                 let full = have >= *need;
                 r.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(6.0), ..default() }).with_children(|r| {
-                    r.spawn(Node { width: Val::Px(30.0), height: Val::Px(30.0), flex_shrink: 0.0, ..default() })
-                        .with_children(|i| crate::inventory::ui::icon(i, items, art, Stack::new(id, 1), 30.0, 30.0, false));
+                    let px = super::fly_in::ICON;
+                    r.spawn((super::fly_in::NeedIcon(item.clone()), Node { width: Val::Px(px), height: Val::Px(px), flex_shrink: 0.0, ..default() }, UiTransform::default()))
+                        .with_children(|i| crate::inventory::ui::icon(i, items, art, Stack::new(id, 1), px, px, false));
                     r.spawn((text(items.get(id).title.clone(), sizes::SMALL, colors::TEXT), Node { flex_grow: 1.0, ..default() }));
                     r.spawn(text(format!("{have}/{need}"), sizes::SMALL, if full { colors::GOOD } else { colors::TEXT }));
                     let carry_text = if full { String::new() } else { format!("you carry {carry}") };
