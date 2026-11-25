@@ -106,16 +106,18 @@ struct ColdVignette(f32);
 /// The cold vignette's colour at full strength.
 const VIGNETTE_BLUE: Color = Color::srgba(0.35, 0.6, 0.95, 0.0);
 
-/// Clear in the middle, blue towards the corners, `strength` 0..1.
+/// Clear in the middle, faint blue towards the corners, `strength` 0..1.
+/// Stops stay at fixed, increasing positions (out of order they flip the gradient);
+/// only the alpha follows the strength.
 fn vignette_gradient(strength: f32) -> BackgroundGradient {
     let blue = |a: f32| VIGNETTE_BLUE.with_alpha(a * strength);
     BackgroundGradient::from(RadialGradient::new(
         UiPosition::CENTER,
         RadialGradientShape::FarthestCorner,
         vec![
-            ColorStop::percent(blue(0.0), 100.0 - 55.0 * strength.sqrt()),
-            ColorStop::percent(blue(0.35), 82.0),
-            ColorStop::percent(blue(0.75), 100.0),
+            ColorStop::percent(blue(0.0), 60.0),
+            ColorStop::percent(blue(0.08), 85.0),
+            ColorStop::percent(blue(0.22), 100.0),
         ],
     ))
 }
