@@ -99,6 +99,9 @@
             Say("bram", "C01_07"),
             Say("bram", "C01_08"),
             Say("bram", "C01_09"),
+            Say("bram", "C01_09b"),
+            // He stays with you until camp is up, then keeps to the urn (`npc::settle`).
+            Follow("bram"),
             Flag("met_bram"),
             Flag("world_begun"),
             Flag("guide_on"),
@@ -118,6 +121,66 @@
             Say("bram", "C01_10"),
             Say("bram", "C01_11"),
             Say("bram", "C01_12"),
+        ],
+    ),
+    (
+        // Played by the guide (guide.ron) when this day-one step comes up.
+        id: "G_camp",
+        title: "Make camp",
+        actors: {
+            "bram": (from: Player, offset: (3.0, 0.0, 7.0)),
+        },
+        steps: [
+            Camera(Actor("bram"), 0.8),
+            Walk("bram", (from: Player, offset: (0.5, 0.0, 2.6))),
+            Face("bram", Player),
+            Say("bram", "G_camp_01"),
+            Say("bram", "G_camp_02"),
+        ],
+    ),
+    (
+        // Played by the guide (guide.ron) when this day-one step comes up.
+        id: "G_fiber",
+        title: "Fiber for a bed",
+        actors: {
+            "bram": (from: Player, offset: (3.0, 0.0, 7.0)),
+        },
+        steps: [
+            Camera(Actor("bram"), 0.8),
+            Walk("bram", (from: Player, offset: (0.5, 0.0, 2.6))),
+            Face("bram", Player),
+            Say("bram", "G_fiber_01"),
+            Say("bram", "G_fiber_02"),
+        ],
+    ),
+    (
+        // Played by the guide (guide.ron) when this day-one step comes up.
+        id: "G_bed",
+        title: "Make the bed",
+        actors: {
+            "bram": (from: Player, offset: (3.0, 0.0, 7.0)),
+        },
+        steps: [
+            Camera(Actor("bram"), 0.8),
+            Walk("bram", (from: Player, offset: (0.5, 0.0, 2.6))),
+            Face("bram", Player),
+            Say("bram", "G_bed_01"),
+            Say("bram", "G_bed_02"),
+        ],
+    ),
+    (
+        // Played by the guide (guide.ron) when this day-one step comes up.
+        id: "G_sleep",
+        title: "First night",
+        actors: {
+            "bram": (from: Player, offset: (3.0, 0.0, 7.0)),
+        },
+        steps: [
+            Camera(Actor("bram"), 0.8),
+            Walk("bram", (from: Player, offset: (0.5, 0.0, 2.6))),
+            Face("bram", Player),
+            Say("bram", "G_sleep_01"),
+            Say("bram", "G_sleep_02"),
         ],
     ),
     (

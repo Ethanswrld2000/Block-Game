@@ -573,11 +573,15 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `Shake`, `Roll`, `Flash`, `Lids`, `Sound`; cutscene-only airships in `cutscene::props` (`Ship`, `ShipTo`, `Fire`,
   `Unship`; your ship is `airship::build_model` with your body at the helm, the court ship `cast::wren::build_ship`);
   marks and targets can follow them (`Ship("ours")`, kept in `Places` as `ship:<name>`). `game::guide`
-  (`assets/data/guide.ron`, pure rules in `guide::rules`): one step at a time (sticks and stones, fiber, camp, camp mat,
-  rough axe, logs, torch, door, home, Tool Urn, set it down), done = story flag `guide:<id>`; the journal (J) lists
-  them first; guide waypoints (`map::Waypoints::guide`, not saved, cyan) point at the nearest matching blocks in the
-  loaded world. A proper home = a closed room with a door in its walls and a torch (any light) inside
-  (`guide::home_missing`); carried urns can only be set down in one. The home step plays C01b (Bram explains it).
+  (`assets/data/guide.ron`, pure rules in `guide::rules`): day one with Bram, one step at a time (sticks and stones,
+  set up camp (B), plant fiber, make your bed (the ancestral urn's camp mat), sleep the first night (`Goal::Slept`)),
+  done = story flag `guide:<id>`; C01 ends with Bram handing you the Ancestral Urn and following you (he settles by
+  the urn once camp is up, `npc::settle`), and each later step opens with Bram walking over and saying it (cutscenes
+  `G_camp`, `G_fiber`, `G_bed`, `G_sleep`; simple lines, no choices). While the guide runs, Z won't sleep until the
+  bed step is done (`rules::bed_missing`). The journal (J) lists the steps first; guide waypoints
+  (`map::Waypoints::guide`, not saved, cyan) point at the nearest matching blocks in the loaded world.
+  A proper home = a closed room with a door in its walls and a torch (any light) inside
+  (`guide::home_missing`); carried urns can only be set down in one.
   Doors are also made at the camp mat (3 logs + 1 cordage) and the carpentry bench (6 planks + 2 sticks).
 - Station textures: `station::skin`. Each `models::Mat` with a tile (`Mat::tile_name`) gets its tile from `stations.png`, cut into
   one repeating texture per material once loaded; boxes are meshed by `skin::box_mesh` with world-scale UVs (one tile per block,
