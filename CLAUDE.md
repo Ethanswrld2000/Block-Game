@@ -618,10 +618,13 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   freezing snow melts slowly, faster the warmer it is (`MELT_FULL`). Rain adds a level of water where walls hold it on two
   sides or more. Water flows (`cover::flow`, every `FLOW_EVERY` 0.15 s): `puddle_<n>` = n eighths, `water` = 8 (a source
   block); open all round (below and four sides air) gives its water out at once, else down first, then an eighth per pass
-  to each side two lower or one it can fall from; total kept (except water falling out of the loaded world). Only cells
-  next to a change move (`World::changed` from `set_block`, `cover::Flowing`), so a lake leaks only when a block next to it
-  changes. Water washes away plants and pebbles; puddles aren't held up (they run). By day without rain, still puddles
-  under 4 eighths dry a level now and then.
+  to each side two lower or one it can fall from; total kept (except water falling out of the loaded world). A source
+  block in a body of `flow::ENDLESS` (11)+ connected source blocks never runs low: it fills the cell below and gives an
+  eighth to any side with less, staying full, so a pit dug by a river or the sea fills right up. Only cells next to a
+  change move (`World::changed` from `set_block`, `cover::Flowing`). Water washes away plants and pebbles; puddles aren't
+  held up (they run). Puddles stay while it rains; once it stops, water short of a full block dries a level at a time
+  (`Flowing::shallow`, chance `dry` per second; not saved, older puddles dry through the column looks).
+  F9 dev menu, World tab: pick a season (`Seasons::next_start` jumps the day forward to its first day).
 - Rainbows and lightning bolts: after rain or a storm gives way to drier weather, `Conditions.rainbow` rises with the change
   and fades 1-2.5 game hours later (`weather::rainbow_strength`); `sky.wesl` `rainbow` draws a main bow 40-42.5° and a faint
   second bow round the point opposite the sun (`sky::rainbow_centre`, kept from sinking far below the horizon so midday bows

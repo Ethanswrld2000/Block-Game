@@ -10,6 +10,13 @@
 //!   two eighths less, or to a side it can fall from (downhill), so puddles
 //!   run to the low spots and settle when no side differs by more than one.
 //!
+//! A source block that is part of a body of more than [`ENDLESS`] - 1 connected
+//! source blocks (a river, a lake, the sea) never runs low: it gives an eighth
+//! to every side holding less and fills the cell below, and stays full. So a
+//! pit dug beside a river fills right up, and each full cell it makes joins
+//! the body. Water short of a full block dries up once the rain stops
+//! (`game::cover` does that, from `Flow::shallow`).
+//!
 //! Only cells near a change are looked at (`Flow::next`): a lake only starts
 //! to leak when a block next to it changes. Water that falls out of the loaded
 //! world (or below the world floor) is gone.
@@ -91,6 +98,9 @@ pub struct Flow {
     pub lost: u32,
 }
 
+/// Connected source blocks that make a body that never runs low.
+pub const ENDLESS: usize = 11;
+
 const SIDES: [[i32; 3]; 4] = [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]];
 const AROUND: [[i32; 3]; 6] = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
 
@@ -103,11 +113,29 @@ pub fn around(p: BlockPos) -> impl Iterator<Item = BlockPos> {
     std::iter::once(p).chain(AROUND.into_iter().map(move |d| add(p, d)))
 }
 
+/// Cells reached from `p` through cells `through` accepts (six ways), up to `cap`.
+fn reach(p: BlockPos, cap: usize, through: impl Fn(BlockPos) -> bool) -> Vec<BlockPos> {
+    let mut seen = vec![p];
+    let mut i = 0;
+    while i < seen.len() && seen.len() < cap {
+        for q in around(seen[i]).skip(1) {
+            if seen.len() < cap && !seen.contains(&q) && through(q) {
+                seen.push(q);
+            }
+        }
+        i += 1;
+    }
+    seen
+}
+
 /// One pass over `active` (at most `budget` cells; the rest wait for the next
 /// pass). `get` reads the world; the pass sees its own changes as it goes, so
-/// the total stays the same. `floor` is the lowest y water can be at.
+/// only endless bodies add water and only falls out of the world take it away.
+/// `floor` is the lowest y water can be at.
 pub fn pass(get: &impl Fn(BlockPos) -> Cell, active: &HashSet<BlockPos>, budget: usize, floor: i32, seed: &mut u64) -> Flow {
     let mut flow = Flow::default();
+    // Source blocks known to be in an endless body (true) or a small one (false).
+    let mut endless: HashMap<BlockPos, bool> = HashMap::new();
     // Lowest first, so a falling column moves together.
     let mut cells: Vec<BlockPos> = active.iter().copied().collect();
     cells.sort_unstable_by_key(|p| (p.y, p.x, p.z));
@@ -129,6 +157,35 @@ pub fn pass(get: &impl Fn(BlockPos) -> Cell, active: &HashSet<BlockPos>, budget:
             levels.insert(q, v);
             moved.push(q);
         };
+
+        // Part of a big body: fill below and any lower side, stay full.
+        if start == 8 {
+            let big = match endless.get(&p) {
+                Some(b) => *b,
+                None => {
+                    let body = reach(p, ENDLESS, |q| look(q, &flow.levels) == Cell::Water(8));
+                    let big = body.len() >= ENDLESS;
+                    endless.extend(body.into_iter().map(|q| (q, big)));
+                    big
+                }
+            };
+            if big {
+                if let Cell::Water(b) = below
+                    && b < 8
+                    && p.y > floor
+                {
+                    set(down, 8, &mut flow.levels, &mut moved);
+                }
+                for q in sides {
+                    if let Cell::Water(n) = look(q, &flow.levels)
+                        && n < 8
+                    {
+                        set(q, n + 1, &mut flow.levels, &mut moved);
+                    }
+                }
+                continue;
+            }
+        }
 
         // Open all round: out to the five at once.
         if below == Cell::Water(0) && sides.iter().all(|q| look(*q, &flow.levels) == Cell::Water(0)) && p.y > floor {
@@ -255,9 +312,9 @@ mod tests {
     fn water_falls_then_spreads_and_keeps_its_volume() {
         let mut p = Pool::new();
         p.floor(-1);
-        // A full block in the air beside a wall (so not open all round), over a floor.
+        // Seven eighths in the air beside a wall (so not open all round), over a floor.
         p.walls.insert(BlockPos::new(1, 2, 0));
-        p.water.insert(BlockPos::new(0, 2, 0), 8);
+        p.water.insert(BlockPos::new(0, 2, 0), 7);
         let start = p.total();
         let passes = p.settle(HashSet::from([BlockPos::new(0, 2, 0)]), 500);
         assert!(passes < 500, "settles");
@@ -287,7 +344,7 @@ mod tests {
     }
 
     #[test]
-    fn a_lake_leaks_into_a_new_hole_and_keeps_its_volume() {
+    fn a_trench_beside_a_lake_fills_up_and_the_lake_stays_full() {
         let mut p = Pool::new();
         p.floor(-3);
         // A lake two deep in x -8..-1, walled off at x 0, a dry pit beyond it.
@@ -302,15 +359,30 @@ mod tests {
                 }
             }
         }
-        let start = p.total();
-        // Dig a hole at x 0 next to the lake's lower layer.
-        let hole = BlockPos::new(0, -2, 0);
-        p.walls.remove(&hole);
-        let passes = p.settle(around(hole).collect(), 2000);
+        // Dig a 3-long trench at x 0..2 next to the lake's lower layer.
+        for x in 0..3 {
+            p.walls.remove(&BlockPos::new(x, -2, 0));
+        }
+        let passes = p.settle(around(BlockPos::new(0, -2, 0)).collect(), 2000);
         assert!(passes < 2000, "settles");
-        assert_eq!(p.total(), start, "volume kept");
-        assert!(level(&p, 0, -2, 0) >= 7, "the hole filled");
-        assert!(p.water.values().any(|l| *l < 8), "the lake went down a little");
+        for x in 0..3 {
+            assert_eq!(level(&p, x, -2, 0), 8, "the trench filled right up");
+        }
+        assert!(p.water.iter().filter(|(q, _)| q.x < 0).all(|(_, l)| *l == 8), "the lake stays full");
+    }
+
+    #[test]
+    fn a_small_pond_runs_out_and_keeps_its_volume() {
+        let mut p = Pool::new();
+        p.floor(-1);
+        // Four source blocks in a row: under the endless size.
+        for x in 0..4 {
+            p.water.insert(BlockPos::new(x, 0, 0), 8);
+        }
+        let passes = p.settle((0..4).map(|x| BlockPos::new(x, 0, 0)).collect(), 3000);
+        assert!(passes < 3000, "settles");
+        assert_eq!(p.total(), 32, "spread out, none made");
+        assert!(p.water.values().all(|l| *l < 8), "no source left");
     }
 
     #[test]

@@ -70,7 +70,7 @@ pub struct Sky {
     pub rain: f32,
     /// Melt a snow layer.
     pub melt: f32,
-    /// Dry a still puddle under four eighths a level.
+    /// Dry a puddle (short of a full block) a level.
     pub dry: f32,
 }
 
@@ -126,7 +126,6 @@ pub fn surface(get: &impl Fn(BlockPos) -> Option<BlockId>, reg: &BlockRegistry, 
 }
 
 /// What one look at the cover cell `at` changes, given the weather's chances.
-/// `moving` says whether water there is still flowing (it doesn't dry then).
 /// Water only gathers and dries here; `super::flow` moves it.
 pub fn step(
     get: &impl Fn(BlockPos) -> Option<BlockId>,
@@ -134,7 +133,6 @@ pub fn step(
     kinds: &Kinds,
     at: BlockPos,
     sky: &Sky,
-    moving: &impl Fn(BlockPos) -> bool,
     seed: &mut u64,
 ) -> Vec<(BlockPos, BlockId)> {
     let Some(here) = get(at) else { return Vec::new() };
@@ -178,8 +176,8 @@ pub fn step(
             level += 1;
         }
     }
-    // A shallow puddle that has stopped running dries a little.
-    if water > 0 && water < 4 && level == water && sky.dry > 0.0 && !moving(at) && rand(seed) < sky.dry {
+    // After the rain, water short of a full block dries a little.
+    if water > 0 && level == water && sky.dry > 0.0 && rand(seed) < sky.dry {
         level -= 1;
     }
     if level == water {
@@ -215,7 +213,7 @@ mod tests {
                 let (x, z) = cols[i % cols.len()];
                 let get = |p: BlockPos| self.get(p);
                 let Some(at) = surface(&get, reg, kinds, x, z, 10, -10) else { continue };
-                let changes = step(&get, reg, kinds, at, sky, &|_| false, &mut seed);
+                let changes = step(&get, reg, kinds, at, sky, &mut seed);
                 for (p, b) in changes {
                     self.cells.insert(p, b);
                 }
@@ -301,19 +299,18 @@ mod tests {
     }
 
     #[test]
-    fn only_still_shallow_puddles_dry() {
+    fn puddles_dry_only_after_the_rain() {
         let (reg, kinds, mut g) = setup();
         let p = BlockPos::new(0, -1, 0);
-        let dry = Sky { dry: 1.0, ..Default::default() };
         let mut seed = 99;
-        for (level, moving, dries) in [(3, false, true), (4, false, false), (2, true, false)] {
+        for level in [1, 4, 7] {
             g.cells.insert(p, kinds.water.block(level));
             let get = |q: BlockPos| g.get(q);
-            let out = step(&get, &reg, &kinds, p, &dry, &|_| moving, &mut seed);
-            assert_eq!(!out.is_empty(), dries, "level {level}, moving {moving}");
-            if dries {
-                assert_eq!(out[0].1, kinds.water.block(level - 1));
-            }
+            let out = step(&get, &reg, &kinds, p, &Sky { dry: 1.0, ..Default::default() }, &mut seed);
+            assert_eq!(out, vec![(p, kinds.water.block(level - 1))], "level {level} dries");
         }
+        g.cells.insert(p, reg.expect("water"));
+        let get = |q: BlockPos| g.get(q);
+        assert_eq!(surface(&get, &reg, &kinds, 0, 0, 10, -10), None, "a full block isn't a puddle");
     }
 }

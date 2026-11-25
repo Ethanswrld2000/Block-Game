@@ -14,6 +14,8 @@
     melt: 0.5,
     // Rain at full strength adds a level of water to a low spot with this chance.
     rain: 0.8,
-    // By day, without rain, a still puddle under 4 eighths loses a level with this chance.
-    dry: 0.15,
+    // Once the rain stops, water short of a full block loses a level with this
+    // chance per look, and puddles water has flowed into or rain has filled with
+    // this chance per second.
+    dry: 0.1,
 )
