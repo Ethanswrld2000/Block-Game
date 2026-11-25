@@ -18,7 +18,7 @@ pub struct SurvivalHudPlugin;
 impl Plugin for SurvivalHudPlugin {
     fn build(&self, app: &mut App) {
         // PostStartup: after the weather panel, so this stacks below it top right.
-        app.add_systems(crate::menu::GamePostStartup, spawn).add_systems(crate::menu::GameUpdate, (update_bars, update_meters, shake, temperature_list, toasts, overlays).after(super::SurvivalSet));
+        app.add_systems(crate::menu::GamePostStartup, spawn).add_systems(crate::menu::GameUpdate, (update_bars, update_meters, shake, temperature_list, toasts, overlays, cold_vignette).after(super::SurvivalSet));
     }
 }
 
@@ -98,6 +98,27 @@ struct CampText;
 
 #[derive(Component)]
 struct Dizzy;
+
+/// Blue edges that close in with the cold (`shiver::vignette`); holds the strength last drawn.
+#[derive(Component, Default)]
+struct ColdVignette(f32);
+
+/// The cold vignette's colour at full strength.
+const VIGNETTE_BLUE: Color = Color::srgba(0.35, 0.6, 0.95, 0.0);
+
+/// Clear in the middle, blue towards the corners, `strength` 0..1.
+fn vignette_gradient(strength: f32) -> BackgroundGradient {
+    let blue = |a: f32| VIGNETTE_BLUE.with_alpha(a * strength);
+    BackgroundGradient::from(RadialGradient::new(
+        UiPosition::CENTER,
+        RadialGradientShape::FarthestCorner,
+        vec![
+            ColorStop::percent(blue(0.0), 100.0 - 55.0 * strength.sqrt()),
+            ColorStop::percent(blue(0.35), 82.0),
+            ColorStop::percent(blue(0.75), 100.0),
+        ],
+    ))
+}
 
 #[derive(Component)]
 struct SleepFade;
@@ -202,6 +223,7 @@ fn full_screen(color: Color) -> impl Bundle {
 fn spawn(mut commands: Commands, theme: Res<Theme>, rules: Res<Exposure>, top_right: Res<crate::hud::TopRight>) {
     let theme = &*theme;
     let rules = &*rules;
+    commands.spawn((ColdVignette::default(), full_screen(Color::NONE), vignette_gradient(0.0)));
     commands.spawn((Dizzy, full_screen(Color::srgba(0.02, 0.03, 0.08, 0.0))));
 
     // Health, outermost bar on top.
@@ -587,6 +609,16 @@ fn toasts(
         if *v != want {
             *v = want;
         }
+    }
+}
+
+fn cold_vignette(s: Res<Survival>, rules: Res<Exposure>, mut q: Query<(&mut ColdVignette, &mut BackgroundGradient)>) {
+    let Ok((mut drawn, mut grad)) = q.single_mut() else { return };
+    let v = &s.vitals;
+    let want = if v.health.is_dead() { 0.0 } else { super::shiver::vignette(&rules, v.feels) };
+    if (want - drawn.0).abs() > 0.004 || (want == 0.0 && drawn.0 != 0.0) {
+        drawn.0 = want;
+        *grad = vignette_gradient(want);
     }
 }
 

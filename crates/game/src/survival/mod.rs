@@ -15,6 +15,7 @@ pub mod food;
 pub mod health;
 mod hud;
 pub mod shelter;
+pub mod shiver;
 pub mod vitals;
 
 use bevy::prelude::*;
@@ -50,6 +51,7 @@ impl Plugin for SurvivalPlugin {
             .init_resource::<Survival>()
             .init_resource::<Camp>()
             .init_resource::<RespawnAt>()
+            .init_resource::<shiver::Shiver>()
             .add_message::<Toast>()
             .add_message::<Ate>()
             .add_systems(crate::menu::GamePostStartup, (remember_spawn, load_player).chain().after(crate::world::setup_generator))
@@ -425,13 +427,16 @@ fn perks_warm(feels: f32) -> f32 {
     if feels >= vitals::COMFORT_HIGH - 4.0 { feels } else { (feels + crate::progress::WARMTH_SPELL).min(vitals::COMFORT_HIGH - 4.0) }
 }
 
-fn set_body(s: Res<Survival>, rules: Res<Exposure>, sleep: Res<camp::Sleep>, mut body: ResMut<Body>) {
+fn set_body(time: Res<Time>, s: Res<Survival>, rules: Res<Exposure>, sleep: Res<camp::Sleep>, mut shiver: ResMut<shiver::Shiver>, mut body: ResMut<Body>) {
     let v = &s.vitals;
+    let still = v.health.is_dead() || sleep.active();
+    shiver.tick(time.delta_secs(), if still { 0 } else { shiver::cold_level(&rules, v.feels) });
     *body = Body {
         speed: v.speed(s.env.carried, &rules),
         fall: vitals::weight_fall(s.env.carried),
         dizzy: v.dizzy(&rules),
-        frozen: v.health.is_dead() || sleep.active(),
+        frozen: still,
+        shiver: shiver.amount,
         ..default()
     };
 }
