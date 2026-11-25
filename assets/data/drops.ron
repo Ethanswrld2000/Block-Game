@@ -41,4 +41,11 @@
     "vine_west": [("plant_fiber", 1, 0.4)],
     "pebble": [("small_rock", 1, 1.0)],
     "wooden_door_open": [("wooden_door", 1, 1.0)],
+    // Felled logs lying on their side give the log they were.
+    "log_x": [("log", 1, 1.0)],
+    "log_z": [("log", 1, 1.0)],
+    "swamp_log_x": [("swamp_log", 1, 1.0)],
+    "swamp_log_z": [("swamp_log", 1, 1.0)],
+    "redwood_log_x": [("redwood_log", 1, 1.0)],
+    "redwood_log_z": [("redwood_log", 1, 1.0)],
 }

@@ -123,6 +123,8 @@ pub fn holding_torch(items: &Items, wielded: &Wielded, off: &OffHand) -> bool {
 pub struct Mined {
     pub pos: BlockPos,
     pub block: BlockId,
+    /// Came down with a felled tree (`chop`): it doesn't fell anything itself.
+    pub felled: bool,
 }
 
 /// A mining swing landed on a block (it may or may not have broken).
@@ -366,11 +368,19 @@ fn break_block(world: &mut World, blocks: &Blocks, mined: &mut MessageWriter<Min
     if !world.set_block(p, BlockId::AIR) {
         return false;
     }
-    mined.write(Mined { pos: p, block: b });
+    mined.write(Mined { pos: p, block: b, felled: false });
     remesh_around(world, blocks, p);
-    let mut check: Vec<BlockPos> = neighbours(p).collect();
     // A long vine can drop a strand at a time; keep it bounded.
-    let mut budget = 256;
+    drop_unsupported(world, blocks, neighbours(p).collect(), 256, |q, qb| {
+        mined.write(Mined { pos: q, block: qb, felled: false });
+    });
+    true
+}
+
+/// Take away every block among `check` (and, as they go, their neighbours)
+/// that has lost what held it up (twigs, vines, plants), up to `budget` looks;
+/// `gone` hears of each one.
+pub(crate) fn drop_unsupported(world: &mut World, blocks: &Blocks, mut check: Vec<BlockPos>, mut budget: usize, mut gone: impl FnMut(BlockPos, BlockId)) {
     while let Some(q) = check.pop() {
         budget -= 1;
         if budget == 0 {
@@ -383,15 +393,14 @@ fn break_block(world: &mut World, blocks: &Blocks, mined: &mut MessageWriter<Min
             continue;
         }
         if world.set_block(q, BlockId::AIR) {
-            mined.write(Mined { pos: q, block: qb });
+            gone(q, qb);
             remesh_around(world, blocks, q);
             check.extend(neighbours(q));
         }
     }
-    true
 }
 
-fn neighbours(p: BlockPos) -> impl Iterator<Item = BlockPos> {
+pub(crate) fn neighbours(p: BlockPos) -> impl Iterator<Item = BlockPos> {
     [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]].into_iter().map(move |d| BlockPos::new(p.x + d[0], p.y + d[1], p.z + d[2]))
 }
 

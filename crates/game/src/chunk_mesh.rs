@@ -105,6 +105,35 @@ pub fn build(chunk: &PaddedChunk, light: &Light, registry: &BlockRegistry, opaqu
     ChunkMeshes { opaque: solid.into_mesh(), translucent: clear.into_mesh(), plants: plants.into_mesh(), light: Some(light.coarse()) }
 }
 
+/// A loose set of cube blocks (a felled tree on its way down) as one mesh,
+/// with `cells` given relative to the mesh origin. Faces between two blocks
+/// of the set are left out where the near one hides them; lit by full sky.
+pub fn loose(cells: &[([i32; 3], voxel::BlockId)], registry: &BlockRegistry) -> Option<Mesh> {
+    let at: std::collections::HashMap<[i32; 3], voxel::BlockId> = cells.iter().copied().collect();
+    let sky = voxel::light::MAX * 4;
+    let mut b = Buffers::default();
+    for &(c, block) in cells {
+        if registry.get(block).shape != voxel::Shape::Cube {
+            continue;
+        }
+        for face in voxel::Face::ALL {
+            let n = face.normal();
+            if at.get(&[c[0] + n[0], c[1] + n[1], c[2] + n[2]]).is_some_and(|&o| o == block || registry.get(o).opaque) {
+                continue;
+            }
+            let start = b.pos.len();
+            let q = Quad { face, block, origin: [0, 0, 0], size_u: 1, size_v: 1, ao: [0; 4], light: [[sky, 0]; 4] };
+            push_quad(&q, registry, &mut b);
+            for p in &mut b.pos[start..] {
+                for k in 0..3 {
+                    p[k] += c[k] as f32;
+                }
+            }
+        }
+    }
+    b.into_mesh()
+}
+
 /// Two crossed quads per plant block, each drawn from both sides. Normals
 /// point up so a tuft is lit like the ground it stands on. The top edge sways.
 /// Snow layers go in with the details; puddles go in `clear` with the water.
@@ -412,6 +441,11 @@ fn push_quad(q: &Quad, registry: &BlockRegistry, b: &mut Buffers) {
     let lit = [q.light[0], q.light[1], q.light[3], q.light[2]];
     // Leaves (see-through foliage) rustle a little.
     let sway = if def.foliage && !def.opaque { LEAF_SWAY } else { 0.0 };
+    // Tile v runs along y on x and z faces and along z on y faces; turn the
+    // tile where that isn't the grain (and the face isn't a cut end).
+    let v_axis = if axis == 1 { 2 } else { 1 };
+    let grain = def.axis.index();
+    let grain_turns = axis != grain && v_axis != grain;
     let start = b.pos.len() as u32;
     for (i, mut c) in corners.into_iter().enumerate() {
         if lower_top {
@@ -421,11 +455,13 @@ fn push_quad(q: &Quad, registry: &BlockRegistry, b: &mut Buffers) {
         b.nor.push(normal);
         // Texture coordinates from position: upright on walls, and continuous
         // across a merged quad so `fract` tiles it once per block.
-        b.uv.push(match axis {
+        let uv = match axis {
             0 => [c[2], -c[1]],
             1 => [c[0], c[2]],
             _ => [c[0], -c[1]],
-        });
+        };
+        // A lying log turns its bark so the grain runs along the log.
+        b.uv.push(if grain_turns { [uv[1], uv[0]] } else { uv });
         b.layer.push([pack_layer(tex, ao[i]), pack_tint_sway(foliage, sway)]);
         b.light.push(light_color(lit[i]));
     }
@@ -477,6 +513,37 @@ mod tests {
             }
         }
         assert_eq!(pack_tint_sway(0.5, 0.0), 0.5);
+    }
+
+    #[test]
+    fn lying_logs_turn_their_bark_along_the_grain() {
+        let tiles = voxel::TileSheet::from_ron(include_str!("../../../assets/textures/blocks.ron")).unwrap();
+        let reg = BlockRegistry::from_ron(include_str!("../../../assets/data/blocks.ron"), &tiles).unwrap();
+        // How far the tile's v changes along each world axis over one face.
+        let v_along = |name: &str, face: voxel::Face| {
+            let mut b = Buffers::default();
+            let q = Quad { face, block: reg.expect(name), origin: [1, 1, 1], size_u: 1, size_v: 1, ao: [0; 4], light: [[0, 0]; 4] };
+            push_quad(&q, &reg, &mut b);
+            let mut d = [0.0f32; 3];
+            for i in 1..4 {
+                for k in 0..3 {
+                    let dp = b.pos[i][k] - b.pos[0][k];
+                    if dp.abs() > 0.5 {
+                        d[k] = d[k].max((b.uv[i][1] - b.uv[0][1]).abs() / dp.abs());
+                    }
+                }
+            }
+            d
+        };
+        use voxel::Face::*;
+        // Standing: v runs up the sides.
+        assert_eq!(v_along("log", PosX)[1], 1.0);
+        // Lying along x: v runs along x on the top and the sides.
+        assert_eq!(v_along("log_x", PosY)[0], 1.0);
+        assert_eq!(v_along("log_x", NegZ)[0], 1.0);
+        // Lying along z: v runs along z on the top and the sides.
+        assert_eq!(v_along("log_z", PosY)[2], 1.0);
+        assert_eq!(v_along("log_z", PosX)[2], 1.0);
     }
 
     #[test]
