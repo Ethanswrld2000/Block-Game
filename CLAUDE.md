@@ -205,7 +205,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   opens its tree (`station::tree`: you look into the urn and its dark opens from the mouth over the screen, a
   UI shader `assets/shaders/urn_void.wesl` (`UrnVoid` UiMaterial); steps stand as a tree growing upward, each above the
   steps it comes after (`tree_layout`, pure); pointing at a step shows on the right what it gives, what it takes and
-  "Put in"; `BLOCKGAME_URNOPEN=0.4` holds the opening that far for screenshots). Models are boxes in `station::models` (upgrades change them);
+  "Put in"; each thing put in flies up from below the screen into its "It takes" picture on the forge's timing and pops with `craft_pop`, `station::fly_in`; `BLOCKGAME_URNOPEN=0.4` holds the opening that far for screenshots). Models are boxes in `station::models` (upgrades change them);
   concept sheets for real art in `docs/stations/` (`python3 tools/gen_station_concepts.py`). Personal storage is a
   chest at `inventory::STORAGE_AT` (not in the world; 8x5, 8x7 with the extra shelf). Saved to `urns.ron` (the old
   fusion `urn.ron` is gone). F9 = dev menu (`station::dev`, tabs: Urns (give/set down urns, items for the next step, finish
