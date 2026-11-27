@@ -142,6 +142,19 @@ impl Seasons {
         SeasonPoint { current: current as usize, next: ((current + 1) % n) as usize, day_in_season, blend }
     }
 
+    /// The first day, from `day` on, of season `season` (`day` itself if it is
+    /// already that season). Moves forward only, so day-based timers stay sane.
+    pub fn next_start(&self, day: u32, season: usize) -> u32 {
+        let n = self.list.len() as u32;
+        let year = self.days * n;
+        let s = (season as u32).min(n - 1);
+        if (day / self.days) % n == s {
+            return day;
+        }
+        let start = day - day % year + s * self.days;
+        if start > day { start } else { start + year }
+    }
+
     /// A season value blended towards the next season.
     pub fn blended(&self, p: SeasonPoint, f: impl Fn(&Season) -> f32) -> f32 {
         let (a, b) = (f(&self.list[p.current]), f(&self.list[p.next]));
@@ -209,6 +222,20 @@ fn save_clock_on_exit(mut exit: MessageReader<AppExit>, clock: Res<WorldClock>, 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn next_start_jumps_forward_to_the_season() {
+        let s = seasons();
+        let (d, n) = (s.days, s.list.len() as u32);
+        let day = d + 1; // second season, one day in
+        assert_eq!(s.next_start(day, 1), day, "already there");
+        assert_eq!(s.next_start(day, 2), 2 * d);
+        assert_eq!(s.next_start(day, 0), n * d, "next year, never back");
+        for k in 0..n as usize {
+            let c = WorldClock { day: s.next_start(day, k), time: 0.5, speed: 1.0 };
+            assert_eq!(s.at(&c).current, k);
+        }
+    }
 
     fn seasons() -> Seasons {
         Seasons::from_ron(include_str!("../../../assets/data/seasons.ron")).unwrap()

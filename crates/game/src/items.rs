@@ -266,10 +266,27 @@ impl Items {
         }
     }
 
+    /// Whether what's in the hand is a tool made for this material (a shovel
+    /// for soil). Only those take a whole block of soil; anything else digs
+    /// it down a layer at a time (`BlockDef::dig_to`).
+    pub fn rated(&self, held: Option<ItemId>, material: &str) -> bool {
+        held.is_some_and(|i| matches!(&self.get(i).kind, ItemKind::Tool { speeds } if speeds.contains_key(material)))
+    }
+
+    /// What a blow that breaks `block` leaves in its place: a lower layer of
+    /// soil when it wasn't dug with the right tool, else nothing.
+    pub fn dug_to(&self, held: Option<ItemId>, block: &BlockDef) -> Option<voxel::BlockId> {
+        block.dig_to.filter(|_| !self.rated(held, &block.material))
+    }
+
     /// Seconds to break a block, or `None` if it can't be broken.
     pub fn break_time(&self, held: Option<ItemId>, block: &BlockDef) -> Option<f32> {
         if block.hardness < 0.0 {
             return None;
+        }
+        // Nothing to it (torches, pebbles, twigs): anything takes it at once.
+        if block.hardness == 0.0 {
+            return Some(0.0);
         }
         // A speed of 0 means this can't cut it at all (logs by hand).
         let speed = self.speed(held, &block.material);
@@ -319,29 +336,81 @@ pub mod tests {
         let log = blocks.get(blocks.expect("log"));
         let pick = items.id("stone_pickaxe");
         let axe = items.id("stone_axe");
-        let hand = items.break_time(None, stone).unwrap();
+        let hand = items.break_time(None, stone);
         let picked = items.break_time(pick, stone).unwrap();
-        assert!(picked < hand && hand > 8.0, "pick {picked}, hand {hand}");
+        assert!(picked < 7.0, "pick {picked}");
+        // Bare hands can't break stone, wood or giant mushrooms at all.
+        assert_eq!(hand, None);
+        for b in ["stone", "cobblestone", "planks", "mushroom_stem", "mushroom_cap", "coal_ore"] {
+            assert_eq!(items.break_time(None, blocks.get(blocks.expect(b))), None, "{b}");
+        }
         // Logs need an axe: not bare hands, not a pickaxe.
         assert!(items.break_time(axe, log).is_some_and(|t| t < 1.0));
         assert_eq!(items.break_time(pick, log), None);
         assert_eq!(items.break_time(None, log), None);
         // A torch in the hand mines like a bare hand.
-        assert_eq!(items.break_time(items.id("torch"), stone), Some(hand));
+        assert_eq!(items.break_time(items.id("torch"), stone), None);
+        let dirt = blocks.get(blocks.expect("dirt"));
+        assert_eq!(items.break_time(items.id("torch"), dirt), items.break_time(None, dirt));
     }
 
     #[test]
-    fn base_tools_take_about_eight_swings() {
+    fn base_tools_take_about_twelve_swings() {
         use crate::swing::{blow_share, Swing};
         let (blocks, items) = load();
         let swings = |tool: &str, block: &str, swing: Swing| {
             let t = items.break_time(items.id(tool), blocks.get(blocks.expect(block))).unwrap();
             (1.0 / blow_share(swing, t) - 1e-4).ceil() as u32
         };
-        assert_eq!(swings("rough_axe", "log", Swing::Chop), 8);
-        assert_eq!(swings("rough_axe", "swamp_log", Swing::Chop), 8);
-        assert_eq!(swings("stone_pickaxe", "stone", Swing::Overhead), 8);
-        assert_eq!(swings("stone_pickaxe", "cobblestone", Swing::Overhead), 8);
+        assert_eq!(swings("rough_axe", "log", Swing::Chop), 12);
+        assert_eq!(swings("rough_axe", "swamp_log", Swing::Chop), 12);
+        assert_eq!(swings("stone_pickaxe", "stone", Swing::Overhead), 12);
+        assert_eq!(swings("stone_pickaxe", "cobblestone", Swing::Overhead), 12);
+    }
+
+    #[test]
+    fn hands_dig_soil_a_layer_at_a_time_and_shovels_take_it_whole() {
+        use crate::swing::{blow_share, Swing};
+        let (blocks, items) = load();
+        let punches = |held: Option<ItemId>, b: voxel::BlockId, s: Swing| (1.0 / blow_share(s, items.break_time(held, blocks.get(b)).unwrap()) - 1e-4).ceil() as u32;
+        // By hand: dirt -> 6/8 -> 4/8 -> 2/8 -> gone, a few punches each.
+        let mut b = blocks.expect("grass");
+        let (mut steps, mut total) = (0, 0);
+        loop {
+            total += punches(None, b, Swing::Jab);
+            steps += 1;
+            match items.dug_to(None, blocks.get(b)) {
+                Some(next) => b = next,
+                None => break,
+            }
+        }
+        assert_eq!(steps, 4);
+        assert!((12..=24).contains(&total), "{total} punches");
+        // A pickaxe isn't a shovel: it digs dirt like a hand.
+        assert!(items.dug_to(items.id("stone_pickaxe"), blocks.get(blocks.expect("dirt"))).is_some());
+        // A shovel takes the whole block, and snow, in a couple of swings.
+        let shovel = items.id("stone_shovel");
+        assert_eq!(items.get(shovel.unwrap()).swing, Swing::Dig);
+        for name in ["dirt", "grass", "sand", "snow", "dirt_layer_4"] {
+            let b = blocks.expect(name);
+            assert_eq!(items.dug_to(shovel, blocks.get(b)), None, "{name}");
+            assert!(punches(shovel, b, Swing::Dig) <= 3, "{name}");
+        }
+    }
+
+    #[test]
+    fn foliage_takes_a_few_punches_and_brush_slows_you() {
+        use crate::swing::{blow_share, Swing};
+        let (blocks, items) = load();
+        let punches = |name: &str| (1.0 / blow_share(Swing::Jab, items.break_time(None, blocks.get(blocks.expect(name))).unwrap()) - 1e-4).ceil() as u32;
+        for name in ["leaves", "swamp_leaves", "redwood_leaves", "shrub", "dry_brush"] {
+            assert!((3..=4).contains(&punches(name)), "{name}: {}", punches(name));
+        }
+        assert!(blocks.get(blocks.expect("shrub")).slows < 0.8);
+        assert_eq!(blocks.get(blocks.expect("dirt")).slows, 1.0);
+        // An axe still cuts through leaves in one swing.
+        let t = items.break_time(items.id("rough_axe"), blocks.get(blocks.expect("leaves"))).unwrap();
+        assert_eq!((1.0 / blow_share(Swing::Chop, t) - 1e-4).ceil() as u32, 1);
     }
 
     #[test]

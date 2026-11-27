@@ -123,6 +123,8 @@ pub fn holding_torch(items: &Items, wielded: &Wielded, off: &OffHand) -> bool {
 pub struct Mined {
     pub pos: BlockPos,
     pub block: BlockId,
+    /// Came down with a felled tree (`chop`): it doesn't fell anything itself.
+    pub felled: bool,
 }
 
 /// A mining swing landed on a block (it may or may not have broken).
@@ -409,14 +411,44 @@ fn find_target(
 /// hanging below those. Returns false if nothing was there to break.
 fn break_block(world: &mut World, blocks: &Blocks, mined: &mut MessageWriter<Mined>, p: BlockPos) -> bool {
     let Some(b) = world.block(p).filter(|b| !b.is_air()) else { return false };
-    if !world.set_block(p, BlockId::AIR) {
+    // Digging snow away leaves the plant or pebble that stood in it.
+    if !world.set_block(p, blocks.registry.get(b).inside.unwrap_or(BlockId::AIR)) {
         return false;
     }
-    mined.write(Mined { pos: p, block: b });
+    mined.write(Mined { pos: p, block: b, felled: false });
     remesh_around(world, blocks, p);
-    let mut check: Vec<BlockPos> = neighbours(p).collect();
+    drop_loose(world, blocks, mined, p);
+    true
+}
+
+/// Dig the block at `p` down to the lower layer `to` (soil dug by hand); it
+/// drops nothing yet, but what stood on it may lose its footing.
+fn dig_down(world: &mut World, blocks: &Blocks, mined: &mut MessageWriter<Mined>, p: BlockPos, to: BlockId) -> bool {
+    if !world.set_block(p, to) {
+        return false;
+    }
+    remesh_around(world, blocks, p);
+    drop_loose(world, blocks, mined, p);
+    true
+}
+
+/// Break whatever around `p` is no longer held up, and what that held up.
+fn drop_loose(world: &mut World, blocks: &Blocks, mined: &mut MessageWriter<Mined>, p: BlockPos) {
     // A long vine can drop a strand at a time; keep it bounded.
-    let mut budget = 256;
+    let mut fell = Vec::new();
+    drop_unsupported(world, blocks, neighbours(p).collect(), 256, |q, qb| {
+        mined.write(Mined { pos: q, block: qb, felled: false });
+        fell.push(q);
+    });
+    for q in fell {
+        remesh_around(world, blocks, q);
+    }
+}
+
+/// Take away every block among `check` (and, as they go, their neighbours)
+/// that has lost what held it up (twigs, vines, plants), up to `budget` looks;
+/// `gone` hears of each one. Their chunks are left to remesh in the background.
+pub(crate) fn drop_unsupported(world: &mut World, blocks: &Blocks, mut check: Vec<BlockPos>, mut budget: usize, mut gone: impl FnMut(BlockPos, BlockId)) {
     while let Some(q) = check.pop() {
         budget -= 1;
         if budget == 0 {
@@ -429,15 +461,13 @@ fn break_block(world: &mut World, blocks: &Blocks, mined: &mut MessageWriter<Min
             continue;
         }
         if world.set_block(q, BlockId::AIR) {
-            mined.write(Mined { pos: q, block: qb });
-            remesh_around(world, blocks, q);
+            gone(q, qb);
             check.extend(neighbours(q));
         }
     }
-    true
 }
 
-fn neighbours(p: BlockPos) -> impl Iterator<Item = BlockPos> {
+pub(crate) fn neighbours(p: BlockPos) -> impl Iterator<Item = BlockPos> {
     [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]].into_iter().map(move |d| BlockPos::new(p.x + d[0], p.y + d[1], p.z + d[2]))
 }
 
@@ -785,8 +815,13 @@ fn use_hands(
         mining.block = None;
         mining.progress = 0.0;
     }
+    // Soil dug without a shovel goes down a layer at a time (not when flying to build).
+    let dug = broke.and_then(|(_, b)| items.dug_to(item, blocks.registry.get(b))).filter(|_| *mode != MoveMode::Fly);
     if let Some((pos, _)) = broke
-        && break_block(&mut world, &blocks, &mut mined, pos)
+        && match dug {
+            Some(to) => dig_down(&mut world, &blocks, &mut mined, pos, to),
+            None => break_block(&mut world, &blocks, &mut mined, pos),
+        }
     {
         mining.block = None;
         mining.progress = 0.0;

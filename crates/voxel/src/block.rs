@@ -53,6 +53,54 @@ struct BlockSpec {
     /// For `shape: layer`: how many eighths of the cell it fills (1..=8).
     #[serde(default)]
     level: u8,
+    /// Logs: the way the grain runs (y = standing, x/z = lying on its side).
+    #[serde(default)]
+    axis: Axis,
+    /// Part of a tree or giant mushroom (`trunk` holds it up, `crown` hangs off
+    /// it); a trunk cut through topples the lot (`crate::fell`).
+    #[serde(default)]
+    tree: Option<TreePart>,
+    /// Dug by hand (or a tool not made for its material), it doesn't go at once:
+    /// it turns into this block, a lower layer of itself (dirt -> dirt_layer_6 -> ...).
+    #[serde(default)]
+    dig_to: Option<String>,
+    /// Walking speed while you stand in it (brush), 0..1 (default 1).
+    #[serde(default = "one")]
+    slows: f32,
+    /// For snow layers: plants and pebbles can stand in it (the registry adds a
+    /// `<layer>+<detail>` block for each pair; see `BlockDef::inside`).
+    #[serde(default)]
+    fills_around: bool,
+}
+
+/// The direction a log's grain runs: its end tiles (`top`) face both ways along it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Axis {
+    X,
+    #[default]
+    Y,
+    Z,
+}
+
+impl Axis {
+    pub fn index(self) -> usize {
+        match self {
+            Axis::X => 0,
+            Axis::Y => 1,
+            Axis::Z => 2,
+        }
+    }
+}
+
+/// What a block is to a tree (see `tree` in blocks.ron).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TreePart {
+    /// Logs and stems: they hold the tree up and fall with it.
+    Trunk,
+    /// Leaves and caps: they fall with the trunk nearest them.
+    Crown,
 }
 
 /// Small furniture drawn as a few boxes in the chunk's detail mesh
@@ -167,6 +215,17 @@ pub struct BlockDef {
     pub light: u8,
     /// `shape: layer`: eighths of the cell filled, 1..=8 (0 for other shapes).
     pub level: u8,
+    /// Logs: the way the grain runs. The mesher turns side tiles to follow it.
+    pub axis: Axis,
+    /// Part of a tree (`crate::fell`), or not.
+    pub tree: Option<TreePart>,
+    /// What digging it without the right tool leaves behind (a lower layer).
+    pub dig_to: Option<BlockId>,
+    /// Walking speed while standing in it, 0..1 (brush slows you).
+    pub slows: f32,
+    /// A layer with a plant or pebble standing in it (`<layer>+<detail>`,
+    /// made by the registry for layers with `fills_around`): the detail.
+    pub inside: Option<BlockId>,
 }
 
 impl BlockDef {
@@ -181,6 +240,8 @@ impl BlockDef {
     /// vines the attached side or the vine above. Empty = needs no support.
     pub fn supports(&self) -> Vec<[i32; 3]> {
         match (self.shape, self.attach) {
+            // Puddles aren't held up: when the ground goes they run (`game::cover::flow`).
+            (Shape::Layer, _) if self.translucent => Vec::new(),
             (Shape::Plant | Shape::Pebble | Shape::Layer, _) => vec![[0, -1, 0]],
             (Shape::Twig, Some(a)) => vec![a.offset()],
             (Shape::Vine, Some(a)) => vec![a.offset(), [0, 1, 0]],
@@ -201,6 +262,7 @@ pub enum RegistryError {
     UnknownTile { block: String, tile: String },
     Duplicate(String),
     FirstMustBeAir,
+    UnknownDigTo { block: String, to: String },
 }
 
 impl std::fmt::Display for RegistryError {
@@ -212,6 +274,7 @@ impl std::fmt::Display for RegistryError {
             }
             Self::Duplicate(n) => write!(f, "block '{n}' is defined twice"),
             Self::FirstMustBeAir => write!(f, "the first block in blocks.ron must be 'air'"),
+            Self::UnknownDigTo { block, to } => write!(f, "block '{block}' digs to '{to}', which is not a block"),
         }
     }
 }
@@ -229,7 +292,12 @@ impl BlockRegistry {
         }
         let mut defs = Vec::with_capacity(specs.len());
         let mut by_name = HashMap::new();
+        let mut digs = Vec::new();
+        let mut fills = Vec::new();
         for (i, s) in specs.into_iter().enumerate() {
+            if s.fills_around && s.shape == Shape::Layer {
+                fills.push(i);
+            }
             let tile = |name: &Option<String>| -> Result<u32, RegistryError> {
                 match name {
                     None => Ok(0),
@@ -245,9 +313,18 @@ impl BlockRegistry {
             if by_name.insert(s.name.clone(), BlockId(i as u16)).is_some() {
                 return Err(RegistryError::Duplicate(s.name));
             }
+            // End tiles face along the grain: +axis gets `top`, -axis `bottom`.
+            let textures = match s.axis {
+                Axis::X => [top, bottom, side, side, side, side],
+                Axis::Y => [side, side, top, bottom, side, side],
+                Axis::Z => [side, side, side, side, top, bottom],
+            };
+            if let Some(to) = s.dig_to {
+                digs.push((i, s.name.clone(), to));
+            }
             defs.push(BlockDef {
                 name: s.name,
-                textures: [side, side, top, bottom, side, side],
+                textures,
                 solid: s.solid,
                 opaque: s.opaque,
                 translucent: s.translucent,
@@ -259,7 +336,29 @@ impl BlockRegistry {
                 model: s.model,
                 light: s.light.min(crate::light::MAX),
                 level: if s.shape == Shape::Layer { s.level.clamp(1, 8) } else { 0 },
+                axis: s.axis,
+                tree: s.tree,
+                dig_to: None,
+                slows: s.slows.clamp(0.0, 1.0),
+                inside: None,
             });
+        }
+        for (i, block, to) in digs {
+            let id = *by_name.get(&to).ok_or(RegistryError::UnknownDigTo { block, to })?;
+            defs[i].dig_to = Some(id);
+        }
+        // Snow that fills up around plants and pebbles: one block per layer and
+        // detail, after every listed block so listed ids don't move (saves go by name).
+        let details: Vec<usize> = (0..defs.len()).filter(|&i| matches!(defs[i].shape, Shape::Plant | Shape::Pebble)).collect();
+        for &l in &fills {
+            for &d in &details {
+                let mut def = defs[l].clone();
+                def.name = format!("{}+{}", defs[l].name, defs[d].name);
+                def.inside = Some(BlockId(d as u16));
+                def.light = def.light.max(defs[d].light);
+                by_name.insert(def.name.clone(), BlockId(defs.len() as u16));
+                defs.push(def);
+            }
         }
         Ok(Self { defs, by_name })
     }
@@ -324,6 +423,17 @@ mod tests {
         assert!(!reg.get(reg.expect("leaves")).opaque);
         assert!(reg.get(reg.expect("water")).translucent);
         assert!(!reg.get(reg.expect("leaves")).translucent);
+    }
+
+    #[test]
+    fn snow_layers_fill_around_plants_and_pebbles() {
+        let reg = test_registry();
+        let id = reg.expect("snow_layer_3+fern");
+        let d = reg.get(id);
+        assert_eq!((d.shape, d.level, d.inside), (Shape::Layer, 3, Some(reg.expect("fern"))));
+        assert_eq!(reg.get(reg.expect("snow_layer_8+pebble")).inside, Some(reg.expect("pebble")));
+        assert!(reg.id("puddle_2+fern").is_none(), "only snow");
+        assert!(reg.get(reg.expect("puddle_2")).supports().is_empty(), "puddles run, they don't fall off");
     }
 
     #[test]

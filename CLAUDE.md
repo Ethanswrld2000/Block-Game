@@ -205,7 +205,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   opens its tree (`station::tree`: you look into the urn and its dark opens from the mouth over the screen, a
   UI shader `assets/shaders/urn_void.wesl` (`UrnVoid` UiMaterial); steps stand as a tree growing upward, each above the
   steps it comes after (`tree_layout`, pure); pointing at a step shows on the right what it gives, what it takes and
-  "Put in"; `BLOCKGAME_URNOPEN=0.4` holds the opening that far for screenshots). Models are boxes in `station::models` (upgrades change them);
+  "Put in"; each thing put in flies up from below the screen into its "It takes" picture on the forge's timing and pops with `craft_pop`, `station::fly_in`; `BLOCKGAME_URNOPEN=0.4` holds the opening that far for screenshots). Models are boxes in `station::models` (upgrades change them);
   concept sheets for real art in `docs/stations/` (`python3 tools/gen_station_concepts.py`). Personal storage is a
   chest at `inventory::STORAGE_AT` (not in the world; 8x5, 8x7 with the extra shelf). Saved to `urns.ron` (the old
   fusion `urn.ron` is gone). F9 = dev menu (`station::dev`, tabs: Urns (give/set down urns, items for the next step, finish
@@ -585,11 +585,15 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `Shake`, `Roll`, `Flash`, `Lids`, `Sound`; cutscene-only airships in `cutscene::props` (`Ship`, `ShipTo`, `Fire`,
   `Unship`; your ship is `airship::build_model` with your body at the helm, the court ship `cast::wren::build_ship`);
   marks and targets can follow them (`Ship("ours")`, kept in `Places` as `ship:<name>`). `game::guide`
-  (`assets/data/guide.ron`, pure rules in `guide::rules`): one step at a time (sticks and stones, fiber, camp, camp mat,
-  rough axe, logs, torch, door, home, Tool Urn, set it down), done = story flag `guide:<id>`; the journal (J) lists
-  them first; guide waypoints (`map::Waypoints::guide`, not saved, cyan) point at the nearest matching blocks in the
-  loaded world. A proper home = a closed room with a door in its walls and a torch (any light) inside
-  (`guide::home_missing`); carried urns can only be set down in one. The home step plays C01b (Bram explains it).
+  (`assets/data/guide.ron`, pure rules in `guide::rules`): day one with Bram, one step at a time (sticks and stones,
+  set up camp (B), plant fiber, make your bed (the ancestral urn's camp mat), sleep the first night (`Goal::Slept`)),
+  done = story flag `guide:<id>`; C01 ends with Bram handing you the Ancestral Urn and following you (he settles by
+  the urn once camp is up, `npc::settle`), and each later step opens with Bram walking over and saying it (cutscenes
+  `G_camp`, `G_fiber`, `G_bed`, `G_sleep`; simple lines, no choices). While the guide runs, Z won't sleep until the
+  bed step is done (`rules::bed_missing`). The journal (J) lists the steps first; guide waypoints
+  (`map::Waypoints::guide`, not saved, cyan) point at the nearest matching blocks in the loaded world.
+  A proper home = a closed room with a door in its walls and a torch (any light) inside
+  (`guide::home_missing`); carried urns can only be set down in one.
   Doors are also made at the camp mat (3 logs + 1 cordage) and the carpentry bench (6 planks + 2 sticks).
 - Station textures: `station::skin`. Each `models::Mat` with a tile (`Mat::tile_name`) gets its tile from `stations.png`, cut into
   one repeating texture per material once loaded; boxes are meshed by `skin::box_mesh` with world-scale UVs (one tile per block,
@@ -621,12 +625,25 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `GUST_EVERY` (20-30 s, `gust_shape`); `Wind::gusting()`/`velocity()` include the gust. `game::wind_streaks`: gizmo line
   trails that ride the wind, more the harder it blows, none under a roof. Wind push on the player is small
   (`player::WIND_PUSH`, from 10 blocks/s, mostly during gusts).
-- Snow cover and puddles: `game::cover` (`assets/data/cover.ron`; pure rules in `cover::rules`). Every `every` seconds
-  `columns` random columns within `radius` of you whose top is open to the sky get a look: snowfall adds a
-  `snow_layer_1..8` (`voxel::Shape::Layer`, `level` eighths high; drifts to the lowest spot beside it first; buries the
-  small plants in `buries`; layer 8 is solid), warm weather melts it a layer at a time. Rain adds `puddle_1..8` (translucent
-  layers, drawn with the water) where walls hold water on two sides or more; water runs to lower puddles, onto flat ground
-  beside it (level 2+), off edges and into real water; puddles dry after the rain. Only near you in loaded chunks.
+- Snow cover and flowing water: `game::cover` (`assets/data/cover.ron`; pure rules in `cover::rules` and `cover::flow`). Every
+  `every` seconds `columns` random columns within `radius` of you whose top is open to the sky get a look: snowfall (any
+  season, whenever `Conditions.snowing`) adds a `snow_layer_1..8` (`voxel::Shape::Layer`, `level` eighths high; drifts to
+  the lowest spot beside it first; layer 8 is solid). Plants and pebbles stay in the snow: layers with `fills_around: true`
+  get a `snow_layer_<n>+<detail>` block per Plant/Pebble block, made by the registry after the listed ones
+  (`BlockDef::inside`; meshed as the layer plus the detail; digging it leaves the detail; crops don't grow under it). Above
+  freezing snow melts slowly, faster the warmer it is (`MELT_FULL`). Rain adds a level of water where walls hold it on two
+  sides or more. Water flows (`cover::flow`, every `FLOW_EVERY` 0.15 s): `puddle_<n>` = n eighths, `water` = 8 (a source
+  block); open all round (below and four sides air) gives its water out at once, else down first, then an eighth per pass
+  to each side two lower or one it can fall from; total kept (except water falling out of the loaded world). A source
+  block in a body of `flow::ENDLESS` (11)+ connected source blocks never runs low: it fills the cell below and gives an
+  eighth to any side with less, staying full, so a pit dug by a river or the sea fills right up. Only cells next to a
+  change move (`World::changed` from `set_block`, `cover::Flowing`). Water washes away plants and pebbles; puddles aren't
+  held up (they run). Puddles stay while it rains; once it stops, water short of a full block dries a level at a time
+  (`Flowing::shallow`, chance `dry` per second; not saved, older puddles dry through the column looks).
+  Wading (`player::Wading`, feet cell when not swimming): puddles and water slow you by depth (`WADE_DRAG`), snow layers
+  more (`SNOW_DRAG`); footsteps splash in water, crunch in thin snow, slosh from `deep_from` eighths (sounds.ron `wade`;
+  `step_splash/snow/slosh_0..2`, `gen_placeholder_sounds.py --only step_splash step_snow step_slosh`).
+  F9 dev menu, World tab: pick a season (`Seasons::next_start` jumps the day forward to its first day).
 - Rainbows and lightning bolts: after rain or a storm gives way to drier weather, `Conditions.rainbow` rises with the change
   and fades 1-2.5 game hours later (`weather::rainbow_strength`); `sky.wesl` `rainbow` draws a main bow 40-42.5° and a faint
   second bow round the point opposite the sun (`sky::rainbow_centre`, kept from sinking far below the horizon so midday bows
@@ -639,6 +656,34 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   from its numbers (`look`). Storm warning: `WARN_SECONDS` (60) before a `severe` weather (lightning, wind >= 12, chill <= -10,
   downpour) a red countdown line shows under the dial, the rim pulses red and Bram (within 40 blocks) barks `storm_coming`.
   The map's waypoint strip sits below it (`DIAL_SPACE`).
+- Falling trees: `voxel::fell` (pure). Blocks have `tree: trunk|crown` and `axis: x|y|z` in blocks.ron (lying logs
+  `log_x/z`, `swamp_log_x/z`, `redwood_log_x/z` have no `tree`, so they never fall again; the mesher turns bark along the
+  grain, end tiles face along it; they drop the standing log). Breaking a trunk block runs `fell::topple`: each trunk
+  (corner-joined trunk blocks) next to the cut that no longer rests on non-tree solid ground falls with its crown: crown
+  blocks it reaches before any other standing trunk nearby does (one BFS from every trunk at once, `CROWN_REACH` 8; the
+  stump counts as another tree). It turns a quarter turn away from the player (`fell::away`, along x or z), logs on their
+  side; each landing column lifts its logs out of the ground until they fit and drops as far as they can (crown-only
+  columns are never lifted); crown blocks that land in the way, or more than `CROWN_HEAP` (2) above the lowest block in
+  their column, are gone. `chop::fell_trees` takes it out of the world and swings it over as one mesh
+  (`chunk_mesh::loose`), then `land` places the blocks; nothing is meshed on the main thread (chunks remesh in the
+  background, the falling mesh stays up to `LAND_WAIT` until they show). Crushed logs, and twigs/vines that lost their
+  hold, drop as items (`Mined.felled` = true, which never fells anything itself).
+- Tool-based mining: bare hands can't break stone, ore, logs or wood (items.ron `hand` speeds 0; giant mushrooms are wood);
+  hardness went up 1.5x (base tools take about 12 swings). Soil dug without a tool that lists its material (a shovel) goes
+  down a quarter at a time: blocks.ron `dig_to` (dirt/grass/moss -> `dirt_layer_6` -> 4 -> 2 -> gone; sand, mud, gravel,
+  clay, peat have their own layers; snow -> `snow_layer_6`), `Items::dug_to`, `interact::dig_down`; the last layer drops
+  the block. Shovels swing `Dig` (thrust and scoop, `swing::DIG`/`BODY_DIG`) and take the whole block. Leaves and brush
+  take a few punches; blocks.ron `slows` (brush, reeds, ferns, tall grass) cuts walking speed (`player::brush`). Stone and
+  deeprock drop small rocks; 4 small rocks make cobblestone at the tool bench, and stick + 2 small rocks a stone shovel.
+- UI polish: one light from the top left on every interactive sprite (`gen_ui_art.py` `ring`: 1 px lighter top/left, darker
+  bottom/right inner edge; swapped on `button_down`, `slot_selected`, `tab_active`; slots are raised now). UI moves are
+  snappy and stepped (`theme::stepped`, `theme::SNAP` ~0.1 s in 2-4 whole steps): the inventory window drops in, tabs and
+  side tabs slide, slots lift, a picked-up stack hops to the cursor and a put-down one drops in. Health bars: shaded `fill`
+  sprite, bright leading edge, a pale chunk of what was just lost that drains after `GHOST_HOLD`, and pixels bubbling up
+  through the blood (`survival::hud::bubble`, pure; more and faster while bleeding). The temperature meter's icon is a
+  thermometer (`icon_temp`), a snowflake in any cold stage (`icon_cold`), the flame in any heat stage. `game::pickups`:
+  a note on the right for each pick-up from the ground (`inventory::PickedUp` from `world_items::pick_up`); the same item
+  within `MERGE` (2 s) adds to its count, otherwise it fades after `HOLD` (rules in `pickups::Feed`, pure).
 - Next: see `docs/GAMEPLAY_LOOP.md`.
 
 ## Testing without a screen

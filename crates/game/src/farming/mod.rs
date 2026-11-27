@@ -145,8 +145,12 @@ fn grow(time: Res<Time>, mut wait: Local<f32>, book: Res<CropBook>, blocks: Res<
             gone.push(*pos);
             continue;
         };
-        let here = world.block(*pos).and_then(|b| book.find(&blocks, b));
+        let block = world.block(*pos);
+        // Under snow a crop keeps its place but doesn't grow.
+        let snowed = block.and_then(|b| blocks.registry.get(b).inside);
+        let here = snowed.or(block).and_then(|b| book.find(&blocks, b));
         match here {
+            Some(_) if snowed.is_some() => {}
             Some((c, stage)) if c == s.crop => {
                 let want = crop.stage(now - s.at, s.wet);
                 if want > stage

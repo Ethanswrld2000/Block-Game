@@ -18,12 +18,23 @@ pub struct SurvivalHudPlugin;
 impl Plugin for SurvivalHudPlugin {
     fn build(&self, app: &mut App) {
         // PostStartup: after the weather panel, so this stacks below it top right.
-        app.add_systems(crate::menu::GamePostStartup, spawn).add_systems(crate::menu::GameUpdate, (update_bars, update_meters, shake, temperature_list, toasts, overlays).after(super::SurvivalSet));
+        app.add_systems(crate::menu::GamePostStartup, spawn)
+            .add_systems(crate::menu::GameUpdate, (update_bars, bubble_blood, update_meters, temp_icon, shake, temperature_list, toasts, overlays, cold_vignette).after(super::SurvivalSet));
     }
 }
 
 const BAR_W: f32 = 170.0;
 const BAR_H: f32 = 14.0;
+/// The health bars are a little taller, so the blood has room to bubble.
+const HEALTH_H: f32 = 18.0;
+/// Inside a health bar's frame (3 points each side).
+const HEALTH_INNER: f32 = HEALTH_H - 6.0;
+/// Bubbles kept ready in the blood bar.
+const BUBBLES: usize = 8;
+/// A lost chunk of a bar stays pale this long before it drains away, s.
+const GHOST_HOLD: f32 = 0.45;
+/// How fast the pale chunk drains, share of the bar per second.
+const GHOST_DRAIN: f32 = 0.6;
 /// Food, air, warmth and load bars, and the width of the value after them.
 const METER_W: f32 = 130.0;
 const VALUE_W: f32 = 150.0;
@@ -46,6 +57,18 @@ fn layer_color(l: Layer) -> Color {
 
 #[derive(Component)]
 struct BarFill(Layer);
+
+/// What a bar just lost, shown pale behind the fill before it drains away.
+#[derive(Component)]
+struct BarGhost(Layer);
+
+/// A pixel rising through the blood.
+#[derive(Component)]
+struct Bubble(usize);
+
+/// The temperature meter's picture: thermometer, snowflake or flame.
+#[derive(Component)]
+struct TempIcon;
 
 #[derive(Component)]
 struct BarNote(Layer);
@@ -98,6 +121,29 @@ struct CampText;
 
 #[derive(Component)]
 struct Dizzy;
+
+/// Blue edges that close in with the cold (`shiver::vignette`); holds the strength last drawn.
+#[derive(Component, Default)]
+struct ColdVignette(f32);
+
+/// The cold vignette's colour at full strength.
+const VIGNETTE_BLUE: Color = Color::srgba(0.35, 0.6, 0.95, 0.0);
+
+/// Clear in the middle, faint blue towards the corners, `strength` 0..1.
+/// Stops stay at fixed, increasing positions (out of order they flip the gradient);
+/// only the alpha follows the strength.
+fn vignette_gradient(strength: f32) -> BackgroundGradient {
+    let blue = |a: f32| VIGNETTE_BLUE.with_alpha(a * strength);
+    BackgroundGradient::from(RadialGradient::new(
+        UiPosition::CENTER,
+        RadialGradientShape::FarthestCorner,
+        vec![
+            ColorStop::percent(blue(0.0), 60.0),
+            ColorStop::percent(blue(0.08), 85.0),
+            ColorStop::percent(blue(0.22), 100.0),
+        ],
+    ))
+}
 
 #[derive(Component)]
 struct SleepFade;
@@ -202,6 +248,7 @@ fn full_screen(color: Color) -> impl Bundle {
 fn spawn(mut commands: Commands, theme: Res<Theme>, rules: Res<Exposure>, top_right: Res<crate::hud::TopRight>) {
     let theme = &*theme;
     let rules = &*rules;
+    commands.spawn((ColdVignette::default(), full_screen(Color::NONE), vignette_gradient(0.0)));
     commands.spawn((Dizzy, full_screen(Color::srgba(0.02, 0.03, 0.08, 0.0))));
 
     // Health, outermost bar on top.
@@ -226,9 +273,35 @@ fn spawn(mut commands: Commands, theme: Res<Theme>, rules: Res<Exposure>, top_ri
                         Layer::Injuries => "icon_injuries",
                     }));
                     row.spawn((text(l.name(), sizes::SMALL, colors::TEXT), Node { width: Val::Px(70.0), ..default() }));
-                    row.spawn(bar_back(theme, BAR_W)).with_children(|b| {
+                    row.spawn((
+                        Node { width: Val::Px(BAR_W), height: Val::Px(HEALTH_H), padding: UiRect::all(Val::Px(3.0)), ..default() },
+                        theme.skin("bar"),
+                    ))
+                    .with_children(|b| {
                         b.spawn(bar_inner()).with_children(|b| {
-                            b.spawn((BarFill(l), fill(layer_color(l))));
+                            b.spawn((BarGhost(l), zone(0.0, 1.0, Color::srgba(1.0, 0.95, 0.85, 0.55))));
+                            // The fill: the bar sprite's lit top row and shaded bottom,
+                            // in the layer's colour, with a bright leading edge.
+                            b.spawn((
+                                BarFill(l),
+                                Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), overflow: Overflow::clip(), ..default() },
+                                theme.skin_tinted("fill", layer_color(l)),
+                            ))
+                            .with_children(|f| {
+                                f.spawn((
+                                    Node { position_type: PositionType::Absolute, right: Val::Px(0.0), width: Val::Px(2.0), height: Val::Percent(100.0), ..default() },
+                                    BackgroundColor(Color::srgba(1.0, 1.0, 1.0, 0.4)),
+                                ));
+                                if l == Layer::Blood {
+                                    for i in 0..BUBBLES {
+                                        f.spawn((
+                                            Bubble(i),
+                                            Node { position_type: PositionType::Absolute, width: Val::Px(2.0), height: Val::Px(2.0), ..default() },
+                                            BackgroundColor(Color::srgba(1.0, 0.62, 0.58, 0.0)),
+                                        ));
+                                    }
+                                }
+                            });
                             if l != Layer::Damage {
                                 b.spawn(tick(MORTAL_AT));
                             }
@@ -279,7 +352,7 @@ fn spawn(mut commands: Commands, theme: Res<Theme>, rules: Res<Exposure>, top_ri
             });
             // Felt temperature: cold stages, comfortable, heat stages.
             col.spawn((Shake(Gauge::Temperature), Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, ..default() })).with_children(|row| {
-                row.spawn(theme.icon("icon_warmth"));
+                row.spawn((TempIcon, theme.icon("icon_temp")));
                 row.spawn(bar_back(theme, METER_W)).with_children(|b| {
                     b.spawn(bar_inner()).with_children(|b| {
                         let (cold, hot) = rules.comfort();
@@ -370,11 +443,41 @@ fn spawn(mut commands: Commands, theme: Res<Theme>, rules: Res<Exposure>, top_ri
         });
 }
 
-fn update_bars(s: Res<Survival>, mut fills: Query<(&BarFill, &mut Node)>, mut notes: Query<(&BarNote, &mut Text)>) {
+#[allow(clippy::type_complexity)]
+fn update_bars(
+    time: Res<Time<Real>>,
+    s: Res<Survival>,
+    mut ghosts_at: Local<[(f32, f32); 4]>,
+    mut fills: Query<(&BarFill, &mut Node), Without<BarGhost>>,
+    mut ghosts: Query<(&BarGhost, &mut Node), Without<BarFill>>,
+    mut notes: Query<(&BarNote, &mut Text)>,
+) {
     let h = &s.vitals.health;
     let mortal = h.mortal();
+    let now = time.elapsed_secs();
     for (f, mut node) in &mut fills {
-        node.width = Val::Percent(h.get(f.0) / MAX * 100.0);
+        let w = Val::Percent(h.get(f.0) / MAX * 100.0);
+        if node.width != w {
+            node.width = w;
+        }
+    }
+    // The pale chunk: jumps to a gain at once, holds a loss a moment, then drains.
+    for (i, l) in Layer::ALL.into_iter().enumerate() {
+        let (ghost, lost_at) = &mut ghosts_at[i];
+        let v = h.get(l) / MAX;
+        if v >= *ghost {
+            *ghost = v;
+            *lost_at = now;
+        } else if now - *lost_at > GHOST_HOLD {
+            *ghost = (*ghost - GHOST_DRAIN * time.delta_secs()).max(v);
+        }
+    }
+    for (g, mut node) in &mut ghosts {
+        let i = Layer::ALL.iter().position(|l| *l == g.0).unwrap_or(0);
+        let w = Val::Percent(ghosts_at[i].0 * 100.0);
+        if node.width != w {
+            node.width = w;
+        }
     }
     for (n, mut t) in &mut notes {
         let mut note = String::new();
@@ -392,6 +495,71 @@ fn update_bars(s: Res<Survival>, mut fills: Query<(&BarFill, &mut Node)>, mut no
         if t.0 != note {
             t.0 = note;
         }
+    }
+}
+
+/// Where bubble `i` is at time `t` (seconds), with `bleeding` (0 = calm):
+/// its place along the blood (0..1), how far up it has risen (0 at the
+/// bottom, 1 at the top) and how bright it is. Rises in whole 2-point steps;
+/// bleeding makes more of them and quicker. Pure.
+pub(crate) fn bubble(i: usize, t: f32, bleeding: f32) -> Option<(f32, f32, f32)> {
+    let busy = (bleeding * 4.0).clamp(0.0, 1.0);
+    // Calm: three bubbles about; bleeding: all of them, faster.
+    let shown = 3 + ((BUBBLES - 3) as f32 * busy).round() as usize;
+    if i >= shown {
+        return None;
+    }
+    let period = (1.3 + 0.37 * (i % 3) as f32 + 0.21 * (i % 2) as f32) / (1.0 + busy);
+    let phase = i as f32 * 0.618;
+    let cycle = (t / period + phase).floor();
+    let frac = t / period + phase - cycle;
+    // A new spot along the bar each time round.
+    let h = ((i as f32 * 12.9898 + cycle * 78.233).sin() * 43758.547).fract().abs();
+    let x = 0.06 + 0.88 * h;
+    // Steps of 2 points up the inside of the bar.
+    let rows = ((HEALTH_INNER - 2.0) / 2.0).floor();
+    let rise = (frac * (rows + 1.0)).floor().min(rows) / rows;
+    // Brightest low down, fading as it nears the top, gone at the surface.
+    let alpha = if frac > 0.9 { 0.0 } else { 0.85 - 0.5 * rise };
+    Some((x, rise, alpha))
+}
+
+/// Pixels bubble up through the blood bar.
+fn bubble_blood(time: Res<Time<Real>>, s: Res<Survival>, mut q: Query<(&Bubble, &mut Node, &mut BackgroundColor)>) {
+    let t = time.elapsed_secs();
+    let h = &s.vitals.health;
+    let level = h.get(Layer::Blood) / MAX;
+    for (b, mut node, mut bg) in &mut q {
+        let (x, rise, a) = match bubble(b.0, t, h.bleeding) {
+            // Too little blood left to bubble in.
+            Some(v) if level > 0.04 => v,
+            _ => (0.0, 0.0, 0.0),
+        };
+        let (l, top) = (Val::Percent(x * 100.0), Val::Px(HEALTH_INNER - 2.0 - rise * (HEALTH_INNER - 2.0)));
+        if node.left != l || node.top != top {
+            node.left = l;
+            node.top = top;
+        }
+        if bg.0.alpha() != a {
+            bg.0.set_alpha(a);
+        }
+    }
+}
+
+/// The temperature meter's picture follows how it feels: a snowflake in any
+/// cold stage, a flame in any heat stage, a thermometer in between.
+fn temp_icon(theme: Res<Theme>, s: Res<Survival>, rules: Res<Exposure>, mut shown: Local<&'static str>, mut q: Query<&mut ImageNode, With<TempIcon>>) {
+    let want = match rules.temperature(s.vitals.feels) {
+        Some((Scale::Cold, _)) => "icon_cold",
+        Some((Scale::Heat, _)) => "icon_warmth",
+        _ => "icon_temp",
+    };
+    if *shown == want {
+        return;
+    }
+    *shown = want;
+    for mut img in &mut q {
+        *img = theme.image(want);
     }
 }
 
@@ -590,6 +758,16 @@ fn toasts(
     }
 }
 
+fn cold_vignette(s: Res<Survival>, rules: Res<Exposure>, mut q: Query<(&mut ColdVignette, &mut BackgroundGradient)>) {
+    let Ok((mut drawn, mut grad)) = q.single_mut() else { return };
+    let v = &s.vitals;
+    let want = if v.health.is_dead() { 0.0 } else { super::shiver::vignette(&rules, v.feels) };
+    if (want - drawn.0).abs() > 0.004 || (want == 0.0 && drawn.0 != 0.0) {
+        drawn.0 = want;
+        *grad = vignette_gradient(want);
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn overlays(
     s: Res<Survival>,
@@ -617,5 +795,34 @@ fn overlays(
             "outside the Rotting Gate"
         } else if camp.bedroll.is_some() { "at your camp" } else { "at the edge of the swamp" };
         t.0 = if wait { String::new() } else { format!("Press Space to wake {place}") };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bubbles_rise_in_whole_steps_and_bleeding_adds_more() {
+        let rows = ((HEALTH_INNER - 2.0) / 2.0).floor();
+        let mut seen = 0;
+        for k in 0..400 {
+            let t = k as f32 * 0.037;
+            for i in 0..BUBBLES {
+                if let Some((x, rise, a)) = bubble(i, t, 0.0) {
+                    seen += 1;
+                    assert!((0.0..=1.0).contains(&x));
+                    assert!((0.0..=1.0).contains(&rise) && (0.0..=1.0).contains(&a));
+                    // On a 2-point row, never between.
+                    let r = rise * rows;
+                    assert!((r - r.round()).abs() < 1e-4, "{rise}");
+                }
+            }
+        }
+        assert!(seen > 0);
+        let calm = (0..BUBBLES).filter(|&i| bubble(i, 1.0, 0.0).is_some()).count();
+        let bleeding = (0..BUBBLES).filter(|&i| bubble(i, 1.0, 0.5).is_some()).count();
+        assert_eq!(calm, 3);
+        assert_eq!(bleeding, BUBBLES);
     }
 }

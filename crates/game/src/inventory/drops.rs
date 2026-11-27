@@ -72,7 +72,12 @@ mod tests {
         let drops = Drops::from_ron(include_str!("../../../../assets/data/drops.ron"), &blocks, &items).unwrap();
         let at = BlockPos::new(3, 4, 5);
         let stone = drops.roll(&items, blocks.expect("stone"), at, 0);
-        assert_eq!(stone, vec![Stack::new(items.id("cobblestone").unwrap(), 1)]);
+        // Stone breaks into small rocks, never a stone block.
+        let rock = items.id("small_rock").unwrap();
+        assert!(!stone.is_empty() && stone.iter().all(|s| s.item == rock), "{stone:?}");
+        assert!((2..=3).contains(&stone.iter().map(|s| s.count).sum::<u16>()));
+        // The last layer of dug dirt gives the dirt.
+        assert_eq!(drops.roll(&items, blocks.expect("dirt_layer_2"), at, 0), vec![Stack::new(items.id("dirt").unwrap(), 1)]);
         // Unlisted blocks drop themselves.
         assert_eq!(drops.roll(&items, blocks.expect("log"), at, 0), vec![Stack::new(items.id("log").unwrap(), 1)]);
         assert!(drops.roll(&items, blocks.expect("water"), at, 0).is_empty());
