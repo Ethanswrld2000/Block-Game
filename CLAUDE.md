@@ -640,6 +640,15 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   from its numbers (`look`). Storm warning: `WARN_SECONDS` (60) before a `severe` weather (lightning, wind >= 12, chill <= -10,
   downpour) a red countdown line shows under the dial, the rim pulses red and Bram (within 40 blocks) barks `storm_coming`.
   The map's waypoint strip sits below it (`DIAL_SPACE`).
+- UI polish: one light from the top left on every interactive sprite (`gen_ui_art.py` `ring`: 1 px lighter top/left, darker
+  bottom/right inner edge; swapped on `button_down`, `slot_selected`, `tab_active`; slots are raised now). UI moves are
+  snappy and stepped (`theme::stepped`, `theme::SNAP` ~0.1 s in 2-4 whole steps): the inventory window drops in, tabs and
+  side tabs slide, slots lift, a picked-up stack hops to the cursor and a put-down one drops in. Health bars: shaded `fill`
+  sprite, bright leading edge, a pale chunk of what was just lost that drains after `GHOST_HOLD`, and pixels bubbling up
+  through the blood (`survival::hud::bubble`, pure; more and faster while bleeding). The temperature meter's icon is a
+  thermometer (`icon_temp`), a snowflake in any cold stage (`icon_cold`), the flame in any heat stage. `game::pickups`:
+  a note on the right for each pick-up from the ground (`inventory::PickedUp` from `world_items::pick_up`); the same item
+  within `MERGE` (2 s) adds to its count, otherwise it fades after `HOLD` (rules in `pickups::Feed`, pure).
 - Next: see `docs/GAMEPLAY_LOOP.md`.
 
 ## Testing without a screen

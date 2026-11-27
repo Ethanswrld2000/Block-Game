@@ -47,6 +47,8 @@
         "icon_figure": (rect: (12, 88, 12, 12), slice: None),
         "icon_star": (rect: (24, 88, 12, 12), slice: None),
         "icon_sword": (rect: (36, 88, 12, 12), slice: None),
+        "icon_temp": (rect: (48, 88, 12, 12), slice: None),
+        "icon_cold": (rect: (60, 88, 12, 12), slice: None),
         "sil_helmet": (rect: (0, 128, 16, 16), slice: None),
         "sil_hat": (rect: (16, 128, 16, 16), slice: None),
         "sil_chest": (rect: (32, 128, 16, 16), slice: None),
