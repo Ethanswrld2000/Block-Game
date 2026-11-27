@@ -44,14 +44,15 @@ pub fn spend(h: &mut Health, cost: f32) -> bool {
     true
 }
 
-/// A cut caught on your guard. True if the guard holds; false if you're too
-/// worn down to hold it (the guard breaks and the cut lands).
-pub fn block(h: &mut Health) -> bool {
+/// A cut caught on your guard, costing `cost` (`BLOCK_HIT` on a blade; less
+/// on a shield). True if the guard holds; false if you're too worn down to
+/// hold it (the guard breaks and the cut lands).
+pub fn block(h: &mut Health, cost: f32) -> bool {
     if free(h) {
         return true;
     }
-    let holds = spare(h) >= BLOCK_HIT;
-    h.hit(Layer::Fatigue, BLOCK_HIT.min(spare(h).max(0.0)));
+    let holds = spare(h) >= cost;
+    h.hit(Layer::Fatigue, cost.min(spare(h).max(0.0)));
     holds
 }
 
@@ -78,9 +79,9 @@ mod tests {
     #[test]
     fn a_guard_breaks_when_too_worn_to_hold() {
         let mut h = Health::default();
-        assert!(block(&mut h));
+        assert!(block(&mut h, BLOCK_HIT));
         h.hit(Layer::Fatigue, h.get(Layer::Fatigue) - FLOOR - 1.0);
-        assert!(!block(&mut h));
+        assert!(!block(&mut h, BLOCK_HIT));
         assert_eq!(h.get(Layer::Fatigue), FLOOR);
     }
 
@@ -90,7 +91,7 @@ mod tests {
         h.hit(Layer::Blood, 60.0);
         assert!(h.mortal().is_some());
         let before = h.get(Layer::Blood);
-        assert!(spend(&mut h, HEAVY) && block(&mut h));
+        assert!(spend(&mut h, HEAVY) && block(&mut h, BLOCK_HIT));
         assert_eq!(h.get(Layer::Blood), before);
     }
 }

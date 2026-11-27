@@ -247,11 +247,18 @@ pub(crate) fn pose_hands(
         let (mut swing_pos, mut swing_rot) = t.map_or((Vec3::ZERO, Quat::IDENTITY), |t| style.pose(t));
         // Charging a heavy cut: the sword hauled up over the head and held.
         let charging = if hand == Hand::Right && t.is_none() { anim.charge_level() } else { None };
-        if let Some(k) = charging {
-            (swing_pos, swing_rot) = crate::swing::charge_pose(k);
+        if let Some((heavy, k)) = charging {
+            (swing_pos, swing_rot) = crate::swing::charge_pose(heavy, k);
         }
-        // A sword raised to block (`combat::Guard`).
-        if hand == Hand::Right && guard.blend > 0.001 {
+        // A shield in the left hand: stood upright at your side, raised
+        // into the middle to block, shoved out to bash (`combat::shield`).
+        let shielding = hand == Hand::Left && off.0.is_some_and(|i| items.get(i).shield.is_some());
+        if shielding && t.is_none() {
+            let up = if guard.shield.is_some() { guard.blend } else { 0.0 };
+            (swing_pos, swing_rot) = crate::swing::shield_pose(up, guard.bash);
+        }
+        // A weapon raised to block (`combat::Guard`).
+        if hand == Hand::Right && guard.blend > 0.001 && guard.shield.is_none() {
             let (gp, gr) = crate::swing::guard_pose();
             swing_pos = swing_pos.lerp(gp, guard.blend);
             swing_rot = swing_rot.slerp(gr, guard.blend);
@@ -269,7 +276,7 @@ pub(crate) fn pose_hands(
         let to_mouth = Vec3::new(-side * 0.2, 0.12 + chew, 0.12) * e;
         // Motion feel (`pov`), eased out while the hand is busy (a swing,
         // a guard, eating) so those poses stay as they are.
-        let busy = if t.is_some() || charging.is_some() || e > 0.0 || (hand == Hand::Right && guard.blend > 0.001) { 1.0 } else { 0.0 };
+        let busy = if t.is_some() || charging.is_some() || e > 0.0 || (hand == Hand::Right && guard.blend > 0.001 && guard.shield.is_none()) || (shielding && guard.shield.is_some() && guard.blend > 0.001) { 1.0 } else { 0.0 };
         let calm = 1.0 - busy;
         // Sprint carry: low, pulled in and tipped down, pumping with the stride.
         let k = pov.sprint * calm;

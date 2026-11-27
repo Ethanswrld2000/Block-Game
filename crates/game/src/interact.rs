@@ -103,7 +103,7 @@ pub struct OffHand(pub Option<ItemId>);
 pub fn right_click_use(items: &Items, item: Option<ItemId>) -> bool {
     item.is_some_and(|i| {
         let it = items.get(i);
-        matches!(it.kind, ItemKind::Block(_) | ItemKind::Torch | ItemKind::Food { .. }) || it.swing == Swing::Slash
+        matches!(it.kind, ItemKind::Block(_) | ItemKind::Torch | ItemKind::Food { .. }) || it.moves.is_some() || it.shield.is_some()
     })
 }
 
@@ -163,17 +163,23 @@ pub struct Strike {
     pub yours: bool,
 }
 
-/// A fighting swing (a sword's) reached its contact moment: whatever is in
-/// the arc in front of `origin` along `dir` within `reach` takes the blow
-/// (`combat` resolves it against foes and creatures).
+/// A fighting swing (a weapon's move) reached its contact moment: whatever
+/// is in the arc in front of `origin` along `dir` within `reach` takes the
+/// blow (`combat` resolves it against foes and creatures).
 #[derive(Message, Debug, Clone, Copy)]
 pub struct Swung {
     pub origin: Vec3,
     pub dir: Vec3,
     pub reach: f32,
+    /// Half the arc it sweeps, degrees.
+    pub arc: f32,
     pub damage: f32,
-    /// A charged cut: it breaks a raised guard.
+    /// A charged move: it breaks a raised guard.
     pub heavy: bool,
+    /// The move (a `Spin` hits all round, a `Slam` knocks down all close by).
+    pub style: Swing,
+    /// What it was swung with (for its special and traits).
+    pub weapon: Option<ItemId>,
 }
 
 /// Holding the attack button with a sword: up to this long it's a light cut
@@ -191,15 +197,14 @@ pub fn heavy_mult(power: f32) -> f32 {
     1.6 + 0.8 * power.clamp(0.0, 1.0)
 }
 
-/// The next light cut of a combo after `last`, and its damage multiplier:
-/// right to left, back across, then a harder third cut.
-pub fn combo_cut(last: u8, carried: bool) -> (u8, Swing, f32) {
-    let step = if carried { (last + 1) % 3 } else { 0 };
-    match step {
-        1 => (1, Swing::SlashBack, 1.0),
-        2 => (2, Swing::Slash, 1.25),
-        _ => (0, Swing::Slash, 1.0),
-    }
+/// The next light move of a combo after `last`, and its damage multiplier:
+/// the weapon's light moves in turn (a sword: right to left, back across),
+/// the third of three hitting harder.
+pub fn combo_cut(light: &[Swing], last: u8, carried: bool) -> (u8, Swing, f32) {
+    let n = light.len().max(1) as u8;
+    let step = if carried { (last + 1) % n } else { 0 };
+    let style = light.get(step as usize).copied().unwrap_or(Swing::Slash);
+    (step, style, if step == 2 { 1.25 } else { 1.0 })
 }
 
 /// Seconds between blows.
@@ -261,21 +266,33 @@ pub struct Arm {
     pub heavy: bool,
     /// Damage multiplier of this cut (combo finisher, charge).
     mult: f32,
+    /// How much faster than usual it swings (a swift weapon's trait).
+    speed: f32,
 }
 
 impl Arm {
     /// Starts a swing unless one is under way.
     fn start(&mut self, style: Swing, mining: bool) {
         if self.t.is_none() {
-            *self = Arm { t: Some(0.0), style, mining, striking: false, heavy: false, mult: 1.0 };
+            *self = Arm { t: Some(0.0), style, mining, striking: false, heavy: false, mult: 1.0, speed: 1.0 };
         }
+    }
+
+    /// A fighting move (it hits foes at contact).
+    pub fn striking(&self) -> bool {
+        self.striking && self.t.is_some()
+    }
+
+    /// A fighting move from `t` (0..1).
+    fn fight(t: f32, style: Swing, heavy: bool, mult: f32, speed: f32) -> Self {
+        Arm { t: Some(t), style, mining: false, striking: true, heavy, mult, speed }
     }
 
     /// Moves the swing on by `dt` seconds; true on the frame a mining or
     /// fighting swing lands.
     fn advance(&mut self, dt: f32) -> bool {
         let Some(t) = self.t else { return false };
-        let next = t + dt / self.style.period();
+        let next = t + dt * self.speed.max(0.1) / self.style.period();
         self.t = (next < 1.0).then_some(next);
         (self.mining || self.striking) && swing::lands(self.style, t, next)
     }
@@ -292,8 +309,10 @@ pub struct HandAnim {
     pub eat_hand: Hand,
     place_cooldown: f32,
     strike_cooldown: f32,
-    /// Seconds the attack button has been held with a sword (a charge).
+    /// Seconds the attack button has been held with a weapon (a charge).
     charge: Option<f32>,
+    /// The heavy move being charged.
+    charging: Swing,
     /// A light cut waiting for the arm to come free.
     queued: bool,
     /// Which cut of the combo came last (0, 1, 2) and how long is left to
@@ -317,10 +336,10 @@ impl HandAnim {
         }
     }
 
-    /// How far up a heavy cut is charged (0..1), while one is.
-    pub fn charge_level(&self) -> Option<f32> {
+    /// The heavy move being charged and how far up (0..1), while one is.
+    pub fn charge_level(&self) -> Option<(Swing, f32)> {
         let c = self.charge?;
-        (c > TAP && self.right.t.is_none()).then(|| ((c - TAP) / RAISE).min(1.0))
+        (c > TAP && self.right.t.is_none()).then(|| (self.charging, ((c - TAP) / RAISE).min(1.0)))
     }
 
     /// Starts a plain swing of `hand` (no blow) unless one is under way.
@@ -574,8 +593,14 @@ fn use_hands(
     let item = wielded.0;
     // A sword's cut lands at contact, on whatever is in its arc then.
     if landed && striking {
-        let damage = item.map_or(crate::items::FIST_DAMAGE, |i| items.get(i).damage) * (1.0 + perks.damage) * mult;
-        swung.write(Swung { origin: cam.translation, dir: cam.forward().as_vec3(), reach: crate::combat::SWORD_REACH, damage, heavy });
+        let it = item.map(|i| items.get(i));
+        let damage = it.map_or(crate::items::FIST_DAMAGE, |i| i.damage) * (1.0 + perks.damage) * mult;
+        let reach = it.map_or(crate::combat::SWORD_REACH, |i| i.reach()) + if anim.right.style == Swing::Lunge { 1.0 } else { 0.0 };
+        let arc = match anim.right.style {
+            Swing::Spin => 180.0,
+            _ => it.and_then(|i| i.moves.as_ref()).map_or(55.0, |m| m.arc),
+        };
+        swung.write(Swung { origin: cam.translation, dir: cam.forward().as_vec3(), reach, arc, damage, heavy, style: anim.right.style, weapon: item });
     }
     let landed = landed && !striking;
     anim.left.advance(dt);
@@ -587,6 +612,13 @@ fn use_hands(
         return;
     }
     let style = item.map_or(Swing::Jab, |i| items.get(i).swing);
+    // A shield raised: left click bashes (`combat::shield`), nothing else.
+    if guard.up && guard.shield.is_some() {
+        mining.block = None;
+        anim.charge = None;
+        anim.queued = false;
+        return;
+    }
 
     // A creature in front of the block you aim at takes the click.
     let block_dist = target.hit.and_then(|h| {
@@ -595,8 +627,14 @@ fn use_hands(
     });
     // A gun fires (`combat::guns`) and never mines or strikes.
     let gun = item.is_some_and(|i| items.get(i).gun.is_some());
+    // A weapon with moves fights: a sword (or spear, dagger, hammer) always,
+    // a tool with moves (an axe) whenever it isn't aimed at a block it can work.
+    let moves = item.and_then(|i| items.get(i).moves.clone());
+    let works_blocks = item.is_some_and(|i| matches!(&items.get(i).kind, ItemKind::Tool { speeds } if !speeds.is_empty()));
+    let foe_first = aimed.entity.is_some() && block_dist.is_none_or(|d| aimed.dist < d);
+    let fighting = moves.is_some() && (!works_blocks || foe_first || target.hit.is_none() || anim.charge.is_some() || anim.right.striking && anim.right.t.is_some());
     if let Some(e) = aimed.entity
-        && style != Swing::Slash
+        && !fighting
         && !gun
         && block_dist.is_none_or(|d| aimed.dist < d)
     {
@@ -699,16 +737,18 @@ fn use_hands(
         return;
     }
 
-    // A sword fights and never mines: left click cuts (one cut per swing,
+    // A weapon fights: left click for its moves (one blow per swing,
     // landing at contact), right click blocks (`combat::Guard`).
-    if style == Swing::Slash {
+    if fighting && let (Some(moves), Some(i)) = (&moves, item) {
         mining.block = None;
         let input = SwordInput {
             pressed: mouse.pressed(MouseButton::Left),
             just: mouse.just_pressed(MouseButton::Left),
             guard: guard.up,
         };
-        sword(&mut anim, input, &mut survival.vitals.health, dt);
+        let it = items.get(i);
+        let wield = Wield { moves, stamina: it.stamina, speed: 1.0 + it.tuning.speed };
+        sword(&mut anim, input, wield, &mut survival.vitals.health, dt);
         return;
     }
 
@@ -837,11 +877,22 @@ pub struct SwordInput {
     pub guard: bool,
 }
 
-/// A sword in hand: tap for a light cut (three chain into a combo), hold to
-/// charge a heavy one, let go to swing it. Each wears Fatigue down
+/// The weapon in hand: its moves, and what its quality and traits change.
+#[derive(Clone, Copy)]
+pub struct Wield<'a> {
+    pub moves: &'a crate::items::Moves,
+    /// Multiplier on the Fatigue each move costs.
+    pub stamina: f32,
+    /// Multiplier on how fast it swings.
+    pub speed: f32,
+}
+
+/// A weapon in hand: tap for a light move (they chain into a combo), hold to
+/// charge the heavy one, let go to swing it. Each wears Fatigue down
 /// (`combat::stamina`); winded, nothing swings.
-pub fn sword(anim: &mut HandAnim, input: SwordInput, health: &mut crate::survival::health::Health, dt: f32) {
+pub fn sword(anim: &mut HandAnim, input: SwordInput, wield: Wield, health: &mut crate::survival::health::Health, dt: f32) {
     use crate::combat::stamina::{self, HEAVY, LIGHT};
+    anim.charging = wield.moves.heavy;
     let busy = anim.right.t.is_some();
     if busy {
         anim.combo_window = COMBO_WINDOW;
@@ -866,10 +917,11 @@ pub fn sword(anim: &mut HandAnim, input: SwordInput, health: &mut crate::surviva
             anim.charge = None;
             if c < TAP {
                 anim.queued = true;
-            } else if !busy && stamina::spend(health, HEAVY) {
+            } else if !busy && stamina::spend(health, HEAVY * wield.stamina) {
                 let raised = ((c - TAP) / RAISE).min(1.0);
                 let power = ((c - TAP) / CHARGE).min(1.0);
-                anim.right = Arm { t: Some(swing::HEAVY_WINDUP * raised), style: Swing::Heavy, mining: false, striking: true, heavy: true, mult: heavy_mult(power) };
+                let heavy = wield.moves.heavy;
+                anim.right = Arm::fight(heavy.windup() * raised, heavy, true, heavy_mult(power), wield.speed);
                 // The next light cut starts a fresh combo.
                 anim.combo = 2;
             }
@@ -877,10 +929,10 @@ pub fn sword(anim: &mut HandAnim, input: SwordInput, health: &mut crate::surviva
     }
     if anim.queued && !busy {
         anim.queued = false;
-        if stamina::spend(health, LIGHT) {
-            let (step, style, mult) = combo_cut(anim.combo, anim.combo_window > 0.0);
+        if stamina::spend(health, LIGHT * wield.stamina) {
+            let (step, style, mult) = combo_cut(&wield.moves.light, anim.combo, anim.combo_window > 0.0);
             anim.combo = step;
-            anim.right = Arm { t: Some(0.0), style, mining: false, striking: true, heavy: false, mult };
+            anim.right = Arm::fight(0.0, style, false, mult, wield.speed);
         }
     }
 }
@@ -911,6 +963,15 @@ mod tests {
     use crate::survival::health::{Health as Stamina, Layer};
 
     const DT: f32 = 1.0 / 60.0;
+
+    fn moves() -> crate::items::Moves {
+        crate::items::Moves { light: vec![Swing::Slash, Swing::SlashBack, Swing::Slash], heavy: Swing::Heavy, reach: 3.0, arc: 55.0, special: Default::default() }
+    }
+
+    fn sword(anim: &mut HandAnim, input: SwordInput, st: &mut Stamina, dt: f32) {
+        let m = moves();
+        super::sword(anim, input, Wield { moves: &m, stamina: 1.0, speed: 1.0 }, st, dt);
+    }
 
     /// Hold the button for `secs`, let go, and let the arm move for `after`.
     fn click(anim: &mut HandAnim, st: &mut Stamina, secs: f32) {
@@ -971,13 +1032,35 @@ mod tests {
             first = false;
         }
         assert!(anim.right.t.is_none());
-        assert!(anim.charge_level().is_some_and(|k| k > 0.5));
+        assert!(anim.charge_level().is_some_and(|(s, k)| s == Swing::Heavy && k > 0.5));
         sword(&mut anim, SwordInput::default(), &mut st, DT);
         assert_eq!(anim.right.style, Swing::Heavy);
         assert!(anim.right.heavy && anim.right.mult > 1.6);
         // It starts where the charge left the arm, not back at rest.
         assert!(anim.right.t.unwrap() > 0.2);
         assert_eq!(heavy_mult(1.0), 2.4);
+    }
+
+    #[test]
+    fn each_weapon_chains_its_own_moves() {
+        let (mut anim, mut st) = (HandAnim::default(), Stamina::default());
+        let spear = crate::items::Moves { light: vec![Swing::Thrust], heavy: Swing::Lunge, reach: 4.0, arc: 25.0, special: Default::default() };
+        let light = Wield { moves: &spear, stamina: 0.5, speed: 1.2 };
+        for _ in 0..2 {
+            let mut first = true;
+            for _ in 0..3 {
+                super::sword(&mut anim, SwordInput { pressed: true, just: first, guard: false }, light, &mut st, DT);
+                first = false;
+            }
+            super::sword(&mut anim, SwordInput::default(), light, &mut st, DT);
+            assert_eq!((anim.right.style, anim.right.mult), (Swing::Thrust, 1.0));
+            while anim.right.t.is_some() {
+                anim.right.advance(DT);
+            }
+        }
+        // Half the Fatigue of a sword's two light cuts.
+        assert!((st.get(Layer::Fatigue) - (100.0 - stamina::LIGHT)).abs() < 1e-3);
+        assert_eq!(combo_cut(&[Swing::Thrust, Swing::Thrust, Swing::Lunge], 1, true), (2, Swing::Lunge, 1.25));
     }
 
     #[test]

@@ -110,7 +110,8 @@ fn animate(
         (Some(t), _) => Some(held.unwrap_or(Swing::Jab).limbs(t)),
         (None, Some(t)) => Some(arm.style.limbs(t)),
         (None, None) => match anim.charge_level() {
-            Some(k) => Some(crate::swing::charge_limbs(k)),
+            Some((heavy, k)) => Some(crate::swing::charge_limbs(heavy, k)),
+            None if guard.shield.is_some() => Some(Limbs::hold().lerp(Limbs::shield(), guard.blend)),
             None => held.map(|_| Limbs::hold().lerp(Limbs::guard(), guard.blend)),
         },
     };

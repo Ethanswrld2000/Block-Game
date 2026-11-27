@@ -530,6 +530,56 @@ def rapier(c):
     gem(c, 10, 58, 1.3, SAPPHIRE)
 
 
+def war_hammer(c, metal, edge, band):
+    """A long haft and a heavy square head with a spike, 20 x 60."""
+    handle(c, 8, 12, 58, 4, cap=band, wood=WOOD_D)
+    c.rect(1, 2, 19, 13, metal, kind="metal", grain=0.03)
+    c.rect(1, 2, 19, 4, edge, kind="metal", grain=0.02)
+    c.rect(1, 2, 3, 13, mix(metal, edge, 0.4), kind="metal")
+    c.rect(17, 2, 19, 13, mul(metal, 0.7), kind="metal")
+    c.rect(1, 11, 19, 13, mul(metal, 0.75), kind="metal")
+    c.poly([(8, 2), (10, -1), (12, 2)], edge, kind="metal")
+    binding(c, 7, 13, 13, 17)
+    rivet(c, 5, 7, edge)
+    rivet(c, 15, 7, edge)
+
+
+def iron_hammer(c):
+    war_hammer(c, IRON, IRON_L, hexc("8a6a4a"))
+
+
+def steel_hammer(c):
+    war_hammer(c, STEEL, STEEL_L, GOLD)
+
+
+def round_shield(c, face, rim, boss, planks=False):
+    """A round shield seen from the front, 40 x 40: rim, face, a metal boss."""
+    c.ellipse(20, 20, 19, 19, rim, kind="metal", grain=0.03)
+    p = c.ellipse(20, 20, 16, 16, face)
+    if planks:
+        for x in (10, 16, 22, 28):
+            c.line(x, 5, x, 35, 1, mul(face, 0.72))
+        c.grain(p, vertical=True)
+    c.ellipse(20, 20, 5, 5, boss, kind="metal")
+    c.ellipse(19, 19, 2, 2, mix(boss, (255, 255, 255), 0.4), kind="metal")
+    for a in range(0, 360, 45):
+        x = 20 + 17.5 * math.cos(math.radians(a))
+        y = 20 + 17.5 * math.sin(math.radians(a))
+        rivet(c, round(x), round(y), mix(rim, (255, 255, 255), 0.35))
+
+
+def wooden_shield(c):
+    round_shield(c, WOOD, IRON, IRON_L, planks=True)
+
+
+def hide_shield(c):
+    round_shield(c, HIDE, WOOD_D, BRASS_C)
+
+
+def iron_shield(c):
+    round_shield(c, IRON, mul(IRON, 0.7), STEEL_L)
+
+
 def makeshift_pistol(c):
     """A crude pistol, 40 x 20: iron barrel strapped to a wooden grip."""
     c.rect(4, 4, 34, 8, IRON, kind="metal", grain=0.03)
@@ -1196,6 +1246,7 @@ DRAW = {f.__name__: f for f in [
     carpentry_urn, gear_urn, vehicle_urn, iron_dagger, rapier, makeshift_pistol, rifle, iron_helm, iron_mail,
     mold_bloom, deepstone_shard, warden_sigil, linen_robe, sun_hat, fur_boots, reed_breather,
     barley, mire_tuber, iron_shot,
+    iron_hammer, steel_hammer, wooden_shield, hide_shield, iron_shield,
 ]}
 
 

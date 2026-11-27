@@ -53,7 +53,18 @@ pub enum Special {
     Sharpen,
     /// Gives the thing back, studied (magical lens).
     Study,
+    /// Gives a weapon, tool, shield or armor of this quality back one quality
+    /// better (iron anvil, with dungeon materials in the tray).
+    Upgrade(crate::quality::Quality),
 }
+
+/// What the iron anvil takes in its tray to raise an item from each quality.
+pub const UPGRADE: [(crate::quality::Quality, &str, u16); 2] =
+    [(crate::quality::Quality::Plain, "mold_bloom", 2), (crate::quality::Quality::Fine, "deepstone_shard", 2)];
+
+/// Odds of quality (plain, fine, masterwork, relic) for weapons, tools,
+/// shields and armor made at a bench: now and then one comes out fine.
+pub const BENCH_LUCK: crate::quality::Odds = [0.9, 0.1, 0.0, 0.0];
 
 #[derive(Deserialize)]
 struct RecipeSpec {
@@ -102,6 +113,8 @@ pub struct BenchData {
     pub sharpen: Option<SharpenSpec>,
     /// Urn steps done that teach recipes; the game keeps this up to date.
     pub learned: std::collections::BTreeSet<String>,
+    /// Items, to tell what a better version is a version of.
+    pub items: Option<Items>,
 }
 
 /// How a slot takes part in a recipe.
@@ -304,8 +317,15 @@ impl BenchData {
             if let Some(st) = spec.study {
                 recipes.push(one("magical_lens", "plate", i, st.work, Special::Study));
             }
+            if items.get(i).takes_quality() {
+                for (from, what, n) in UPGRADE {
+                    let mut r = one("iron_anvil", "anvil", i, 6, Special::Upgrade(from));
+                    r.slots.insert("flux".into(), Stack::new(item(what)?, n));
+                    recipes.push(r);
+                }
+            }
         }
-        Ok(Self { recipes, fuel, sharpen: spec.sharpen, learned: Default::default() })
+        Ok(Self { recipes, fuel, sharpen: spec.sharpen, learned: Default::default(), items: Some(items.clone()) })
     }
 
     /// The heat the fire slot's fuel gives.
@@ -322,7 +342,14 @@ impl BenchData {
     /// Whether the board holds what a recipe needs and nothing else (the fire
     /// may hold more than it needs; `heat: false` leaves the fire out).
     fn fits(&self, station: &str, r: &Recipe, board: &Board, heat: bool) -> bool {
-        let plain_ok = r.slots.iter().all(|(s, want)| board.slots.get(s).is_some_and(|have| have.item == want.item && have.count >= want.count))
+        // The recipes made for every item take any version of it; an upgrade
+        // only one of the quality it starts from.
+        let same = |have: ItemId, want: ItemId| match (r.special, &self.items) {
+            (Special::None, _) | (_, None) => have == want,
+            (Special::Upgrade(q), Some(items)) => items.get(have).base == want && items.get(have).quality == q,
+            (_, Some(items)) => items.get(have).base == want,
+        };
+        let plain_ok = r.slots.iter().all(|(s, want)| board.slots.get(s).is_some_and(|have| same(have.item, want.item) && have.count >= want.count))
             && board.slots.keys().all(|s| kind_of(station, s) != SlotKind::Plain || r.slots.contains_key(s));
         let pot = mixed(station, board);
         let mix_ok = pot.len() == r.mix.len() && r.mix.iter().all(|want| pot.get(&want.item).is_some_and(|n| *n >= want.count as u32));
@@ -388,6 +415,8 @@ pub struct Board {
     pub made: Option<Stack>,
     /// Knocks so far towards the matching recipe.
     pub work: u8,
+    /// Things made so far (seeds the roll for a made thing's quality).
+    pub rolls: u64,
 }
 
 impl Board {
@@ -459,6 +488,18 @@ impl Board {
         }
         self.work = 0;
         let burn = data.burns(station, &r, self);
+        // What comes off: the very thing put on for the recipes made for
+        // every item (one better for an upgrade); a made weapon or tool is
+        // now and then a fine one.
+        self.rolls = self.rolls.wrapping_add(1);
+        let mut rng = crate::creatures::brain::Rng(0x9E37_79B9_7F4A_7C15 ^ self.rolls.wrapping_mul(0xD1B5_4A32_D192_ED03) | 1);
+        let first = r.slots.keys().next().and_then(|k| self.slots.get(k)).map(|s| s.item);
+        let makes = match (r.special, &data.items, first) {
+            (Special::None, Some(items), _) => Stack::new(items.roll(r.makes.item, BENCH_LUCK, &mut rng), r.makes.count),
+            (Special::Upgrade(_), Some(items), Some(have)) => Stack::new(items.upgraded(have, &mut rng).unwrap_or(have), 1),
+            (_, Some(_), Some(have)) => Stack::new(have, 1),
+            _ => r.makes,
+        };
         for (s, want) in &r.slots {
             self.use_up(s, want.count);
         }
@@ -477,8 +518,8 @@ impl Board {
         {
             self.use_up(d.name, burn);
         }
-        self.made = Some(r.makes);
-        Work::Made(r.makes)
+        self.made = Some(makes);
+        Work::Made(makes)
     }
 
     fn use_up(&mut self, slot: &str, n: u16) {

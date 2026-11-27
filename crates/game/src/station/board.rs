@@ -1642,6 +1642,10 @@ pub(super) fn board_ui(
         let what = match r.special {
             Special::Sharpen => format!("sharpen the {}", items.get(r.makes.item).title),
             Special::Study => format!("study the {}", items.get(r.makes.item).title),
+            Special::Upgrade(q) => {
+                let up = q.next().map_or("", |n| items.qualities().tier(n).title.as_str());
+                format!("work the {} up to {up}", items.get(r.makes.item).title)
+            }
             Special::None => format!("make {}", a_or_some(&items, r.makes)),
         };
         let l = layout(st.kind);

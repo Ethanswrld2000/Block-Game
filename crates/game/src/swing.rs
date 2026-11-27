@@ -32,6 +32,19 @@ pub enum Swing {
     /// A shovel: drawn back and up, thrust down into the ground, then levered
     /// up and the load tossed off to the side.
     Dig,
+    /// A stab: drawn back at the hip, driven straight out ahead (spear,
+    /// dagger, rapier).
+    Thrust,
+    /// A heavy stab: hauled far back, then the whole body lunges behind it.
+    Lunge,
+    /// The axe's heavy: wound far round to the right, then a full sweep
+    /// across that hits everything around you.
+    Spin,
+    /// A hammer: raised high, brought down hard.
+    Smash,
+    /// The hammer's heavy: hauled over the head and slammed into the ground,
+    /// knocking down everything close by.
+    Slam,
 }
 
 #[derive(Clone, Copy)]
@@ -171,7 +184,62 @@ const HEAVY: [Hand; 7] = [
     key(1.0, [0.0; 3], [0.0; 3], Ease::InOut),
 ];
 
+/// A stab: settle, drawn back by the hip, driven straight out, a jar, back.
+const THRUST: [Hand; 6] = [
+    REST,
+    key(0.08, [0.0, -0.01, 0.01], [-0.05, 0.0, 0.0], Ease::InOut),
+    key(0.34, [0.03, 0.0, 0.09], [-0.15, 0.15, 0.0], Ease::InOut),
+    key(0.46, [-0.05, 0.02, -0.22], [-0.25, 0.05, 0.0], Ease::In),
+    key(0.58, [-0.045, 0.018, -0.19], [-0.24, 0.05, 0.0], Ease::Out),
+    key(1.0, [0.0; 3], [0.0; 3], Ease::InOut),
+];
+
+/// The lunge: drawn far back, the whole arm driven out and held there a beat.
+const LUNGE: [Hand; 7] = [
+    REST,
+    key(0.08, [0.0, -0.02, 0.01], [-0.05, 0.0, 0.0], Ease::InOut),
+    key(0.40, [0.06, 0.03, 0.16], [-0.1, 0.3, 0.1], Ease::InOut),
+    key(0.52, [-0.06, 0.03, -0.34], [-0.3, 0.0, 0.0], Ease::In),
+    key(0.62, [-0.055, 0.025, -0.30], [-0.28, 0.0, 0.0], Ease::Out),
+    key(0.76, [-0.05, 0.02, -0.28], [-0.27, 0.0, 0.0], Ease::InOut),
+    key(1.0, [0.0; 3], [0.0; 3], Ease::InOut),
+];
+
+/// The spin: wound far round to the right, a full sweep across to the left.
+const SPIN: [Hand; 7] = [
+    REST,
+    key(0.10, [0.01, -0.02, 0.01], [-0.08, 0.06, 0.02], Ease::InOut),
+    key(0.42, [0.2, 0.05, 0.12], [-0.3, -1.4, -0.5], Ease::InOut),
+    key(0.56, [-0.22, 0.05, -0.12], [-0.32, 1.5, 0.4], Ease::In),
+    key(0.64, [-0.2, 0.05, -0.11], [-0.3, 1.38, 0.36], Ease::Out),
+    key(0.78, [-0.18, 0.04, -0.1], [-0.28, 1.3, 0.33], Ease::InOut),
+    key(1.0, [0.0; 3], [0.0; 3], Ease::InOut),
+];
+
+/// The hammer: raised high, brought down hard, a jar, held, back up.
+const SMASH: [Hand; 7] = [
+    REST,
+    key(0.10, [0.0, -0.02, 0.01], [-0.1, 0.0, 0.0], Ease::InOut),
+    key(0.42, [0.02, 0.2, 0.1], [1.3, 0.04, 0.0], Ease::InOut),
+    key(0.54, [-0.07, -0.06, -0.14], [-0.8, 0.1, 0.0], Ease::In),
+    key(0.60, [-0.065, -0.05, -0.13], [-0.7, 0.1, 0.0], Ease::Out),
+    key(0.74, [-0.06, -0.045, -0.125], [-0.66, 0.1, 0.0], Ease::InOut),
+    key(1.0, [0.0; 3], [0.0; 3], Ease::InOut),
+];
+
+/// The ground slam: hauled right over the head, driven down into the ground.
+const SLAM: [Hand; 7] = [
+    REST,
+    key(0.10, [0.0, -0.02, 0.01], [-0.1, 0.0, 0.0], Ease::InOut),
+    key(0.42, [0.03, 0.24, 0.13], [1.6, 0.1, 0.2], Ease::InOut),
+    key(0.54, [-0.05, -0.14, -0.16], [-1.15, 0.1, 0.0], Ease::In),
+    key(0.62, [-0.045, -0.12, -0.15], [-1.0, 0.1, 0.0], Ease::Out),
+    key(0.78, [-0.04, -0.11, -0.14], [-0.95, 0.1, 0.0], Ease::InOut),
+    key(1.0, [0.0; 3], [0.0; 3], Ease::InOut),
+];
+
 /// How far through `Heavy` the wind-up is: charging holds the arm there.
+#[cfg(test)]
 pub const HEAVY_WINDUP: f32 = 0.40;
 
 /// Holding a sword up across the body to block: blade tipped up and to the
@@ -271,8 +339,66 @@ const BODY_DIG: [Body; 7] = [
     limbs(1.0, HOLD, Ease::InOut),
 ];
 
+const BODY_THRUST: [Body; 6] = [
+    limbs(0.0, HOLD, Ease::InOut),
+    limbs(0.08, [0.0, 0.02, 0.3, 0.08, 0.0, 0.85, 0.0, 0.15, 0.0, 0.0], Ease::InOut),
+    limbs(0.34, [-0.35, -0.06, 0.9, 0.15, -0.2, 1.7, 0.1, 0.3, 0.0, 0.0], Ease::InOut),
+    limbs(0.46, [0.3, 0.18, 1.5, 0.05, 0.15, 0.05, -0.2, 0.3, 0.0, 0.0], Ease::In),
+    limbs(0.58, [0.28, 0.16, 1.45, 0.05, 0.14, 0.1, -0.2, 0.3, 0.0, 0.0], Ease::Out),
+    limbs(1.0, HOLD, Ease::InOut),
+];
+
+const BODY_LUNGE: [Body; 7] = [
+    limbs(0.0, HOLD, Ease::InOut),
+    limbs(0.08, [0.0, 0.03, 0.25, 0.08, 0.0, 0.85, 0.0, 0.15, 0.0, 0.0], Ease::InOut),
+    limbs(0.40, [-0.5, -0.12, 0.8, 0.2, -0.3, 1.9, 0.3, 0.5, 0.0, 0.0], Ease::InOut),
+    limbs(0.52, [0.45, 0.3, 1.55, 0.05, 0.2, 0.0, -0.4, 0.3, 0.0, 0.0], Ease::In),
+    limbs(0.62, [0.43, 0.28, 1.5, 0.05, 0.19, 0.05, -0.4, 0.3, 0.0, 0.0], Ease::Out),
+    limbs(0.76, [0.42, 0.27, 1.48, 0.05, 0.18, 0.06, -0.38, 0.3, 0.0, 0.0], Ease::InOut),
+    limbs(1.0, HOLD, Ease::InOut),
+];
+
+const BODY_SPIN: [Body; 7] = [
+    limbs(0.0, HOLD, Ease::InOut),
+    limbs(0.10, [0.05, 0.03, 0.25, 0.08, 0.05, 0.85, 0.05, 0.2, 0.0, 0.0], Ease::InOut),
+    limbs(0.42, [-1.2, -0.05, 1.35, 0.4, -1.5, 0.5, 1.0, 0.9, -1.3, -1.4], Ease::InOut),
+    limbs(0.56, [0.9, 0.16, 1.45, 0.05, 0.8, 0.1, 1.2, 0.35, -1.3, -1.4], Ease::In),
+    limbs(0.64, [0.8, 0.14, 1.42, 0.05, 0.72, 0.14, 1.15, 0.35, -1.25, -1.4], Ease::Out),
+    limbs(0.78, [0.75, 0.13, 1.4, 0.05, 0.68, 0.15, 1.1, 0.35, -1.25, -1.4], Ease::InOut),
+    limbs(1.0, HOLD, Ease::InOut),
+];
+
+const BODY_SMASH: [Body; 7] = [
+    limbs(0.0, HOLD, Ease::InOut),
+    limbs(0.10, [0.0, 0.04, 0.2, 0.08, 0.0, 0.85, 0.0, 0.15, 0.0, 0.0], Ease::InOut),
+    limbs(0.42, [-0.15, -0.18, 2.7, 0.15, 0.2, 0.3, 2.4, 0.6, 0.5, 0.0], Ease::InOut),
+    limbs(0.54, [0.1, 0.42, 1.1, 0.05, 0.25, 0.1, 0.85, 0.3, -1.2, 0.0], Ease::In),
+    limbs(0.60, [0.08, 0.38, 1.16, 0.05, 0.24, 0.12, 0.88, 0.3, -1.15, 0.0], Ease::Out),
+    limbs(0.74, [0.08, 0.37, 1.18, 0.05, 0.23, 0.13, 0.88, 0.3, -1.15, 0.0], Ease::InOut),
+    limbs(1.0, HOLD, Ease::InOut),
+];
+
+const BODY_SLAM: [Body; 7] = [
+    limbs(0.0, HOLD, Ease::InOut),
+    limbs(0.10, [0.0, 0.04, 0.2, 0.08, 0.0, 0.85, 0.0, 0.15, 0.0, 0.0], Ease::InOut),
+    limbs(0.42, [-0.2, -0.28, 2.9, 0.15, 0.25, 0.4, 2.7, 0.6, 0.7, 0.0], Ease::InOut),
+    limbs(0.54, [0.1, 0.6, 0.9, 0.05, 0.3, 0.05, 0.9, 0.2, -1.4, 0.0], Ease::In),
+    limbs(0.62, [0.08, 0.55, 0.95, 0.05, 0.28, 0.08, 0.92, 0.2, -1.35, 0.0], Ease::Out),
+    limbs(0.78, [0.08, 0.53, 0.97, 0.05, 0.27, 0.1, 0.92, 0.2, -1.35, 0.0], Ease::InOut),
+    limbs(1.0, HOLD, Ease::InOut),
+];
+
 /// Blocking: the sword arm up and across, blade raised in front of the face.
 const BODY_GUARD: [f32; 10] = [0.3, 0.06, 1.55, 0.12, 0.85, 1.25, 0.4, 0.9, -0.35, -1.45];
+
+/// Behind a shield: the left arm up with the forearm across the chest, the
+/// right held back ready.
+const BODY_SHIELD: [f32; 10] = [-0.15, 0.08, 0.35, 0.1, 0.0, 0.9, 1.45, 1.4, 0.0, 0.0];
+
+/// A shield held at your side: stood upright, its face out to the left.
+const SHIELD_REST: [f32; 6] = [0.02, -0.02, 0.0, 1.35, 0.35, 0.0];
+/// A shield raised: up in the middle of the view, its face to the front.
+const SHIELD_UP: [f32; 6] = [-0.17, 0.12, -0.02, 1.5, 0.05, 0.0];
 
 impl Limbs {
     fn from_array(v: [f32; 10]) -> Self {
@@ -287,6 +413,11 @@ impl Limbs {
     /// Arms raised to block with a sword.
     pub fn guard() -> Self {
         Self::from_array(BODY_GUARD)
+    }
+
+    /// The left arm up behind a shield.
+    pub fn shield() -> Self {
+        Self::from_array(BODY_SHIELD)
     }
 
     /// `self` blended `k` (0..1) of the way to `other`.
@@ -306,6 +437,15 @@ pub fn guard_pose() -> (Vec3, Quat) {
     (Vec3::new(v[0], v[1], v[2]), Quat::from_euler(EulerRot::XYZ, v[3], v[4], v[5]))
 }
 
+/// The left hand's offset and turn holding a shield, `up` (0..1) of the way
+/// to raised, `bash` (0..1 through a bash) shoving it out ahead. In the right
+/// hand's frame (`hands` mirrors it for the left).
+pub fn shield_pose(up: f32, bash: Option<f32>) -> (Vec3, Quat) {
+    let v: [f32; 6] = std::array::from_fn(|i| SHIELD_REST[i] + (SHIELD_UP[i] - SHIELD_REST[i]) * up.clamp(0.0, 1.0));
+    let shove = bash.map_or(0.0, crate::combat::shield::bash_reach);
+    (Vec3::new(v[0], v[1], v[2] - shove * 0.22), Quat::from_euler(EulerRot::XYZ, v[3], v[4], v[5]))
+}
+
 impl Swing {
     fn keys(self) -> &'static [Hand] {
         match self {
@@ -316,6 +456,11 @@ impl Swing {
             Swing::SlashBack => &SLASH_BACK,
             Swing::Heavy => &HEAVY,
             Swing::Dig => &DIG,
+            Swing::Thrust => &THRUST,
+            Swing::Lunge => &LUNGE,
+            Swing::Spin => &SPIN,
+            Swing::Smash => &SMASH,
+            Swing::Slam => &SLAM,
         }
     }
 
@@ -328,6 +473,11 @@ impl Swing {
             Swing::SlashBack => &BODY_SLASH_BACK,
             Swing::Heavy => &BODY_HEAVY,
             Swing::Dig => &BODY_DIG,
+            Swing::Thrust => &BODY_THRUST,
+            Swing::Lunge => &BODY_LUNGE,
+            Swing::Spin => &BODY_SPIN,
+            Swing::Smash => &BODY_SMASH,
+            Swing::Slam => &BODY_SLAM,
         }
     }
 
@@ -350,7 +500,18 @@ impl Swing {
             Swing::SlashBack => 0.40,
             Swing::Heavy => 0.75,
             Swing::Dig => 0.6,
+            Swing::Thrust => 0.36,
+            Swing::Lunge => 0.7,
+            Swing::Spin => 0.8,
+            Swing::Smash => 0.62,
+            Swing::Slam => 0.95,
         }
+    }
+
+    /// When the wind-up is all the way back (the key before contact):
+    /// charging a heavy holds the arm there.
+    pub fn windup(self) -> f32 {
+        self.keys()[self.contact_key() - 1].t
     }
 
     /// When the blow lands, as a share of the swing (the end of the strike).
@@ -364,9 +525,9 @@ impl Swing {
         (Vec3::new(v[0], v[1], v[2]), Quat::from_euler(EulerRot::XYZ, v[3], v[4], v[5]))
     }
 
-    /// A fighting swing (a sword's): it cuts and never mines.
+    /// A fighting swing (a weapon's move): it hits foes in its arc and never mines.
     pub fn fights(self) -> bool {
-        matches!(self, Swing::Slash | Swing::SlashBack | Swing::Heavy)
+        matches!(self, Swing::Slash | Swing::SlashBack | Swing::Heavy | Swing::Thrust | Swing::Lunge | Swing::Spin | Swing::Smash | Swing::Slam)
     }
 
     /// The body's arms `t` (0..1) of the way through a swing (third person).
@@ -376,14 +537,14 @@ impl Swing {
     }
 }
 
-/// The hand's pose while charging a heavy cut, `k` (0..1) of the way up.
-pub fn charge_pose(k: f32) -> (Vec3, Quat) {
-    Swing::Heavy.pose(HEAVY_WINDUP * k.clamp(0.0, 1.0))
+/// The hand's pose while charging a heavy move, `k` (0..1) of the way up.
+pub fn charge_pose(heavy: Swing, k: f32) -> (Vec3, Quat) {
+    heavy.pose(heavy.windup() * k.clamp(0.0, 1.0))
 }
 
-/// The body's arms while charging a heavy cut.
-pub fn charge_limbs(k: f32) -> Limbs {
-    Swing::Heavy.limbs(HEAVY_WINDUP * k.clamp(0.0, 1.0))
+/// The body's arms while charging a heavy move.
+pub fn charge_limbs(heavy: Swing, k: f32) -> Limbs {
+    heavy.limbs(heavy.windup() * k.clamp(0.0, 1.0))
 }
 
 /// Did a swing that went from `before` to `after` (shares of the swing, 0..1)
@@ -404,7 +565,20 @@ pub fn blow_share(swing: Swing, seconds: f32) -> f32 {
 mod tests {
     use super::*;
 
-    const ALL: [Swing; 7] = [Swing::Jab, Swing::Chop, Swing::Overhead, Swing::Slash, Swing::SlashBack, Swing::Heavy, Swing::Dig];
+    const ALL: [Swing; 12] = [
+        Swing::Jab,
+        Swing::Chop,
+        Swing::Overhead,
+        Swing::Slash,
+        Swing::SlashBack,
+        Swing::Heavy,
+        Swing::Dig,
+        Swing::Thrust,
+        Swing::Lunge,
+        Swing::Spin,
+        Swing::Smash,
+        Swing::Slam,
+    ];
 
     fn pitch(q: Quat) -> f32 {
         q.to_euler(EulerRot::XYZ).0
@@ -417,9 +591,10 @@ mod tests {
     /// The angle each swing drives along: down for jabs and picks, across
     /// (toward the middle) for the axe. Smaller = further into the strike.
     fn drive(s: Swing, t: f32) -> f32 {
-        let q = s.pose(t).1;
+        let (p, q) = s.pose(t);
         match s {
-            Swing::Chop | Swing::Slash => -yaw(q),
+            Swing::Thrust | Swing::Lunge => p.z,
+            Swing::Chop | Swing::Slash | Swing::Spin => -yaw(q),
             Swing::SlashBack => yaw(q),
             _ => pitch(q),
         }
@@ -517,9 +692,27 @@ mod tests {
         assert!(p0.y - p1.y > 0.25 && pitch(q0) - pitch(q1) > 2.0);
         assert!(Swing::Heavy.period() > Swing::Slash.period() * 1.5);
         // Charging holds the arm on the way to the wind-up, ending there.
-        assert_eq!(charge_pose(1.0), Swing::Heavy.pose(HEAVY_WINDUP));
-        assert_eq!(charge_pose(0.0), Swing::Heavy.pose(0.0));
+        assert_eq!(Swing::Heavy.windup(), HEAVY_WINDUP);
+        assert_eq!(charge_pose(Swing::Heavy, 1.0), Swing::Heavy.pose(HEAVY_WINDUP));
+        assert_eq!(charge_pose(Swing::Heavy, 0.0), Swing::Heavy.pose(0.0));
         assert!(Swing::Heavy.fights() && Swing::SlashBack.fights() && !Swing::Chop.fights());
+    }
+
+    #[test]
+    fn weapon_moves_go_their_own_ways() {
+        // Stabs go straight out ahead, hardly turning.
+        for s in [Swing::Thrust, Swing::Lunge] {
+            let (p0, q0) = s.pose(s.windup());
+            let (p1, q1) = s.pose(s.contact());
+            assert!(p0.z - p1.z > 0.25 && (yaw(q1) - yaw(q0)).abs() < 0.4, "{s:?}");
+        }
+        assert!(Swing::Lunge.period() > Swing::Thrust.period() * 1.5);
+        // The spin sweeps wider than the chop; the slam drops further than the smash.
+        let sweep = |s: Swing| yaw(s.pose(s.contact()).1) - yaw(s.pose(s.windup()).1);
+        assert!(sweep(Swing::Spin) > sweep(Swing::Chop));
+        let drop = |s: Swing| pitch(s.pose(s.windup()).1) - pitch(s.pose(s.contact()).1);
+        assert!(drop(Swing::Slam) > drop(Swing::Smash) && drop(Swing::Smash) > 1.8);
+        assert!(Swing::Thrust.fights() && Swing::Slam.fights() && !Swing::Dig.fights());
     }
 
     #[test]
