@@ -51,10 +51,21 @@ struct MaterialSounds {
     dig: String,
 }
 
+/// Footsteps in water and snow (each picks `<name>_0..2`).
+#[derive(Deserialize, Clone, Debug)]
+struct WadeSounds {
+    water: String,
+    snow: String,
+    deep_snow: String,
+    /// Snow this many eighths deep or more sloshes instead of crunching.
+    deep_from: u8,
+}
+
 #[derive(Resource, Deserialize, Debug)]
 struct SoundSpec {
     materials: HashMap<String, MaterialSounds>,
     fallback: MaterialSounds,
+    wade: WadeSounds,
     volumes: HashMap<String, f32>,
     #[serde(default)]
     music: MusicSpec,
@@ -137,7 +148,7 @@ fn load_bank(mut commands: Commands, assets: Res<AssetServer>) {
     .iter()
     .map(|s| s.to_string())
     .collect();
-    for kind in ["soft", "hard", "wood", "plant"] {
+    for kind in ["soft", "hard", "wood", "plant", "splash", "snow", "slosh"] {
         for i in 0..3 {
             names.push(format!("step_{kind}_{i}"));
         }
@@ -416,11 +427,28 @@ fn footsteps(
     if !changed || *mode != MoveMode::Walk || !player.on_ground || player.in_water {
         return;
     }
-    let under = BlockPos::from_world((player.pos - Vec3::Y * 0.2).to_array());
-    let Some(material) = material_at(&world, &blocks, under) else { return };
     *which = (*which + 1 + (step as usize % 2)) % 3;
     let gain = if player.crouching { 0.4 } else if player.sprinting { 1.3 } else { 1.0 };
-    out.write(PlaySound::new(format!("{}_{}", spec.of(&material).step, *which)).gain(gain));
+    // Wading: splashes in water, a crunch in thin snow, a slosh in deep snow.
+    let w = player.wading;
+    let wade = &spec.wade;
+    let name = if w.water > 0.0 {
+        Some((&wade.water, 0.6 + 0.6 * w.water))
+    } else if w.snow > 0.0 {
+        let deep = w.snow * 8.0 >= wade.deep_from as f32 - 0.01;
+        Some(if deep { (&wade.deep_snow, 1.0) } else { (&wade.snow, 0.8) })
+    } else {
+        None
+    };
+    let (step_name, depth_gain) = match name {
+        Some((n, g)) => (n.clone(), g),
+        None => {
+            let under = BlockPos::from_world((player.pos - Vec3::Y * 0.2).to_array());
+            let Some(material) = material_at(&world, &blocks, under) else { return };
+            (spec.of(&material).step.clone(), 1.0)
+        }
+    };
+    out.write(PlaySound::new(format!("{step_name}_{}", *which)).gain(gain * depth_gain));
 }
 
 /// A knock with each blow while mining, the moment it lands; a crunch when the block goes.
@@ -679,5 +707,16 @@ mod tests {
             assert!(path.is_file(), "missing {}", path.display());
         }
         assert!(spec.music.gap.0 <= spec.music.gap.1);
+    }
+
+    #[test]
+    fn wading_sounds_exist() {
+        let spec: SoundSpec = ron::from_str(include_str!("../../../assets/data/sounds.ron")).unwrap();
+        for name in [&spec.wade.water, &spec.wade.snow, &spec.wade.deep_snow] {
+            for i in 0..3 {
+                let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/sounds").join(format!("{name}_{i}.ogg"));
+                assert!(path.is_file(), "missing {}", path.display());
+            }
+        }
     }
 }

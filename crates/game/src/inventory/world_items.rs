@@ -26,6 +26,7 @@ pub struct WorldItemsPlugin;
 impl Plugin for WorldItemsPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<Spill>()
+            .add_message::<PickedUp>()
             .add_systems(crate::menu::GamePostStartup, load)
             .add_systems(crate::menu::GameUpdate, (spawn_spills, fall_and_spin, pick_up, save_now_and_then).chain())
             .add_systems(Last, save_on_exit.run_if(crate::menu::in_game));
@@ -37,6 +38,13 @@ impl Plugin for WorldItemsPlugin {
 pub struct Spill {
     pub stack: Stack,
     pub at: Vec3,
+}
+
+/// Something from the ground went into your pockets (`pickups` shows it).
+#[derive(Message, Debug, Clone, Copy)]
+pub struct PickedUp {
+    pub item: crate::items::ItemId,
+    pub count: u16,
 }
 
 /// Items back from the save, spawned with `spawn_spills` along with the spills.
@@ -193,6 +201,7 @@ fn pick_up(
     items: Res<Items>,
     mut inv: ResMut<Inventory>,
     mut q: Query<(Entity, &mut WorldItem, &Transform)>,
+    mut picked: MessageWriter<PickedUp>,
 ) {
     if *mode != MoveMode::Walk || !player.ready {
         return;
@@ -207,6 +216,8 @@ fn pick_up(
         let left = inv.bypass_change_detection().add(&items, wi.stack);
         if left != Some(wi.stack) {
             inv.set_changed();
+            let went = wi.stack.count - left.map_or(0, |l| l.count);
+            picked.write(PickedUp { item: wi.stack.item, count: went });
         }
         match left {
             None => commands.entity(e).despawn(),
