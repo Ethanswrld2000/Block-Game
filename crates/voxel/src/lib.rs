@@ -6,6 +6,7 @@
 pub mod block;
 pub mod chunk;
 pub mod coords;
+pub mod fell;
 pub mod light;
 pub mod mesher;
 pub mod raycast;
@@ -13,7 +14,7 @@ pub mod room;
 pub mod save;
 pub mod tiles;
 
-pub use block::{BlockDef, BlockId, BlockRegistry, Model, Shape, Side};
+pub use block::{Axis, BlockDef, BlockId, BlockRegistry, Model, Shape, Side, TreePart};
 pub use chunk::Chunk;
 pub use coords::{BlockPos, ChunkPos, CHUNK_SIZE, CHUNK_SIZE_I32};
 pub use mesher::{Face, PaddedChunk, Quad};

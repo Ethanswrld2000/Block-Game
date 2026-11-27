@@ -53,6 +53,13 @@ struct BlockSpec {
     /// For `shape: layer`: how many eighths of the cell it fills (1..=8).
     #[serde(default)]
     level: u8,
+    /// Logs: the way the grain runs (y = standing, x/z = lying on its side).
+    #[serde(default)]
+    axis: Axis,
+    /// Part of a tree or giant mushroom (`trunk` holds it up, `crown` hangs off
+    /// it); a trunk cut through topples the lot (`crate::fell`).
+    #[serde(default)]
+    tree: Option<TreePart>,
     /// Dug by hand (or a tool not made for its material), it doesn't go at once:
     /// it turns into this block, a lower layer of itself (dirt -> dirt_layer_6 -> ...).
     #[serde(default)]
@@ -64,6 +71,36 @@ struct BlockSpec {
     /// `<layer>+<detail>` block for each pair; see `BlockDef::inside`).
     #[serde(default)]
     fills_around: bool,
+}
+
+/// The direction a log's grain runs: its end tiles (`top`) face both ways along it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Axis {
+    X,
+    #[default]
+    Y,
+    Z,
+}
+
+impl Axis {
+    pub fn index(self) -> usize {
+        match self {
+            Axis::X => 0,
+            Axis::Y => 1,
+            Axis::Z => 2,
+        }
+    }
+}
+
+/// What a block is to a tree (see `tree` in blocks.ron).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TreePart {
+    /// Logs and stems: they hold the tree up and fall with it.
+    Trunk,
+    /// Leaves and caps: they fall with the trunk nearest them.
+    Crown,
 }
 
 /// Small furniture drawn as a few boxes in the chunk's detail mesh
@@ -178,6 +215,10 @@ pub struct BlockDef {
     pub light: u8,
     /// `shape: layer`: eighths of the cell filled, 1..=8 (0 for other shapes).
     pub level: u8,
+    /// Logs: the way the grain runs. The mesher turns side tiles to follow it.
+    pub axis: Axis,
+    /// Part of a tree (`crate::fell`), or not.
+    pub tree: Option<TreePart>,
     /// What digging it without the right tool leaves behind (a lower layer).
     pub dig_to: Option<BlockId>,
     /// Walking speed while standing in it, 0..1 (brush slows you).
@@ -272,12 +313,18 @@ impl BlockRegistry {
             if by_name.insert(s.name.clone(), BlockId(i as u16)).is_some() {
                 return Err(RegistryError::Duplicate(s.name));
             }
+            // End tiles face along the grain: +axis gets `top`, -axis `bottom`.
+            let textures = match s.axis {
+                Axis::X => [top, bottom, side, side, side, side],
+                Axis::Y => [side, side, top, bottom, side, side],
+                Axis::Z => [side, side, side, side, top, bottom],
+            };
             if let Some(to) = s.dig_to {
                 digs.push((i, s.name.clone(), to));
             }
             defs.push(BlockDef {
                 name: s.name,
-                textures: [side, side, top, bottom, side, side],
+                textures,
                 solid: s.solid,
                 opaque: s.opaque,
                 translucent: s.translucent,
@@ -289,6 +336,8 @@ impl BlockRegistry {
                 model: s.model,
                 light: s.light.min(crate::light::MAX),
                 level: if s.shape == Shape::Layer { s.level.clamp(1, 8) } else { 0 },
+                axis: s.axis,
+                tree: s.tree,
                 dig_to: None,
                 slows: s.slows.clamp(0.0, 1.0),
                 inside: None,

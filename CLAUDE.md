@@ -640,6 +640,18 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   from its numbers (`look`). Storm warning: `WARN_SECONDS` (60) before a `severe` weather (lightning, wind >= 12, chill <= -10,
   downpour) a red countdown line shows under the dial, the rim pulses red and Bram (within 40 blocks) barks `storm_coming`.
   The map's waypoint strip sits below it (`DIAL_SPACE`).
+- Falling trees: `voxel::fell` (pure). Blocks have `tree: trunk|crown` and `axis: x|y|z` in blocks.ron (lying logs
+  `log_x/z`, `swamp_log_x/z`, `redwood_log_x/z` have no `tree`, so they never fall again; the mesher turns bark along the
+  grain, end tiles face along it; they drop the standing log). Breaking a trunk block runs `fell::topple`: each trunk
+  (corner-joined trunk blocks) next to the cut that no longer rests on non-tree solid ground falls with its crown: crown
+  blocks it reaches before any other standing trunk nearby does (one BFS from every trunk at once, `CROWN_REACH` 8; the
+  stump counts as another tree). It turns a quarter turn away from the player (`fell::away`, along x or z), logs on their
+  side; each landing column lifts its logs out of the ground until they fit and drops as far as they can (crown-only
+  columns are never lifted); crown blocks that land in the way, or more than `CROWN_HEAP` (2) above the lowest block in
+  their column, are gone. `chop::fell_trees` takes it out of the world and swings it over as one mesh
+  (`chunk_mesh::loose`), then `land` places the blocks; nothing is meshed on the main thread (chunks remesh in the
+  background, the falling mesh stays up to `LAND_WAIT` until they show). Crushed logs, and twigs/vines that lost their
+  hold, drop as items (`Mined.felled` = true, which never fells anything itself).
 - Tool-based mining: bare hands can't break stone, ore, logs or wood (items.ron `hand` speeds 0; giant mushrooms are wood);
   hardness went up 1.5x (base tools take about 12 swings). Soil dug without a tool that lists its material (a shovel) goes
   down a quarter at a time: blocks.ron `dig_to` (dirt/grass/moss -> `dirt_layer_6` -> 4 -> 2 -> gone; sand, mud, gravel,
