@@ -1184,7 +1184,28 @@ def iron_shot(c):
         c.dot(int(x) - 1, int(y) - 1, IRON_L)
 
 
+def raw_wood(c):
+    """A split chunk of wood: pale inside, bark down one side."""
+    p = c.poly([(3, 6), (15, 2), (18, 12), (6, 18)], hexc("b88a56"))
+    c.grain(p)
+    c.poly([(3, 6), (6, 18), (4, 18), (1, 8)], BARK)
+    c.line(4, 7, 6, 17, 1, BARK_D)
+    c.line(14, 4, 16, 11, 1, hexc("d8aa70"))
+
+
+def bedroll(c):
+    """A rolled mat of woven grass tied with cord, 40 x 20."""
+    c.ellipse(20, 10, 18, 7, hexc("8a8a48"), kind="soft")
+    c.ellipse(5, 10, 3, 6, hexc("a8a460"), kind="soft")
+    c.ellipse(5, 10, 1.5, 3, hexc("5a5a2c"))
+    for x in range(9, 36, 4):
+        c.line(x, 4, x, 16, 1, hexc("767640"))
+    for x in (13, 27):
+        c.rect(x, 3, x + 2, 17, CORD)
+
+
 DRAW = {f.__name__: f for f in [
+    raw_wood, bedroll,
     stone_pickaxe, stone_axe, stone_shovel, flint_spear, iron_sword, steel_sword, spirit_sword, torch, marsh_berries, swamp_reed, smoked_fish, bread, peat_stew,
     cured_meat, feast_platter, ember_herb, stick, plant_fiber, cordage, coal, raw_iron, flint, hide, fur, linen_shirt,
     linen_trousers, hide_boots, reed_hat, reed_cloak, fur_hood, fur_coat, hide_leggings, bark_helm, bark_vest, hide_jerkin,

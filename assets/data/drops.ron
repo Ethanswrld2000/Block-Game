@@ -3,6 +3,10 @@
 // An empty list drops nothing.
 {
     "stone": [("cobblestone", 1, 1.0)],
+    // Logs give raw wood, not the log block.
+    "log": [("raw_wood", 2, 1.0)],
+    "swamp_log": [("raw_wood", 2, 1.0)],
+    "redwood_log": [("raw_wood", 2, 1.0)],
     "grass": [("dirt", 1, 1.0), ("plant_fiber", 1, 0.5), ("swamp_reed", 1, 0.08)],
     "moss": [("moss", 1, 1.0), ("plant_fiber", 1, 0.35)],
     "leaves": [("stick", 1, 0.5), ("plant_fiber", 1, 0.3)],

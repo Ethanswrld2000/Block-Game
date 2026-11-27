@@ -28,11 +28,14 @@
         (
             name: "ancestral", title: "Ancestral Urn", station: "Sleeping Station",
             color: (0.58, 0.36, 0.24),
-            how: "Stands by your bedroll from the start and moves with it.",
+            how: "Stands by your bedroll once you lay it out, and moves with it.",
             steps: [
                 (name: "camp_mat", title: "Camp Mat", tier: 1, gives: Station("camp_mat"),
                  needs: { "stick": 4, "plant_fiber": 4 },
                  desc: "A woven mat with a knapping stone. Lash rocks to a stick for your first axe."),
+                (name: "block_crafter", title: "Block Crafter", tier: 1, gives: Station("block_crafter"), after: ["camp_mat"],
+                 needs: { "raw_wood": 4, "stick": 4 },
+                 desc: "A splitting block and a saw: raw wood into wood slats, your first building block."),
                 (name: "tool_urn", title: "Tool Urn", tier: 1, gives: Urn("tool"), after: ["camp_mat"],
                  needs: { "small_rock": 6, "stick": 6, "cordage": 1 },
                  desc: "Set it down anywhere to start the Tool Station."),
@@ -87,7 +90,7 @@
             how: "The warden of the Rotting Gate's depth 1 drops it, once per world.",
             steps: [
                 (name: "carpentry_bench", title: "Carpentry Bench", tier: 1, gives: Station("carpentry_bench"),
-                 needs: { "log": 4, "flint": 2 },
+                 needs: { "raw_wood": 8, "flint": 2 },
                  desc: "Saw logs into planks and planks into sticks; build chests."),
                 (name: "carpentry_table", title: "Carpentry Table", tier: 1, gives: Station("carpentry_table"), after: ["carpentry_bench"],
                  needs: { "planks": 8, "stick": 4, "cordage": 2 },

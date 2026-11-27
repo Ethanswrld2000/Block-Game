@@ -228,7 +228,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   those laid out (`-` skips a slot; the bench must stand, see above).
 - Chopping: an axe blow (`swing: Chop`) that lands on a log sends `chop::Chop`, which shakes the
   tree through the voxel material's `shake` uniform (`shake_offset` in voxel_vertex.wesl and voxel_prepass.wesl).
-  New characters start with only their clothes (`start_kit.ron`); the bedroll is always there (B).
+  New characters start with only their clothes (`start_kit.ron`); the bedroll is an item woven by hand (Tab: 6 plant fiber + 2 sticks), B lays it out (and rolls it back into your pockets).
 - Tool swings: `game::swing` (pure): items have `swing: Jab|Chop|Overhead` in items.ron (axe chops diagonally
   from the upper right, pick comes straight down). A swing is keyframed poses (wind up, strike, bounce, rest);
   mining lands one blow per swing at `Swing::contact` (`interact::Blow`, which plays the dig knock), each worth
@@ -298,8 +298,8 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
 - Rooms: `voxel::room::find_room` (pure) fills outward from a cell through open cells; walls (`BlockDef::is_wall`:
   solid full cubes that aren't `plant` material; leaves, plants, water, torches are holes) stop it. Closed within
   `MAX_ROOM` (4096) cells = a `Room` (`cells`, `shell`); otherwise `NotRoom::Open`/`InWall`/`Unknown` (unloaded).
-  `station::room_at` runs it on the world. A carried urn can only be set down inside a closed room with a door and a torch (a proper home) and no other
-  urn in it (the ancestral urn by the bedroll is exempt but takes up its room). Insulation tiers, doors and the
+  `station::room_at` runs it on the world. A carried urn can be set down in the open within `station::CAMP_URNS` (16) of the bedroll, `URN_SPACING` (8) from other urns;
+  anywhere else only inside a closed room with a door and a torch (a proper home) and no other urn in it. Insulation tiers, doors and the
   shelter panel from the house plan aren't built yet.
 - Floating world: `worldgen::floating`. The land is one island, `MAIN_RADIUS` 2000 blocks (about 2.5 miles across,
   coastline wobbles with `coast` noise), centred on spawn (`WorldGen::island_center`); the normal terrain is cut to it
@@ -530,8 +530,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   cell is empty and the trunk still stands (`twigs.ron`).
 - Sky island chests: grid islands with radius >= `worldgen::islands::CHEST_RADIUS` (24) keep a chest at their middle
   (`WorldGen::island_chest`), filled from loot.ron `sky_island` the first time it's opened.
-- The Tab crafting list is empty (recipes.ron kept for later): cordage, torches and ember herbs are made on the camp mat;
-  the Crafting side tab hides while the list is empty.
+- The Tab crafting list holds only the bedroll; cordage, torches and ember herbs are made on the camp mat.
 - Lighting: block-based (`voxel::light`, pure). Per chunk at mesh time, over the chunk plus 16 blocks each side
   (its 26 neighbours) and the `world::SKY_REACH` (3) chunks above them: sky light (15 straight down open columns,
   then spreading sideways and down, one level per step) and block light (`light` in blocks.ron: torch 14, campfire
@@ -573,12 +572,18 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `Shake`, `Roll`, `Flash`, `Lids`, `Sound`; cutscene-only airships in `cutscene::props` (`Ship`, `ShipTo`, `Fire`,
   `Unship`; your ship is `airship::build_model` with your body at the helm, the court ship `cast::wren::build_ship`);
   marks and targets can follow them (`Ship("ours")`, kept in `Places` as `ship:<name>`). `game::guide`
-  (`assets/data/guide.ron`, pure rules in `guide::rules`): one step at a time (sticks and stones, fiber, camp, camp mat,
-  rough axe, logs, torch, door, home, Tool Urn, set it down), done = story flag `guide:<id>`; the journal (J) lists
+  (`assets/data/guide.ron`, pure rules in `guide::rules`): one step at a time (sticks and stones, fiber, bedroll, camp mat,
+  rough axe, campfire, raw wood, block crafter, wood slats, a night by the fire (goal `Flag("met_bram")`), the Rotting Gate
+  (`place: "gate"` waypoint)), done = story flag `guide:<id>`; the journal (J) lists
   them first; guide waypoints (`map::Waypoints::guide`, not saved, cyan) point at the nearest matching blocks in the
   loaded world. A proper home = a closed room with a door in its walls and a torch (any light) inside
-  (`guide::home_missing`); carried urns can only be set down in one. The home step plays C01b (Bram explains it).
-  Doors are also made at the camp mat (3 logs + 1 cordage) and the carpentry bench (6 planks + 2 sticks).
+  (`guide::home_missing`; C01b, Bram explaining it, is unused for now). Doors come from the carpentry bench (6 planks + 2 sticks)
+  and door frame.
+- Early game (Ethan's flow): no house before the Carpentry Urn (Rotting Gate depth 1). Logs drop `raw_wood` (2 each,
+  drops.ron; recipes that took logs take raw wood). Ancestral urn step `block_crafter` (after the camp mat: 4 raw wood + 4
+  sticks) places the Block Crafter (`StationKind::BlockCrafter`, the carpentry bench's board): raw wood -> `wood_slats`, the
+  first building block. Sleeping needs a campfire within `camp::FIRE_REACH` (6) or a closed room (`camp::warm_enough`).
+  The first sleep sets story flag `slept`; Bram's C02 (pointing to the gate) plays the next morning at camp.
 - Station textures: `station::skin`. Each `models::Mat` with a tile (`Mat::tile_name`) gets its tile from `stations.png`, cut into
   one repeating texture per material once loaded; boxes are meshed by `skin::box_mesh` with world-scale UVs (one tile per block,
   `TILES_PER_BLOCK`), so the pixel size matches the terrain whatever the box size. Glowing and liquid materials stay flat.

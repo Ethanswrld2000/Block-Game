@@ -73,8 +73,9 @@ mod tests {
         let at = BlockPos::new(3, 4, 5);
         let stone = drops.roll(&items, blocks.expect("stone"), at, 0);
         assert_eq!(stone, vec![Stack::new(items.id("cobblestone").unwrap(), 1)]);
-        // Unlisted blocks drop themselves.
-        assert_eq!(drops.roll(&items, blocks.expect("log"), at, 0), vec![Stack::new(items.id("log").unwrap(), 1)]);
+        // Unlisted blocks drop themselves; logs give raw wood.
+        assert_eq!(drops.roll(&items, blocks.expect("planks"), at, 0), vec![Stack::new(items.id("planks").unwrap(), 1)]);
+        assert_eq!(drops.roll(&items, blocks.expect("log"), at, 0), vec![Stack::new(items.id("raw_wood").unwrap(), 2)]);
         assert!(drops.roll(&items, blocks.expect("water"), at, 0).is_empty());
         // Leaves give sticks about half the time.
         let stick = items.id("stick").unwrap();

@@ -5,7 +5,7 @@
 //
 //   id, title, text: the journal entry
 //   goal:
-//     Have([("stick", 5), ("small_rock", 2)])  in your pockets; "log|swamp_log" counts any of them
+//     Have([("stick", 5), ("small_rock", 2)])  in your pockets; "a|b" counts any of them
 //     Camp                                     your bedroll is laid out (B)
 //     Step("camp_mat")                          an urn step is done
 //     Made("rough_axe")                         made at a bench
@@ -13,34 +13,36 @@
 //                                               in its walls and a torch (or any light) inside
 //     Urn                                       you have an urn of your own (carried or set down)
 //     UrnPlaced                                 you have set one down
+//     Flag("met_bram")                          a story flag is set (cutscenes set them)
 //   marks: waypoints to the nearest of these blocks in the loaded world, until you have enough:
 //     (name: "Sticks", blocks: ["twig_*", "dry_brush"], until: ("stick", 5)); `*` ends a name prefix
 //   cutscene: played when the step comes up (cutscenes.ron)
+//   place: a waypoint to a named place while the step is under way ("gate", "sporrow", "castle", ...)
 (
     steps: [
         (
             id: "gather",
             title: "Sticks and stones",
             text: "Bram says to start with sticks and stones. Right click twigs on tree trunks to snap them off, and pebbles on the ground to pick them up. The marks at the top of the screen point to the nearest ones.",
-            goal: Have([("stick", 5), ("small_rock", 2)]),
+            goal: Have([("stick", 6), ("small_rock", 2)]),
             marks: [
-                (name: "Sticks", blocks: ["twig_*", "dry_brush"], until: ("stick", 5)),
+                (name: "Sticks", blocks: ["twig_*", "dry_brush"], until: ("stick", 6)),
                 (name: "Stones", blocks: ["pebble"], until: ("small_rock", 2)),
             ],
         ),
         (
             id: "fiber",
             title: "Plant fiber",
-            text: "Pull up tall grass and reeds for plant fiber. You need four to weave a camp mat.",
-            goal: Have([("plant_fiber", 4)]),
+            text: "Pull up tall grass and reeds for plant fiber. You need ten: six for a bedroll and four for a camp mat.",
+            goal: Have([("plant_fiber", 10)]),
             marks: [
-                (name: "Grass", blocks: ["tall_grass", "reeds", "fern"], until: ("plant_fiber", 4)),
+                (name: "Grass", blocks: ["tall_grass", "reeds", "fern"], until: ("plant_fiber", 10)),
             ],
         ),
         (
             id: "camp",
-            title: "Make camp",
-            text: "Press B to unroll your bedroll. The Ancestral Urn stands beside it: everything you build grows from urns.",
+            title: "A bedroll",
+            text: "Open your pockets (Tab) and weave a bedroll from 6 plant fiber and 2 sticks. Then press B to lay it out. Where it lies is your camp, and the Ancestral Urn stands beside it: everything you build grows from urns.",
             goal: Camp,
         ),
         (
@@ -56,44 +58,48 @@
             goal: Made("rough_axe"),
         ),
         (
-            id: "wood",
-            title: "Chop wood",
-            text: "Bare hands can't cut logs, but the axe can. Chop a tree for at least 4 logs, and grab more sticks and fiber while you're at it.",
-            goal: Have([("log|swamp_log|redwood_log", 4)]),
-        ),
-        (
-            id: "torch",
-            title: "Light",
-            text: "Dig peat from the soft swamp ground. At the camp mat, peat on the base and a stick in the tie make torches.",
-            goal: Made("torch"),
+            id: "fire",
+            title: "A campfire",
+            text: "Nights are cold and dark, and you can't sleep without a fire. At the camp mat, 4 small rocks on the base and 4 sticks in the tie make a campfire. Set it down beside your bedroll.",
+            goal: Made("campfire"),
             marks: [
-                (name: "Peat", blocks: ["peat"], until: ("peat", 1)),
+                (name: "Stones", blocks: ["pebble"], until: ("small_rock", 4)),
+                (name: "Sticks", blocks: ["twig_*", "dry_brush"], until: ("stick", 4)),
             ],
         ),
         (
-            id: "door",
-            title: "A door",
-            text: "At the camp mat, twist 3 plant fiber into cordage. Then 3 logs on the base and the cordage in the tie make a door.",
-            goal: Made("wooden_door"),
+            id: "wood",
+            title: "Raw wood",
+            text: "Bare hands can't cut logs, but the axe can. Chop a tree: each log splits into raw wood. Gather at least 6.",
+            goal: Have([("raw_wood", 6)]),
         ),
         (
-            id: "home",
-            title: "A home",
-            text: "Build a small shelter: walls all round, a floor and a roof (dirt or stone will do), the door in one wall and a torch inside. Stand in it to check it holds.",
-            goal: Home,
-            cutscene: "C01b",
+            id: "block_crafter",
+            title: "The block crafter",
+            text: "Feed the Ancestral Urn 4 raw wood and 4 sticks for its next step, the Block Crafter.",
+            goal: Step("block_crafter"),
+            marks: [
+                (name: "Sticks", blocks: ["twig_*", "dry_brush"], until: ("stick", 4)),
+            ],
         ),
         (
-            id: "tool_urn",
-            title: "Your first urn",
-            text: "Feed the Ancestral Urn its next step, the Tool Urn: 6 small rocks, 6 sticks and 1 cordage.",
-            goal: Urn,
+            id: "slats",
+            title: "Wood slats",
+            text: "Right click the block crafter. Lay raw wood on the bed and saw it into wood slats, a block you can build with.",
+            goal: Made("wood_slats"),
         ),
         (
-            id: "place_urn",
-            title: "Set it down",
-            text: "Hold the Tool Urn and right click the floor of your home to set it down. From here on, the urns' trees show what comes next.",
-            goal: UrnPlaced,
+            id: "night",
+            title: "A night by the fire",
+            text: "When night falls, stand by your bedroll with the campfire close by and press Z to sleep through it.",
+            goal: Flag("met_bram"),
+        ),
+        (
+            id: "gate",
+            title: "The Rotting Gate",
+            text: "Bram says there's an old gate east of camp, and things worth having inside. Follow the mark to find it.",
+            goal: Flag("met_brindlespheimer"),
+            place: "gate",
         ),
     ],
 )

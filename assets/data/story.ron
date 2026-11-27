@@ -15,7 +15,7 @@
 (
     beats: [
         (id: "crash", play: "C01", when: [NewWorld]),
-        (id: "bram_arrives", play: "C02", when: [Day(1), Hours(5.0, 12.0), AtCamp(16.0)]),
+        (id: "bram_arrives", play: "C02", when: [Flag("slept"), Hours(5.0, 12.0), AtCamp(16.0)]),
         (id: "the_gate", play: "C03", when: [Near(npc: "brindlespheimer", within: 8.0, sight: true)]),
         (id: "sporrow", play: "C04", when: [Area(place: "sporrow", within: 26.0)]),
         (id: "gilm", play: "C05", when: [Near(npc: "gilm", within: 6.0, sight: true)]),

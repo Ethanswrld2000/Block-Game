@@ -59,6 +59,7 @@ pub(super) fn board_name(kind: StationKind) -> Option<&'static str> {
         StationKind::ArmorStand => Some("armor_stand"),
         StationKind::BladesmithBench => Some("bladesmith_bench"),
         StationKind::GunsmithBench => Some("gunsmith_bench"),
+        StationKind::BlockCrafter => Some("block_crafter"),
         _ => None,
     }
 }
@@ -1995,6 +1996,7 @@ mod tests {
             StationKind::ArmorStand,
             StationKind::BladesmithBench,
             StationKind::GunsmithBench,
+            StationKind::BlockCrafter,
         ] {
             let t = models::tool(kind).unwrap();
             let l = layout(kind);
@@ -2027,6 +2029,7 @@ mod tests {
             StationKind::ArmorStand,
             StationKind::BladesmithBench,
             StationKind::GunsmithBench,
+            StationKind::BlockCrafter,
         ] {
             for s in slots_of(board_name(kind).unwrap()) {
                 assert!(layout(kind).slots.iter().any(|l| l.0 == s.name), "{kind:?} {}", s.name);

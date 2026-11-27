@@ -6,7 +6,7 @@
     trades: [
         (id: "rope", gives: ("cordage", 4), wants: {"plant_fiber": 6}),
         (id: "iron", gives: ("raw_iron", 3), wants: {"hide": 2}),
-        (id: "coal", gives: ("coal", 6), wants: {"log": 4}),
+        (id: "coal", gives: ("coal", 6), wants: {"raw_wood": 8}),
         (id: "embers", gives: ("spirit_ember", 2), wants: {"old_coin": 1}),
         (id: "skystone", gives: ("skystone", 3), wants: {"raw_iron": 2}),
         (id: "furs", gives: ("fur", 2), wants: {"cordage": 3}),

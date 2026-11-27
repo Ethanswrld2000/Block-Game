@@ -23,6 +23,8 @@ pub enum Goal {
     Urn,
     /// You have set one down.
     UrnPlaced,
+    /// A story flag is set (a cutscene's `Flag` step, ...).
+    Flag(String),
 }
 
 /// A waypoint to the nearest of some blocks, until you have enough of an item.
@@ -44,6 +46,9 @@ pub struct StepDef {
     pub marks: Vec<MarkDef>,
     #[serde(default)]
     pub cutscene: Option<String>,
+    /// A waypoint to a named place (`cutscene::Places`: "gate", "sporrow", ...) while the step is under way.
+    #[serde(default)]
+    pub place: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
@@ -102,6 +107,7 @@ pub struct Facts<'a> {
     pub home: bool,
     pub urn: bool,
     pub urn_placed: bool,
+    pub flags: BTreeSet<String>,
 }
 
 pub fn met(goal: &Goal, f: &Facts) -> bool {
@@ -114,6 +120,7 @@ pub fn met(goal: &Goal, f: &Facts) -> bool {
         Goal::Home => f.home,
         Goal::Urn => f.urn || f.urn_placed,
         Goal::UrnPlaced => f.urn_placed,
+        Goal::Flag(flag) => f.flags.contains(flag),
     }
 }
 
@@ -143,21 +150,24 @@ mod tests {
     use voxel::room::{find_room, Cell as RoomCell};
 
     #[test]
-    fn the_data_loads_and_walks_from_sticks_to_an_urn() {
+    fn the_data_loads_and_walks_from_sticks_to_the_gate() {
         let data = load(include_str!("../../../../assets/data/guide.ron")).expect("guide.ron");
         let first = &data.steps[0];
         assert!(matches!(&first.goal, Goal::Have(l) if l.iter().any(|(i, _)| i == "stick") && l.iter().any(|(i, _)| i == "small_rock")));
         assert!(first.marks.iter().any(|m| m.blocks.iter().any(|b| matches(b, "twig_north"))), "points to twigs");
         assert!(first.marks.iter().any(|m| m.blocks.iter().any(|b| matches(b, "pebble"))), "points to pebbles");
         let at = |g: &dyn Fn(&Goal) -> bool| data.steps.iter().position(|s| g(&s.goal)).unwrap();
+        let camp = at(&|g| *g == Goal::Camp);
+        let mat = at(&|g| matches!(g, Goal::Step(s) if s == "camp_mat"));
         let axe = at(&|g| matches!(g, Goal::Made(i) if i == "rough_axe"));
-        let door = at(&|g| matches!(g, Goal::Made(i) if i == "wooden_door"));
-        let torch = at(&|g| matches!(g, Goal::Made(i) if i == "torch"));
-        let home = at(&|g| *g == Goal::Home);
-        let urn = at(&|g| *g == Goal::UrnPlaced);
-        assert!(axe < torch && axe < door && door < home && torch < home && home < urn);
-        assert_eq!(urn, data.steps.len() - 1, "ends with the first urn set down");
-        assert_eq!(data.steps[home].cutscene.as_deref(), Some("C01b"), "Bram explains a home");
+        let fire = at(&|g| matches!(g, Goal::Made(i) if i == "campfire"));
+        let crafter = at(&|g| matches!(g, Goal::Step(s) if s == "block_crafter"));
+        let slats = at(&|g| matches!(g, Goal::Made(i) if i == "wood_slats"));
+        let bram = at(&|g| matches!(g, Goal::Flag(f) if f == "met_bram"));
+        assert!(camp < mat && mat < axe && axe < fire && axe < crafter && crafter < slats && fire < bram && slats < bram);
+        let last = data.steps.last().unwrap();
+        assert_eq!(last.place.as_deref(), Some("gate"), "ends pointing at the Rotting Gate");
+        assert!(!data.steps.iter().any(|s| s.goal == Goal::Home), "no home this early");
         // Steps go one at a time.
         let mut flags = BTreeSet::new();
         assert_eq!(current(&data, &flags).map(|(i, _)| i), Some(0));
@@ -180,6 +190,9 @@ mod tests {
         assert!(!met(&Goal::UrnPlaced, &f));
         let f = Facts { urn_placed: true, ..Default::default() };
         assert!(met(&Goal::Urn, &f) && met(&Goal::UrnPlaced, &f));
+        assert!(!met(&Goal::Flag("met_bram".into()), &f));
+        let f = Facts { flags: ["met_bram".to_string()].into(), ..Default::default() };
+        assert!(met(&Goal::Flag("met_bram".into()), &f));
         assert!(matches("twig_*", "twig_east") && !matches("twig_*", "log") && matches("pebble", "pebble"));
     }
 

@@ -1,10 +1,10 @@
-// Crafting recipes, shown in the inventory screen (Tab). Tools, planks, sticks,
-// chests, food, clothes and armor are made by hand at the benches instead (benches.ron); nothing is
-// left here.
+// Crafting recipes, shown in the inventory screen (Tab). Almost everything is made
+// by hand at the benches instead (benches.ron).
 //   makes:  (item, count)
 //   needs:  [(item, count), ...] used up when you craft
 //   at:     where you have to be: Hand (anywhere, the default) or Camp (by your bedroll)
 [
-    // Empty: everything is made at a station now (benches.ron). Cordage, torches and ember herbs
-    // moved to the camp mat.
+    // Everything else is made at a station (benches.ron). The bedroll comes first: the
+    // ancestral urn and its camp mat only appear once it is laid out.
+    (makes: ("bedroll", 1), needs: [("plant_fiber", 6), ("stick", 2)]),
 ]

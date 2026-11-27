@@ -184,7 +184,7 @@ pub fn slots_of(station: &str) -> &'static [SlotDef] {
     match station {
         "camp_mat" => &CAMP_MAT_SLOTS,
         "tool_bench" => &TOOL_BENCH_SLOTS,
-        "carpentry_bench" => &CARPENTRY_SLOTS,
+        "carpentry_bench" | "block_crafter" => &CARPENTRY_SLOTS,
         "carpentry_table" => &CARPENTRY_TABLE_SLOTS,
         "machination_table" => &MACHINATION_SLOTS,
         "cooking_pot" => &COOKING_POT_SLOTS,
@@ -561,18 +561,21 @@ mod tests {
     }
 
     #[test]
-    fn logs_saw_into_planks() {
+    fn raw_wood_saws_into_planks_and_splits_into_slats() {
         let (items, data) = data();
         let id = |n| items.id(n).unwrap();
         let [bed, _] = CARPENTRY_SLOTS;
-        let mut b = Board::default();
-        b.put(bed, Stack::new(id("log"), 1));
-        let made = loop {
-            if let Work::Made(s) = b.strike(&data, "carpentry_bench") {
-                break s;
-            }
-        };
-        assert_eq!(made, Stack::new(id("planks"), 4));
+        for (station, makes) in [("carpentry_bench", Stack::new(id("planks"), 2)), ("block_crafter", Stack::new(id("wood_slats"), 2))] {
+            let mut b = Board::default();
+            b.put(bed, Stack::new(id("raw_wood"), 1));
+            let made = loop {
+                if let Work::Made(s) = b.strike(&data, station) {
+                    break s;
+                }
+            };
+            assert_eq!(made, makes, "{station}");
+        }
+        assert!(matches!(items.get(id("wood_slats")).kind, crate::items::ItemKind::Block(_)), "slats are a block you can place");
     }
 
     #[test]
@@ -582,7 +585,7 @@ mod tests {
         let [top, joint] = CARPENTRY_TABLE_SLOTS;
         for (wood, n, with, m, makes) in [
             ("planks", 4, "stick", 2, "floorboards"),
-            ("planks", 4, "log", 1, "timber_wall"),
+            ("planks", 4, "raw_wood", 2, "timber_wall"),
             ("stick", 6, "mud", 2, "wattle_wall"),
             ("plant_fiber", 6, "stick", 2, "thatch"),
         ] {

@@ -1,11 +1,12 @@
 //! The getting-started guide (`assets/data/guide.ron`, rules in `rules`). After the
 //! opening sets `guide_on`, one step at a time is under way: sticks and stones, fiber,
-//! camp, the camp mat, a rough axe, logs, a torch, a door, a home (Bram explains it,
-//! C01b), the Tool Urn, and setting it down. The journal (J) lists them; finishing one
-//! ticks it off (story flag `guide:<id>`), says the next in a toast, and points
-//! waypoints (`map::Waypoints::guide`) at the nearest blocks the step asks for, found in
-//! the loaded world around you. In the home step, standing in a closed room tells you
-//! what it still lacks.
+//! a bedroll laid out, the camp mat, a rough axe, a campfire, raw wood, the block
+//! crafter and wood slats, a night by the fire (Bram comes in the morning), and the
+//! way to the Rotting Gate. The journal (J) lists them; finishing one ticks it off
+//! (story flag `guide:<id>`), says the next in a toast, and points waypoints
+//! (`map::Waypoints::guide`) at the nearest blocks the step asks for, found in the
+//! loaded world around you, or at the step's `place`. A `Home` step (none at the moment)
+//! says what a closed room you stand in still lacks.
 
 pub mod rules;
 
@@ -70,7 +71,7 @@ fn guide(
     mut story: ResMut<Story>,
     (player, menus, playing): (Res<Player>, Res<Menus>, Res<Playing>),
     (inv, items, world, blocks): (Res<Inventory>, Res<Items>, Res<World>, Res<Blocks>),
-    (camp, urns): (Res<crate::survival::camp::Camp>, Res<crate::station::Urns>),
+    (camp, urns, places): (Res<crate::survival::camp::Camp>, Res<crate::station::Urns>, Res<crate::cutscene::Places>),
     mut waypoints: ResMut<Waypoints>,
     (mut toast, mut start): (MessageWriter<Toast>, MessageWriter<StartCutscene>),
     mut st: Local<State>,
@@ -109,6 +110,11 @@ fn guide(
         f.steps.insert(s.clone());
     }
     f.made = story.made.clone();
+    if let rules::Goal::Flag(flag) = &step.goal
+        && story.flags.contains(flag)
+    {
+        f.flags.insert(flag.clone());
+    }
     f.urn_placed = urns.placed.keys().any(|k| k != "ancestral");
     f.urn = inv.pockets.items.iter().any(|p| items.get(p.stack.item).name.ends_with("_urn"));
     if rules::met(&step.goal, &f) {
@@ -121,7 +127,7 @@ fn guide(
             }
             None => {
                 story.flags.insert(rules::DONE.to_string());
-                toast.write(Toast(format!("Done: {}. Your home is started", step.title)));
+                toast.write(Toast(format!("Done: {}. You're on your own from here", step.title)));
             }
         }
         return;
@@ -152,6 +158,9 @@ fn guide(
     }
     st.look = LOOK_EVERY;
     let mut marks = Vec::new();
+    if let Some(p) = step.place.as_ref().and_then(|name| places.0.get(name)) {
+        marks.push(Waypoint { name: step.title.clone(), pos: p.to_array() });
+    }
     for m in &step.marks {
         if rules::have(&m.until.0, count) >= m.until.1 {
             continue;
