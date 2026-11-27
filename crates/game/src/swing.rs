@@ -23,6 +23,12 @@ pub enum Swing {
     /// A sword: drawn back high on the right, then a quick diagonal cut down
     /// and across, following through. Always a fighting swing, never mining.
     Slash,
+    /// The second cut of a sword combo: back across from the left, the
+    /// mirror of `Slash`.
+    SlashBack,
+    /// A charged sword cut (hold the button): raised high over the head and
+    /// brought straight down hard. Breaks a guard.
+    Heavy,
 }
 
 #[derive(Clone, Copy)]
@@ -125,6 +131,33 @@ const SLASH: [Hand; 6] = [
     key(1.0, [0.0; 3], [0.0; 3], Ease::InOut),
 ];
 
+/// The backhand cut: the blade is already across on the left after the
+/// first cut, so it draws back there and sweeps across to the right.
+const SLASH_BACK: [Hand; 6] = [
+    REST,
+    key(0.08, [-0.01, -0.01, 0.01], [-0.05, -0.04, 0.0], Ease::InOut),
+    key(0.36, [-0.16, 0.08, 0.04], [0.35, 1.0, 0.6], Ease::InOut),
+    key(0.50, [0.15, -0.05, -0.14], [-0.55, -0.92, -0.4], Ease::In),
+    key(0.62, [0.13, -0.07, -0.11], [-0.6, -0.84, -0.4], Ease::Out),
+    key(1.0, [0.0; 3], [0.0; 3], Ease::InOut),
+];
+
+/// The charged cut: hauled high over the head with the blade laid back (the
+/// pose held while charging), then brought straight down with the whole body,
+/// a jar as it lands, a beat, and back up.
+const HEAVY: [Hand; 7] = [
+    REST,
+    key(0.08, [0.0, -0.02, 0.01], [-0.1, 0.0, 0.0], Ease::InOut),
+    key(0.40, [0.03, 0.22, 0.12], [1.4, 0.1, 0.2], Ease::InOut),
+    key(0.52, [-0.06, -0.08, -0.15], [-0.85, 0.15, 0.0], Ease::In),
+    key(0.60, [-0.055, -0.07, -0.14], [-0.75, 0.14, 0.0], Ease::Out),
+    key(0.76, [-0.05, -0.06, -0.13], [-0.72, 0.13, 0.0], Ease::InOut),
+    key(1.0, [0.0; 3], [0.0; 3], Ease::InOut),
+];
+
+/// How far through `Heavy` the wind-up is: charging holds the arm there.
+pub const HEAVY_WINDUP: f32 = 0.40;
+
 /// Holding a sword up across the body to block: blade tipped up and to the
 /// left, in front of the face.
 const GUARD: [f32; 6] = [-0.13, 0.1, 0.03, 0.5, 1.15, 0.9];
@@ -193,6 +226,25 @@ const BODY_SLASH: [Body; 6] = [
     limbs(1.0, HOLD, Ease::InOut),
 ];
 
+const BODY_SLASH_BACK: [Body; 6] = [
+    limbs(0.0, HOLD, Ease::InOut),
+    limbs(0.08, [-0.04, 0.02, 0.3, 0.08, -0.04, 0.8, 0.0, 0.15, 0.0, 0.0], Ease::InOut),
+    limbs(0.36, [0.55, -0.04, 1.6, 0.05, 0.95, 1.0, 0.1, 0.3, 0.4, 1.0], Ease::InOut),
+    limbs(0.50, [-0.6, 0.14, 1.3, 0.6, -0.7, 0.1, -0.1, 0.3, -1.1, 1.2], Ease::In),
+    limbs(0.62, [-0.55, 0.15, 1.2, 0.6, -0.65, 0.15, -0.1, 0.3, -1.15, 1.2], Ease::Out),
+    limbs(1.0, HOLD, Ease::InOut),
+];
+
+const BODY_HEAVY: [Body; 7] = [
+    limbs(0.0, HOLD, Ease::InOut),
+    limbs(0.08, [0.0, 0.04, 0.2, 0.08, 0.0, 0.85, 0.0, 0.15, 0.0, 0.0], Ease::InOut),
+    limbs(0.40, [-0.2, -0.22, 2.8, 0.15, 0.25, 0.4, 2.5, 0.6, 0.6, 0.0], Ease::InOut),
+    limbs(0.52, [0.1, 0.5, 1.1, 0.05, 0.3, 0.05, 1.0, 0.2, -1.3, 0.0], Ease::In),
+    limbs(0.60, [0.08, 0.45, 1.18, 0.05, 0.28, 0.08, 1.02, 0.2, -1.25, 0.0], Ease::Out),
+    limbs(0.76, [0.08, 0.44, 1.2, 0.05, 0.27, 0.1, 1.0, 0.2, -1.25, 0.0], Ease::InOut),
+    limbs(1.0, HOLD, Ease::InOut),
+];
+
 /// Blocking: the sword arm up and across, blade raised in front of the face.
 const BODY_GUARD: [f32; 10] = [0.3, 0.06, 1.55, 0.12, 0.85, 1.25, 0.4, 0.9, -0.35, -1.45];
 
@@ -235,6 +287,8 @@ impl Swing {
             Swing::Chop => &CHOP,
             Swing::Overhead => &OVERHEAD,
             Swing::Slash => &SLASH,
+            Swing::SlashBack => &SLASH_BACK,
+            Swing::Heavy => &HEAVY,
         }
     }
 
@@ -244,6 +298,8 @@ impl Swing {
             Swing::Chop => &BODY_CHOP,
             Swing::Overhead => &BODY_OVERHEAD,
             Swing::Slash => &BODY_SLASH,
+            Swing::SlashBack => &BODY_SLASH_BACK,
+            Swing::Heavy => &BODY_HEAVY,
         }
     }
 
@@ -251,7 +307,7 @@ impl Swing {
     fn contact_key(self) -> usize {
         match self {
             Swing::Jab => 2,
-            Swing::Chop | Swing::Overhead | Swing::Slash => 3,
+            _ => 3,
         }
     }
 
@@ -263,6 +319,8 @@ impl Swing {
             Swing::Chop => 0.55,
             Swing::Overhead => 0.58,
             Swing::Slash => 0.42,
+            Swing::SlashBack => 0.40,
+            Swing::Heavy => 0.75,
         }
     }
 
@@ -277,11 +335,26 @@ impl Swing {
         (Vec3::new(v[0], v[1], v[2]), Quat::from_euler(EulerRot::XYZ, v[3], v[4], v[5]))
     }
 
+    /// A fighting swing (a sword's): it cuts and never mines.
+    pub fn fights(self) -> bool {
+        matches!(self, Swing::Slash | Swing::SlashBack | Swing::Heavy)
+    }
+
     /// The body's arms `t` (0..1) of the way through a swing (third person).
     /// Shares its timing with `pose`, so both land at `contact`.
     pub fn limbs(self, t: f32) -> Limbs {
         Limbs::from_array(sample(self.body_keys(), t))
     }
+}
+
+/// The hand's pose while charging a heavy cut, `k` (0..1) of the way up.
+pub fn charge_pose(k: f32) -> (Vec3, Quat) {
+    Swing::Heavy.pose(HEAVY_WINDUP * k.clamp(0.0, 1.0))
+}
+
+/// The body's arms while charging a heavy cut.
+pub fn charge_limbs(k: f32) -> Limbs {
+    Swing::Heavy.limbs(HEAVY_WINDUP * k.clamp(0.0, 1.0))
 }
 
 /// Did a swing that went from `before` to `after` (shares of the swing, 0..1)
@@ -302,7 +375,7 @@ pub fn blow_share(swing: Swing, seconds: f32) -> f32 {
 mod tests {
     use super::*;
 
-    const ALL: [Swing; 4] = [Swing::Jab, Swing::Chop, Swing::Overhead, Swing::Slash];
+    const ALL: [Swing; 6] = [Swing::Jab, Swing::Chop, Swing::Overhead, Swing::Slash, Swing::SlashBack, Swing::Heavy];
 
     fn pitch(q: Quat) -> f32 {
         q.to_euler(EulerRot::XYZ).0
@@ -316,7 +389,11 @@ mod tests {
     /// (toward the middle) for the axe. Smaller = further into the strike.
     fn drive(s: Swing, t: f32) -> f32 {
         let q = s.pose(t).1;
-        if matches!(s, Swing::Chop | Swing::Slash) { -yaw(q) } else { pitch(q) }
+        match s {
+            Swing::Chop | Swing::Slash => -yaw(q),
+            Swing::SlashBack => yaw(q),
+            _ => pitch(q),
+        }
     }
 
     #[test]
@@ -398,6 +475,22 @@ mod tests {
         assert!(yaw(g) > 0.8);
         let l = Limbs::hold().lerp(Limbs::guard(), 1.0);
         assert_eq!(l, Limbs::guard());
+    }
+
+    #[test]
+    fn combo_cuts_go_opposite_ways_and_the_heavy_comes_down() {
+        // The second cut sweeps back the other way.
+        let across = |s: Swing| yaw(s.pose(s.contact()).1) - yaw(s.pose(0.37).1);
+        assert!(across(Swing::Slash) > 1.0 && across(Swing::SlashBack) < -1.0);
+        // The heavy: raised high, then a big drop; slower than a light cut.
+        let (p0, q0) = Swing::Heavy.pose(HEAVY_WINDUP);
+        let (p1, q1) = Swing::Heavy.pose(Swing::Heavy.contact());
+        assert!(p0.y - p1.y > 0.25 && pitch(q0) - pitch(q1) > 2.0);
+        assert!(Swing::Heavy.period() > Swing::Slash.period() * 1.5);
+        // Charging holds the arm on the way to the wind-up, ending there.
+        assert_eq!(charge_pose(1.0), Swing::Heavy.pose(HEAVY_WINDUP));
+        assert_eq!(charge_pose(0.0), Swing::Heavy.pose(0.0));
+        assert!(Swing::Heavy.fights() && Swing::SlashBack.fights() && !Swing::Chop.fights());
     }
 
     #[test]

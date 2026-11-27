@@ -170,6 +170,34 @@ pub struct Swung {
     pub dir: Vec3,
     pub reach: f32,
     pub damage: f32,
+    /// A charged cut: it breaks a raised guard.
+    pub heavy: bool,
+}
+
+/// Holding the attack button with a sword: up to this long it's a light cut
+/// (on release), longer charges a heavy one.
+pub const TAP: f32 = 0.22;
+/// Seconds for the arm to come all the way up while charging.
+const RAISE: f32 = 0.3;
+/// Seconds more of charging, after `TAP`, for a full-power heavy cut.
+pub const CHARGE: f32 = 0.7;
+/// After a light cut, a click within this long carries the combo on.
+pub const COMBO_WINDOW: f32 = 0.45;
+
+/// The damage multiplier of a heavy cut charged `power` (0..1).
+pub fn heavy_mult(power: f32) -> f32 {
+    1.6 + 0.8 * power.clamp(0.0, 1.0)
+}
+
+/// The next light cut of a combo after `last`, and its damage multiplier:
+/// right to left, back across, then a harder third cut.
+pub fn combo_cut(last: u8, carried: bool) -> (u8, Swing, f32) {
+    let step = if carried { (last + 1) % 3 } else { 0 };
+    match step {
+        1 => (1, Swing::SlashBack, 1.0),
+        2 => (2, Swing::Slash, 1.25),
+        _ => (0, Swing::Slash, 1.0),
+    }
 }
 
 /// Seconds between blows.
@@ -227,13 +255,17 @@ pub struct Arm {
     mining: bool,
     /// A fighting swing: it sends a `Swung` at contact.
     striking: bool,
+    /// A charged (heavy) cut.
+    pub heavy: bool,
+    /// Damage multiplier of this cut (combo finisher, charge).
+    mult: f32,
 }
 
 impl Arm {
     /// Starts a swing unless one is under way.
     fn start(&mut self, style: Swing, mining: bool) {
         if self.t.is_none() {
-            *self = Arm { t: Some(0.0), style, mining, striking: false };
+            *self = Arm { t: Some(0.0), style, mining, striking: false, heavy: false, mult: 1.0 };
         }
     }
 
@@ -258,6 +290,14 @@ pub struct HandAnim {
     pub eat_hand: Hand,
     place_cooldown: f32,
     strike_cooldown: f32,
+    /// Seconds the attack button has been held with a sword (a charge).
+    charge: Option<f32>,
+    /// A light cut waiting for the arm to come free.
+    queued: bool,
+    /// Which cut of the combo came last (0, 1, 2) and how long is left to
+    /// carry it on.
+    combo: u8,
+    combo_window: f32,
 }
 
 impl HandAnim {
@@ -273,6 +313,12 @@ impl HandAnim {
             Hand::Left => &mut self.left,
             Hand::Right => &mut self.right,
         }
+    }
+
+    /// How far up a heavy cut is charged (0..1), while one is.
+    pub fn charge_level(&self) -> Option<f32> {
+        let c = self.charge?;
+        (c > TAP && self.right.t.is_none()).then(|| ((c - TAP) / RAISE).min(1.0))
     }
 
     /// Starts a plain swing of `hand` (no blow) unless one is under way.
@@ -469,7 +515,7 @@ fn use_hands(
         MessageWriter<crate::survival::Toast>,
         MessageWriter<crate::shrine::UseShrine>,
     ),
-    (aimed, cam, perks, station, edges, ship, guard, mut swung, generator): (
+    (aimed, cam, perks, station, edges, ship, guard, mut swung, generator, mut stamina): (
         Res<Aimed>,
         Single<&Transform, With<FlyCamera>>,
         Res<crate::progress::skills::Perks>,
@@ -479,6 +525,7 @@ fn use_hands(
         Res<crate::combat::Guard>,
         MessageWriter<Swung>,
         Option<Res<crate::world::Generator>>,
+        ResMut<crate::combat::stamina::Stamina>,
     ),
     blocks: Res<Blocks>,
     mode: Res<MoveMode>,
@@ -492,19 +539,21 @@ fn use_hands(
     anim.place_cooldown -= dt;
     anim.strike_cooldown -= dt;
     let hand = Hand::Right;
-    let striking = anim.arm(hand).striking;
+    let (striking, heavy, mult) = (anim.right.striking, anim.right.heavy, anim.right.mult);
     let landed = anim.arm_mut(hand).advance(dt);
     let item = wielded.0;
     // A sword's cut lands at contact, on whatever is in its arc then.
     if landed && striking {
-        let damage = item.map_or(crate::items::FIST_DAMAGE, |i| items.get(i).damage) * (1.0 + perks.damage);
-        swung.write(Swung { origin: cam.translation, dir: cam.forward().as_vec3(), reach: crate::combat::SWORD_REACH, damage });
+        let damage = item.map_or(crate::items::FIST_DAMAGE, |i| items.get(i).damage) * (1.0 + perks.damage) * mult;
+        swung.write(Swung { origin: cam.translation, dir: cam.forward().as_vec3(), reach: crate::combat::SWORD_REACH, damage, heavy });
     }
     let landed = landed && !striking;
     anim.left.advance(dt);
     // Clicks only act while the mouse is captured (the first click captures it).
     if cursor.grab_mode == CursorGrabMode::None || body.frozen {
         mining.block = None;
+        anim.charge = None;
+        anim.queued = false;
         return;
     }
     let style = item.map_or(Swing::Jab, |i| items.get(i).swing);
@@ -624,11 +673,12 @@ fn use_hands(
     // landing at contact), right click blocks (`combat::Guard`).
     if style == Swing::Slash {
         mining.block = None;
-        if mouse.pressed(MouseButton::Left) && !guard.up && anim.arm(hand).t.is_none() {
-            let arm = anim.arm_mut(hand);
-            arm.start(Swing::Slash, false);
-            arm.striking = true;
-        }
+        let input = SwordInput {
+            pressed: mouse.pressed(MouseButton::Left),
+            just: mouse.just_pressed(MouseButton::Left),
+            guard: guard.up,
+        };
+        sword(&mut anim, input, &mut stamina, dt);
         return;
     }
 
@@ -743,6 +793,63 @@ fn use_hands(
     }
 }
 
+/// The attack button, for a sword.
+#[derive(Clone, Copy, Default)]
+pub struct SwordInput {
+    pub pressed: bool,
+    pub just: bool,
+    /// Your guard is up (no cutting).
+    pub guard: bool,
+}
+
+/// A sword in hand: tap for a light cut (three chain into a combo), hold to
+/// charge a heavy one, let go to swing it. Each costs stamina; winded, nothing
+/// swings.
+pub fn sword(anim: &mut HandAnim, input: SwordInput, stamina: &mut crate::combat::stamina::Stamina, dt: f32) {
+    use crate::combat::stamina::{HEAVY, LIGHT};
+    let busy = anim.right.t.is_some();
+    if busy {
+        anim.combo_window = COMBO_WINDOW;
+    } else {
+        anim.combo_window -= dt;
+    }
+    if input.guard {
+        anim.charge = None;
+        anim.queued = false;
+        return;
+    }
+    if input.just && anim.charge.is_none() {
+        anim.charge = Some(0.0);
+    }
+    if let Some(c) = anim.charge {
+        if input.pressed {
+            // The charge builds only once the arm is free.
+            if !busy {
+                anim.charge = Some(c + dt);
+            }
+        } else {
+            anim.charge = None;
+            if c < TAP {
+                anim.queued = true;
+            } else if !busy && stamina.spend(HEAVY) {
+                let raised = ((c - TAP) / RAISE).min(1.0);
+                let power = ((c - TAP) / CHARGE).min(1.0);
+                anim.right = Arm { t: Some(swing::HEAVY_WINDUP * raised), style: Swing::Heavy, mining: false, striking: true, heavy: true, mult: heavy_mult(power) };
+                // The next light cut starts a fresh combo.
+                anim.combo = 2;
+            }
+        }
+    }
+    if anim.queued && !busy {
+        anim.queued = false;
+        if stamina.spend(LIGHT) {
+            let (step, style, mult) = combo_cut(anim.combo, anim.combo_window > 0.0);
+            anim.combo = step;
+            anim.right = Arm { t: Some(0.0), style, mining: false, striking: true, heavy: false, mult };
+        }
+    }
+}
+
 fn draw_target(target: Res<Target>, mining: Res<Mining>, menus: Res<crate::camera::Menus>, mut gizmos: Gizmos) {
     if let Some(hit) = target.hit.filter(|_| !menus.open) {
         let p = hit.block;
@@ -759,5 +866,93 @@ fn draw_target(target: Res<Target>, mining: Res<Mining>, menus: Res<crate::camer
                 gizmos.rect(Isometry3d::new(at, turn), Vec2::splat(s), color);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::combat::stamina::{self, Stamina};
+
+    const DT: f32 = 1.0 / 60.0;
+
+    /// Hold the button for `secs`, let go, and let the arm move for `after`.
+    fn click(anim: &mut HandAnim, st: &mut Stamina, secs: f32) {
+        let mut t = 0.0;
+        let mut first = true;
+        while t < secs {
+            sword(anim, SwordInput { pressed: true, just: first, guard: false }, st, DT);
+            anim.right.advance(DT);
+            first = false;
+            t += DT;
+        }
+        sword(anim, SwordInput::default(), st, DT);
+    }
+
+    fn finish(anim: &mut HandAnim, st: &mut Stamina) {
+        while anim.right.t.is_some() {
+            sword(anim, SwordInput::default(), st, DT);
+            anim.right.advance(DT);
+        }
+    }
+
+    #[test]
+    fn taps_chain_into_a_three_cut_combo() {
+        let (mut anim, mut st) = (HandAnim::default(), Stamina::default());
+        let mut styles = Vec::new();
+        for _ in 0..4 {
+            click(&mut anim, &mut st, 0.1);
+            styles.push((anim.right.style, anim.right.mult));
+            finish(&mut anim, &mut st);
+        }
+        assert_eq!(styles[0], (Swing::Slash, 1.0));
+        assert_eq!(styles[1], (Swing::SlashBack, 1.0));
+        assert_eq!(styles[2], (Swing::Slash, 1.25));
+        assert_eq!(styles[3], (Swing::Slash, 1.0), "the combo starts over");
+        assert!(st.value < stamina::MAX);
+    }
+
+    #[test]
+    fn a_pause_breaks_the_combo() {
+        let (mut anim, mut st) = (HandAnim::default(), Stamina::default());
+        click(&mut anim, &mut st, 0.1);
+        finish(&mut anim, &mut st);
+        for _ in 0..60 {
+            sword(&mut anim, SwordInput::default(), &mut st, DT);
+        }
+        click(&mut anim, &mut st, 0.1);
+        assert_eq!(anim.right.style, Swing::Slash);
+        assert_eq!(anim.combo, 0);
+    }
+
+    #[test]
+    fn holding_charges_a_heavy_cut() {
+        let (mut anim, mut st) = (HandAnim::default(), Stamina::default());
+        // Halfway up the arm is held there, no swing yet.
+        let mut first = true;
+        for _ in 0..30 {
+            sword(&mut anim, SwordInput { pressed: true, just: first, guard: false }, &mut st, DT);
+            first = false;
+        }
+        assert!(anim.right.t.is_none());
+        assert!(anim.charge_level().is_some_and(|k| k > 0.5));
+        sword(&mut anim, SwordInput::default(), &mut st, DT);
+        assert_eq!(anim.right.style, Swing::Heavy);
+        assert!(anim.right.heavy && anim.right.mult > 1.6);
+        // It starts where the charge left the arm, not back at rest.
+        assert!(anim.right.t.unwrap() > 0.2);
+        assert_eq!(heavy_mult(1.0), 2.4);
+    }
+
+    #[test]
+    fn nothing_swings_while_winded_or_guarding() {
+        let (mut anim, mut st) = (HandAnim::default(), Stamina::default());
+        st.spend(stamina::MAX + 1.0);
+        click(&mut anim, &mut st, 0.1);
+        assert!(anim.right.t.is_none());
+        let mut st = Stamina::default();
+        sword(&mut anim, SwordInput { pressed: true, just: true, guard: true }, &mut st, DT);
+        sword(&mut anim, SwordInput::default(), &mut st, DT);
+        assert!(anim.right.t.is_none());
     }
 }

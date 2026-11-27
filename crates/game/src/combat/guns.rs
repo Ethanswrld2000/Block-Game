@@ -118,7 +118,7 @@ pub(super) fn fire(
         Some((_, Target::Foe(e))) => {
             if let Ok((_, tf, mut foe)) = foes.get_mut(e) {
                 let k = &book.kinds[foe.kind];
-                let strength = hit_foe(tf, &mut foe, k, origin, gun.damage, &mut dice.0, &mut sound, &mut bursts);
+                let strength = hit_foe(tf, &mut foe, k, origin, gun.damage, false, &mut dice.0, &mut sound, &mut bursts);
                 impact.write(super::feel::Impact { strength: strength * 0.6 });
             }
         }

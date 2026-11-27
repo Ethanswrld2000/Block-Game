@@ -245,6 +245,11 @@ pub(crate) fn pose_hands(
         };
         // Wind up, strike, bounce off, back to rest (see `swing`).
         let (mut swing_pos, mut swing_rot) = t.map_or((Vec3::ZERO, Quat::IDENTITY), |t| style.pose(t));
+        // Charging a heavy cut: the sword hauled up over the head and held.
+        let charging = if hand == Hand::Right && t.is_none() { anim.charge_level() } else { None };
+        if let Some(k) = charging {
+            (swing_pos, swing_rot) = crate::swing::charge_pose(k);
+        }
         // A sword raised to block (`combat::Guard`).
         if hand == Hand::Right && guard.blend > 0.001 {
             let (gp, gr) = crate::swing::guard_pose();
@@ -264,7 +269,7 @@ pub(crate) fn pose_hands(
         let to_mouth = Vec3::new(-side * 0.2, 0.12 + chew, 0.12) * e;
         // Motion feel (`pov`), eased out while the hand is busy (a swing,
         // a guard, eating) so those poses stay as they are.
-        let busy = if t.is_some() || e > 0.0 || (hand == Hand::Right && guard.blend > 0.001) { 1.0 } else { 0.0 };
+        let busy = if t.is_some() || charging.is_some() || e > 0.0 || (hand == Hand::Right && guard.blend > 0.001) { 1.0 } else { 0.0 };
         let calm = 1.0 - busy;
         // Sprint carry: low, pulled in and tipped down, pumping with the stride.
         let k = pov.sprint * calm;

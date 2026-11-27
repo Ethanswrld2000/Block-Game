@@ -365,7 +365,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   the iron anvil) cut on left click and never mine: the cut lands at `Swing::contact` as `interact::Swung`, hitting every
   foe in a 55° sweep within `SWORD_REACH` (and the creature you aim at). Hold right click to block (`combat::Guard`,
   `swing::guard_pose` / `Limbs::guard`); a block raised under `ai::PARRY_WINDOW` before a cut lands parries it (the foe
-  reels). Q shoves every foe close in front back and off balance (2 s cooldown). Foes: kinds in `assets/data/foes.ron`
+  reels). Q kicks (see Combat core below). Foes: kinds in `assets/data/foes.ron`
   (NPC rig looks, weapon item held via `hands::Held::holding`, damage, reach, swing time, sight/forget/leash, style:
   aggression, caution, guard, poise). Pure mind in `combat::ai` (`Brain`: Idle, Return, Approach, Circle, Press, Attack,
   Recover, Guard, Backoff, Stagger; at most `PRESSERS` press you at once, the rest circle; gives up past `forget` or
@@ -375,6 +375,18 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   shimmering per part, a faint light, `BurstKind::Wisp` particles trailing (and a burst on death). Sound `clash`.
   Dev keys: Ctrl+Shift+J (Cmd on a Mac) spawns a Hollow Warden, Ctrl+Shift+H a Fen Shade, 6 blocks ahead; either gives
   you an iron sword on the hotbar if you have no sword. Foes don't despawn.
+- Combat core (plan step 1, Claude Doc "Block Game: Combat and Dungeon Plan"): `combat::stamina` (pure `Stamina`: light
+  cut 12, heavy 24, kick 20, a blocked cut 16, sprint 9/s; refills after 0.7 s; run dry = winded 1.3 s: no cuts, kicks,
+  guard or sprint; a block with too little left breaks the guard and the cut lands; thin gold bar above the hotbar while
+  not full). Swords (`interact::sword`): tap = light cut on release, three chain into a combo (`interact::combo_cut`:
+  `Slash`, `SlashBack`, then a 1.25x `Slash`) if clicked within `COMBO_WINDOW` (0.45 s) of the last; hold past `TAP`
+  (0.22 s) to charge a heavy cut (`Swing::Heavy`, arm held at `swing::charge_pose`), released for `heavy_mult` (1.6-2.4x)
+  over `CHARGE` (0.7 s); a heavy cut (`Swung.heavy`) breaks a raised guard outright (`ai::Brain::struck`). No dodge (Ethan's
+  call). A parry (guard raised under `ai::PARRY_WINDOW`) costs nothing and sends `feel::SlowMo` (game at 0.3x for 0.6 real s,
+  easing back). Blows on a foe that hasn't noticed you do `ai::BACKSTAB` (3x). `combat::kick` (Q, replaced the shove):
+  the nearest foe within 2.6 blocks in a 50° arc is booted back (4 damage, staggered, guard broken); hitting a wall within
+  `SLAM_WINDOW` slams it (8 more, longer stagger). First person shows a shin and boot (`LegView`); third person kicks the
+  body's right leg (`Drive::kick`, `kick::leg_body`).
 - Rotting Gate (Legacy prompts 5-7): `worldgen::rotting` (pure). The gate is a mossy cobblestone arch placed once on the
   main island 300-600 blocks from spawn (`WorldGen::rotting_gate`, warded, position logged). `rotting_floor(seed, run, depth)`
   lays out a fresh floor per run on a 28-block grid: start room (way out in its west wall), halls, boss room with the stair;

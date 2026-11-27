@@ -204,6 +204,7 @@ fn drive_preview(
         arms,
         sway: [-0.08 * f * wiggle.cos(), 0.0],
         act: None,
+        kick: None,
     };
     body::drive(&mut tf, &mut rig, &mut parts, dt, &drive);
 }

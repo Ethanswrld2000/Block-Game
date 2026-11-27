@@ -4,7 +4,10 @@
 //! - `ai`: pure foe minds (tactics, giving up, taking blows).
 //! - `path`: pure A* over the block grid, for chasing you round walls.
 //!
-//! This file: your guard (hold right click with a sword) and shove (Q), foes
+//! - `stamina`: the bar every fighting action draws on.
+//! - `kick`: Q boots a foe back (into a wall: a slam).
+//!
+//! This file: your guard (hold right click with a sword), foes
 //! on the NPC rig holding swords, their walking and pathing, cuts landing
 //! both ways (blocked, parried or hurting), ghosts (see-through, shimmering,
 //! trailing wisps), death and drops, and the dev keys: Ctrl+Shift+J (Cmd on
@@ -14,7 +17,9 @@ pub mod ai;
 pub mod data;
 pub mod feel;
 pub mod guns;
+pub mod kick;
 pub mod path;
+pub mod stamina;
 mod saved;
 
 use bevy::prelude::*;
@@ -47,11 +52,10 @@ impl Plugin for CombatPlugin {
         app.insert_resource(FoeBook { kinds })
             .insert_resource(FoeDice(Rng(0xF0E5_5EED_1234)))
             .init_resource::<Guard>()
-            .init_resource::<ShoveTimer>()
             .add_message::<SpawnFoe>()
             .add_message::<Shoot>()
             .add_message::<FoeSlain>()
-            .add_plugins(feel::FeelPlugin)
+            .add_plugins((feel::FeelPlugin, stamina::StaminaPlugin, kick::KickPlugin))
             .add_systems(crate::menu::GamePostStartup, saved::load)
             .add_systems(crate::menu::GameUpdate, saved::save_now_and_then)
             .add_systems(Last, saved::save_on_exit.run_if(crate::menu::in_game))
@@ -61,7 +65,7 @@ impl Plugin for CombatPlugin {
             )
             .add_systems(
                 crate::menu::GameUpdate,
-                (spawn_key, spawn, take_swings, guns::fire, take_strikes, shove, think, shoot, fly_bolts, walk, animate, haunt, fall)
+                (spawn_key, spawn, take_swings, guns::fire, take_strikes, kick::kick, think, shoot, fly_bolts, walk, animate, haunt, fall)
                     .chain()
                     .in_set(FallSet)
                     .after(InteractSet)
@@ -82,10 +86,6 @@ fn fall_set() -> FallSet {
 pub const SWORD_REACH: f32 = 3.0;
 /// Half the width of a sword's sweep, degrees.
 const SWEEP: f32 = 55.0;
-/// Shove: reach, half its arc (degrees), seconds between shoves.
-const SHOVE_REACH: f32 = 3.4;
-const SHOVE_ARC: f32 = 75.0;
-const SHOVE_EVERY: f32 = 2.0;
 /// Half the width of a foe's body.
 const HALF: f32 = 0.3;
 const GRAVITY: f32 = 25.0;
@@ -115,8 +115,6 @@ pub struct Guard {
     pub blend: f32,
 }
 
-#[derive(Resource, Default)]
-struct ShoveTimer(f32);
 
 /// Put a foe of a kind in the world, feet at `at`.
 #[derive(Message, Debug, Clone, Copy)]
@@ -190,6 +188,10 @@ pub struct Foe {
     pub tag: u32,
     /// 1 when hit, eases to 0: the body rocks back.
     pub flinch: f32,
+    /// Seconds since a kick sent it flying that a wall still slams it.
+    pub kicked: f32,
+    /// It hit a wall while kicked (`kick` deals the slam).
+    pub slam: bool,
 }
 
 /// A spirit's look: its own materials (made see-through and blue once its
@@ -201,16 +203,16 @@ pub struct Ghost {
     wisp: f32,
 }
 
-fn traits(k: &FoeKind) -> Traits {
+pub(crate) fn traits(k: &FoeKind) -> Traits {
     Traits { style: k.style, reach: k.reach, sight: k.sight, forget: k.forget, leash: k.leash, swing: k.swing, contact: Swing::Slash.contact(), ranged: k.ranged.is_some() }
 }
 
-fn flat(v: Vec3) -> Vec3 {
+pub(crate) fn flat(v: Vec3) -> Vec3 {
     Vec3::new(v.x, 0.0, v.z)
 }
 
 /// Is `to` within `arc` degrees either side of the flat direction `ahead`?
-fn ahead_of(ahead: Vec3, to: Vec3, arc: f32) -> bool {
+pub(crate) fn ahead_of(ahead: Vec3, to: Vec3, arc: f32) -> bool {
     let (a, t) = (flat(ahead).normalize_or_zero(), flat(to).normalize_or_zero());
     t == Vec3::ZERO || a.dot(t) >= arc.to_radians().cos()
 }
@@ -220,6 +222,7 @@ fn solid(world: &World, blocks: &Blocks, p: BlockPos) -> bool {
 }
 
 /// Raise or lower your guard.
+#[allow(clippy::too_many_arguments)]
 fn guard_input(
     time: Res<Time>,
     mouse: Res<ButtonInput<MouseButton>>,
@@ -227,12 +230,13 @@ fn guard_input(
     wielded: Res<Wielded>,
     items: Res<Items>,
     anim: Res<HandAnim>,
+    stamina: Res<stamina::Stamina>,
     mut guard: ResMut<Guard>,
 ) {
     let dt = time.delta_secs();
     let sword = wielded.0.is_some_and(|i| items.get(i).swing == Swing::Slash);
-    // Not mid-cut: finish the swing first.
-    let up = sword && !menus.open && mouse.pressed(MouseButton::Right) && anim.arm(Hand::Right).t.is_none();
+    // Not mid-cut (finish the swing first), and not winded.
+    let up = sword && !menus.open && mouse.pressed(MouseButton::Right) && anim.arm(Hand::Right).t.is_none() && stamina.winded <= 0.0;
     guard.held = if up { guard.held + dt } else { 0.0 };
     guard.up = up;
     let want = if up { 1.0 } else { 0.0 };
@@ -330,6 +334,8 @@ fn spawn(
             boost: m.boost,
             tag: m.tag,
             flinch: 0.0,
+            kicked: 0.0,
+            slam: false,
         };
         commands.entity(root).insert((Name::new(k.title.clone()), foe, rig));
         if k.ghost {
@@ -345,14 +351,17 @@ fn spawn(
 }
 
 /// What a blow on a foe does: blocked on its blade, its guard broken, or a wound.
+/// A blow of yours on a foe: `heavy` (a charged cut) breaks a raised guard;
+/// one it hasn't noticed you for is a backstab (`ai::BACKSTAB` times the damage).
+/// Returns the hit's strength for the hit feel.
 #[allow(clippy::too_many_arguments)]
-/// A blow lands on a foe. Returns how hard it landed for the hit feel (`feel::Impact`).
-fn hit_foe(tf: &Transform, foe: &mut Foe, k: &FoeKind, from: Vec3, damage: f32, dice: &mut Rng, sound: &mut MessageWriter<PlaySound>, bursts: &mut MessageWriter<Burst>) -> f32 {
+fn hit_foe(tf: &Transform, foe: &mut Foe, k: &FoeKind, from: Vec3, damage: f32, heavy: bool, dice: &mut Rng, sound: &mut MessageWriter<PlaySound>, bursts: &mut MessageWriter<Burst>) -> f32 {
     let to_you = flat(from - tf.translation);
     let facing = ahead_of(Vec3::new(-foe.yaw.sin(), 0.0, -foe.yaw.cos()), to_you, ai::GUARD_ARC);
     let chest = tf.translation + Vec3::Y * 1.3 + to_you.normalize_or_zero() * 0.4;
     let push = -to_you.normalize_or_zero();
-    match foe.brain.struck(facing, &traits(k), dice) {
+    let damage = if foe.brain.aware { damage } else { damage * ai::BACKSTAB };
+    match foe.brain.struck(facing, heavy, &traits(k), dice) {
         Took::Blocked => {
             sound.write(PlaySound::new("clash").gain(0.9).at(chest));
             bursts.write(Burst::new(chest, BurstKind::Sparks, 10));
@@ -403,7 +412,7 @@ fn take_swings(
     mut impact: MessageWriter<feel::Impact>,
 ) {
     for s in swung.read() {
-        sound.write(PlaySound::new("swing").speed(1.25).gain(0.7));
+        sound.write(PlaySound::new("swing").speed(if s.heavy { 0.8 } else { 1.25 }).gain(0.7));
         for (_, tf, mut foe) in &mut foes {
             let mid = tf.translation + Vec3::Y * 1.0;
             let to = mid - s.origin;
@@ -411,8 +420,8 @@ fn take_swings(
                 continue;
             }
             let k = &book.kinds[foe.kind];
-            let strength = hit_foe(tf, &mut foe, k, s.origin, s.damage, &mut dice.0, &mut sound, &mut bursts);
-            impact.write(feel::Impact { strength });
+            let strength = hit_foe(tf, &mut foe, k, s.origin, s.damage, s.heavy, &mut dice.0, &mut sound, &mut bursts);
+            impact.write(feel::Impact { strength: if s.heavy { strength.max(0.7) } else { strength } });
         }
         if let Some(e) = aimed.entity
             && creatures.contains(e)
@@ -438,49 +447,10 @@ fn take_strikes(
     for s in strikes.read() {
         let Ok((_, tf, mut foe)) = foes.get_mut(s.entity) else { continue };
         let k = &book.kinds[foe.kind];
-        let strength = hit_foe(tf, &mut foe, k, cam.translation, s.damage, &mut dice.0, &mut sound, &mut bursts);
+        let strength = hit_foe(tf, &mut foe, k, cam.translation, s.damage, false, &mut dice.0, &mut sound, &mut bursts);
         if s.yours {
             impact.write(feel::Impact { strength });
         }
-    }
-}
-
-/// Q shoves every foe close in front of you back and off balance.
-#[allow(clippy::too_many_arguments)]
-fn shove(
-    time: Res<Time>,
-    keys: Res<ButtonInput<KeyCode>>,
-    menus: Res<Menus>,
-    book: Res<FoeBook>,
-    player: Res<Player>,
-    cam: Single<&Transform, With<FlyCamera>>,
-    mut timer: ResMut<ShoveTimer>,
-    mut anim: ResMut<HandAnim>,
-    mut foes: Query<(&Transform, &mut Foe)>,
-    mut sound: MessageWriter<PlaySound>,
-) {
-    timer.0 -= time.delta_secs();
-    if menus.open || !keys.just_pressed(KeyCode::KeyQ) || timer.0 > 0.0 {
-        return;
-    }
-    timer.0 = SHOVE_EVERY;
-    anim.start(Hand::Right, Swing::Jab);
-    sound.write(PlaySound::new("swing").speed(0.7));
-    let ahead = cam.forward().as_vec3();
-    let mut any = false;
-    for (tf, mut foe) in &mut foes {
-        let to = tf.translation - player.pos;
-        if flat(to).length() > SHOVE_REACH || to.y.abs() > 2.0 || !ahead_of(ahead, to, SHOVE_ARC) {
-            continue;
-        }
-        let k = &book.kinds[foe.kind];
-        foe.brain.shoved(&traits(k));
-        foe.vel = flat(to).normalize_or(flat(ahead)) * 9.0 + Vec3::Y * 3.5;
-        foe.on_ground = false;
-        any = true;
-    }
-    if any {
-        sound.write(PlaySound::new("hit").speed(0.8));
     }
 }
 
@@ -495,6 +465,7 @@ fn think(
     survival: Res<crate::survival::Survival>,
     (world, blocks): (Res<World>, Res<Blocks>),
     (cam, anim, guard): (Single<&Transform, With<FlyCamera>>, Res<HandAnim>, Res<Guard>),
+    (mut stamina, mut slow): (ResMut<stamina::Stamina>, MessageWriter<feel::SlowMo>),
     mut dice: ResMut<FoeDice>,
     mut foes: Query<(Entity, &Transform, &mut Foe)>,
     mut hits: MessageWriter<Damage>,
@@ -512,7 +483,7 @@ fn think(
     let ahead = cam.forward().as_vec3();
     // Your cut under way, before it lands: foes in its path see it coming.
     let arm = anim.arm(Hand::Right);
-    let winding = arm.style == Swing::Slash && arm.t.is_some_and(|t| t < arm.style.contact());
+    let winding = arm.style.fights() && arm.t.is_some_and(|t| t < arm.style.contact());
     let pressing = foes.iter().filter(|(_, _, f)| f.brain.tactic.pressing()).count();
     let spots: Vec<(Entity, Vec3)> = foes.iter().map(|(e, tf, _)| (e, tf.translation)).collect();
 
@@ -557,12 +528,17 @@ fn think(
             && to.y.abs() < 2.0
             && ahead_of(Vec3::new(-foe.yaw.sin(), 0.0, -foe.yaw.cos()), to, 60.0)
         {
-            if guard.up && ahead_of(ahead, -to, ai::GUARD_ARC) {
-                let parried = guard.held < ai::PARRY_WINDOW;
+            // A parry costs nothing and slows the world for a moment; a plain
+            // block costs stamina, and with too little left the guard breaks.
+            let parried = guard.up && guard.held < ai::PARRY_WINDOW;
+            if guard.up && ahead_of(ahead, -to, ai::GUARD_ARC) && (parried || stamina.block()) {
                 foe.brain.blocked(parried);
                 foe.vel += -flat(to).normalize_or_zero() * if parried { 6.0 } else { 3.0 };
                 sound.write(PlaySound::new("clash").speed(if parried { 1.2 } else { 1.0 }));
                 bursts.write(Burst::new(pos + to * 0.5 + Vec3::Y * 1.4, BurstKind::Sparks, if parried { 22 } else { 10 }));
+                if parried {
+                    slow.write(feel::SlowMo);
+                }
             } else {
                 hits.write(Damage { amount: k.damage * foe.boost, cause: k.cause.into() });
                 sound.write(PlaySound::new("hit"));
@@ -650,6 +626,7 @@ fn walk(time: Res<Time>, world: Res<World>, blocks: Res<Blocks>, mut q: Query<(&
         if world.block(BlockPos::from_world(tf.translation.to_array())).is_none() {
             continue;
         }
+        foe.kicked = (foe.kicked - dt).max(0.0);
         let staggered = foe.brain.tactic == Tactic::Stagger;
         let blend = if foe.on_ground && !staggered { (8.0 * dt).min(1.0) } else { (1.5 * dt).min(1.0) };
         let want = foe.want;
@@ -663,6 +640,10 @@ fn walk(time: Res<Time>, world: Res<World>, blocks: Res<Blocks>, mut q: Query<(&
             next[axis] += foe.vel[axis] * dt;
             if crate::creatures::blocked(&world, &blocks, next, HALF, HEIGHT) {
                 bumped = true;
+                // Kicked into a wall: `kick` deals the slam.
+                if foe.kicked > 0.0 && foe.vel[axis].abs() > 4.0 {
+                    foe.slam = true;
+                }
                 foe.vel[axis] = 0.0;
             } else {
                 pos = next;
@@ -724,6 +705,7 @@ fn animate(real: Res<Time<Real>>, game: Res<Time>, book: Res<FoeBook>, cam: Sing
             arms: Some(arms),
             sway,
             act: None,
+            kick: None,
         };
         body::drive(&mut tf, &mut rig, &mut parts, dt, &drive);
     }

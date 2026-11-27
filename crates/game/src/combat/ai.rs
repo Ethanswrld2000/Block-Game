@@ -22,6 +22,10 @@ pub const PRESSERS: usize = 2;
 pub const PARRY_WINDOW: f32 = 0.25;
 /// How far ahead of it (degrees either side) a blade held up covers.
 pub const GUARD_ARC: f32 = 70.0;
+/// Seconds a kick leaves it reeling.
+pub const KICK_STAGGER: f32 = 1.0;
+/// A blow on a foe that hasn't noticed you does this many times the damage.
+pub const BACKSTAB: f32 = 3.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Tactic {
@@ -264,10 +268,16 @@ impl Brain {
         }
     }
 
-    /// It is struck; `facing` = you are inside its guard's arc. Returns what
-    /// the blow did (the caller deals the damage on `Hurt`).
-    pub fn struck(&mut self, facing: bool, t: &Traits, rng: &mut Rng) -> Took {
+    /// It is struck; `facing` = you are inside its guard's arc; `heavy` = a
+    /// charged cut, which breaks a raised guard outright. Returns what the
+    /// blow did (the caller deals the damage on `Hurt`).
+    pub fn struck(&mut self, facing: bool, heavy: bool, t: &Traits, rng: &mut Rng) -> Took {
         self.aware = true;
+        if self.tactic == Tactic::Guard && facing && heavy {
+            self.poise = t.style.poise;
+            self.set(Tactic::Stagger, 1.3);
+            return Took::GuardBroken;
+        }
         if self.tactic == Tactic::Guard && facing {
             self.poise -= 1.0;
             if self.poise <= 0.0 {
@@ -284,15 +294,20 @@ impl Brain {
             return Took::Blocked;
         }
         self.fury = (self.fury + 0.5).min(1.5);
-        self.set(Tactic::Stagger, 0.3);
+        self.set(Tactic::Stagger, if heavy { 0.8 } else { 0.3 });
         Took::Hurt
     }
 
-    /// Shoved back: reels for a moment, guard broken.
-    pub fn shoved(&mut self, t: &Traits) {
+    /// Kicked: knocked back reeling, guard broken, whatever it was doing.
+    pub fn kicked(&mut self, t: &Traits) {
         self.aware = true;
         self.poise = t.style.poise;
-        self.set(Tactic::Stagger, 0.9);
+        self.set(Tactic::Stagger, KICK_STAGGER);
+    }
+
+    /// Slammed into a wall by a kick: down for longer.
+    pub fn slammed(&mut self) {
+        self.set(Tactic::Stagger, KICK_STAGGER + 0.8);
     }
 
     /// Its cut was caught on your blade. A parry (your guard went up just in
@@ -458,15 +473,19 @@ mod tests {
         let mut rng = Rng(5);
         let mut b = Brain::new(&t.style, 1);
         b.set(Tactic::Guard, 5.0);
-        assert_eq!(b.struck(true, &t, &mut rng), Took::Blocked);
-        assert_eq!(b.struck(true, &t, &mut rng), Took::GuardBroken);
+        assert_eq!(b.struck(true, false, &t, &mut rng), Took::Blocked);
+        assert_eq!(b.struck(true, false, &t, &mut rng), Took::GuardBroken);
         assert_eq!(b.tactic, Tactic::Stagger);
         // From behind the guard doesn't help.
         b.set(Tactic::Guard, 5.0);
-        assert_eq!(b.struck(false, &t, &mut rng), Took::Hurt);
+        assert_eq!(b.struck(false, false, &t, &mut rng), Took::Hurt);
+        // A charged cut breaks a raised guard at once.
+        b.set(Tactic::Guard, 1.0);
+        assert_eq!(b.struck(true, true, &t, &mut rng), Took::GuardBroken);
+        assert_eq!(b.tactic, Tactic::Stagger);
         // A hit interrupts its swing.
         b.set(Tactic::Attack, 0.0);
-        assert_eq!(b.struck(true, &t, &mut rng), Took::Hurt);
+        assert_eq!(b.struck(true, false, &t, &mut rng), Took::Hurt);
         assert_eq!(b.tactic, Tactic::Stagger);
     }
 
