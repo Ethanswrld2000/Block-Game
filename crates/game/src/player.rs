@@ -107,6 +107,8 @@ pub struct Body {
     pub fall: f32,
     /// 0..1: lack of air makes the view sway.
     pub dizzy: f32,
+    /// 0..1: cold makes the view shiver (`survival::shiver`).
+    pub shiver: f32,
     /// No moving at all (dead, or asleep).
     pub frozen: bool,
     /// The Levitation spell: no gravity; Space rises, Ctrl/C sinks.
@@ -117,7 +119,7 @@ pub struct Body {
 
 impl Default for Body {
     fn default() -> Self {
-        Self { speed: 1.0, fall: 1.0, dizzy: 0.0, frozen: false, levitate: false, feather: false }
+        Self { speed: 1.0, fall: 1.0, dizzy: 0.0, shiver: 0.0, frozen: false, levitate: false, feather: false }
     }
 }
 
@@ -478,7 +480,11 @@ fn ride_camera(time: Res<Time>, player: Res<Player>, body: Res<Body>, kick: Opti
     let dizzy_roll = (t * 0.9).sin() * 0.09 * body.dizzy;
     let dizzy_yaw = (t * 0.6).sin() * 0.05 * body.dizzy;
     let (kick_pitch, kick_roll) = kick.map_or((0.0, 0.0), |k| (k.pitch, k.roll));
-    let roll = (p.bob_phase * 0.5).sin() * 0.012 * b + dizzy_roll + kick_roll;
+    // Cold: quick trembling.
+    let (shiver_pitch, shiver_yaw, shiver_roll) = crate::survival::shiver::offset(t, body.shiver);
+    let kick_pitch = kick_pitch + shiver_pitch;
+    let dizzy_yaw = dizzy_yaw + shiver_yaw;
+    let roll = (p.bob_phase * 0.5).sin() * 0.012 * b + dizzy_roll + kick_roll + shiver_roll;
     // Landing nods the view down with the dip, then it springs back.
     let land_nod = p.dip * 0.15;
     let rotation = Quat::from_euler(EulerRot::YXZ, look.yaw + dizzy_yaw, look.pitch + s.abs() * 0.006 * b + kick_pitch + land_nod, roll);
