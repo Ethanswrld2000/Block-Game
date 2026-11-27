@@ -289,6 +289,7 @@ fn walk_floor(
                     tag: if boss { BOSS } else { TAG },
                     home: None,
                     health: None,
+                    elite: false,
                 });
             }
         }

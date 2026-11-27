@@ -44,7 +44,7 @@ use crate::station::particles::{Burst, BurstKind};
 use crate::swing::{Limbs, Swing};
 use crate::world::World;
 use ai::{Brain, Senses, Tactic, Took, Traits};
-use data::FoeKind;
+use data::{Elite, FoeKind, Role};
 
 pub struct CombatPlugin;
 
@@ -67,7 +67,7 @@ impl Plugin for CombatPlugin {
             )
             .add_systems(
                 crate::menu::GameUpdate,
-                (spawn_key, spawn, take_swings, guns::fire, take_strikes, kick::kick, shield::bash, think, ail, shoot, fly_bolts, walk, animate, haunt, fall)
+                (spawn_key, spawn, take_swings, guns::fire, take_strikes, kick::kick, shield::bash, think, mend, ail, shoot, fly_bolts, walk, animate, telegraph, haunt, fall, corpses)
                     .chain()
                     .in_set(FallSet)
                     .after(InteractSet)
@@ -165,13 +165,25 @@ pub struct SpawnFoe {
     pub home: Option<Vec3>,
     /// Its health, if not full (a foe back from a save).
     pub health: Option<f32>,
+    /// An elite: stronger, bigger, glowing gold, with one `Elite` trait.
+    pub elite: bool,
 }
 
 impl SpawnFoe {
     pub fn new(kind: usize, at: Vec3) -> Self {
-        Self { kind, at, boost: 1.0, tag: 0, home: None, health: None }
+        Self { kind, at, boost: 1.0, tag: 0, home: None, health: None, elite: false }
     }
 }
+
+/// Seconds between a mender's mending, how far it reaches and how much it gives.
+pub const MEND_EVERY: f32 = 4.0;
+pub const MEND_REACH: f32 = 8.0;
+pub const MEND: f32 = 10.0;
+/// A heavy (unblockable) cut of anything but a brute lands this much harder.
+const HEAVY_HIT: f32 = 1.3;
+/// Seconds a fallen foe takes to go over, and to sink away after.
+const FALL_OVER: f32 = 0.55;
+const CORPSE_FOR: f32 = 2.6;
 
 /// A foe fell (just before it is despawned).
 #[derive(Message, Debug, Clone, Copy)]
@@ -230,6 +242,34 @@ pub struct Foe {
     pub slam: bool,
     /// Bleeding, burning, frost from your weapon's traits.
     pub ail: ailment::Ailments,
+    /// An elite's trait.
+    pub elite: Option<Elite>,
+    /// Full health (for menders).
+    pub max_health: f32,
+    /// Seconds to a mender's next mending.
+    pub mend: f32,
+    /// Its red wind-up light (`telegraph`).
+    flash: Option<Entity>,
+}
+
+impl Foe {
+    /// Its traits, with an elite's haste.
+    pub fn traits(&self, k: &FoeKind) -> Traits {
+        Traits { haste: self.elite.map_or(1.0, |e| e.haste()), ..traits(k) }
+    }
+
+    /// How hard its blows land.
+    pub fn damage(&self, k: &FoeKind) -> f32 {
+        k.damage * self.boost * self.elite.map_or(1.0, |e| e.damage())
+    }
+}
+
+/// A foe that fell: it goes over backwards, lies a moment and sinks away.
+#[derive(Component)]
+pub struct Corpse {
+    t: f32,
+    yaw: f32,
+    at: Vec3,
 }
 
 /// A spirit's look: its own materials (made see-through and blue once its
@@ -242,7 +282,18 @@ pub struct Ghost {
 }
 
 pub(crate) fn traits(k: &FoeKind) -> Traits {
-    Traits { style: k.style, reach: k.reach, sight: k.sight, forget: k.forget, leash: k.leash, swing: k.swing, contact: Swing::Slash.contact(), ranged: k.ranged.is_some() }
+    Traits {
+        style: k.style,
+        reach: k.reach,
+        sight: k.sight,
+        forget: k.forget,
+        leash: k.leash,
+        swing: k.swing,
+        contact: Swing::Slash.contact(),
+        ranged: k.ranged.is_some(),
+        role: k.role,
+        haste: 1.0,
+    }
 }
 
 pub(crate) fn flat(v: Vec3) -> Vec3 {
@@ -306,7 +357,7 @@ fn aim_foes(cam: Single<&Transform, With<FlyCamera>>, mode: Res<MoveMode>, q: Qu
 }
 
 /// Ctrl+Shift+J (Cmd+Shift+J) spawns a Hollow Warden a few blocks ahead,
-/// Ctrl+Shift+H a Fen Shade. If you have no sword yet, one goes in your
+/// Ctrl+Shift+H a Fen Shade, Ctrl+Shift+G a pack of every role (an elite among them). If you have no sword yet, one goes in your
 /// pockets and on the hotbar so you can fight it.
 #[allow(clippy::too_many_arguments)]
 fn spawn_key(
@@ -322,17 +373,23 @@ fn spawn_key(
 ) {
     let held = |a, b| keys.pressed(a) || keys.pressed(b);
     let combo = (held(KeyCode::ControlLeft, KeyCode::ControlRight) || held(KeyCode::SuperLeft, KeyCode::SuperRight)) && held(KeyCode::ShiftLeft, KeyCode::ShiftRight);
-    let name = match () {
-        _ if combo && keys.just_pressed(KeyCode::KeyJ) => "hollow",
-        _ if combo && keys.just_pressed(KeyCode::KeyH) => "shade",
+    // Ctrl+Shift+G: a mixed pack, one of each role, the grunt an elite.
+    let pack: &[(&str, bool)] = match () {
+        _ if combo && keys.just_pressed(KeyCode::KeyJ) => &[("hollow", false)],
+        _ if combo && keys.just_pressed(KeyCode::KeyH) => &[("shade", false)],
+        _ if combo && keys.just_pressed(KeyCode::KeyG) => &[("hollow", true), ("shieldbearer", false), ("sporecaster", false), ("mire_mender", false), ("mire_skitter", false), ("rot_brute", false)],
         _ => return,
     };
-    let Some(kind) = book.kinds.iter().position(|k| k.name == name) else { return };
     let fwd = flat(cam.forward().as_vec3()).normalize_or(Vec3::NEG_Z);
-    let at = player.pos + fwd * 6.0;
-    let (x, z) = (at.x.floor() as i32, at.z.floor() as i32);
-    let y = crate::creatures::ground_near(&world, &blocks, x, z, at.y as i32 - 8, at.y as i32 + 6, false).map_or(at.y, |y| y as f32);
-    spawn.write(SpawnFoe::new(kind, Vec3::new(x as f32 + 0.5, y, z as f32 + 0.5)));
+    let side = Vec3::new(-fwd.z, 0.0, fwd.x);
+    for (i, (name, elite)) in pack.iter().enumerate() {
+        let Some(kind) = book.kinds.iter().position(|k| k.name == *name) else { continue };
+        let spread = (i as f32 - (pack.len() as f32 - 1.0) / 2.0) * 1.8;
+        let at = player.pos + fwd * (6.0 + (i % 2) as f32 * 2.5) + side * spread;
+        let (x, z) = (at.x.floor() as i32, at.z.floor() as i32);
+        let y = crate::creatures::ground_near(&world, &blocks, x, z, at.y as i32 - 8, at.y as i32 + 6, false).map_or(at.y, |y| y as f32);
+        spawn.write(SpawnFoe { elite: *elite, ..SpawnFoe::new(kind, Vec3::new(x as f32 + 0.5, y, z as f32 + 0.5)) });
+    }
 
     // A sword to test with.
     let has_sword = items.ids().any(|i| items.get(i).swing == Swing::Slash && inv.count(i) > 0);
@@ -363,9 +420,36 @@ fn spawn(
         if let Some(weapon) = items.id(&k.weapon) {
             commands.spawn((Held::holding(weapon), Transform::from_scale(Vec3::splat(HELD_SCALE)), Visibility::default(), ChildOf(rig.hands[1])));
         }
+        if let Some(off) = k.offhand.as_deref().and_then(|n| items.id(n)) {
+            // A shield stood upright on the forearm, its face to the front.
+            commands.spawn((
+                Held::holding(off),
+                Transform::from_scale(Vec3::splat(HELD_SCALE)).with_rotation(Quat::from_rotation_x(1.45)),
+                Visibility::default(),
+                ChildOf(rig.hands[0]),
+            ));
+        }
+        let elite = m.elite.then(|| Elite::pick(dice.0.unit()));
+        let max_health = k.health * m.boost * if elite.is_some() { data::ELITE_HEALTH } else { 1.0 };
+        // The red light of a heavy cut winding up (off until then).
+        let flash = commands
+            .spawn((
+                PointLight { intensity: 0.0, range: 5.0, color: Color::srgb(1.0, 0.15, 0.1), shadow_maps_enabled: false, ..default() },
+                Transform::from_xyz(0.0, 1.4, -0.4),
+                ChildOf(root),
+            ))
+            .id();
+        if elite.is_some() {
+            commands.entity(root).insert(Transform::from_translation(m.at).with_rotation(Quat::from_rotation_y(yaw)).with_scale(Vec3::splat(data::ELITE_SCALE)));
+            commands.spawn((
+                PointLight { intensity: 22_000.0, range: 5.0, color: Color::srgb(1.0, 0.78, 0.3), shadow_maps_enabled: false, ..default() },
+                Transform::from_xyz(0.0, 2.1, 0.0),
+                ChildOf(root),
+            ));
+        }
         let foe = Foe {
             kind: m.kind,
-            health: m.health.unwrap_or(k.health * m.boost),
+            health: m.health.unwrap_or(max_health),
             brain: Brain::new(&k.style, dice.0.next()),
             vel: Vec3::ZERO,
             yaw,
@@ -383,8 +467,16 @@ fn spawn(
             kicked: 0.0,
             slam: false,
             ail: ailment::Ailments::default(),
+            elite,
+            max_health,
+            mend: MEND_EVERY,
+            flash: Some(flash),
         };
-        commands.entity(root).insert((Name::new(k.title.clone()), foe, rig));
+        let title = match elite {
+            Some(e) => format!("{} {}", e.title(), k.title),
+            None => k.title.clone(),
+        };
+        commands.entity(root).insert((Name::new(title), foe, rig));
         if k.ghost {
             commands.entity(root).insert(Ghost::default());
             // A faint blue glow about it.
@@ -538,6 +630,8 @@ fn take_swings(
             at
         });
         let mut sparks = Vec::new();
+        // Foes near a warded elite take half.
+        let wards: Vec<(Entity, Vec3)> = foes.iter().filter(|(_, _, f)| f.elite == Some(Elite::Warded)).map(|(e, tf, _)| (e, tf.translation)).collect();
         for (e, tf, mut foe) in &mut foes {
             let mid = tf.translation + Vec3::Y * 1.0;
             let to = mid - s.origin;
@@ -549,6 +643,11 @@ fn take_swings(
                 continue;
             }
             let k = &book.kinds[foe.kind];
+            let warded = wards.iter().any(|(w, at)| *w != e && (*at - tf.translation).length() < data::WARD_REACH);
+            let blow = Blow { damage: blow.damage * if warded { 0.5 } else { 1.0 }, ..blow };
+            if warded {
+                bursts.write(Burst::new(mid + Vec3::Y * 0.3, BurstKind::Sparkle, 4));
+            }
             let (strength, took, dealt) = hit_foe(tf, &mut foe, k, s.origin, &blow, &mut dice.0, &mut sound, &mut bursts);
             if slam.is_some() {
                 // Knocked off its feet.
@@ -649,9 +748,12 @@ fn think(
     let pressing = foes.iter().filter(|(_, _, f)| f.brain.tactic.pressing()).count();
     let spots: Vec<(Entity, Vec3)> = foes.iter().map(|(e, tf, _)| (e, tf.translation)).collect();
 
+    // Shooters and menders (for shield bearers to stand before).
+    let shooters: Vec<Vec3> = foes.iter().filter(|(_, _, f)| matches!(book.kinds[f.kind].role, Role::Archer | Role::Support) && f.brain.aware).map(|(_, tf, _)| tf.translation).collect();
+    let behind = player.pos - flat(ahead).normalize_or_zero() * 2.6;
     for (e, tf, mut foe) in &mut foes {
         let k = &book.kinds[foe.kind];
-        let t = traits(k);
+        let t = foe.traits(k);
         let pos = tf.translation;
         let to = player.pos - pos;
         let dist = if fightable { flat(to).length() } else { f32::MAX };
@@ -681,7 +783,7 @@ fn think(
                 let from = pos + Vec3::Y * 1.45;
                 let target = player.pos + Vec3::Y * 1.1;
                 let vel = (target - from).normalize_or_zero() * r.speed;
-                shots.write(Shoot { from, vel, damage: k.damage * foe.boost, cause: k.cause, color: r.color });
+                shots.write(Shoot { from, vel, damage: foe.damage(k), cause: k.cause, color: r.color });
                 sound.write(PlaySound::new("knife").speed(0.7).at(from));
             }
         } else if lands
@@ -692,8 +794,10 @@ fn think(
         {
             // A parry costs nothing and slows the world for a moment; a plain
             // block costs stamina, and with too little left the guard breaks.
-            let parried = guard.up && guard.held < ai::PARRY_WINDOW;
-            if guard.up && ahead_of(ahead, -to, guard_arc) && (parried || stamina::block(&mut survival.vitals.health, guard_cost)) {
+            // A heavy cut (flashing red) goes through any guard.
+            let heavy = foe.brain.heavy;
+            let parried = guard.up && guard.held < ai::PARRY_WINDOW && !heavy;
+            if guard.up && !heavy && ahead_of(ahead, -to, guard_arc) && (parried || stamina::block(&mut survival.vitals.health, guard_cost)) {
                 foe.brain.blocked(parried);
                 foe.vel += -flat(to).normalize_or_zero() * if parried { 6.0 } else { 3.0 };
                 let shield = guard.shield.is_some();
@@ -719,8 +823,13 @@ fn think(
                     }
                 }
             } else {
-                hits.write(Damage { amount: k.damage * foe.boost, cause: k.cause.into() });
-                sound.write(PlaySound::new("hit"));
+                let hard = if heavy && k.role != Role::Brute { HEAVY_HIT } else { 1.0 };
+                hits.write(Damage { amount: foe.damage(k) * hard, cause: k.cause.into() });
+                sound.write(PlaySound::new("hit").speed(if heavy { 0.7 } else { 1.0 }));
+                if heavy && guard.up {
+                    // Your guard was smashed aside.
+                    sound.write(PlaySound::new("clash").speed(0.6));
+                }
             }
         }
 
@@ -728,6 +837,16 @@ fn think(
         let toward = flat(to).normalize_or_zero();
         let tactic = foe.brain.tactic;
         foe.want = match tactic {
+            // A skirmisher circles round to your back.
+            Tactic::Circle if k.role == Role::Skirmisher && dist < 9.0 => follow(&mut foe, &world, &blocks, pos, behind, k.run, dt),
+            // A shield bearer stands between you and the shooters.
+            Tactic::Circle | Tactic::Guard | Tactic::Approach
+                if k.role == Role::Shield
+                    && let Some(near) = shooters.iter().filter(|s| flat(**s - pos).length() < 12.0).min_by(|a, b| flat(**a - pos).length().total_cmp(&flat(**b - pos).length())) =>
+            {
+                let spot = *near + flat(player.pos - *near).normalize_or_zero() * 2.2;
+                if flat(spot - pos).length() < 0.5 { Vec3::ZERO } else { follow(&mut foe, &world, &blocks, pos, spot, k.walk, dt) }
+            }
             Tactic::Idle | Tactic::Stagger | Tactic::Recover => Vec3::ZERO,
             Tactic::Return => {
                 let home = foe.home;
@@ -863,13 +982,20 @@ fn animate(real: Res<Time<Real>>, game: Res<Time>, book: Res<FoeBook>, cam: Sing
         let d = eye - (tf.translation + Vec3::Y * EYES);
         let focus = foe.brain.aware.then(|| [crate::npc::motion::wrap(yaw_of(d) - rig.facing()), d.y.atan2(Vec2::new(d.x, d.z).length())]);
         let tactic = foe.brain.tactic;
-        let arms = if tactic == Tactic::Attack { Swing::Slash.limbs(foe.brain.swing.min(1.0)) } else { Limbs::hold().lerp(Limbs::guard(), foe.guard) };
+        // Its cuts on the same keys as yours; a heavy one hauled up overhead.
+        let cut = if foe.brain.heavy { Swing::Heavy } else { Swing::Slash };
+        let guard_pose = if k.role == Role::Shield { Limbs::shield() } else { Limbs::guard() };
+        let arms = if tactic == Tactic::Attack { cut.limbs(foe.brain.swing.min(1.0)) } else { Limbs::hold().lerp(guard_pose, foe.guard) };
         let mut sway = match tactic {
             Tactic::Stagger => [-0.28, 0.08],
             Tactic::Guard => [0.08, 0.0],
             _ => [0.0; 2],
         };
         sway[0] -= 0.45 * foe.flinch;
+        // Staggered: rocked back hard, arms flung wide.
+        if tactic == Tactic::Stagger {
+            sway[0] -= 0.12;
+        }
         let drive = Drive {
             yaw: foe.yaw,
             turn: 0.14,
@@ -981,10 +1107,100 @@ fn fall(
                 spill.write(crate::inventory::Spill { stack: Stack::new(item, *n), at });
             }
         }
-        bursts.write(Burst::new(at, if k.ghost { BurstKind::Wisp } else { BurstKind::Smoke }, if k.ghost { 40 } else { 14 }));
+        // Elites drop better things.
+        if foe.elite.is_some() {
+            for (name, n, _) in k.drops.iter().take(2) {
+                if let Some(item) = items.id(name) {
+                    spill.write(crate::inventory::Spill { stack: Stack::new(item, *n), at });
+                }
+            }
+        }
+        bursts.write(Burst::new(at, if k.ghost { BurstKind::Wisp } else { BurstKind::Smoke }, if k.ghost { 40 } else { 8 }));
         toast.write(crate::survival::Toast(format!("{} slain", k.title)));
-        gain.write(crate::progress::GainXp { xp: k.health * foe.boost * prog.xp.kill, why: String::new() });
-        commands.entity(e).despawn();
+        gain.write(crate::progress::GainXp { xp: foe.max_health * prog.xp.kill, why: String::new() });
+        // Ghosts burst away; bodies go over and lie a moment.
+        if k.ghost {
+            commands.entity(e).despawn();
+        } else {
+            if let Some(f) = foe.flash {
+                commands.entity(f).despawn();
+            }
+            commands.entity(e).remove::<Foe>().insert(Corpse { t: 0.0, yaw: foe.yaw, at: tf.translation });
+        }
+    }
+}
+
+/// Fallen foes: over backwards (a crumple at the knees as it goes), a moment
+/// lying there, then sunk into the ground and gone.
+fn corpses(mut commands: Commands, time: Res<Time>, mut q: Query<(Entity, &mut Transform, &mut Corpse)>, mut bursts: MessageWriter<Burst>) {
+    let dt = time.delta_secs();
+    for (e, mut tf, mut c) in &mut q {
+        let before = c.t;
+        c.t += dt;
+        let k = (c.t / FALL_OVER).min(1.0);
+        let over = k * k * std::f32::consts::FRAC_PI_2 * 0.96;
+        let sink = ((c.t - CORPSE_FOR * 0.6) / (CORPSE_FOR * 0.4)).clamp(0.0, 1.0) * 0.6;
+        tf.rotation = Quat::from_rotation_y(c.yaw) * Quat::from_rotation_x(over);
+        tf.translation = c.at - Vec3::Y * sink;
+        // A puff as it hits the ground.
+        if before < FALL_OVER && c.t >= FALL_OVER {
+            bursts.write(Burst::new(c.at + Vec3::Y * 0.2, BurstKind::Smoke, 8));
+        }
+        if c.t >= CORPSE_FOR {
+            commands.entity(e).despawn();
+        }
+    }
+}
+
+/// Menders mend: every `MEND_EVERY` seconds, the foes near one (not itself)
+/// get some health back, with a green glitter.
+fn mend(time: Res<Time>, book: Res<FoeBook>, mut foes: Query<(Entity, &Transform, &mut Foe)>, mut bursts: MessageWriter<Burst>, mut sound: MessageWriter<PlaySound>) {
+    let dt = time.delta_secs().min(0.05);
+    let mut casts = Vec::new();
+    for (e, tf, mut foe) in &mut foes {
+        if book.kinds[foe.kind].role != Role::Support || !foe.brain.aware || foe.brain.tactic == Tactic::Stagger {
+            continue;
+        }
+        foe.mend -= dt;
+        if foe.mend <= 0.0 {
+            foe.mend = MEND_EVERY;
+            casts.push((e, tf.translation));
+        }
+    }
+    for (from, at) in casts {
+        let mut any = false;
+        for (e, tf, mut foe) in &mut foes {
+            if e != from && (tf.translation - at).length() < MEND_REACH && foe.health < foe.max_health {
+                foe.health = (foe.health + MEND).min(foe.max_health);
+                bursts.write(Burst::new(tf.translation + Vec3::Y * 1.2, BurstKind::Sparkle, 8));
+                any = true;
+            }
+        }
+        if any {
+            bursts.write(Burst::new(at + Vec3::Y * 1.8, BurstKind::Sparkle, 12));
+            sound.write(PlaySound::new("spell_on").speed(1.2).gain(0.6).at(at));
+        }
+    }
+}
+
+/// A heavy cut winding up glows red, brighter as it comes, with sparks.
+fn telegraph(time: Res<Time>, book: Res<FoeBook>, foes: Query<(&Transform, &Foe)>, mut lights: Query<&mut PointLight>, mut bursts: MessageWriter<Burst>, mut tick: Local<f32>) {
+    *tick -= time.delta_secs();
+    let spark = *tick <= 0.0;
+    if spark {
+        *tick = 0.08;
+    }
+    for (tf, foe) in &foes {
+        let glow = foe.brain.telegraph(&foe.traits(&book.kinds[foe.kind]));
+        if let Some(mut l) = foe.flash.and_then(|f| lights.get_mut(f).ok()) {
+            let want = glow * 60_000.0;
+            if (l.intensity - want).abs() > 1.0 {
+                l.intensity = want;
+            }
+        }
+        if spark && glow > 0.2 {
+            bursts.write(Burst::new(tf.translation + Vec3::Y * 1.6, BurstKind::Sparks, 2));
+        }
     }
 }
 

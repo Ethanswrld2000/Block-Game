@@ -20,6 +20,72 @@ pub struct Style {
     pub poise: f32,
 }
 
+/// A foe's part in a group fight (`ai` weighs its tactics by it; `combat`
+/// moves it by it).
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Role {
+    /// Fodder in packs: simple cuts, a weak guard.
+    #[default]
+    Grunt,
+    /// Blocks everything from the front (a tower shield); stands in front of
+    /// shooters. Needs a heavy, a kick, a hammer or a flank.
+    Shield,
+    /// Shoots from range and keeps its distance.
+    Archer,
+    /// Hits hard and slow: every attack is heavy (unblockable, flashing red).
+    Brute,
+    /// Fast: circles round to your back while the others hold you.
+    Skirmisher,
+    /// Keeps back and mends the others (`MEND`): kill it first.
+    Support,
+}
+
+/// What makes an elite stronger than the rest of its kind (one each). Elites
+/// also have more health (`ELITE_HEALTH`), hit harder (`ELITE_DAMAGE`), stand
+/// a little bigger, glow gold and drop better loot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Elite {
+    /// Its blows land half again as hard.
+    Fierce,
+    /// Foes near it take half damage (a ward round it).
+    Warded,
+    /// It swings a third faster.
+    Frenzied,
+}
+
+pub const ELITE_HEALTH: f32 = 1.8;
+pub const ELITE_DAMAGE: f32 = 1.25;
+pub const ELITE_SCALE: f32 = 1.12;
+/// How far an elite's ward reaches.
+pub const WARD_REACH: f32 = 6.0;
+
+impl Elite {
+    pub const ALL: [Elite; 3] = [Elite::Fierce, Elite::Warded, Elite::Frenzied];
+
+    /// Pick one from a number in 0..1.
+    pub fn pick(u: f32) -> Elite {
+        Elite::ALL[((u * 3.0) as usize).min(2)]
+    }
+
+    pub fn title(self) -> &'static str {
+        match self {
+            Elite::Fierce => "Fierce",
+            Elite::Warded => "Warded",
+            Elite::Frenzied => "Frenzied",
+        }
+    }
+
+    /// Multiplier on its damage (with `ELITE_DAMAGE`).
+    pub fn damage(self) -> f32 {
+        ELITE_DAMAGE * if self == Elite::Fierce { 1.5 } else { 1.0 }
+    }
+
+    /// Multiplier on how long its swings take.
+    pub fn haste(self) -> f32 {
+        if self == Elite::Frenzied { 0.67 } else { 1.0 }
+    }
+}
+
 /// A foe that fights from afar: its "cut" throws a bolt that flies at you
 /// (`reach` is then how far it shoots from).
 #[derive(Deserialize, Debug, Clone, Copy)]
@@ -66,6 +132,12 @@ pub struct FoeKind {
     /// A shooter that cuts instead when you are this close (court soldiers).
     #[serde(default)]
     pub close: Option<f32>,
+    /// Its part in a group fight.
+    #[serde(default)]
+    pub role: Role,
+    /// What it holds in its left hand (a shield bearer's shield).
+    #[serde(default)]
+    pub offhand: Option<String>,
 }
 
 pub fn load(text: &str) -> Result<Vec<FoeKind>, String> {
@@ -83,5 +155,19 @@ mod tests {
             assert!(k.sight < k.forget && k.leash > k.sight, "{}", k.name);
             assert!((0.0..=1.0).contains(&k.style.aggression) && (0.0..=1.0).contains(&k.style.caution), "{}", k.name);
         }
+        // Every role has a kind, and shield bearers carry a shield.
+        for r in [super::Role::Grunt, super::Role::Shield, super::Role::Archer, super::Role::Brute, super::Role::Skirmisher, super::Role::Support] {
+            assert!(kinds.iter().any(|k| k.role == r), "{r:?}");
+        }
+        assert!(kinds.iter().filter(|k| k.role == super::Role::Shield).all(|k| k.offhand.is_some()));
+    }
+
+    #[test]
+    fn elites_pick_every_kind() {
+        use super::Elite;
+        let seen: std::collections::HashSet<_> = (0..30).map(|i| Elite::pick(i as f32 / 30.0)).collect();
+        assert_eq!(seen.len(), 3);
+        assert_eq!(Elite::pick(1.0), Elite::Frenzied);
+        assert!(Elite::Fierce.damage() > Elite::Warded.damage() && Elite::Frenzied.haste() < 1.0);
     }
 }
