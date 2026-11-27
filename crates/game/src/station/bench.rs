@@ -811,4 +811,18 @@ mod tests {
         while !matches!(b.strike(&data, "tool_bench"), Work::Made(_)) {}
         assert_eq!(b.slots.get("material"), Some(&Stack::new(id("small_rock"), 1)));
     }
+
+    #[test]
+    fn small_rocks_make_cobblestone_and_a_shovel() {
+        let (items, data) = data();
+        let id = |n| items.id(n).unwrap();
+        let [handle, material] = TOOL_BENCH_SLOTS;
+        let mut b = Board::default();
+        b.put(material, Stack::new(id("small_rock"), 4));
+        assert_eq!(data.matching("tool_bench", &b).unwrap().makes.item, id("cobblestone"));
+        let mut b = Board::default();
+        b.put(handle, Stack::new(id("stick"), 1));
+        b.put(material, Stack::new(id("small_rock"), 2));
+        assert_eq!(data.matching("tool_bench", &b).unwrap().makes.item, id("stone_shovel"));
+    }
 }

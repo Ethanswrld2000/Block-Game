@@ -53,6 +53,13 @@ struct BlockSpec {
     /// For `shape: layer`: how many eighths of the cell it fills (1..=8).
     #[serde(default)]
     level: u8,
+    /// Dug by hand (or a tool not made for its material), it doesn't go at once:
+    /// it turns into this block, a lower layer of itself (dirt -> dirt_layer_6 -> ...).
+    #[serde(default)]
+    dig_to: Option<String>,
+    /// Walking speed while you stand in it (brush), 0..1 (default 1).
+    #[serde(default = "one")]
+    slows: f32,
     /// For snow layers: plants and pebbles can stand in it (the registry adds a
     /// `<layer>+<detail>` block for each pair; see `BlockDef::inside`).
     #[serde(default)]
@@ -171,6 +178,10 @@ pub struct BlockDef {
     pub light: u8,
     /// `shape: layer`: eighths of the cell filled, 1..=8 (0 for other shapes).
     pub level: u8,
+    /// What digging it without the right tool leaves behind (a lower layer).
+    pub dig_to: Option<BlockId>,
+    /// Walking speed while standing in it, 0..1 (brush slows you).
+    pub slows: f32,
     /// A layer with a plant or pebble standing in it (`<layer>+<detail>`,
     /// made by the registry for layers with `fills_around`): the detail.
     pub inside: Option<BlockId>,
@@ -210,6 +221,7 @@ pub enum RegistryError {
     UnknownTile { block: String, tile: String },
     Duplicate(String),
     FirstMustBeAir,
+    UnknownDigTo { block: String, to: String },
 }
 
 impl std::fmt::Display for RegistryError {
@@ -221,6 +233,7 @@ impl std::fmt::Display for RegistryError {
             }
             Self::Duplicate(n) => write!(f, "block '{n}' is defined twice"),
             Self::FirstMustBeAir => write!(f, "the first block in blocks.ron must be 'air'"),
+            Self::UnknownDigTo { block, to } => write!(f, "block '{block}' digs to '{to}', which is not a block"),
         }
     }
 }
@@ -238,6 +251,7 @@ impl BlockRegistry {
         }
         let mut defs = Vec::with_capacity(specs.len());
         let mut by_name = HashMap::new();
+        let mut digs = Vec::new();
         let mut fills = Vec::new();
         for (i, s) in specs.into_iter().enumerate() {
             if s.fills_around && s.shape == Shape::Layer {
@@ -258,6 +272,9 @@ impl BlockRegistry {
             if by_name.insert(s.name.clone(), BlockId(i as u16)).is_some() {
                 return Err(RegistryError::Duplicate(s.name));
             }
+            if let Some(to) = s.dig_to {
+                digs.push((i, s.name.clone(), to));
+            }
             defs.push(BlockDef {
                 name: s.name,
                 textures: [side, side, top, bottom, side, side],
@@ -272,8 +289,14 @@ impl BlockRegistry {
                 model: s.model,
                 light: s.light.min(crate::light::MAX),
                 level: if s.shape == Shape::Layer { s.level.clamp(1, 8) } else { 0 },
+                dig_to: None,
+                slows: s.slows.clamp(0.0, 1.0),
                 inside: None,
             });
+        }
+        for (i, block, to) in digs {
+            let id = *by_name.get(&to).ok_or(RegistryError::UnknownDigTo { block, to })?;
+            defs[i].dig_to = Some(id);
         }
         // Snow that fills up around plants and pebbles: one block per layer and
         // detail, after every listed block so listed ids don't move (saves go by name).
