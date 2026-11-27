@@ -23,6 +23,8 @@ pub enum Goal {
     Urn,
     /// You have set one down.
     UrnPlaced,
+    /// You have slept (Z by your bed).
+    Slept,
 }
 
 /// A waypoint to the nearest of some blocks, until you have enough of an item.
@@ -72,6 +74,13 @@ pub fn flag(id: &str) -> String {
 pub const ON: &str = "guide_on";
 /// Set once every step is done.
 pub const DONE: &str = "guide_done";
+/// The step that makes your bed: until it's done, the guide keeps you from sleeping.
+pub const BED: &str = "bed";
+
+/// Whether the guide still holds sleep back: it's under way and the bed isn't made yet.
+pub fn bed_missing(flags: &BTreeSet<String>) -> bool {
+    flags.contains(ON) && !flags.contains(DONE) && !flags.contains(&flag(BED))
+}
 
 /// The step under way: the first not done.
 pub fn current<'a>(data: &'a GuideData, flags: &BTreeSet<String>) -> Option<(usize, &'a StepDef)> {
@@ -102,6 +111,7 @@ pub struct Facts<'a> {
     pub home: bool,
     pub urn: bool,
     pub urn_placed: bool,
+    pub slept: bool,
 }
 
 pub fn met(goal: &Goal, f: &Facts) -> bool {
@@ -114,6 +124,7 @@ pub fn met(goal: &Goal, f: &Facts) -> bool {
         Goal::Home => f.home,
         Goal::Urn => f.urn || f.urn_placed,
         Goal::UrnPlaced => f.urn_placed,
+        Goal::Slept => f.slept,
     }
 }
 
@@ -143,26 +154,43 @@ mod tests {
     use voxel::room::{find_room, Cell as RoomCell};
 
     #[test]
-    fn the_data_loads_and_walks_from_sticks_to_an_urn() {
+    fn day_one_walks_from_sticks_to_the_first_sleep() {
         let data = load(include_str!("../../../../assets/data/guide.ron")).expect("guide.ron");
         let first = &data.steps[0];
         assert!(matches!(&first.goal, Goal::Have(l) if l.iter().any(|(i, _)| i == "stick") && l.iter().any(|(i, _)| i == "small_rock")));
         assert!(first.marks.iter().any(|m| m.blocks.iter().any(|b| matches(b, "twig_north"))), "points to twigs");
         assert!(first.marks.iter().any(|m| m.blocks.iter().any(|b| matches(b, "pebble"))), "points to pebbles");
-        let at = |g: &dyn Fn(&Goal) -> bool| data.steps.iter().position(|s| g(&s.goal)).unwrap();
-        let axe = at(&|g| matches!(g, Goal::Made(i) if i == "rough_axe"));
-        let door = at(&|g| matches!(g, Goal::Made(i) if i == "wooden_door"));
-        let torch = at(&|g| matches!(g, Goal::Made(i) if i == "torch"));
-        let home = at(&|g| *g == Goal::Home);
-        let urn = at(&|g| *g == Goal::UrnPlaced);
-        assert!(axe < torch && axe < door && door < home && torch < home && home < urn);
-        assert_eq!(urn, data.steps.len() - 1, "ends with the first urn set down");
-        assert_eq!(data.steps[home].cutscene.as_deref(), Some("C01b"), "Bram explains a home");
+        let ids: Vec<_> = data.steps.iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(ids, ["gather", "camp", "fiber", BED, "sleep"]);
+        assert_eq!(data.steps[1].goal, Goal::Camp);
+        assert!(matches!(&data.steps[2].goal, Goal::Have(l) if l.iter().any(|(i, _)| i == "plant_fiber")));
+        assert_eq!(data.steps[3].goal, Goal::Step("camp_mat".into()), "the urn weaves the bed");
+        assert_eq!(data.steps.last().unwrap().goal, Goal::Slept, "ends with the first night's sleep");
+        // Bram talks as every step after the first comes up (the opening covers the first).
+        assert!(data.steps[1..].iter().all(|s| s.cutscene.is_some()));
+        let scenes = include_str!("../../../../assets/data/cutscenes.ron");
+        for s in &data.steps {
+            if let Some(c) = &s.cutscene {
+                assert!(scenes.contains(&format!("id: \"{c}\"")), "no cutscene {c}");
+            }
+        }
         // Steps go one at a time.
         let mut flags = BTreeSet::new();
         assert_eq!(current(&data, &flags).map(|(i, _)| i), Some(0));
         flags.insert(flag(&data.steps[0].id));
         assert_eq!(current(&data, &flags).map(|(i, _)| i), Some(1));
+    }
+
+    #[test]
+    fn sleep_waits_for_the_bed_while_the_guide_runs() {
+        let mut flags = BTreeSet::new();
+        assert!(!bed_missing(&flags), "old worlds without the guide sleep as before");
+        flags.insert(ON.to_string());
+        assert!(bed_missing(&flags));
+        flags.insert(flag(BED));
+        assert!(!bed_missing(&flags));
+        let done: BTreeSet<String> = [ON, DONE].iter().map(|s| s.to_string()).collect();
+        assert!(!bed_missing(&done));
     }
 
     #[test]
@@ -180,6 +208,8 @@ mod tests {
         assert!(!met(&Goal::UrnPlaced, &f));
         let f = Facts { urn_placed: true, ..Default::default() };
         assert!(met(&Goal::Urn, &f) && met(&Goal::UrnPlaced, &f));
+        assert!(!met(&Goal::Slept, &f));
+        assert!(met(&Goal::Slept, &Facts { slept: true, ..Default::default() }));
         assert!(matches("twig_*", "twig_east") && !matches("twig_*", "log") && matches("pebble", "pebble"));
     }
 

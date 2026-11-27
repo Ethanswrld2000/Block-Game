@@ -1,7 +1,8 @@
-//! The getting-started guide (`assets/data/guide.ron`, rules in `rules`). After the
-//! opening sets `guide_on`, one step at a time is under way: sticks and stones, fiber,
-//! camp, the camp mat, a rough axe, logs, a torch, a door, a home (Bram explains it,
-//! C01b), the Tool Urn, and setting it down. The journal (J) lists them; finishing one
+//! The getting-started guide (`assets/data/guide.ron`, rules in `rules`): day one with
+//! Bram. After the opening sets `guide_on`, one step at a time is under way: sticks and
+//! stones, set up camp, plant fiber, the bed (the camp mat), and sleeping through the
+//! first night. Bram walks over and says each step as it comes up (its cutscene). The
+//! journal (J) lists them; finishing one
 //! ticks it off (story flag `guide:<id>`), says the next in a toast, and points
 //! waypoints (`map::Waypoints::guide`) at the nearest blocks the step asks for, found in
 //! the loaded world around you. In the home step, standing in a closed room tells you
@@ -70,7 +71,7 @@ fn guide(
     mut story: ResMut<Story>,
     (player, menus, playing): (Res<Player>, Res<Menus>, Res<Playing>),
     (inv, items, world, blocks): (Res<Inventory>, Res<Items>, Res<World>, Res<Blocks>),
-    (camp, urns): (Res<crate::survival::camp::Camp>, Res<crate::station::Urns>),
+    (camp, urns, sleep): (Res<crate::survival::camp::Camp>, Res<crate::station::Urns>, Res<crate::survival::camp::Sleep>),
     mut waypoints: ResMut<Waypoints>,
     (mut toast, mut start): (MessageWriter<Toast>, MessageWriter<StartCutscene>),
     mut st: Local<State>,
@@ -109,6 +110,7 @@ fn guide(
         f.steps.insert(s.clone());
     }
     f.made = story.made.clone();
+    f.slept = sleep.active();
     f.urn_placed = urns.placed.keys().any(|k| k != "ancestral");
     f.urn = inv.pockets.items.iter().any(|p| items.get(p.stack.item).name.ends_with("_urn"));
     if rules::met(&step.goal, &f) {
@@ -121,7 +123,7 @@ fn guide(
             }
             None => {
                 story.flags.insert(rules::DONE.to_string());
-                toast.write(Toast(format!("Done: {}. Your home is started", step.title)));
+                toast.write(Toast(format!("Done: {}. You made it through your first day", step.title)));
             }
         }
         return;
