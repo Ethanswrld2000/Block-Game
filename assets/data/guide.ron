@@ -13,17 +13,24 @@
 //                                               in its walls and a torch (or any light) inside
 //     Urn                                       you have an urn of your own (carried or set down)
 //     UrnPlaced                                 you have set one down
+//     Slept                                     you have slept (Z by your bed, at night)
 //     Flag("met_bram")                          a story flag is set (cutscenes set them)
 //   marks: waypoints to the nearest of these blocks in the loaded world, until you have enough:
 //     (name: "Sticks", blocks: ["twig_*", "dry_brush"], until: ("stick", 5)); `*` ends a name prefix
-//   cutscene: played when the step comes up (cutscenes.ron)
+//   cutscene: played when the step comes up (cutscenes.ron): Bram walks over and says what's next
 //   place: a waypoint to a named place while the step is under way ("gate", "sporrow", "castle", ...)
+//
+// Day one: Bram finds you as you wake (C01), hands you the Ancestral Urn and walks you through
+// making camp: a bedroll you weave, the camp mat, an axe, a campfire, raw wood and the block
+// crafter, then the first night by the fire. Until the camp mat ("bed" step) is done, Z won't
+// sleep (`survival::camp`), and sleeping always needs a campfire close by. The morning after,
+// Bram points you to the Rotting Gate (C02), the last step.
 (
     steps: [
         (
             id: "gather",
             title: "Sticks and stones",
-            text: "Bram says to start with sticks and stones. Right click twigs on tree trunks to snap them off, and pebbles on the ground to pick them up. The marks at the top of the screen point to the nearest ones.",
+            text: "Bram wants sticks and stones first. Right click twigs on tree trunks to snap them off, and pebbles on the ground to pick them up. The marks at the top of the screen point to the nearest ones.",
             goal: Have([("stick", 6), ("small_rock", 2)]),
             marks: [
                 (name: "Sticks", blocks: ["twig_*", "dry_brush"], until: ("stick", 6)),
@@ -38,18 +45,21 @@
             marks: [
                 (name: "Grass", blocks: ["tall_grass", "reeds", "fern"], until: ("plant_fiber", 10)),
             ],
+            cutscene: "G_fiber",
         ),
         (
             id: "camp",
-            title: "A bedroll",
-            text: "Open your pockets (Tab) and weave a bedroll from 6 plant fiber and 2 sticks. Then press B to lay it out. Where it lies is your camp, and the Ancestral Urn stands beside it: everything you build grows from urns.",
+            title: "Set up camp",
+            text: "Open your pockets (Tab) and weave a bedroll from 6 plant fiber and 2 sticks. Then find a flat, open spot and press B to lay it out. The urn Bram gave you stands beside it.",
             goal: Camp,
+            cutscene: "G_camp",
         ),
         (
-            id: "camp_mat",
+            id: "bed",
             title: "The camp mat",
-            text: "Hold sticks or plant fiber and right click the Ancestral Urn to put them in (Shift puts in all it wants). Four of each finish the Camp Mat.",
+            text: "Hold sticks or plant fiber and right click the urn to put them in (Shift puts in all it wants). 4 sticks and 4 fiber weave the Camp Mat, where you make your first things by hand.",
             goal: Step("camp_mat"),
+            cutscene: "G_bed",
         ),
         (
             id: "axe",
@@ -76,7 +86,7 @@
         (
             id: "block_crafter",
             title: "The block crafter",
-            text: "Feed the Ancestral Urn 4 raw wood and 4 sticks for its next step, the Block Crafter.",
+            text: "Feed the urn 4 raw wood and 4 sticks for its next step, the Block Crafter.",
             goal: Step("block_crafter"),
             marks: [
                 (name: "Sticks", blocks: ["twig_*", "dry_brush"], until: ("stick", 4)),
@@ -89,10 +99,11 @@
             goal: Made("wood_slats"),
         ),
         (
-            id: "night",
+            id: "sleep",
             title: "A night by the fire",
             text: "When night falls, stand by your bedroll with the campfire close by and press Z to sleep through it.",
-            goal: Flag("met_bram"),
+            goal: Slept,
+            cutscene: "G_sleep",
         ),
         (
             id: "gate",

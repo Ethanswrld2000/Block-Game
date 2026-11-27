@@ -23,6 +23,7 @@ pub mod bench;
 pub mod board;
 mod book;
 mod float;
+mod fly_in;
 mod forge;
 pub mod grab;
 pub mod particles;
@@ -73,6 +74,7 @@ impl Plugin for StationPlugin {
             .add_message::<particles::Burst>()
             .add_message::<board::Cooked>()
             .add_message::<board::Crafted>()
+            .add_message::<fly_in::FlyIn>()
             .add_plugins(MaterialPlugin::<forge::GlintMaterial>::default())
             .add_plugins(MaterialPlugin::<grab::MouthMaterial>::default())
             .add_plugins(bevy::ui_render::UiMaterialPlugin::<tree::UrnVoid>::default())
@@ -111,7 +113,7 @@ impl Plugin for StationPlugin {
                     tree::tree_keys,
                     tree::tree_click,
                     tree::tree_build,
-                    tree::tree_animate,
+                    (tree::tree_animate, fly_in::launch, fly_in::fly).chain(),
                     grab::mouth_look,
                     dev::dev_keys,
                     dev::dev_click,

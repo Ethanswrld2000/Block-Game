@@ -196,9 +196,17 @@ struct Motion {
     opened: f32,
     tab: f32,
     hover: f32,
-    /// Something was just put into this slot: it settles with a bounce.
+    /// A side tab (Crafting / Chest) was switched.
+    side: f32,
+    /// A stack was just picked up: it hops up to the cursor.
+    picked: f32,
+    /// Something was just put into this slot: it drops into place.
     settle: Option<(Hover, f32)>,
 }
+
+/// The side panel's content (slides in when its tab changes).
+#[derive(Component)]
+struct SideContent;
 
 #[derive(Component)]
 struct InvRoot;
@@ -540,7 +548,13 @@ fn click(
                 sound.write(PlaySound::new("ui_tab"));
             }
         }
-        Hover::Side(s) => ui.side = s,
+        Hover::Side(s) => {
+            if ui.side != s {
+                ui.side = s;
+                motion.side = motion.now;
+                sound.write(PlaySound::new("ui_tab"));
+            }
+        }
         Hover::Preview => {}
         Hover::Cell(g, x, y) if left => {
             let held = ui.held;
@@ -782,6 +796,7 @@ fn click(
         motion.settle = Some((hover, motion.now));
     } else if !had && has {
         sound.write(PlaySound::new("ui_pick"));
+        motion.picked = motion.now;
     } else if had && !has {
         sound.write(PlaySound::new("ui_drop"));
         motion.settle = Some((hover, motion.now));
@@ -1296,6 +1311,7 @@ fn rebuild(mut commands: Commands, mut ui: ResMut<InvUi>, theme: Res<Theme>, d: 
                 let (pw, ph) = (w as f32 * CELL, hh as f32 * CELL);
                 root.spawn((
                     HeldIcon,
+                    UiTransform::default(),
                     Node { position_type: PositionType::Absolute, width: Val::Px(pw - 2.0), height: Val::Px(ph - 2.0), overflow: Overflow::clip(), ..default() },
                     theme.skin_tinted("item", item_bg(true)),
                     Outline { width: Val::Px(2.0), offset: Val::Px(0.0), color: colors::GOLD },
@@ -1409,7 +1425,7 @@ fn items_tab(c: &mut ChildSpawnerCommands, view: &SlotView, d: &Data, ui: &mut I
                     });
                 }
             });
-            match ui.side {
+            side.spawn((SideContent, UiTransform::default(), Node { flex_direction: FlexDirection::Column, width: Val::Percent(100.0), ..default() })).with_children(|side| match ui.side {
                 Side::Chest => {
                     if let Some((c, g)) = chest {
                         grid_node(side, theme, g, GridRef::Chest(c), items, art, hover, held);
@@ -1419,7 +1435,7 @@ fn items_tab(c: &mut ChildSpawnerCommands, view: &SlotView, d: &Data, ui: &mut I
                     side.spawn(text("Things are made at the stations by your urns.", sizes::SMALL, colors::MUTED));
                 }
                 Side::Crafting => crafting_list(side, theme, items, art, d, ui),
-            }
+            });
         });
     });
 }
@@ -1523,56 +1539,65 @@ fn follow_cursor(window: Single<&bevy::window::Window, With<PrimaryWindow>>, mut
     }
 }
 
-/// Ease out (fast, then settling).
-fn ease(t: f32) -> f32 {
-    let t = t.clamp(0.0, 1.0);
-    1.0 - (1.0 - t).powi(3)
-}
-
-/// The window scales in and the veil fades in when the screen opens; a new
-/// tab slides in; slots lift under the cursor and bounce when something lands.
+/// Snappy, stepped moves (`theme::stepped`, about 0.1 s in 2-4 whole steps):
+/// the window drops into place and the veil darkens when the screen opens; a
+/// new tab or side tab slides in; slots lift under the cursor; a picked-up
+/// stack hops to the cursor and a put-down one drops into its slot.
 #[allow(clippy::type_complexity)]
 fn animate(
     ui: Res<InvUi>,
     motion: Res<Motion>,
-    mut window: Query<&mut UiTransform, (With<WinBox>, Without<Content>, Without<Lift>)>,
+    mut window: Query<&mut UiTransform, (With<WinBox>, Without<Content>, Without<Lift>, Without<SideContent>, Without<HeldIcon>)>,
     mut veil: Query<&mut BackgroundColor, With<Veil>>,
-    mut content: Query<&mut UiTransform, (With<Content>, Without<WinBox>, Without<Lift>)>,
-    mut lifts: Query<(&Lift, &mut UiTransform), (Without<WinBox>, Without<Content>)>,
+    mut content: Query<&mut UiTransform, (With<Content>, Without<WinBox>, Without<Lift>, Without<SideContent>, Without<HeldIcon>)>,
+    mut side: Query<&mut UiTransform, (With<SideContent>, Without<WinBox>, Without<Lift>, Without<Content>, Without<HeldIcon>)>,
+    mut held: Query<&mut UiTransform, (With<HeldIcon>, Without<WinBox>, Without<Lift>, Without<Content>, Without<SideContent>)>,
+    mut lifts: Query<(&Lift, &mut UiTransform), (Without<WinBox>, Without<Content>, Without<SideContent>, Without<HeldIcon>)>,
 ) {
     if !ui.open {
         return;
     }
     let now = motion.now;
-    let open = ease((now - motion.opened) / 0.16);
-    for mut t in &mut window {
-        t.scale = Vec2::splat(0.95 + 0.05 * open);
-    }
-    for mut b in &mut veil {
-        b.0 = b.0.with_alpha(0.78 * open);
-    }
-    let slide = 1.0 - ease((now - motion.tab) / 0.18);
-    for mut t in &mut content {
-        t.translation = Val2::px(slide * 18.0, 0.0);
-    }
-    for (l, mut t) in &mut lifts {
-        let mut lift = 0.0;
-        let mut scale = 1.0;
-        if ui.hover == Some(l.0) && ui.held.is_none() {
-            let k = ease((now - motion.hover) / 0.1);
-            lift = -2.0 * k;
-            scale += 0.03 * k;
-        }
-        if let Some((at, since)) = motion.settle
-            && at == l.0
-        {
-            let s = now - since;
-            scale += 0.12 * (-s * 9.0).exp() * (s * 28.0).sin();
-        }
-        let want = UiTransform { translation: Val2::px(0.0, lift), scale: Vec2::splat(scale), ..default() };
+    let step = |since: f32, secs: f32, steps: u32| theme::stepped((now - since) / secs, steps);
+    let set = |t: &mut UiTransform, x: f32, y: f32| {
+        let want = UiTransform { translation: Val2::px(x, y), ..default() };
         if *t != want {
             *t = want;
         }
+    };
+    // Opening: 8 points down to 0 in 4 steps, veil in the same steps.
+    let open = step(motion.opened, 0.12, 4);
+    for mut t in &mut window {
+        set(&mut t, 0.0, 8.0 * (1.0 - open));
+    }
+    for mut b in &mut veil {
+        let a = 0.78 * open;
+        if b.0.alpha() != a {
+            b.0 = b.0.with_alpha(a);
+        }
+    }
+    for mut t in &mut content {
+        set(&mut t, 12.0 * (1.0 - step(motion.tab, theme::SNAP, 3)), 0.0);
+    }
+    for mut t in &mut side {
+        set(&mut t, 12.0 * (1.0 - step(motion.side, theme::SNAP, 3)), 0.0);
+    }
+    // Picked up: starts 6 points low (where the slot was) and hops up.
+    for mut t in &mut held {
+        set(&mut t, 0.0, 6.0 * (1.0 - step(motion.picked, 0.09, 3)));
+    }
+    for (l, mut t) in &mut lifts {
+        let mut lift = 0.0;
+        if ui.hover == Some(l.0) && ui.held.is_none() {
+            lift = -4.0 * step(motion.hover, 0.08, 2);
+        }
+        // Put down: lands from 6 points up in 3 steps.
+        if let Some((at, since)) = motion.settle
+            && at == l.0
+        {
+            lift = -6.0 * (1.0 - step(since, theme::SNAP, 3));
+        }
+        set(&mut t, 0.0, lift);
     }
 }
 

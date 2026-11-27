@@ -252,6 +252,7 @@ fn sleep_key(
     camp: Res<Camp>,
     s: Res<Survival>,
     torches: Res<Torches>,
+    story: Res<crate::cutscene::Story>,
     mut sleep: ResMut<Sleep>,
     mut toast: MessageWriter<Toast>,
 ) {
@@ -263,6 +264,8 @@ fn sleep_key(
         toast.write(Toast("Unroll your bedroll first (B)".into()));
     } else if !camp.near(player.pos) && !away {
         toast.write(Toast("Too far from your bedroll".into()));
+    } else if crate::guide::rules::bed_missing(&story.flags) {
+        toast.write(Toast("Make your camp mat first: put 4 sticks and 4 plant fiber in the urn".into()));
     } else if !(is_night(clock.hour()) || s.vitals.health.get(Layer::Fatigue) < EXHAUSTED) {
         toast.write(Toast("You can only sleep at night, or when worn out".into()));
     } else if !warm_enough(player.pos, torches.fires(), s.cover == super::shelter::Cover::Room) {

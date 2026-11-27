@@ -90,6 +90,19 @@ def bevel(x, y, w, h, hi, lo, face, width=2, outline=INK, corner=None, inner=Non
     rect(x + o, y + o, w - 2 * o, h - 2 * o, face)
 
 
+def ring(x, y, w, h, o, tl, br, corner=None):
+    """Repaint the 1 px ring `o` px inside a sprite's edge: `tl` on the top
+    and left, `br` on the bottom and right. Light comes from the top left, so
+    raised things get the light colour as `tl`, pressed or active ones as `br`."""
+    rect(x + o, y + o, w - 2 * o, 1, tl)
+    rect(x + o, y + o, 1, h - 2 * o, tl)
+    rect(x + o, y + h - 1 - o, w - 2 * o, 1, br)
+    rect(x + w - 1 - o, y + o, 1, h - 2 * o, br)
+    if corner is not None:
+        put(x + w - 1 - o, y + o, corner)
+        put(x + o, y + h - 1 - o, corner)
+
+
 def rivet(x, y):
     put(x, y, IRON_HI)
     put(x + 1, y, IRON)
@@ -209,15 +222,18 @@ add("white", x, y, 4, 4, 1)
 
 # --- Slots and buttons (row 1, y = 24) -------------------------------------
 y = 24
-# slot: a sunken square, dark at the top left, lit at the bottom right.
-bevel(0, y, 16, 16, hexc("0a0806"), hexc("5a5044"), hexc("221c16", 232), width=2, corner=hexc("2e271f"))
+# Interactive things share one light from the top left: a 1 px lighter inner
+# edge at the top and left, a 1 px darker one at the bottom and right; pressed
+# buttons, the selected slot and the open tab have those two swapped.
+# slot: a raised square, lit at the top left, with a dark well inside.
+bevel(0, y, 16, 16, hexc("6a5e4e"), hexc("0a0806"), hexc("221c16", 232), width=1, corner=hexc("2e271f"), inner=hexc("120e0b", 236))
 add("slot", 0, y, 16, 16, 4)
-bevel(16, y, 16, 16, hexc("15110d"), hexc("a8987c"), hexc("3a3126", 240), width=2, corner=hexc("4a3f31"))
+bevel(16, y, 16, 16, hexc("b8a888"), hexc("15110d"), hexc("3a3126", 240), width=1, corner=hexc("4a3f31"), inner=hexc("1d1712", 240))
 add("slot_hover", 16, y, 16, 16, 4)
-# slot_selected: a gold frame round the slot, with bright corner pips.
-bevel(32, y, 16, 16, GOLD, BRASS_LO, hexc("2e2614", 238), width=2, corner=BRASS)
-rect(32 + 3, y + 3, 10, 1, hexc("0a0806"))
-rect(32 + 3, y + 3, 1, 10, hexc("0a0806"))
+# slot_selected: the active slot, pressed in: a gold frame lit at the bottom
+# right, dark at the top left, with bright corner pips.
+bevel(32, y, 16, 16, BRASS_LO, GOLD, hexc("2e2614", 238), width=2, corner=BRASS)
+ring(32, y, 16, 16, 3, hexc("0a0806"), hexc("6a5a30"), corner=hexc("2e2614"))
 for cx, cy in [(1, 1), (14, 1), (1, 14), (14, 14)]:
     put(32 + cx, y + cy, BRASS_HI)
 add("slot_selected", 32, y, 16, 16, 5)
@@ -228,14 +244,17 @@ add("item", 48, y, 16, 16, 4)
 
 # buttons: carved stone blocks.
 bevel(64, y, 16, 16, STONE_HI, STONE_DEEP, STONE, width=2, corner=STONE_LO)
+ring(64, y, 16, 16, 2, hexc("a29d91"), STONE_LO, corner=STONE)
 rect(64 + 3, y + 12, 10, 1, STONE_LO)  # a worn lower lip
 add("button", 64, y, 16, 16, 4)
 # hover: the stone lights up with a mossy-gold glow.
 bevel(80, y, 16, 16, hexc("f2e2a0"), hexc("5a4a22"), hexc("a8925a"), width=2, corner=hexc("8a763f"))
+ring(80, y, 16, 16, 2, hexc("cdb878"), hexc("7a6632"), corner=hexc("a8925a"))
 rect(80 + 3, y + 12, 10, 1, hexc("8a763f"))
 add("button_hover", 80, y, 16, 16, 4)
 # down: pressed in, light and dark swapped.
 bevel(96, y, 16, 16, STONE_DEEP, STONE_HI, STONE_LO, width=2, corner=STONE_LO)
+ring(96, y, 16, 16, 2, hexc("2e2b26"), STONE, corner=STONE_LO)
 add("button_down", 96, y, 16, 16, 4)
 bevel(112, y, 16, 16, hexc("57534c"), hexc("2a2824"), hexc("3e3b35"), width=2, corner=hexc("35322d"))
 add("button_off", 112, y, 16, 16, 4)
@@ -601,6 +620,37 @@ ICONS = {
         ".kYk..k.....",
         ".kk.........",
     ],
+    # The temperature meter's picture follows the felt temperature: a
+    # thermometer when comfortable, a snowflake when cold, the flame
+    # (icon_warmth) when hot.
+    "temp": [  # a thermometer
+        ".....kk.....",
+        "....kwwk....",
+        "....kwsk....",
+        "....kwsk....",
+        "....kwsk....",
+        "....krrk....",
+        "....krrk....",
+        "....krrk....",
+        "...krrrrk...",
+        "...krpprk...",
+        "...krrrrk...",
+        "....kkkk....",
+    ],
+    "cold": [  # a snowflake
+        ".....kk.....",
+        "..k.kcck.k..",
+        ".kbkcccckbk.",
+        "..kbkcckbk..",
+        ".kckbccbkck.",
+        "kccccwwcccck",
+        "kccccwwcccck",
+        ".kckbccbkck.",
+        "..kbkcckbk..",
+        ".kbkcccckbk.",
+        "..k.kcck.k..",
+        ".....kk.....",
+    ],
 }
 
 y = 76
@@ -806,18 +856,20 @@ add("sil_hand_left", sx, y, 16, 16)
 # cut. tab_active: the open one, the panel's own planks with no bottom edge,
 # so it runs into the window. tab_hover: a lighter, raised board.
 x = 176
-bevel(x, y, 16, 14, hexc("6e5232"), hexc("2e2013"), hexc("2a2118", 242), width=2, corner=hexc("4a3622"))
+bevel(x, y, 16, 14, hexc("8a6a42"), hexc("2e2013"), hexc("2a2118", 242), width=2, corner=hexc("4a3622"))
+ring(x, y, 16, 14, 2, hexc("5e4629"), hexc("3a2a19"), corner=hexc("4a3622"))
 add("tab", x, y, 16, 14, 4)
 x = 192
 rect(x, y, 16, 14, INK)
 put(x, y, CLEAR)
 put(x + 15, y, CLEAR)
-rect(x + 1, y + 1, 14, 1, OAK_HI)
-rect(x + 2, y + 2, 12, 1, OAK)
-rect(x + 1, y + 1, 1, 13, OAK_HI)
-rect(x + 2, y + 2, 1, 12, OAK)
-rect(x + 14, y + 1, 1, 13, OAK_LO)
-rect(x + 13, y + 2, 1, 12, OAK_MID)
+# Active, so pressed in: dark at the top left, lit at the right.
+rect(x + 1, y + 1, 14, 1, OAK_DEEP)
+rect(x + 2, y + 2, 12, 1, OAK_LO)
+rect(x + 1, y + 1, 1, 13, OAK_DEEP)
+rect(x + 2, y + 2, 1, 12, OAK_LO)
+rect(x + 14, y + 1, 1, 13, OAK_HI)
+rect(x + 13, y + 2, 1, 12, OAK)
 rect(x + 3, y + 3, 10, 11, PANEL_FACE)
 rect(x + 3, y + 3, 10, 1, SHADE)
 rect(x + 1, y + 1, 2, 2, IRON)
@@ -827,6 +879,7 @@ put(x + 14, y + 2, IRON_LO)
 add("tab_active", x, y, 16, 14, (4, 4, 4, 1))
 x = 208
 bevel(x, y, 16, 14, hexc("c49a62"), hexc("4f361d"), hexc("3d2e1f", 248), width=2, corner=hexc("74512d"))
+ring(x, y, 16, 14, 2, hexc("8f6d43"), hexc("5e4227"), corner=hexc("74512d"))
 add("tab_hover", x, y, 16, 14, 4)
 # slot_glow: a slot that takes what you carry (a green-gold light round it).
 x = 224

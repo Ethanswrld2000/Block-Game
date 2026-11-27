@@ -205,7 +205,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   opens its tree (`station::tree`: you look into the urn and its dark opens from the mouth over the screen, a
   UI shader `assets/shaders/urn_void.wesl` (`UrnVoid` UiMaterial); steps stand as a tree growing upward, each above the
   steps it comes after (`tree_layout`, pure); pointing at a step shows on the right what it gives, what it takes and
-  "Put in"; `BLOCKGAME_URNOPEN=0.4` holds the opening that far for screenshots). Models are boxes in `station::models` (upgrades change them);
+  "Put in"; each thing put in flies up from below the screen into its "It takes" picture on the forge's timing and pops with `craft_pop`, `station::fly_in`; `BLOCKGAME_URNOPEN=0.4` holds the opening that far for screenshots). Models are boxes in `station::models` (upgrades change them);
   concept sheets for real art in `docs/stations/` (`python3 tools/gen_station_concepts.py`). Personal storage is a
   chest at `inventory::STORAGE_AT` (not in the world; 8x5, 8x7 with the extra shelf). Saved to `urns.ron` (the old
   fusion `urn.ron` is gone). F9 = dev menu (`station::dev`, tabs: Urns (give/set down urns, items for the next step, finish
@@ -572,18 +572,23 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `Shake`, `Roll`, `Flash`, `Lids`, `Sound`; cutscene-only airships in `cutscene::props` (`Ship`, `ShipTo`, `Fire`,
   `Unship`; your ship is `airship::build_model` with your body at the helm, the court ship `cast::wren::build_ship`);
   marks and targets can follow them (`Ship("ours")`, kept in `Places` as `ship:<name>`). `game::guide`
-  (`assets/data/guide.ron`, pure rules in `guide::rules`): one step at a time (sticks and stones, fiber, bedroll, camp mat,
-  rough axe, campfire, raw wood, block crafter, wood slats, a night by the fire (goal `Flag("met_bram")`), the Rotting Gate
-  (`place: "gate"` waypoint)), done = story flag `guide:<id>`; the journal (J) lists
-  them first; guide waypoints (`map::Waypoints::guide`, not saved, cyan) point at the nearest matching blocks in the
-  loaded world. A proper home = a closed room with a door in its walls and a torch (any light) inside
-  (`guide::home_missing`; C01b, Bram explaining it, is unused for now). Doors come from the carpentry bench (6 planks + 2 sticks)
-  and door frame.
-- Early game (Ethan's flow): no house before the Carpentry Urn (Rotting Gate depth 1). Logs drop `raw_wood` (2 each,
-  drops.ron; recipes that took logs take raw wood). Ancestral urn step `block_crafter` (after the camp mat: 4 raw wood + 4
-  sticks) places the Block Crafter (`StationKind::BlockCrafter`, the carpentry bench's board): raw wood -> `wood_slats`, the
-  first building block. Sleeping needs a campfire within `camp::FIRE_REACH` (6) or a closed room (`camp::warm_enough`).
-  The first sleep sets story flag `slept`; Bram's C02 (pointing to the gate) plays the next morning at camp.
+  (`assets/data/guide.ron`, pure rules in `guide::rules`): day one with Bram, one step at a time (sticks and stones,
+  plant fiber, set up camp (weave the bedroll, B), the camp mat (step id `bed`), rough axe, campfire, raw wood, block
+  crafter, wood slats, sleep the first night (`Goal::Slept`), the Rotting Gate (`place: "gate"` waypoint, goal
+  `Flag("met_brindlespheimer")`)), done = story flag `guide:<id>`; C01 ends with Bram handing you the Ancestral Urn and
+  following you (he settles by the urn once camp is up, `npc::settle`), and some steps open with Bram walking over and
+  saying it (cutscenes `G_fiber`, `G_camp`, `G_bed`, `G_sleep`; simple lines, no choices). While the guide runs, Z won't
+  sleep until the camp mat is done (`rules::bed_missing`). The journal (J) lists the steps first; guide waypoints
+  (`map::Waypoints::guide`, not saved, cyan) point at the nearest matching blocks in the loaded world.
+  A proper home = a closed room with a door in its walls and a torch (any light) inside
+  (`guide::home_missing`; C01b, Bram explaining it, is unused for now). Doors come from the carpentry bench (6 planks +
+  2 sticks) and door frame.
+- Early game (Ethan's flow): no house before the Carpentry Urn (Rotting Gate depth 1). Logs, standing or felled, drop
+  `raw_wood` (2 each, drops.ron; recipes that took logs take raw wood). Ancestral urn step `block_crafter` (after the camp
+  mat: 4 raw wood + 4 sticks) places the Block Crafter (`StationKind::BlockCrafter`, the carpentry bench's board): raw wood
+  -> `wood_slats`, the first building block. Sleeping needs a campfire within `camp::FIRE_REACH` (6) or a closed room
+  (`camp::warm_enough`). The first sleep sets story flag `slept`; Bram's C02 (pointing to the gate) plays the next
+  morning at camp.
 - Station textures: `station::skin`. Each `models::Mat` with a tile (`Mat::tile_name`) gets its tile from `stations.png`, cut into
   one repeating texture per material once loaded; boxes are meshed by `skin::box_mesh` with world-scale UVs (one tile per block,
   `TILES_PER_BLOCK`), so the pixel size matches the terrain whatever the box size. Glowing and liquid materials stay flat.
@@ -645,6 +650,34 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   from its numbers (`look`). Storm warning: `WARN_SECONDS` (60) before a `severe` weather (lightning, wind >= 12, chill <= -10,
   downpour) a red countdown line shows under the dial, the rim pulses red and Bram (within 40 blocks) barks `storm_coming`.
   The map's waypoint strip sits below it (`DIAL_SPACE`).
+- Falling trees: `voxel::fell` (pure). Blocks have `tree: trunk|crown` and `axis: x|y|z` in blocks.ron (lying logs
+  `log_x/z`, `swamp_log_x/z`, `redwood_log_x/z` have no `tree`, so they never fall again; the mesher turns bark along the
+  grain, end tiles face along it; they drop the standing log). Breaking a trunk block runs `fell::topple`: each trunk
+  (corner-joined trunk blocks) next to the cut that no longer rests on non-tree solid ground falls with its crown: crown
+  blocks it reaches before any other standing trunk nearby does (one BFS from every trunk at once, `CROWN_REACH` 8; the
+  stump counts as another tree). It turns a quarter turn away from the player (`fell::away`, along x or z), logs on their
+  side; each landing column lifts its logs out of the ground until they fit and drops as far as they can (crown-only
+  columns are never lifted); crown blocks that land in the way, or more than `CROWN_HEAP` (2) above the lowest block in
+  their column, are gone. `chop::fell_trees` takes it out of the world and swings it over as one mesh
+  (`chunk_mesh::loose`), then `land` places the blocks; nothing is meshed on the main thread (chunks remesh in the
+  background, the falling mesh stays up to `LAND_WAIT` until they show). Crushed logs, and twigs/vines that lost their
+  hold, drop as items (`Mined.felled` = true, which never fells anything itself).
+- Tool-based mining: bare hands can't break stone, ore, logs or wood (items.ron `hand` speeds 0; giant mushrooms are wood);
+  hardness went up 1.5x (base tools take about 12 swings). Soil dug without a tool that lists its material (a shovel) goes
+  down a quarter at a time: blocks.ron `dig_to` (dirt/grass/moss -> `dirt_layer_6` -> 4 -> 2 -> gone; sand, mud, gravel,
+  clay, peat have their own layers; snow -> `snow_layer_6`), `Items::dug_to`, `interact::dig_down`; the last layer drops
+  the block. Shovels swing `Dig` (thrust and scoop, `swing::DIG`/`BODY_DIG`) and take the whole block. Leaves and brush
+  take a few punches; blocks.ron `slows` (brush, reeds, ferns, tall grass) cuts walking speed (`player::brush`). Stone and
+  deeprock drop small rocks; 4 small rocks make cobblestone at the tool bench, and stick + 2 small rocks a stone shovel.
+- UI polish: one light from the top left on every interactive sprite (`gen_ui_art.py` `ring`: 1 px lighter top/left, darker
+  bottom/right inner edge; swapped on `button_down`, `slot_selected`, `tab_active`; slots are raised now). UI moves are
+  snappy and stepped (`theme::stepped`, `theme::SNAP` ~0.1 s in 2-4 whole steps): the inventory window drops in, tabs and
+  side tabs slide, slots lift, a picked-up stack hops to the cursor and a put-down one drops in. Health bars: shaded `fill`
+  sprite, bright leading edge, a pale chunk of what was just lost that drains after `GHOST_HOLD`, and pixels bubbling up
+  through the blood (`survival::hud::bubble`, pure; more and faster while bleeding). The temperature meter's icon is a
+  thermometer (`icon_temp`), a snowflake in any cold stage (`icon_cold`), the flame in any heat stage. `game::pickups`:
+  a note on the right for each pick-up from the ground (`inventory::PickedUp` from `world_items::pick_up`); the same item
+  within `MERGE` (2 s) adds to its count, otherwise it fades after `HOLD` (rules in `pickups::Feed`, pure).
 - Next: see `docs/GAMEPLAY_LOOP.md`.
 
 ## Testing without a screen

@@ -51,6 +51,9 @@
         (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("small_rock", 3)}, work: 4, makes: ("stone_pickaxe", 1)),
         (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("cobblestone", 3)}, work: 5, makes: ("stone_pickaxe", 1)),
         (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("cobblestone", 1)}, work: 3, makes: ("stone_shovel", 1)),
+        (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("small_rock", 2)}, work: 3, makes: ("stone_shovel", 1)),
+        // Building stone: four small rocks knocked together into a block (no handle).
+        (station: "tool_bench", slots: {"material": ("small_rock", 4)}, work: 3, makes: ("cobblestone", 1)),
         (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("cobblestone", 2)}, work: 4, makes: ("stone_axe", 1), unlock: "improved_tool_bench"),
         (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("flint", 2)}, work: 4, makes: ("flint_spear", 1), unlock: "improved_tool_bench"),
 

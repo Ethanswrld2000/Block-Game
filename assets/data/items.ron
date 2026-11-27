@@ -14,21 +14,24 @@
 //   stack:  how many share one cell (defaults: blocks and materials 32, torches 16, food 8, else 1)
 //   damage: how hard it hits a creature (defaults: tools 4, anything else 2, like a fist)
 //   swing:  Jab (default, a punch), Chop (axe: diagonal from the upper right) or
-//           Overhead (pick: straight down) or Slash (sword: a fighting cut, never mines).
+//           Overhead (pick: straight down), Dig (shovel: thrust into the ground and scoop) or
+//           Slash (sword: a fighting cut, never mines).
 //           Mining lands one blow per swing, when it connects.
 // Pictures: every item has a sprite in assets/textures/icons/ (items.png, weapons.png for
 // tools, blocks.png for blocks), 20 px per cell of its size. The same sprite is the held model.
 // After adding an item, run `python3 tools/gen_item_art.py` to give it a placeholder sprite.
 // Breaking takes hardness (blocks.ron) / speed seconds. A missing material
 // uses the bare-hand speed below; a missing entry there is 1.
-// Base tools take about 8 swings: rough axe on a log, stone pickaxe on stone (test in items.rs).
+// Base tools take about 12 swings: rough axe on a log, stone pickaxe on stone (test in items.rs).
+// A tool that lists a block's material takes the whole block; anything else (hands, a pick on
+// dirt) only digs soil down a layer at a time (`dig_to` in blocks.ron).
 (
-    // Logs (material "log") need an axe: bare hands and other tools can't cut them.
-    hand: { "stone": 0.3, "ore": 0.25, "log": 0.0 },
+    // Bare hands can't break stone, ore, logs or wood (giant mushrooms are wood): those need tools.
+    hand: { "stone": 0.0, "ore": 0.0, "log": 0.0, "wood": 0.0 },
     items: [
         (
             name: "stone_pickaxe", title: "Stone Pickaxe", mass: 2.5, size: (2, 3), damage: 5.0, swing: Overhead,
-            kind: Tool(speeds: { "stone": 0.7, "ore": 0.6, "soil": 1.3 }),
+            kind: Tool(speeds: { "stone": 0.7, "ore": 0.6 }),
         ),
         // The first axe: a stick and two small rocks knocked together at the tool bench.
         (
@@ -40,8 +43,8 @@
             kind: Tool(speeds: { "log": 4.0, "wood": 4.0, "plant": 3.0 }),
         ),
         (
-            name: "stone_shovel", title: "Stone Shovel", mass: 1.8, size: (1, 3), damage: 4.0,
-            kind: Tool(speeds: { "soil": 4.0 }),
+            name: "stone_shovel", title: "Stone Shovel", mass: 1.8, size: (1, 3), damage: 4.0, swing: Dig,
+            kind: Tool(speeds: { "soil": 1.2 }),
         ),
         (name: "torch", title: "Torch", mass: 0.4, size: (1, 2), kind: Torch),
         (name: "dirt", title: "Dirt", kind: Block("dirt"), mass: 1.5),
@@ -182,16 +185,16 @@
         // Hammered at the iron anvil (benches.ron); steel and spirit ones once it's upgraded.
         (
             name: "iron_pickaxe", title: "Iron Pickaxe", mass: 2.8, size: (2, 3), damage: 7.0, swing: Overhead,
-            kind: Tool(speeds: { "stone": 6.0, "ore": 5.5, "soil": 1.6 }),
+            kind: Tool(speeds: { "stone": 6.0, "ore": 5.5 }),
         ),
         (
             name: "iron_axe", title: "Iron Axe", mass: 2.2, size: (1, 3), damage: 9.0, swing: Chop,
             kind: Tool(speeds: { "log": 6.0, "wood": 6.0, "plant": 4.0 }),
         ),
-        (name: "iron_shovel", title: "Iron Shovel", mass: 2.0, size: (1, 3), damage: 5.0, kind: Tool(speeds: { "soil": 6.0 })),
+        (name: "iron_shovel", title: "Iron Shovel", mass: 2.0, size: (1, 3), damage: 5.0, swing: Dig, kind: Tool(speeds: { "soil": 2.4 })),
         (
             name: "steel_pickaxe", title: "Steel Pickaxe", mass: 2.6, size: (2, 3), damage: 9.0, swing: Overhead,
-            kind: Tool(speeds: { "stone": 8.5, "ore": 8.0, "soil": 2.0 }),
+            kind: Tool(speeds: { "stone": 8.5, "ore": 8.0 }),
         ),
         (
             name: "steel_axe", title: "Steel Axe", mass: 2.0, size: (1, 3), damage: 11.0, swing: Chop,
@@ -199,7 +202,7 @@
         ),
         (
             name: "spirit_pickaxe", title: "Spirit-Etched Pickaxe", mass: 2.2, size: (2, 3), damage: 10.0, swing: Overhead,
-            kind: Tool(speeds: { "stone": 11.0, "ore": 10.5, "soil": 2.5 }),
+            kind: Tool(speeds: { "stone": 11.0, "ore": 10.5 }),
         ),
         (
             name: "spirit_axe", title: "Spirit-Etched Axe", mass: 1.8, size: (1, 3), damage: 14.0, swing: Chop,

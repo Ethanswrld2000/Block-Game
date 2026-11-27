@@ -281,6 +281,11 @@ fn move_axis(world: &World, blocks: &Blocks, p: &mut Player, axis: usize, amount
 }
 
 #[allow(clippy::too_many_arguments)]
+/// How much what you stand in holds you back (brush, `slows` in blocks.ron): the slowest of the cells.
+fn brush(world: &World, blocks: &Blocks, cells: [BlockPos; 2]) -> f32 {
+    cells.iter().filter_map(|c| world.block(*c)).map(|b| blocks.registry.get(b).slows).fold(1.0, f32::min)
+}
+
 fn walk(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
@@ -351,6 +356,7 @@ fn walk(
     } else {
         WALK
     } * body.speed
+        * brush(&world, &blocks, [feet, mid])
         * p.wading.drag();
     // Quick to start and stop on the ground; little control in the air.
     let accel = if p.on_ground { 45.0 } else if p.in_water { 12.0 } else { 9.0 };

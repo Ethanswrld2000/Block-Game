@@ -1,12 +1,13 @@
-//! The getting-started guide (`assets/data/guide.ron`, rules in `rules`). After the
-//! opening sets `guide_on`, one step at a time is under way: sticks and stones, fiber,
-//! a bedroll laid out, the camp mat, a rough axe, a campfire, raw wood, the block
-//! crafter and wood slats, a night by the fire (Bram comes in the morning), and the
-//! way to the Rotting Gate. The journal (J) lists them; finishing one ticks it off
-//! (story flag `guide:<id>`), says the next in a toast, and points waypoints
-//! (`map::Waypoints::guide`) at the nearest blocks the step asks for, found in the
-//! loaded world around you, or at the step's `place`. A `Home` step (none at the moment)
-//! says what a closed room you stand in still lacks.
+//! The getting-started guide (`assets/data/guide.ron`, rules in `rules`): day one with
+//! Bram. After the opening sets `guide_on`, one step at a time is under way: sticks and
+//! stones, plant fiber, a bedroll laid out, the camp mat, a rough axe, a campfire, raw
+//! wood, the block crafter and wood slats, the first night by the fire, and the way to
+//! the Rotting Gate. Bram walks over and says some steps as they come up (their
+//! cutscenes). The journal (J) lists them; finishing one ticks it off (story flag
+//! `guide:<id>`), says the next in a toast, and points waypoints (`map::Waypoints::guide`)
+//! at the nearest blocks the step asks for, found in the loaded world around you, or at
+//! the step's `place`. In a `Home` step (none at the moment), standing in a closed room
+//! tells you what it still lacks.
 
 pub mod rules;
 
@@ -71,7 +72,8 @@ fn guide(
     mut story: ResMut<Story>,
     (player, menus, playing): (Res<Player>, Res<Menus>, Res<Playing>),
     (inv, items, world, blocks): (Res<Inventory>, Res<Items>, Res<World>, Res<Blocks>),
-    (camp, urns, places): (Res<crate::survival::camp::Camp>, Res<crate::station::Urns>, Res<crate::cutscene::Places>),
+    (camp, urns, sleep): (Res<crate::survival::camp::Camp>, Res<crate::station::Urns>, Res<crate::survival::camp::Sleep>),
+    places: Res<crate::cutscene::Places>,
     mut waypoints: ResMut<Waypoints>,
     (mut toast, mut start): (MessageWriter<Toast>, MessageWriter<StartCutscene>),
     mut st: Local<State>,
@@ -110,6 +112,7 @@ fn guide(
         f.steps.insert(s.clone());
     }
     f.made = story.made.clone();
+    f.slept = sleep.active();
     if let rules::Goal::Flag(flag) = &step.goal
         && story.flags.contains(flag)
     {
