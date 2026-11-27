@@ -293,7 +293,7 @@ fn walk(
     blocks: Res<Blocks>,
     cam: Query<&FlyCamera>,
     body: Res<Body>,
-    (wind, menus, stamina): (Res<crate::wind::Wind>, Res<crate::camera::Menus>, Res<crate::combat::stamina::Stamina>),
+    (wind, menus): (Res<crate::wind::Wind>, Res<crate::camera::Menus>),
     mut player: ResMut<Player>,
     mut damage: MessageWriter<Damage>,
 ) {
@@ -346,7 +346,7 @@ fn walk(
     if keys.pressed(KeyCode::KeyD) { wish += right; }
     if keys.pressed(KeyCode::KeyA) { wish -= right; }
     let wish = wish.normalize_or_zero();
-    p.sprinting = keys.pressed(KeyCode::ShiftLeft) && keys.pressed(KeyCode::KeyW) && !p.crouching && stamina.ready();
+    p.sprinting = keys.pressed(KeyCode::ShiftLeft) && keys.pressed(KeyCode::KeyW) && !p.crouching;
     let speed = if p.in_water {
         SWIM
     } else if p.crouching {

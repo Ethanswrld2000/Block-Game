@@ -4,7 +4,7 @@
 //! - `ai`: pure foe minds (tactics, giving up, taking blows).
 //! - `path`: pure A* over the block grid, for chasing you round walls.
 //!
-//! - `stamina`: the bar every fighting action draws on.
+//! - `stamina`: fighting wears the Fatigue bar down.
 //! - `kick`: Q boots a foe back (into a wall: a slam).
 //!
 //! This file: your guard (hold right click with a sword), foes
@@ -55,7 +55,7 @@ impl Plugin for CombatPlugin {
             .add_message::<SpawnFoe>()
             .add_message::<Shoot>()
             .add_message::<FoeSlain>()
-            .add_plugins((feel::FeelPlugin, stamina::StaminaPlugin, kick::KickPlugin))
+            .add_plugins((feel::FeelPlugin, kick::KickPlugin))
             .add_systems(crate::menu::GamePostStartup, saved::load)
             .add_systems(crate::menu::GameUpdate, saved::save_now_and_then)
             .add_systems(Last, saved::save_on_exit.run_if(crate::menu::in_game))
@@ -230,13 +230,13 @@ fn guard_input(
     wielded: Res<Wielded>,
     items: Res<Items>,
     anim: Res<HandAnim>,
-    stamina: Res<stamina::Stamina>,
+    survival: Res<crate::survival::Survival>,
     mut guard: ResMut<Guard>,
 ) {
     let dt = time.delta_secs();
     let sword = wielded.0.is_some_and(|i| items.get(i).swing == Swing::Slash);
     // Not mid-cut (finish the swing first), and not winded.
-    let up = sword && !menus.open && mouse.pressed(MouseButton::Right) && anim.arm(Hand::Right).t.is_none() && stamina.winded <= 0.0;
+    let up = sword && !menus.open && mouse.pressed(MouseButton::Right) && anim.arm(Hand::Right).t.is_none() && stamina::ready(&survival.vitals.health);
     guard.held = if up { guard.held + dt } else { 0.0 };
     guard.up = up;
     let want = if up { 1.0 } else { 0.0 };
@@ -462,10 +462,10 @@ fn think(
     book: Res<FoeBook>,
     player: Res<Player>,
     mode: Res<MoveMode>,
-    survival: Res<crate::survival::Survival>,
+    mut survival: ResMut<crate::survival::Survival>,
     (world, blocks): (Res<World>, Res<Blocks>),
     (cam, anim, guard): (Single<&Transform, With<FlyCamera>>, Res<HandAnim>, Res<Guard>),
-    (mut stamina, mut slow): (ResMut<stamina::Stamina>, MessageWriter<feel::SlowMo>),
+    mut slow: MessageWriter<feel::SlowMo>,
     mut dice: ResMut<FoeDice>,
     mut foes: Query<(Entity, &Transform, &mut Foe)>,
     mut hits: MessageWriter<Damage>,
@@ -531,7 +531,7 @@ fn think(
             // A parry costs nothing and slows the world for a moment; a plain
             // block costs stamina, and with too little left the guard breaks.
             let parried = guard.up && guard.held < ai::PARRY_WINDOW;
-            if guard.up && ahead_of(ahead, -to, ai::GUARD_ARC) && (parried || stamina.block()) {
+            if guard.up && ahead_of(ahead, -to, ai::GUARD_ARC) && (parried || stamina::block(&mut survival.vitals.health)) {
                 foe.brain.blocked(parried);
                 foe.vel += -flat(to).normalize_or_zero() * if parried { 6.0 } else { 3.0 };
                 sound.write(PlaySound::new("clash").speed(if parried { 1.2 } else { 1.0 }));

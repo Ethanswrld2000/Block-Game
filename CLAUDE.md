@@ -375,10 +375,10 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   shimmering per part, a faint light, `BurstKind::Wisp` particles trailing (and a burst on death). Sound `clash`.
   Dev keys: Ctrl+Shift+J (Cmd on a Mac) spawns a Hollow Warden, Ctrl+Shift+H a Fen Shade, 6 blocks ahead; either gives
   you an iron sword on the hotbar if you have no sword. Foes don't despawn.
-- Combat core (plan step 1, Claude Doc "Block Game: Combat and Dungeon Plan"): `combat::stamina` (pure `Stamina`: light
-  cut 12, heavy 24, kick 20, a blocked cut 16, sprint 9/s; refills after 0.7 s; run dry = winded 1.3 s: no cuts, kicks,
-  guard or sprint; a block with too little left breaks the guard and the cut lands; thin gold bar above the hotbar while
-  not full). Swords (`interact::sword`): tap = light cut on release, three chain into a combo (`interact::combo_cut`:
+- Combat core (plan step 1, Claude Doc "Block Game: Combat and Dungeon Plan"): fighting wears the existing Fatigue bar
+  (`combat::stamina`, pure rules on `Health`; no separate stamina bar): light cut 2, heavy 4, kick 3, a blocked cut 3, never
+  below `stamina::FLOOR` (55, where sprinting stops too); at the floor you're winded: no cuts, kicks or guard, and a block
+  breaks and the cut lands; badly hurt (a mortal layer) it costs nothing more. Swords (`interact::sword`): tap = light cut on release, three chain into a combo (`interact::combo_cut`:
   `Slash`, `SlashBack`, then a 1.25x `Slash`) if clicked within `COMBO_WINDOW` (0.45 s) of the last; hold past `TAP`
   (0.22 s) to charge a heavy cut (`Swing::Heavy`, arm held at `swing::charge_pose`), released for `heavy_mult` (1.6-2.4x)
   over `CHARGE` (0.7 s); a heavy cut (`Swung.heavy`) breaks a raised guard outright (`ai::Brain::struck`). No dodge (Ethan's

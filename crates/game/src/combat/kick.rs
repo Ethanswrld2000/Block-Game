@@ -1,6 +1,6 @@
 //! The kick (Q): one foe close in front is booted back hard, reeling with its
 //! guard broken. Kicked into a wall it slams and goes down for longer and
-//! takes a knock. It costs stamina; winded, you can't kick.
+//! takes a knock. It wears Fatigue down (`stamina`); winded, you can't kick.
 //!
 //! In first person a leg swings up into view (`LegView`); in third person your
 //! body's right leg kicks (`Drive::kick`, from `leg_body`). The poses are pure
@@ -9,7 +9,7 @@
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 
-use super::stamina::{self, Stamina};
+use super::stamina;
 use super::{ahead_of, ai, feel, flat, traits, Foe, FoeBook};
 use crate::camera::{FlyCamera, Menus};
 use crate::player::{MoveMode, Player};
@@ -108,7 +108,7 @@ pub(super) fn kick(
     player: Res<Player>,
     cam: Single<&Transform, With<FlyCamera>>,
     mut kicking: ResMut<Kicking>,
-    mut stamina: ResMut<Stamina>,
+    mut survival: ResMut<crate::survival::Survival>,
     mut foes: Query<(&Transform, &mut Foe)>,
     mut sound: MessageWriter<PlaySound>,
     mut bursts: MessageWriter<Burst>,
@@ -145,7 +145,7 @@ pub(super) fn kick(
         && !menus.open
         && !menus.still
         && *mode == MoveMode::Walk
-        && stamina.spend(stamina::KICK)
+        && stamina::spend(&mut survival.vitals.health, stamina::KICK)
     {
         kicking.t = Some(0.0);
         kicking.cooldown = COOLDOWN;

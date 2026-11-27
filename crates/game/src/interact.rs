@@ -545,7 +545,7 @@ fn use_hands(
         MessageWriter<crate::survival::Toast>,
         MessageWriter<crate::shrine::UseShrine>,
     ),
-    (aimed, cam, perks, station, edges, ship, guard, mut swung, generator, mut stamina): (
+    (aimed, cam, perks, station, edges, ship, guard, mut swung, generator, mut survival): (
         Res<Aimed>,
         Single<&Transform, With<FlyCamera>>,
         Res<crate::progress::skills::Perks>,
@@ -555,7 +555,7 @@ fn use_hands(
         Res<crate::combat::Guard>,
         MessageWriter<Swung>,
         Option<Res<crate::world::Generator>>,
-        ResMut<crate::combat::stamina::Stamina>,
+        ResMut<crate::survival::Survival>,
     ),
     blocks: Res<Blocks>,
     mode: Res<MoveMode>,
@@ -708,7 +708,7 @@ fn use_hands(
             just: mouse.just_pressed(MouseButton::Left),
             guard: guard.up,
         };
-        sword(&mut anim, input, &mut stamina, dt);
+        sword(&mut anim, input, &mut survival.vitals.health, dt);
         return;
     }
 
@@ -838,10 +838,10 @@ pub struct SwordInput {
 }
 
 /// A sword in hand: tap for a light cut (three chain into a combo), hold to
-/// charge a heavy one, let go to swing it. Each costs stamina; winded, nothing
-/// swings.
-pub fn sword(anim: &mut HandAnim, input: SwordInput, stamina: &mut crate::combat::stamina::Stamina, dt: f32) {
-    use crate::combat::stamina::{HEAVY, LIGHT};
+/// charge a heavy one, let go to swing it. Each wears Fatigue down
+/// (`combat::stamina`); winded, nothing swings.
+pub fn sword(anim: &mut HandAnim, input: SwordInput, health: &mut crate::survival::health::Health, dt: f32) {
+    use crate::combat::stamina::{self, HEAVY, LIGHT};
     let busy = anim.right.t.is_some();
     if busy {
         anim.combo_window = COMBO_WINDOW;
@@ -866,7 +866,7 @@ pub fn sword(anim: &mut HandAnim, input: SwordInput, stamina: &mut crate::combat
             anim.charge = None;
             if c < TAP {
                 anim.queued = true;
-            } else if !busy && stamina.spend(HEAVY) {
+            } else if !busy && stamina::spend(health, HEAVY) {
                 let raised = ((c - TAP) / RAISE).min(1.0);
                 let power = ((c - TAP) / CHARGE).min(1.0);
                 anim.right = Arm { t: Some(swing::HEAVY_WINDUP * raised), style: Swing::Heavy, mining: false, striking: true, heavy: true, mult: heavy_mult(power) };
@@ -877,7 +877,7 @@ pub fn sword(anim: &mut HandAnim, input: SwordInput, stamina: &mut crate::combat
     }
     if anim.queued && !busy {
         anim.queued = false;
-        if stamina.spend(LIGHT) {
+        if stamina::spend(health, LIGHT) {
             let (step, style, mult) = combo_cut(anim.combo, anim.combo_window > 0.0);
             anim.combo = step;
             anim.right = Arm { t: Some(0.0), style, mining: false, striking: true, heavy: false, mult };
@@ -907,7 +907,8 @@ fn draw_target(target: Res<Target>, mining: Res<Mining>, menus: Res<crate::camer
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::combat::stamina::{self, Stamina};
+    use crate::combat::stamina;
+    use crate::survival::health::{Health as Stamina, Layer};
 
     const DT: f32 = 1.0 / 60.0;
 
@@ -944,7 +945,7 @@ mod tests {
         assert_eq!(styles[1], (Swing::SlashBack, 1.0));
         assert_eq!(styles[2], (Swing::Slash, 1.25));
         assert_eq!(styles[3], (Swing::Slash, 1.0), "the combo starts over");
-        assert!(st.value < stamina::MAX);
+        assert!(st.get(Layer::Fatigue) < 100.0);
     }
 
     #[test]
@@ -982,7 +983,7 @@ mod tests {
     #[test]
     fn nothing_swings_while_winded_or_guarding() {
         let (mut anim, mut st) = (HandAnim::default(), Stamina::default());
-        st.spend(stamina::MAX + 1.0);
+        stamina::spend(&mut st, 100.0);
         click(&mut anim, &mut st, 0.1);
         assert!(anim.right.t.is_none());
         let mut st = Stamina::default();
