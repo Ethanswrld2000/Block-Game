@@ -299,7 +299,7 @@ fn open_close(
     (mut spill, mut sound): (MessageWriter<Spill>, MessageWriter<PlaySound>),
     mut cursor: Single<&mut CursorOptions, With<PrimaryWindow>>,
     loot: Option<Res<super::loot::Loot>>,
-    generator: Option<Res<crate::world::Generator>>,
+    (generator, below): (Option<Res<crate::world::Generator>>, Option<Res<crate::delve::Below>>),
     mut seed: Local<u64>,
 ) {
     motion.now = real.elapsed_secs();
@@ -339,7 +339,9 @@ fn open_close(
             *seed = seed.wrapping_add(0x9E37_79B9_7F4A_7C15) ^ (p.x as u64).wrapping_mul(31) ^ (p.z as u64).wrapping_mul(1_000_003);
             let mut rng = crate::creatures::brain::Rng(*seed | 1);
             let grid = chests.grid(p);
-            let table = if generator.0.island_chest(p.x, p.y, p.z) {
+            let table = if let Some(t) = below.as_ref().and_then(|b| b.chest_table(p)) {
+                t
+            } else if generator.0.island_chest(p.x, p.y, p.z) {
                 "sky_island"
             } else if in_barrow {
                 "barrow"

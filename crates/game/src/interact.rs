@@ -576,7 +576,7 @@ fn use_hands(
         Option<Res<crate::world::Generator>>,
         ResMut<crate::survival::Survival>,
     ),
-    blocks: Res<Blocks>,
+    (blocks, boons): (Res<Blocks>, Res<crate::delve::boons::Boons>),
     mode: Res<MoveMode>,
     player: Res<Player>,
     body: Res<crate::player::Body>,
@@ -594,7 +594,7 @@ fn use_hands(
     // A sword's cut lands at contact, on whatever is in its arc then.
     if landed && striking {
         let it = item.map(|i| items.get(i));
-        let damage = it.map_or(crate::items::FIST_DAMAGE, |i| i.damage) * (1.0 + perks.damage) * mult;
+        let damage = it.map_or(crate::items::FIST_DAMAGE, |i| i.damage) * (1.0 + perks.damage + boons.might()) * mult;
         let reach = it.map_or(crate::combat::SWORD_REACH, |i| i.reach()) + if anim.right.style == Swing::Lunge { 1.0 } else { 0.0 };
         let arc = match anim.right.style {
             Swing::Spin => 180.0,
@@ -642,7 +642,7 @@ fn use_hands(
         if mouse.pressed(MouseButton::Left) && anim.strike_cooldown <= 0.0 {
             anim.start(hand, style);
             anim.strike_cooldown = STRIKE_COOLDOWN;
-            let damage = item.map_or(crate::items::FIST_DAMAGE, |i| items.get(i).damage) * (1.0 + perks.damage);
+            let damage = item.map_or(crate::items::FIST_DAMAGE, |i| items.get(i).damage) * (1.0 + perks.damage + boons.might());
             let mut dir = cam.forward().as_vec3();
             dir.y = 0.0;
             strikes.write(Strike { entity: e, damage, dir: dir.normalize_or_zero(), yours: true });
@@ -799,10 +799,12 @@ fn use_hands(
     // when the tool meets the block, and the blows add up to break it.
     let breakable = |world: &World| {
         let hit = target.hit?;
-        if warded(hit.block) {
+        let b = world.block(hit.block)?;
+        // Cracked stone in a dungeon (a secret wall, a weak floor) gives way though.
+        let name = &blocks.registry.get(b).name;
+        if warded(hit.block) && name != "cracked_stone" && name != "cracked_floor" {
             return None;
         }
-        let b = world.block(hit.block)?;
         // A tool sharpened at the sharpening stone cuts faster for a while.
         let sharp = edges.as_ref().map_or(1.0, |e| e.speed(&items, item));
         let seconds = items.break_time(item, blocks.registry.get(b))? / (1.0 + perks.mining) / sharp;

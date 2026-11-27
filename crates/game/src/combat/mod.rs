@@ -15,6 +15,7 @@
 
 pub mod ai;
 pub mod ailment;
+pub mod boss;
 pub mod data;
 pub mod feel;
 pub mod guns;
@@ -58,6 +59,8 @@ impl Plugin for CombatPlugin {
             .add_message::<Shoot>()
             .add_message::<FoeSlain>()
             .add_plugins((feel::FeelPlugin, kick::KickPlugin))
+            .add_systems(crate::menu::GameStartup, boss::spawn_bar)
+            .add_systems(crate::menu::GameUpdate, boss::bar.after(FallSet))
             .add_systems(crate::menu::GamePostStartup, saved::load)
             .add_systems(crate::menu::GameUpdate, saved::save_now_and_then)
             .add_systems(Last, saved::save_on_exit.run_if(crate::menu::in_game))
@@ -67,7 +70,7 @@ impl Plugin for CombatPlugin {
             )
             .add_systems(
                 crate::menu::GameUpdate,
-                (spawn_key, spawn, take_swings, guns::fire, take_strikes, kick::kick, shield::bash, think, mend, ail, shoot, fly_bolts, walk, animate, telegraph, haunt, fall, corpses)
+                (spawn_key, spawn, take_swings, guns::fire, take_strikes, kick::kick, shield::bash, think, boss::attacks, mend, ail, shoot, fly_bolts, walk, animate, telegraph, haunt, fall, corpses)
                     .chain()
                     .in_set(FallSet)
                     .after(InteractSet)

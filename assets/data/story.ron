@@ -5,7 +5,7 @@
 // Conditions (all must hold):
 //   NewWorld; Day(n) (0 = the first day); Hours(from, to) (wraps past midnight);
 //   AtCamp(blocks) (the bedroll, else the ancestral urn); Urn("carpentry") (carried, set down or growing);
-//   Step("carpentry_bench") (urn step done); Depth(n) (Rotting Gate boss beaten at depth n);
+//   Step("carpentry_bench") (urn step done); Dungeon(n) (story dungeon n cleared: 1 Rotting Gate .. 5 castle vault);
 //   Met("bram") (talked to); Recruited("orrin") (settled by its urn); Flag("x"); Played("C10");
 //   DayAfter("flag:x" | "played:C10" | "step:carpentry_bench") (a later day than it first came true);
 //   Near(npc: "gilm", within: 6.0, sight: true); Area(place: "sporrow", within: 30.0);
@@ -19,15 +19,15 @@
         (id: "the_gate", play: "C03", when: [Near(npc: "brindlespheimer", within: 8.0, sight: true)]),
         (id: "sporrow", play: "C04", when: [Area(place: "sporrow", within: 26.0)]),
         (id: "gilm", play: "C05", when: [Near(npc: "gilm", within: 6.0, sight: true)]),
-        (id: "first_urn", play: "C06", when: [Depth(1)]),
+        (id: "first_urn", play: "C06", when: [Dungeon(1)]),
         (id: "first_urn_bram", play: "C06b", when: [Played("C06"), Near(npc: "bram", within: 6.0, sight: true)]),
         (id: "wren", play: "C07", when: [DayAfter("step:carpentry_bench"), AtCamp(16.0)]),
         (id: "liora", play: "C08", when: [Near(npc: "liora", within: 5.0, sight: true)]),
         (id: "liora_at_camp", play: "C08b", when: [Played("C08"), AtCamp(12.0), Near(npc: "liora", within: 10.0, sight: false)]),
-        (id: "messler", play: "C09", when: [Depth(3), Near(npc: "messler", within: 8.0, sight: true)]),
-        (id: "messler_story", play: "C10", when: [Flag("fed_messler")]),
+        (id: "messler", play: "C09", when: [Near(npc: "messler", within: 8.0, sight: true)]),
+        (id: "messler_story", play: "C10", when: [Flag("fed_messler"), Played("C08")]),
         (id: "the_raid", play: "C11", when: [Played("C10"), Hours(20.0, 4.0), AtCamp(16.0)]),
-        (id: "orrin", play: "C13", when: [Near(npc: "orrin", within: 6.0, sight: true)]),
+        (id: "orrin", play: "C13", when: [Dungeon(5), Near(npc: "orrin", within: 6.0, sight: true)]),
         (id: "telescope", play: "C14", when: [Flag("used_telescope"), Recruited("orrin")]),
         (id: "airship", play: "C15", when: [Made("airship")]),
         (id: "the_aunt", play: "C16", when: [Near(npc: "aunt", within: 8.0, sight: true)]),

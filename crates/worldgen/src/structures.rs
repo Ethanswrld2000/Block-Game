@@ -201,22 +201,6 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) {
         }
         draw_barrow(wg, &mut canvas, &b);
     }
-    for d in wg.dungeons_in(x0, z0, x1, z1) {
-        if d.bounds.max[1] < lo || d.bounds.min[1] > hi {
-            continue;
-        }
-        crate::dungeons::draw(wg, &mut canvas, &d);
-    }
-    if let Some(g) = wg.rotting_gate()
-        && g.bounds.min[0] - 4 <= x1
-        && g.bounds.max[0] + 4 >= x0
-        && g.bounds.min[2] - 4 <= z1
-        && g.bounds.max[2] + 4 >= z0
-        && g.bounds.max[1] + 2 >= lo
-        && g.bounds.min[1] - 40 <= hi
-    {
-        crate::rotting::draw_gate(wg, &mut canvas, g);
-    }
     let near = |b: &crate::dungeons::Aabb| {
         b.min[0] - 4 <= x1 && b.max[0] + 4 >= x0 && b.min[2] - 4 <= z1 && b.max[2] + 4 >= z0 && b.max[1] + 2 >= lo && b.min[1] - 40 <= hi
     };
@@ -225,6 +209,13 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) {
     }
     if let Some(k) = wg.castle().filter(|k| near(&k.bounds)) {
         crate::landmarks::draw_castle(wg, &mut canvas, k);
+    }
+    // Dungeon entrances last (the castle's vault stands in its court).
+    for d in wg.dungeons_in(x0, z0, x1, z1) {
+        if d.bounds.max[1] + 2 < lo || d.bounds.min[1] - 40 > hi {
+            continue;
+        }
+        crate::dungeons::draw(wg, &mut canvas, &d);
     }
 }
 

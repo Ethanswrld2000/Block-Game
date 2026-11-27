@@ -26,8 +26,8 @@ pub struct CastPlugin;
 impl Plugin for CastPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Cast>()
-            .add_systems(crate::menu::GamePostStartup, (load, set_star_urn).chain().after(crate::world::setup_generator))
-            .add_systems(crate::menu::GameUpdate, (place_cast, keep_brindlespheimer).before(crate::npc::NpcSet).after(crate::player::PlayerSet))
+            .add_systems(crate::menu::GamePostStartup, load.after(crate::world::setup_generator))
+            .add_systems(crate::menu::GameUpdate, (set_star_urn, place_cast, keep_brindlespheimer).before(crate::npc::NpcSet).after(crate::player::PlayerSet))
             .add_systems(crate::menu::GameUpdate, save_now_and_then)
             .add_systems(Last, save_on_exit.run_if(crate::menu::in_game))
             .add_plugins((services::ServicesPlugin, wren::WrenPlugin));
@@ -75,8 +75,12 @@ fn load(mut commands: Commands, dir: Res<SaveDir>, generator: Option<Res<Generat
     }
 }
 
-/// The Star Urn stands on the castle tower until you take it.
-fn set_star_urn(mut cast: ResMut<Cast>, mut urns: ResMut<crate::station::Urns>, generator: Option<Res<Generator>>) {
+/// The Star Urn stands on the castle tower (until you take it) once the castle
+/// vault is cleared.
+fn set_star_urn(mut cast: ResMut<Cast>, mut urns: ResMut<crate::station::Urns>, generator: Option<Res<Generator>>, below: Res<crate::delve::Below>) {
+    if below.chain_cleared() < 5 || cast.placed.contains("star_urn") {
+        return;
+    }
     let Some(k) = generator.as_ref().and_then(|g| g.0.castle()) else { return };
     if !cast.placed.insert("star_urn".into()) || urns.placed.contains_key("star") || urns.progress.contains_key("star") {
         return;
@@ -98,6 +102,7 @@ fn place_cast(
     world: Res<World>,
     blocks: Res<crate::blocks::Blocks>,
     mut spawn: MessageWriter<SpawnNpc>,
+    below: Res<crate::delve::Below>,
 ) {
     *timer -= time.delta_secs();
     if *timer > 0.0 || !player.ready {
@@ -110,7 +115,10 @@ fn place_cast(
         let door = Vec3::new(f.pos[0] as f32 + 0.5, f.pos[1] as f32, f.pos[2] as f32 + 0.5);
         spots.push(("gilm", Vec3::from_array(f.stand), door, true));
     }
-    if let Some(k) = g.0.castle() {
+    // Orrin is on the tower once the vault under the castle is cleared.
+    if let Some(k) = g.0.castle()
+        && below.chain_cleared() >= 5
+    {
         spots.push(("orrin", Vec3::from_array(k.orrin), Vec3::from_array(k.urn), false));
     }
     if let Some(a) = g.0.aunt_island() {
@@ -131,28 +139,39 @@ fn place_cast(
     }
 }
 
-/// Brindlespheimer stands beside the Rotting Gate whenever you are near it.
+/// Brindlespheimer stands beside whichever dungeon entrance you are nearest.
 #[allow(clippy::too_many_arguments)]
 fn keep_brindlespheimer(
     mut commands: Commands,
-    generator: Option<Res<Generator>>,
+    nearby: Res<crate::dungeon::Nearby>,
     book: Res<NpcBook>,
     player: Res<Player>,
     world: Res<World>,
     blocks: Res<crate::blocks::Blocks>,
     npcs: Query<(Entity, &Npc)>,
     mut spawn: MessageWriter<SpawnNpc>,
-    mut asked: Local<f32>,
+    (mut asked, mut at_door): (Local<f32>, Local<Option<u64>>),
     time: Res<Time>,
 ) {
-    let Some(g) = generator.as_ref().and_then(|g| g.0.rotting_gate()) else { return };
-    let outside = Vec3::from_array(g.outside);
-    let dist = Vec2::new(outside.x - player.pos.x, outside.z - player.pos.z).length();
+    // Down on a floor: he waits up top.
+    if worldgen::in_pocket(player.pos.x as i32, player.pos.z as i32) {
+        return;
+    }
     let here: Vec<Entity> = npcs.iter().filter(|(_, n)| n.post == Some(GATE_POST)).map(|(e, _)| e).collect();
-    if dist > GONE {
+    let Some(g) = nearby.nearest(player.pos) else {
         for e in here {
             commands.entity(e).despawn();
         }
+        return;
+    };
+    let outside = Vec3::from_array(g.outside);
+    let dist = Vec2::new(outside.x - player.pos.x, outside.z - player.pos.z).length();
+    // Too far, or a nearer entrance now: he goes (and turns up at the new one).
+    if dist > GONE || (*at_door != Some(g.id) && !here.is_empty()) {
+        for e in here {
+            commands.entity(e).despawn();
+        }
+        *at_door = None;
         return;
     }
     *asked -= time.delta_secs();
@@ -161,13 +180,14 @@ fn keep_brindlespheimer(
     }
     let Some(kind) = book.kinds.iter().position(|k| k.dialogue == "brindlespheimer") else { return };
     // Beside the path, a little off to one side of the door.
-    let side = Vec3::new(-g.out.1 as f32, 0.0, g.out.0 as f32);
-    let want = outside + side * 2.5 + Vec3::new(g.out.0 as f32, 0.0, g.out.1 as f32);
+    let out = Vec3::new(g.veil.out.0 as f32, 0.0, g.veil.out.1 as f32);
+    let want = Vec3::from_array(g.guide);
     let Some(at) = ground_near(&world, &blocks, want + Vec3::Y * 2.0) else { return };
-    let mut npc = Npc::new(kind, yaw_of(Vec3::new(g.out.0 as f32, 0.0, g.out.1 as f32)));
+    let mut npc = Npc::new(kind, yaw_of(out));
     npc.order = Order::Stay;
     npc.post = Some(GATE_POST);
     spawn.write(SpawnNpc { npc, at });
+    *at_door = Some(g.id);
     *asked = 3.0;
 }
 

@@ -763,7 +763,39 @@
             ),
         },
     ),
-    // Brindlespheimer, the moldy wizard at the Rotting Gate. Blank face, slow speech; never follows.
+    // Brindlespheimer, the moldy wizard. He stands at whichever dungeon entrance you are nearest
+    // (game::cast), casts the spirit form, names the dungeon's theme and boss and hints at its puzzles.
+    // game::delve sets {dungeon}, {floors}, {boss}, {hint} and the flags theme:<name> and cleared_here.
+    // Tallow, the peddler of the dungeon floors: old coin for gear (trades.ron `shop`).
+    "tallow": (
+        start: "greet",
+        again: "greet",
+        nodes: {
+            "greet": (
+                mood: Happy,
+                say: ["TALLOW_GREET_01", "TALLOW_GREET_02"],
+                choices: [
+                    (text: "Show me what you have.", tone: "Ask", goto: "trade"),
+                    (text: "Goodbye.", end: true),
+                ],
+            ),
+            "trade": (
+                mood: Happy,
+                say: ["TALLOW_TRADE_01"],
+                choices: [(text: "Nothing for now.", end: true)],
+            ),
+            "trade_done": (
+                mood: Happy,
+                say: ["TALLOW_TRADE_DONE_01"],
+                then: "trade",
+            ),
+            "trade_short": (
+                mood: Neutral,
+                say: ["TALLOW_TRADE_SHORT_01"],
+                then: "trade",
+            ),
+        },
+    ),
     "brindlespheimer": (
         start: "greet",
         again: "again",
@@ -778,9 +810,15 @@
                     "BRINDLESPHEIMER_GREET_04",
                 ],
                 choices: [
-                    (text: "What is this gate?", tone: "Ask", goto: "gate"),
-                    (text: "Are you all right?", tone: "Ask", goto: "well"),
-                    (text: "Take me out of my body.", tone: "Ask", goto: "help"),
+                    (text: "What is this place?", tone: "Ask", goto: "here_rotting_bog", needs: ["theme:rotting_bog"]),
+                    (text: "What is this place?", tone: "Ask", goto: "here_flooded_crypt", needs: ["theme:flooded_crypt"]),
+                    (text: "What is this place?", tone: "Ask", goto: "here_root_choked_hall", needs: ["theme:root_choked_hall"]),
+                    (text: "What is this place?", tone: "Ask", goto: "here_collapsed_mine", needs: ["theme:collapsed_mine"]),
+                    (text: "What is this place?", tone: "Ask", goto: "here_frozen_vault", needs: ["theme:frozen_vault"]),
+                    (text: "Who waits at the bottom?", tone: "Ask", goto: "boss"),
+                    (text: "Any advice?", tone: "Ask", goto: "advice"),
+                    (text: "It's cleared. I beat it.", tone: "Proud", goto: "cleared", needs: ["cleared_here"]),
+                    (text: "Take me out of my body.", tone: "Ready", goto: "help"),
                     (text: "Goodbye.", end: true),
                 ],
             ),
@@ -788,9 +826,15 @@
                 mood: Neutral,
                 say: ["BRINDLESPHEIMER_AGAIN_01", "BRINDLESPHEIMER_AGAIN_02"],
                 choices: [
-                    (text: "What is this gate?", tone: "Ask", goto: "gate"),
-                    (text: "Are you all right?", tone: "Ask", goto: "well"),
-                    (text: "Take me out of my body.", tone: "Ask", goto: "help"),
+                    (text: "What is this place?", tone: "Ask", goto: "here_rotting_bog", needs: ["theme:rotting_bog"]),
+                    (text: "What is this place?", tone: "Ask", goto: "here_flooded_crypt", needs: ["theme:flooded_crypt"]),
+                    (text: "What is this place?", tone: "Ask", goto: "here_root_choked_hall", needs: ["theme:root_choked_hall"]),
+                    (text: "What is this place?", tone: "Ask", goto: "here_collapsed_mine", needs: ["theme:collapsed_mine"]),
+                    (text: "What is this place?", tone: "Ask", goto: "here_frozen_vault", needs: ["theme:frozen_vault"]),
+                    (text: "Who waits at the bottom?", tone: "Ask", goto: "boss"),
+                    (text: "Any advice?", tone: "Ask", goto: "advice"),
+                    (text: "It's cleared. I beat it.", tone: "Proud", goto: "cleared", needs: ["cleared_here"]),
+                    (text: "Take me out of my body.", tone: "Ready", goto: "help"),
                     (text: "Goodbye.", end: true),
                 ],
             ),
@@ -798,39 +842,73 @@
                 mood: Neutral,
                 say: ["BRINDLESPHEIMER_HUB_01"],
                 choices: [
-                    (text: "What is this gate?", tone: "Ask", goto: "gate"),
-                    (text: "Are you all right?", tone: "Ask", goto: "well"),
-                    (text: "Take me out of my body.", tone: "Ask", goto: "help"),
+                    (text: "What is this place?", tone: "Ask", goto: "here_rotting_bog", needs: ["theme:rotting_bog"]),
+                    (text: "What is this place?", tone: "Ask", goto: "here_flooded_crypt", needs: ["theme:flooded_crypt"]),
+                    (text: "What is this place?", tone: "Ask", goto: "here_root_choked_hall", needs: ["theme:root_choked_hall"]),
+                    (text: "What is this place?", tone: "Ask", goto: "here_collapsed_mine", needs: ["theme:collapsed_mine"]),
+                    (text: "What is this place?", tone: "Ask", goto: "here_frozen_vault", needs: ["theme:frozen_vault"]),
+                    (text: "Who waits at the bottom?", tone: "Ask", goto: "boss"),
+                    (text: "Any advice?", tone: "Ask", goto: "advice"),
+                    (text: "It's cleared. I beat it.", tone: "Proud", goto: "cleared", needs: ["cleared_here"]),
+                    (text: "Take me out of my body.", tone: "Ready", goto: "help"),
                     (text: "That's all.", end: true),
                 ],
             ),
-            "gate": (
+            "here_rotting_bog": (
                 mood: Neutral,
                 anim: Point,
-                say: [
-                    "BRINDLESPHEIMER_GATE_01",
-                    "BRINDLESPHEIMER_GATE_02",
-                ],
+                say: ["BRINDLESPHEIMER_ROTTING_BOG_01", "BRINDLESPHEIMER_ROTTING_BOG_02", "BRINDLESPHEIMER_HERE_FLOORS"],
                 then: "hub",
             ),
-            "well": (
+            "here_flooded_crypt": (
                 mood: Neutral,
-                anim: Shrug,
-                say: [
-                    "BRINDLESPHEIMER_WELL_01",
-                    "BRINDLESPHEIMER_WELL_02",
-                ],
+                anim: Point,
+                say: ["BRINDLESPHEIMER_FLOODED_CRYPT_01", "BRINDLESPHEIMER_FLOODED_CRYPT_02", "BRINDLESPHEIMER_HERE_FLOORS"],
+                then: "hub",
+            ),
+            "here_root_choked_hall": (
+                mood: Neutral,
+                anim: Point,
+                say: ["BRINDLESPHEIMER_ROOT_CHOKED_HALL_01", "BRINDLESPHEIMER_ROOT_CHOKED_HALL_02", "BRINDLESPHEIMER_HERE_FLOORS"],
+                then: "hub",
+            ),
+            "here_collapsed_mine": (
+                mood: Neutral,
+                anim: Point,
+                say: ["BRINDLESPHEIMER_COLLAPSED_MINE_01", "BRINDLESPHEIMER_COLLAPSED_MINE_02", "BRINDLESPHEIMER_HERE_FLOORS"],
+                then: "hub",
+            ),
+            "here_frozen_vault": (
+                mood: Neutral,
+                anim: Point,
+                say: ["BRINDLESPHEIMER_FROZEN_VAULT_01", "BRINDLESPHEIMER_FROZEN_VAULT_02", "BRINDLESPHEIMER_HERE_FLOORS"],
+                then: "hub",
+            ),
+            "boss": (
+                mood: Worried,
+                anim: Think,
+                say: ["BRINDLESPHEIMER_BOSS_01", "BRINDLESPHEIMER_BOSS_02"],
+                then: "hub",
+            ),
+            "advice": (
+                mood: Neutral,
+                anim: Think,
+                say: ["BRINDLESPHEIMER_ADVICE_01", "BRINDLESPHEIMER_ADVICE_02", "BRINDLESPHEIMER_ADVICE_03"],
+                then: "hub",
+            ),
+            "cleared": (
+                mood: Happy,
+                anim: Nod,
+                say: ["BRINDLESPHEIMER_CLEARED_01", "BRINDLESPHEIMER_CLEARED_02"],
                 then: "hub",
             ),
             "help": (
                 mood: Neutral,
-                say: [
-                    "BRINDLESPHEIMER_HELP_01",
-                    "BRINDLESPHEIMER_HELP_02",
-                    "BRINDLESPHEIMER_HELP_03",
-                    "BRINDLESPHEIMER_HELP_04",
+                say: ["BRINDLESPHEIMER_HELP_01", "BRINDLESPHEIMER_HELP_02"],
+                choices: [
+                    (text: "Ready.", act: Spirit, end: true),
+                    (text: "Wait, not yet.", goto: "hub"),
                 ],
-                then: "hub",
             ),
         },
     ),

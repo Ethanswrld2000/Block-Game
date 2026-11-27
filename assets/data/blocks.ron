@@ -149,4 +149,14 @@
     (name: "swamp_log_z", top: "swamp_log_top", side: "swamp_log_side", hardness: 3.75, material: "log", axis: z),
     (name: "redwood_log_x", top: "redwood_log_top", side: "redwood_log_side", hardness: 4.5, material: "log", axis: x),
     (name: "redwood_log_z", top: "redwood_log_top", side: "redwood_log_side", hardness: 4.5, material: "log", axis: z),
+    // Dungeons (worldgen::delve, game::delve). The pocket is under the ward: of its blocks only
+    // cracked stone and cracked floor break (cracked floor gives way under you by itself).
+    (name: "cracked_stone", top: "cracked_stone", hardness: 1.5, material: "stone"),
+    (name: "cracked_floor", top: "cracked_floor", hardness: 1.5, material: "stone"),
+    // A lock-in slab or a puzzle's gate (game::delve opens it); a locked door that takes the floor's key.
+    (name: "dungeon_slab", top: "dungeon_slab", hardness: -1.0, material: "stone"),
+    (name: "vault_door", top: "vault_door", hardness: -1.0, material: "wood"),
+    // A slick of lamp oil on the floor: fire spreads over it; a stone plate that a weight presses down.
+    (name: "oil", top: "oil", solid: false, opaque: false, hardness: -1.0, shape: layer, level: 1),
+    (name: "pressure_plate", top: "pressure_plate", solid: false, opaque: false, hardness: -1.0, shape: layer, level: 1),
 ]

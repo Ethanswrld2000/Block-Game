@@ -138,6 +138,43 @@ pub struct FoeKind {
     /// What it holds in its left hand (a shield bearer's shield).
     #[serde(default)]
     pub offhand: Option<String>,
+    /// A boss: its phases and named attacks (`combat::boss`).
+    #[serde(default)]
+    pub boss: Option<BossDef>,
+}
+
+/// A boss's phases and attacks.
+#[derive(Deserialize, Debug, Clone)]
+pub struct BossDef {
+    /// Health shares (0..1, highest first) where a new phase begins.
+    pub phases: Vec<f32>,
+    pub attacks: Vec<BossAttack>,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct BossAttack {
+    /// Shown on the boss bar while it comes.
+    pub name: String,
+    /// The first phase (0 = from the start) that uses it.
+    #[serde(default)]
+    pub phase: u8,
+    /// Seconds between uses.
+    pub every: f32,
+    /// Seconds of warning before it lands.
+    pub wind: f32,
+    pub kind: AttackKind,
+}
+
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+pub enum AttackKind {
+    /// A blow to the ground: hurts everything within `radius` on the ground.
+    Slam { radius: f32, damage: f32 },
+    /// A fan of `count` bolts at you.
+    Volley { count: u8, damage: f32 },
+    /// A rush straight at you for a second.
+    Charge { speed: f32, damage: f32 },
+    /// Calls `count` foes of `kind` (foes.ron) to its side.
+    Summon { kind: String, count: u8 },
 }
 
 pub fn load(text: &str) -> Result<Vec<FoeKind>, String> {

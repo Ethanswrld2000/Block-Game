@@ -560,6 +560,73 @@ def sky_shrine_top(s):
 TILES += [("sky_shrine", sky_shrine), ("sky_shrine_top", sky_shrine_top)]
 
 
+# Dungeon blocks (worldgen::delve), appended so nothing moves.
+
+
+def cracked_stone(s):
+    # Grey stone with dark cracks running through it: a wall you can break.
+    img = noisy(s, [(92, 92, 98), (112, 112, 118), (128, 128, 134)], (8, 4))
+    ys, xs = np.mgrid[0:T, 0:T]
+    crack = (np.abs(xs - 6 - ys * 0.6) < 1.0) | (np.abs(ys - 18 + (xs - 14) * 0.5) < 1.0) & (xs > 12) \
+        | (np.abs(xs - 24 + (ys - 20) * 0.4) < 0.9) & (ys > 16)
+    img[crack, :3] = (34, 32, 36)
+    return img
+
+
+def cracked_floor(s):
+    img = noisy(s, [(96, 92, 88), (116, 112, 104), (132, 126, 118)], (8, 4))
+    ys, xs = np.mgrid[0:T, 0:T]
+    d = np.sqrt((xs - 15.5) ** 2 + (ys - 15.5) ** 2)
+    a = np.arctan2(ys - 15.5, xs - 15.5)
+    star = (np.abs(np.sin(a * 3)) < 0.12) & (d > 2) & (d < 15)
+    img[star, :3] = (40, 36, 34)
+    return img
+
+
+def dungeon_slab(s):
+    # A heavy dressed slab with a faint blue line round its edge (a shut door).
+    img = noisy(s, [(70, 72, 84), (86, 88, 100), (98, 100, 112)], (8, 4))
+    ys, xs = np.mgrid[0:T, 0:T]
+    edge = (xs < 2) | (xs >= T - 2) | (ys < 2) | (ys >= T - 2)
+    img[edge, :3] = (46, 48, 58)
+    line = ((xs == 4) | (xs == T - 5) | (ys == 4) | (ys == T - 5)) & (xs >= 4) & (xs <= T - 5) & (ys >= 4) & (ys <= T - 5)
+    img[line, :3] = (110, 170, 230)
+    return img
+
+
+def vault_door(s):
+    # Iron-banded dark wood with a keyhole.
+    img = noisy(s, [(74, 52, 34), (92, 66, 42), (106, 78, 50)], (8, 2))
+    ys, xs = np.mgrid[0:T, 0:T]
+    img[(ys % 10) < 2, :3] = (70, 72, 78)
+    hole = ((xs - 15.5) ** 2 + (ys - 13) ** 2 < 6) | ((np.abs(xs - 15.5) < 1.2) & (ys >= 13) & (ys < 20))
+    img[(np.abs(xs - 15.5) < 4) & (ys >= 9) & (ys < 23), :3] = (196, 164, 70)
+    img[hole, :3] = (16, 12, 10)
+    return img
+
+
+def oil(s):
+    # A black slick with an oily sheen.
+    img = noisy(s, [(16, 14, 18), (26, 22, 30), (38, 32, 44)], (8, 4))
+    ys, xs = np.mgrid[0:T, 0:T]
+    sheen = np.abs(np.sin(xs * 0.4 + ys * 0.25)) > 0.94
+    img[sheen, :3] = (70, 60, 96)
+    return img
+
+
+def pressure_plate(s):
+    img = noisy(s, [(110, 104, 92), (124, 118, 104)], (8, 4))
+    ys, xs = np.mgrid[0:T, 0:T]
+    edge = (xs < 3) | (xs >= T - 3) | (ys < 3) | (ys >= T - 3)
+    img[edge, :3] = (70, 66, 58)
+    img[(xs - 15.5) ** 2 + (ys - 15.5) ** 2 < 16, :3] = (150, 120, 60)
+    return img
+
+
+TILES += [("cracked_stone", cracked_stone), ("cracked_floor", cracked_floor), ("dungeon_slab", dungeon_slab),
+          ("vault_door", vault_door), ("oil", oil), ("pressure_plate", pressure_plate)]
+
+
 def main():
     root = os.path.join(os.path.dirname(__file__), "..", "assets", "textures")
     os.makedirs(root, exist_ok=True)

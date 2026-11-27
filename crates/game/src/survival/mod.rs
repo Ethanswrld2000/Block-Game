@@ -148,13 +148,13 @@ pub fn entry_layer(cause: DamageCause) -> Layer {
     }
 }
 
-fn take_hits(mut hits: MessageReader<Damage>, inv: Res<Inventory>, items: Res<Items>, mut s: ResMut<Survival>, mut toast: MessageWriter<Toast>) {
+fn take_hits(mut hits: MessageReader<Damage>, inv: Res<Inventory>, items: Res<Items>, mut s: ResMut<Survival>, mut toast: MessageWriter<Toast>, boons: Res<crate::delve::boons::Boons>) {
     for d in hits.read() {
         let h = &mut s.vitals.health;
         let was_mortal = h.mortal();
         // Armor keeps part of the blow off the bar it lands on.
         let layer = entry_layer(d.cause);
-        let amount = d.amount * (1.0 - inv.protection(&items, layer));
+        let amount = d.amount * (1.0 - inv.protection(&items, layer)) * (1.0 - boons.ward());
         h.hit(layer, amount);
         if d.cause == DamageCause::Piercing {
             // Open wounds keep losing blood for a while.
@@ -427,12 +427,12 @@ fn perks_warm(feels: f32) -> f32 {
     if feels >= vitals::COMFORT_HIGH - 4.0 { feels } else { (feels + crate::progress::WARMTH_SPELL).min(vitals::COMFORT_HIGH - 4.0) }
 }
 
-fn set_body(time: Res<Time>, s: Res<Survival>, rules: Res<Exposure>, sleep: Res<camp::Sleep>, mut shiver: ResMut<shiver::Shiver>, mut body: ResMut<Body>) {
+fn set_body(time: Res<Time>, s: Res<Survival>, rules: Res<Exposure>, sleep: Res<camp::Sleep>, mut shiver: ResMut<shiver::Shiver>, mut body: ResMut<Body>, boons: Res<crate::delve::boons::Boons>) {
     let v = &s.vitals;
     let still = v.health.is_dead() || sleep.active();
     shiver.tick(time.delta_secs(), if still { 0 } else { shiver::cold_level(&rules, v.feels) });
     *body = Body {
-        speed: v.speed(s.env.carried, &rules),
+        speed: v.speed(s.env.carried, &rules) * (1.0 + boons.fleet()),
         fall: vitals::weight_fall(s.env.carried),
         dizzy: v.dizzy(&rules),
         frozen: still,

@@ -1,0 +1,60 @@
+// Dungeon room templates (worldgen::delve). Every floor has a start room, fight rooms, a trap
+// gauntlet, one puzzle room, a rest room, maybe treasure, a secret room and a coin shop, and the
+// boss arena; each picks one of the templates of its kind here (by weight, for its theme and floor).
+//   kind:    Fight | Trap | Puzzle | Ambush | Treasure | Secret | Rest | Shop | Boss | Start
+//   half:    ((min, max) half width across x, (min, max) across z), blocks from the middle to the wall
+//   height:  (min, max) inside height
+//   pillars: stone pillars in a grid (theme `pillar` block); pit: a sunken middle with spikes
+//   hazards: (hazard, min, max) placed in the room. Spikes (plates that stab up in turn), Pit (a hole
+//            with spikes at the bottom), Oil (a slick that burns when fire reaches it), Barrel (blows up
+//            when struck, burnt or kicked), Darts (a wall that shoots poison darts), Blade (a pendulum),
+//            Collapse (cracked floor that gives way), FireJet (a vent that throws flame), Any (one of
+//            the theme's, by its weights)
+//   foes:    (min, max) foes per wave; waves: how many waves (Ambush rooms: the doors lock, they come in turn)
+//   elite:   chance one of them is an elite (Treasure: the chest's guard)
+//   min_floor: only from this floor down; themes: only in these (empty = all)
+// Rest, treasure, puzzle, secret and shop rooms never lock (game::delve).
+[
+    (name: "start", kind: Start, half: ((5, 5), (5, 5)), height: (6, 6)),
+
+    // Fights: a mixed group and a hazard or two to use (kick them into it).
+    (name: "hall", kind: Fight, half: ((5, 8), (5, 8)), height: (5, 7), hazards: [(Any, 1, 1)], foes: (2, 4)),
+    (name: "pillared_hall", kind: Fight, weight: 1.2, half: ((7, 10), (7, 10)), height: (6, 8), pillars: true, hazards: [(Any, 1, 2)], foes: (3, 5)),
+    (name: "spike_court", kind: Fight, half: ((6, 9), (6, 9)), height: (5, 7), hazards: [(Spikes, 2, 4)], foes: (2, 4)),
+    (name: "barrel_store", kind: Fight, weight: 0.8, half: ((5, 8), (5, 8)), height: (5, 6), hazards: [(Barrel, 2, 4), (Oil, 1, 1)], foes: (3, 4)),
+    (name: "pit_room", kind: Fight, weight: 0.9, half: ((7, 10), (7, 10)), height: (6, 8), pit: true, hazards: [(Any, 0, 1)], foes: (2, 4)),
+    (name: "blade_hall", kind: Fight, weight: 0.6, half: ((6, 9), (5, 7)), height: (7, 8), hazards: [(Blade, 1, 2)], foes: (2, 3), min_floor: 2),
+
+    // Trap gauntlets: long halls of traps to get through, a few foes at most.
+    (name: "spike_run", kind: Trap, half: ((9, 10), (3, 4)), height: (5, 6), hazards: [(Spikes, 5, 8), (Darts, 1, 2)], foes: (0, 1)),
+    (name: "blade_run", kind: Trap, half: ((9, 10), (3, 4)), height: (7, 8), hazards: [(Blade, 2, 3), (Collapse, 1, 2)]),
+    (name: "dart_gallery", kind: Trap, half: ((3, 4), (9, 10)), height: (5, 6), hazards: [(Darts, 3, 4), (Spikes, 2, 3)]),
+    (name: "fire_walk", kind: Trap, half: ((9, 10), (3, 4)), height: (6, 7), hazards: [(FireJet, 3, 5), (Oil, 1, 1), (Collapse, 1, 1)]),
+
+    // Puzzles: weigh down every pressure plate (push the stone blocks), pull the levers until every
+    // lamp burns, or pull the lever and run for the gate before it shuts. The prize waits behind the gate.
+    (name: "puzzle_hall", kind: Puzzle, half: ((6, 8), (6, 8)), height: (5, 7)),
+    (name: "puzzle_vault", kind: Puzzle, weight: 0.7, half: ((7, 8), (7, 8)), height: (6, 7), pillars: true),
+
+    // Ambushes: the doors lock behind you and the foes come in waves.
+    (name: "ambush_hall", kind: Ambush, half: ((7, 9), (7, 9)), height: (6, 7), foes: (2, 3), waves: 3, elite: 0.3),
+    (name: "ambush_court", kind: Ambush, weight: 0.8, half: ((8, 10), (8, 10)), height: (6, 8), pillars: true, hazards: [(Any, 1, 1)], foes: (2, 4), waves: 2, elite: 0.5),
+
+    // Treasure: a chest guarded by a trap or by an elite.
+    (name: "trapped_hoard", kind: Treasure, half: ((4, 6), (4, 6)), height: (5, 6), hazards: [(Spikes, 3, 5), (Darts, 1, 1)]),
+    (name: "guarded_hoard", kind: Treasure, half: ((5, 7), (5, 7)), height: (5, 6), foes: (1, 1), elite: 1.0),
+
+    // Secret rooms, behind a cracked wall: a small hoard.
+    (name: "secret_cache", kind: Secret, half: ((3, 4), (3, 4)), height: (4, 5)),
+
+    // Rest: a campfire that heals.
+    (name: "rest_room", kind: Rest, half: ((4, 6), (4, 6)), height: (5, 6)),
+
+    // The coin shop: a merchant who takes old coin.
+    (name: "coin_shop", kind: Shop, half: ((4, 5), (4, 5)), height: (5, 6)),
+
+    // Boss arenas, built for one boss.
+    (name: "pillared_arena", kind: Boss, half: ((10, 11), (10, 11)), height: (10, 12), pillars: true),
+    (name: "pit_arena", kind: Boss, half: ((10, 11), (10, 11)), height: (10, 12), pit: true, hazards: [(Barrel, 2, 3)]),
+    (name: "blade_arena", kind: Boss, weight: 0.6, half: ((10, 11), (10, 11)), height: (11, 12), hazards: [(Blade, 2, 2), (FireJet, 2, 4)], min_floor: 2),
+]
