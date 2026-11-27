@@ -365,11 +365,29 @@ fn find_target(
 /// hanging below those. Returns false if nothing was there to break.
 fn break_block(world: &mut World, blocks: &Blocks, mined: &mut MessageWriter<Mined>, p: BlockPos) -> bool {
     let Some(b) = world.block(p).filter(|b| !b.is_air()) else { return false };
-    if !world.set_block(p, BlockId::AIR) {
+    // Digging snow away leaves the plant or pebble that stood in it.
+    if !world.set_block(p, blocks.registry.get(b).inside.unwrap_or(BlockId::AIR)) {
         return false;
     }
     mined.write(Mined { pos: p, block: b, felled: false });
     remesh_around(world, blocks, p);
+    drop_loose(world, blocks, mined, p);
+    true
+}
+
+/// Dig the block at `p` down to the lower layer `to` (soil dug by hand); it
+/// drops nothing yet, but what stood on it may lose its footing.
+fn dig_down(world: &mut World, blocks: &Blocks, mined: &mut MessageWriter<Mined>, p: BlockPos, to: BlockId) -> bool {
+    if !world.set_block(p, to) {
+        return false;
+    }
+    remesh_around(world, blocks, p);
+    drop_loose(world, blocks, mined, p);
+    true
+}
+
+/// Break whatever around `p` is no longer held up, and what that held up.
+fn drop_loose(world: &mut World, blocks: &Blocks, mined: &mut MessageWriter<Mined>, p: BlockPos) {
     // A long vine can drop a strand at a time; keep it bounded.
     let mut fell = Vec::new();
     drop_unsupported(world, blocks, neighbours(p).collect(), 256, |q, qb| {
@@ -379,7 +397,6 @@ fn break_block(world: &mut World, blocks: &Blocks, mined: &mut MessageWriter<Min
     for q in fell {
         remesh_around(world, blocks, q);
     }
-    true
 }
 
 /// Take away every block among `check` (and, as they go, their neighbours)
@@ -748,8 +765,13 @@ fn use_hands(
         mining.block = None;
         mining.progress = 0.0;
     }
+    // Soil dug without a shovel goes down a layer at a time (not when flying to build).
+    let dug = broke.and_then(|(_, b)| items.dug_to(item, blocks.registry.get(b))).filter(|_| *mode != MoveMode::Fly);
     if let Some((pos, _)) = broke
-        && break_block(&mut world, &blocks, &mut mined, pos)
+        && match dug {
+            Some(to) => dig_down(&mut world, &blocks, &mut mined, pos, to),
+            None => break_block(&mut world, &blocks, &mut mined, pos),
+        }
     {
         mining.block = None;
         mining.progress = 0.0;

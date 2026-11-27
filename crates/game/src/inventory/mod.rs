@@ -19,7 +19,7 @@ pub(crate) mod preview;
 pub(crate) mod ui;
 mod world_items;
 
-pub use world_items::Spill;
+pub use world_items::{PickedUp, Spill};
 
 use std::collections::{BTreeMap, HashMap};
 

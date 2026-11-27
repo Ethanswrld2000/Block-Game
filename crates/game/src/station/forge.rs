@@ -29,8 +29,8 @@ impl MaterialExtension for GlintExtension {
 }
 
 /// Seconds the parts draw together, and the made thing takes to swell in.
-const GATHER: f32 = 1.5;
-const APPEAR: f32 = 0.55;
+pub(super) const GATHER: f32 = 1.5;
+pub(super) const APPEAR: f32 = 0.55;
 /// Sparkles while they gather, a second.
 const SPARKLE_EVERY: f32 = 0.12;
 
@@ -70,7 +70,7 @@ pub(super) fn gather_strength(t: f32) -> f32 {
 }
 
 /// Overshoot then settle (0..1 -> 0..1).
-fn ease_out_back(k: f32) -> f32 {
+pub(super) fn ease_out_back(k: f32) -> f32 {
     let c = 1.9;
     1.0 + (c + 1.0) * (k - 1.0).powi(3) + c * (k - 1.0).powi(2)
 }

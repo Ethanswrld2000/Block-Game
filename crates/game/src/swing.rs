@@ -23,6 +23,9 @@ pub enum Swing {
     /// A sword: drawn back high on the right, then a quick diagonal cut down
     /// and across, following through. Always a fighting swing, never mining.
     Slash,
+    /// A shovel: drawn back and up, thrust down into the ground, then levered
+    /// up and the load tossed off to the side.
+    Dig,
 }
 
 #[derive(Clone, Copy)]
@@ -113,6 +116,19 @@ const OVERHEAD: [Hand; 7] = [
     key(1.0, [0.0; 3], [0.0; 3], Ease::InOut),
 ];
 
+/// The shovel: a small settle, drawn back with the blade lifted, a hard
+/// thrust forward and down into the ground (contact), a jar, then levered up
+/// and rolled to toss the load aside, and back to rest.
+const DIG: [Hand; 7] = [
+    REST,
+    key(0.10, [0.0, -0.02, 0.01], [-0.06, 0.0, 0.0], Ease::InOut),
+    key(0.36, [0.02, 0.06, 0.08], [0.5, 0.05, 0.0], Ease::InOut),
+    key(0.50, [-0.03, -0.10, -0.16], [-0.9, 0.1, 0.0], Ease::In),
+    key(0.58, [-0.03, -0.09, -0.15], [-0.85, 0.1, 0.0], Ease::Out),
+    key(0.78, [0.0, 0.04, -0.08], [0.35, 0.2, 0.35], Ease::InOut),
+    key(1.0, [0.0; 3], [0.0; 3], Ease::InOut),
+];
+
 /// The sword: a quick settle, drawn back high over the right shoulder with
 /// the blade laid back, a fast cut down and across to the left, a short
 /// follow-through, back to rest. Lighter and quicker than the axe.
@@ -193,6 +209,16 @@ const BODY_SLASH: [Body; 6] = [
     limbs(1.0, HOLD, Ease::InOut),
 ];
 
+const BODY_DIG: [Body; 7] = [
+    limbs(0.0, HOLD, Ease::InOut),
+    limbs(0.10, [0.0, 0.03, 0.25, 0.08, 0.0, 0.85, 0.3, 0.4, 0.0, 0.0], Ease::InOut),
+    limbs(0.36, [-0.2, -0.05, 0.6, 0.1, 0.1, 1.2, 0.9, 0.9, 0.6, 0.0], Ease::InOut),
+    limbs(0.50, [0.15, 0.35, 0.9, 0.05, 0.2, 0.15, 0.7, 0.3, -1.2, 0.0], Ease::In),
+    limbs(0.58, [0.13, 0.33, 0.92, 0.05, 0.2, 0.18, 0.72, 0.3, -1.15, 0.0], Ease::Out),
+    limbs(0.78, [0.35, 0.1, 1.3, 0.1, 0.4, 0.5, 1.1, 0.6, -0.3, -0.6], Ease::InOut),
+    limbs(1.0, HOLD, Ease::InOut),
+];
+
 /// Blocking: the sword arm up and across, blade raised in front of the face.
 const BODY_GUARD: [f32; 10] = [0.3, 0.06, 1.55, 0.12, 0.85, 1.25, 0.4, 0.9, -0.35, -1.45];
 
@@ -235,6 +261,7 @@ impl Swing {
             Swing::Chop => &CHOP,
             Swing::Overhead => &OVERHEAD,
             Swing::Slash => &SLASH,
+            Swing::Dig => &DIG,
         }
     }
 
@@ -244,6 +271,7 @@ impl Swing {
             Swing::Chop => &BODY_CHOP,
             Swing::Overhead => &BODY_OVERHEAD,
             Swing::Slash => &BODY_SLASH,
+            Swing::Dig => &BODY_DIG,
         }
     }
 
@@ -251,7 +279,7 @@ impl Swing {
     fn contact_key(self) -> usize {
         match self {
             Swing::Jab => 2,
-            Swing::Chop | Swing::Overhead | Swing::Slash => 3,
+            Swing::Chop | Swing::Overhead | Swing::Slash | Swing::Dig => 3,
         }
     }
 
@@ -263,6 +291,7 @@ impl Swing {
             Swing::Chop => 0.55,
             Swing::Overhead => 0.58,
             Swing::Slash => 0.42,
+            Swing::Dig => 0.6,
         }
     }
 
@@ -302,7 +331,7 @@ pub fn blow_share(swing: Swing, seconds: f32) -> f32 {
 mod tests {
     use super::*;
 
-    const ALL: [Swing; 4] = [Swing::Jab, Swing::Chop, Swing::Overhead, Swing::Slash];
+    const ALL: [Swing; 5] = [Swing::Jab, Swing::Chop, Swing::Overhead, Swing::Slash, Swing::Dig];
 
     fn pitch(q: Quat) -> f32 {
         q.to_euler(EulerRot::XYZ).0

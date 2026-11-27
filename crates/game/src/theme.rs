@@ -121,6 +121,27 @@ impl Theme {
     }
 }
 
+/// UI motion in a few hard steps instead of a long glide, to suit the chunky
+/// pixels: `t` is the time since the move began over how long it takes
+/// (about 0.08-0.12 s); the result is 0 at first, then jumps through
+/// `steps` even steps of an ease-out (quick at first), and is 1 from `t` = 1.
+/// So an 8-point slide in 4 steps moves 2 points at a time.
+pub fn stepped(t: f32, steps: u32) -> f32 {
+    if t >= 1.0 {
+        return 1.0;
+    }
+    if t <= 0.0 || steps == 0 {
+        return 0.0;
+    }
+    let eased = 1.0 - (1.0 - t) * (1.0 - t);
+    let n = steps as f32;
+    // The step whose start the eased curve has passed; the first comes at once.
+    ((eased * n).floor() + 1.0).min(n) / n
+}
+
+/// How long the snappy UI moves take, in seconds.
+pub const SNAP: f32 = 0.1;
+
 /// Text colours.
 pub mod colors {
     use bevy::prelude::Color;
@@ -179,13 +200,32 @@ fn shadow_all_text(mut commands: Commands, q: Query<Entity, (Added<Text>, Withou
 #[cfg(test)]
 mod tests {
     #[test]
+    fn stepped_moves_in_whole_steps() {
+        use super::stepped;
+        assert_eq!(stepped(-0.1, 3), 0.0);
+        assert_eq!(stepped(1.0, 3), 1.0);
+        assert_eq!(stepped(5.0, 3), 1.0);
+        // Only ever whole steps, never going back.
+        let mut last = 0.0;
+        for i in 1..100 {
+            let v = stepped(i as f32 / 100.0, 4);
+            assert!((v * 4.0 - (v * 4.0).round()).abs() < 1e-5, "{v} is between steps");
+            assert!(v >= last);
+            last = v;
+        }
+        // The first step comes straight away, the last before the end.
+        assert_eq!(stepped(0.01, 4), 0.25);
+        assert_eq!(stepped(0.9, 4), 1.0);
+    }
+
+    #[test]
     fn sheet_lists_what_the_game_uses() {
         let spec: super::SheetSpec = ron::from_str(include_str!("../../../assets/textures/ui.ron")).unwrap();
         for name in [
             "panel", "panel_light", "inset", "header", "tooltip", "banner", "divider", "slot", "slot_hover", "slot_selected", "item", "button",
             "button_hover", "button_down", "button_off", "bar", "fill", "knob", "node_major", "node_minor", "node_halo", "crosshair",
             "icon_damage", "icon_fatigue", "icon_blood", "icon_injuries", "icon_food", "icon_air", "icon_warmth", "icon_load", "icon_focus",
-            "icon_xp", "icon_levitate", "icon_light", "icon_lock", "icon_check", "icon_close", "icon_camp", "white",
+            "icon_xp", "icon_levitate", "icon_light", "icon_lock", "icon_check", "icon_close", "icon_camp", "icon_temp", "icon_cold", "white",
         ] {
             let s = spec.sprites.get(name).unwrap_or_else(|| panic!("missing {name}"));
             if let Some((l, t, r, b)) = s.slice {

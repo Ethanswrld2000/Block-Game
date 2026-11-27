@@ -30,6 +30,10 @@ const WIND_PUSH_FROM: f32 = 10.0;
 /// Push in blocks per second for each block per second of wind over `WIND_PUSH_FROM`, at a gust's peak.
 const WIND_PUSH: f32 = 0.03;
 const SWIM: f32 = 2.6;
+/// Speed lost wading through water up to the knee-high top of a full block (by depth).
+const WADE_DRAG: f32 = 0.4;
+/// Speed lost walking through snow a full block deep (by depth); snow slows a lot.
+const SNOW_DRAG: f32 = 0.6;
 const MAX_FALL: f32 = 60.0;
 /// Landing faster than this hurts (about a 3.5 block drop).
 pub const SAFE_LANDING: f32 = 14.0;
@@ -103,6 +107,8 @@ pub struct Body {
     pub fall: f32,
     /// 0..1: lack of air makes the view sway.
     pub dizzy: f32,
+    /// 0..1: cold makes the view shiver (`survival::shiver`).
+    pub shiver: f32,
     /// No moving at all (dead, or asleep).
     pub frozen: bool,
     /// The Levitation spell: no gravity; Space rises, Ctrl/C sinks.
@@ -113,7 +119,32 @@ pub struct Body {
 
 impl Default for Body {
     fn default() -> Self {
-        Self { speed: 1.0, fall: 1.0, dizzy: 0.0, frozen: false, levitate: false, feather: false }
+        Self { speed: 1.0, fall: 1.0, dizzy: 0.0, shiver: 0.0, frozen: false, levitate: false, feather: false }
+    }
+}
+
+/// How deep the feet are in water or snow, 0..1 of a block each.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Wading {
+    pub water: f32,
+    pub snow: f32,
+}
+
+impl Wading {
+    /// What the feet cell holds: a puddle or snow layer by its level, a water block as a full block.
+    pub fn of(def: &voxel::BlockDef, is_water: bool) -> Self {
+        let depth = def.level as f32 / 8.0;
+        match def.shape {
+            _ if is_water => Self { water: 1.0, snow: 0.0 },
+            voxel::Shape::Layer if def.translucent => Self { water: depth, snow: 0.0 },
+            voxel::Shape::Layer => Self { water: 0.0, snow: depth },
+            _ => Self::default(),
+        }
+    }
+
+    /// Multiplies walking speed: deeper is slower, snow more than water.
+    pub fn drag(self) -> f32 {
+        (1.0 - WADE_DRAG * self.water - SNOW_DRAG * self.snow).max(0.3)
     }
 }
 
@@ -125,6 +156,8 @@ pub struct Player {
     pub on_ground: bool,
     pub in_water: bool,
     pub head_in_water: bool,
+    /// What the feet stand in when not swimming (puddles, shallow water, snow).
+    pub wading: Wading,
     pub crouching: bool,
     pub sprinting: bool,
     /// Eye height, eased between standing and crouching.
@@ -148,6 +181,7 @@ impl Default for Player {
             on_ground: false,
             in_water: false,
             head_in_water: false,
+            wading: Wading::default(),
             crouching: false,
             sprinting: false,
             eye: EYE,
@@ -247,6 +281,11 @@ fn move_axis(world: &World, blocks: &Blocks, p: &mut Player, axis: usize, amount
 }
 
 #[allow(clippy::too_many_arguments)]
+/// How much what you stand in holds you back (brush, `slows` in blocks.ron): the slowest of the cells.
+fn brush(world: &World, blocks: &Blocks, cells: [BlockPos; 2]) -> f32 {
+    cells.iter().filter_map(|c| world.block(*c)).map(|b| blocks.registry.get(b).slows).fold(1.0, f32::min)
+}
+
 fn walk(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
@@ -282,6 +321,10 @@ fn walk(
     let head = BlockPos::from_world((p.pos + Vec3::Y * p.eye).to_array());
     p.in_water = cell(&world, &blocks, mid, water) == Cell::Water;
     p.head_in_water = cell(&world, &blocks, head, water) == Cell::Water;
+    p.wading = match world.block(feet) {
+        Some(b) if !p.in_water => Wading::of(blocks.registry.get(b), Some(b) == water),
+        _ => Wading::default(),
+    };
 
     // Crouch (and stand back up only if there's room).
     let want_crouch = keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::KeyC);
@@ -312,7 +355,9 @@ fn walk(
         SPRINT
     } else {
         WALK
-    } * body.speed;
+    } * body.speed
+        * brush(&world, &blocks, [feet, mid])
+        * p.wading.drag();
     // Quick to start and stop on the ground; little control in the air.
     let accel = if p.on_ground { 45.0 } else if p.in_water { 12.0 } else { 9.0 };
     let horiz = Vec2::new(p.vel.x, p.vel.z);
@@ -441,7 +486,11 @@ fn ride_camera(time: Res<Time>, player: Res<Player>, body: Res<Body>, kick: Opti
     let dizzy_roll = (t * 0.9).sin() * 0.09 * body.dizzy;
     let dizzy_yaw = (t * 0.6).sin() * 0.05 * body.dizzy;
     let (kick_pitch, kick_roll) = kick.map_or((0.0, 0.0), |k| (k.pitch, k.roll));
-    let roll = (p.bob_phase * 0.5).sin() * 0.012 * b + dizzy_roll + kick_roll;
+    // Cold: quick trembling.
+    let (shiver_pitch, shiver_yaw, shiver_roll) = crate::survival::shiver::offset(t, body.shiver);
+    let kick_pitch = kick_pitch + shiver_pitch;
+    let dizzy_yaw = dizzy_yaw + shiver_yaw;
+    let roll = (p.bob_phase * 0.5).sin() * 0.012 * b + dizzy_roll + kick_roll + shiver_roll;
     // Landing nods the view down with the dip, then it springs back.
     let land_nod = p.dip * 0.15;
     let rotation = Quat::from_euler(EulerRot::YXZ, look.yaw + dizzy_yaw, look.pitch + s.abs() * 0.006 * b + kick_pitch + land_nod, roll);
@@ -463,6 +512,20 @@ fn follow_fly_camera(mut player: ResMut<Player>, cam: Query<&Transform, With<Fly
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wading_and_snow_slow_you_by_depth() {
+        let tiles = voxel::TileSheet::from_ron(include_str!("../../../assets/textures/blocks.ron")).unwrap();
+        let reg = voxel::BlockRegistry::from_ron(include_str!("../../../assets/data/blocks.ron"), &tiles).unwrap();
+        let of = |n: &str| Wading::of(reg.get(reg.expect(n)), n == "water");
+        assert_eq!(of("air").drag(), 1.0);
+        assert_eq!(of("tall_grass").drag(), 1.0);
+        assert!(of("puddle_2").drag() > of("puddle_6").drag(), "deeper water is slower");
+        assert!(of("puddle_6").drag() > of("water").drag());
+        assert!(of("snow_layer_2").drag() > of("snow_layer_6+fern").drag(), "deeper snow is slower");
+        assert!(of("snow_layer_4").drag() < of("puddle_4").drag(), "snow slows more than water");
+        assert!(of("snow_layer_7").drag() >= 0.3);
+    }
 
     #[test]
     fn box_overlap() {

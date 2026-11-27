@@ -2,7 +2,8 @@
 // A block that isn't listed drops its own item (the item that places it), if there is one.
 // An empty list drops nothing.
 {
-    "stone": [("cobblestone", 1, 1.0)],
+    // Stone breaks into small rocks; cobblestone is made from them at the tool bench.
+    "stone": [("small_rock", 2, 1.0), ("small_rock", 1, 0.5)],
     "grass": [("dirt", 1, 1.0), ("plant_fiber", 1, 0.5), ("swamp_reed", 1, 0.08)],
     "moss": [("moss", 1, 1.0), ("plant_fiber", 1, 0.35)],
     "leaves": [("stick", 1, 0.5), ("plant_fiber", 1, 0.3)],
@@ -10,7 +11,7 @@
     "gravel": [("gravel", 1, 1.0), ("flint", 1, 0.2)],
     "coal_ore": [("coal", 1, 1.0)],
     "iron_ore": [("raw_iron", 1, 1.0)],
-    "deeprock": [("cobblestone", 1, 1.0)],
+    "deeprock": [("small_rock", 2, 1.0), ("small_rock", 1, 0.5)],
     "snow": [],
     "ice": [],
     "water": [],
@@ -48,4 +49,11 @@
     "swamp_log_z": [("swamp_log", 1, 1.0)],
     "redwood_log_x": [("redwood_log", 1, 1.0)],
     "redwood_log_z": [("redwood_log", 1, 1.0)],
+    // Soil dug by hand gives its block when the last layer goes; a shovel on a dug layer gives it too.
+    "dirt_layer_6": [("dirt", 1, 1.0)], "dirt_layer_4": [("dirt", 1, 1.0)], "dirt_layer_2": [("dirt", 1, 1.0)],
+    "sand_layer_6": [("sand", 1, 1.0)], "sand_layer_4": [("sand", 1, 1.0)], "sand_layer_2": [("sand", 1, 1.0)],
+    "mud_layer_6": [("mud", 1, 1.0)], "mud_layer_4": [("mud", 1, 1.0)], "mud_layer_2": [("mud", 1, 1.0)],
+    "gravel_layer_6": [("gravel", 1, 1.0)], "gravel_layer_4": [("gravel", 1, 1.0)], "gravel_layer_2": [("gravel", 1, 1.0)],
+    "clay_layer_6": [("clay", 1, 1.0)], "clay_layer_4": [("clay", 1, 1.0)], "clay_layer_2": [("clay", 1, 1.0)],
+    "peat_layer_6": [("peat", 1, 1.0)], "peat_layer_4": [("peat", 1, 1.0)], "peat_layer_2": [("peat", 1, 1.0)],
 }
