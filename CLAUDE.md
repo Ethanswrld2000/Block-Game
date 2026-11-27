@@ -609,12 +609,25 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `GUST_EVERY` (20-30 s, `gust_shape`); `Wind::gusting()`/`velocity()` include the gust. `game::wind_streaks`: gizmo line
   trails that ride the wind, more the harder it blows, none under a roof. Wind push on the player is small
   (`player::WIND_PUSH`, from 10 blocks/s, mostly during gusts).
-- Snow cover and puddles: `game::cover` (`assets/data/cover.ron`; pure rules in `cover::rules`). Every `every` seconds
-  `columns` random columns within `radius` of you whose top is open to the sky get a look: snowfall adds a
-  `snow_layer_1..8` (`voxel::Shape::Layer`, `level` eighths high; drifts to the lowest spot beside it first; buries the
-  small plants in `buries`; layer 8 is solid), warm weather melts it a layer at a time. Rain adds `puddle_1..8` (translucent
-  layers, drawn with the water) where walls hold water on two sides or more; water runs to lower puddles, onto flat ground
-  beside it (level 2+), off edges and into real water; puddles dry after the rain. Only near you in loaded chunks.
+- Snow cover and flowing water: `game::cover` (`assets/data/cover.ron`; pure rules in `cover::rules` and `cover::flow`). Every
+  `every` seconds `columns` random columns within `radius` of you whose top is open to the sky get a look: snowfall (any
+  season, whenever `Conditions.snowing`) adds a `snow_layer_1..8` (`voxel::Shape::Layer`, `level` eighths high; drifts to
+  the lowest spot beside it first; layer 8 is solid). Plants and pebbles stay in the snow: layers with `fills_around: true`
+  get a `snow_layer_<n>+<detail>` block per Plant/Pebble block, made by the registry after the listed ones
+  (`BlockDef::inside`; meshed as the layer plus the detail; digging it leaves the detail; crops don't grow under it). Above
+  freezing snow melts slowly, faster the warmer it is (`MELT_FULL`). Rain adds a level of water where walls hold it on two
+  sides or more. Water flows (`cover::flow`, every `FLOW_EVERY` 0.15 s): `puddle_<n>` = n eighths, `water` = 8 (a source
+  block); open all round (below and four sides air) gives its water out at once, else down first, then an eighth per pass
+  to each side two lower or one it can fall from; total kept (except water falling out of the loaded world). A source
+  block in a body of `flow::ENDLESS` (11)+ connected source blocks never runs low: it fills the cell below and gives an
+  eighth to any side with less, staying full, so a pit dug by a river or the sea fills right up. Only cells next to a
+  change move (`World::changed` from `set_block`, `cover::Flowing`). Water washes away plants and pebbles; puddles aren't
+  held up (they run). Puddles stay while it rains; once it stops, water short of a full block dries a level at a time
+  (`Flowing::shallow`, chance `dry` per second; not saved, older puddles dry through the column looks).
+  Wading (`player::Wading`, feet cell when not swimming): puddles and water slow you by depth (`WADE_DRAG`), snow layers
+  more (`SNOW_DRAG`); footsteps splash in water, crunch in thin snow, slosh from `deep_from` eighths (sounds.ron `wade`;
+  `step_splash/snow/slosh_0..2`, `gen_placeholder_sounds.py --only step_splash step_snow step_slosh`).
+  F9 dev menu, World tab: pick a season (`Seasons::next_start` jumps the day forward to its first day).
 - Rainbows and lightning bolts: after rain or a storm gives way to drier weather, `Conditions.rainbow` rises with the change
   and fades 1-2.5 game hours later (`weather::rainbow_strength`); `sky.wesl` `rainbow` draws a main bow 40-42.5° and a faint
   second bow round the point opposite the sun (`sky::rainbow_centre`, kept from sinking far below the horizon so midday bows

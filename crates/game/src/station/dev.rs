@@ -20,6 +20,7 @@ use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 use super::urns::State;
 use super::{placed_facing, StepDone, UrnBook, Urns};
 use crate::camera::{FlyCamera, Menus};
+use crate::clock::{Seasons, WorldClock};
 use crate::inventory::grid::Stack;
 use crate::inventory::{Inventory, Spill};
 use crate::item_art::ItemArt;
@@ -34,9 +35,10 @@ enum Tab {
     Urns,
     Items,
     Npcs,
+    World,
 }
 
-const TABS: [(Tab, &str); 3] = [(Tab::Urns, "Urns"), (Tab::Items, "Items"), (Tab::Npcs, "NPCs")];
+const TABS: [(Tab, &str); 4] = [(Tab::Urns, "Urns"), (Tab::Items, "Items"), (Tab::Npcs, "NPCs"), (Tab::World, "World")];
 
 /// Which items the Items tab shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -137,6 +139,7 @@ enum Press {
     Page(i32),
     Empty,
     Npc(usize),
+    Season(usize),
 }
 
 /// How a button is drawn: plain, hovered, and when it is the chosen one (or held down).
@@ -198,6 +201,7 @@ pub(super) fn dev_keys(
             dev.tab = match v.as_str() {
                 "items" => Tab::Items,
                 "npcs" => Tab::Npcs,
+                "world" => Tab::World,
                 _ => Tab::Urns,
             };
             dev.open = true;
@@ -253,7 +257,7 @@ pub(super) fn dev_click(
     (player, cam): (Res<crate::player::Player>, Single<&Transform, With<FlyCamera>>),
     (mut inv, mut urns): (ResMut<Inventory>, ResMut<Urns>),
     (mut done, mut spill, mut toast, mut npc): (MessageWriter<StepDone>, MessageWriter<Spill>, MessageWriter<Toast>, MessageWriter<SpawnKind>),
-    npcs: Res<NpcBook>,
+    (npcs, seasons, mut clock): (Res<NpcBook>, Res<Seasons>, ResMut<WorldClock>),
 ) {
     let scrolled: f32 = wheel.read().map(|w| w.y).sum();
     let Some(book) = book else { return };
@@ -362,6 +366,11 @@ pub(super) fn dev_click(
                 toast.write(Toast(format!("Dev: {} is in front of you", kind.name)));
             }
         }
+        Press::Season(k) => {
+            clock.day = seasons.next_start(clock.day, k);
+            dev.dirty = true;
+            toast.write(Toast(format!("Dev: it is now {} (day {})", seasons.list[k].title, clock.day + 1)));
+        }
         Press::Urn(i, act) => urn_act(i, act, &book, &mut urns, &mut inv, &mut give, &player, &cam, &mut done, &mut toast),
     }
 }
@@ -444,6 +453,7 @@ pub(super) fn dev_build(
     mut dev: ResMut<DevMenu>,
     (book, urns): (Option<Res<UrnBook>>, Res<Urns>),
     (items, art, npcs): (Res<Items>, Res<ItemArt>, Res<NpcBook>),
+    (seasons, clock): (Res<Seasons>, Res<WorldClock>),
     mut root: Query<&mut Visibility, With<DevRoot>>,
     panel: Query<(Entity, Option<&Children>), With<DevPanel>>,
 ) {
@@ -478,6 +488,7 @@ pub(super) fn dev_build(
             Tab::Urns => urns_tab(c, theme, &book, &urns),
             Tab::Items => items_tab(c, theme, dev, &items, &art),
             Tab::Npcs => npcs_tab(c, theme, &npcs),
+            Tab::World => world_tab(c, theme, &seasons, &clock),
         }
     });
 }
@@ -560,6 +571,16 @@ fn npcs_tab(c: &mut ChildSpawnerCommands, theme: &Theme, npcs: &NpcBook) {
         for (k, kind) in npcs.kinds.iter().enumerate() {
             let label = if kind.title.is_empty() { kind.name.clone() } else { format!("{} · {}", kind.name, kind.title) };
             labelled(g, theme, button(Press::Npc(k), Look::Button, false), &label, 345.0);
+        }
+    });
+}
+
+fn world_tab(c: &mut ChildSpawnerCommands, theme: &Theme, seasons: &Seasons, clock: &WorldClock) {
+    let now = seasons.at(clock).current;
+    c.spawn(text("Season: jumps ahead to the first day of the one you pick (time of day stays).", sizes::SMALL, colors::MUTED));
+    c.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(4.0), ..default() }).with_children(|r| {
+        for (k, s) in seasons.list.iter().enumerate() {
+            labelled(r, theme, button(Press::Season(k), Look::Button, k == now), &s.title, 130.0);
         }
     });
 }

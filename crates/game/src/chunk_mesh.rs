@@ -155,39 +155,52 @@ fn push_plants(chunk: &PaddedChunk, light: &Light, registry: &BlockRegistry, b: 
                         let start = out.pos.len();
                         push_layer(def, cell, near, out);
                         out.light.resize(out.pos.len().max(start), lit);
+                        // A plant or pebble standing in the snow pokes out of it.
+                        if let Some(d) = def.inside.filter(|_| def.level < 8) {
+                            let inner = registry.get(d);
+                            let key = [x as u32, y as u32, z as u32];
+                            let start = b.pos.len();
+                            if inner.shape == voxel::Shape::Plant { push_plant(inner, key, b) } else { push_detail(inner, cell, key, b) }
+                            b.light.resize(b.pos.len().max(start), lit);
+                        }
                         continue;
                     }
                     _ => continue,
                 }
-                let tex = def.textures[voxel::Face::PosY as usize] as f32;
-                let tint = if def.foliage { 1.0 } else { 0.0 };
-                // A little jitter so a field of grass isn't a grid.
-                let h = (x as u32).wrapping_mul(73_856_093) ^ (y as u32).wrapping_mul(19_349_663) ^ (z as u32).wrapping_mul(83_492_791);
-                let jx = ((h & 0xFF) as f32 / 255.0 - 0.5) * 0.3;
-                let jz = (((h >> 8) & 0xFF) as f32 / 255.0 - 0.5) * 0.3;
-                let tall = 0.85 + ((h >> 16) & 0xFF) as f32 / 255.0 * 0.25;
-                let (cx, cy, cz) = ((x - 1) as f32 + 0.5 + jx, (y - 1) as f32, (z - 1) as f32 + 0.5 + jz);
-                let r = 0.45;
-                for (dx, dz) in [(r, r), (r, -r)] {
-                    let a = [cx - dx, cy, cz - dz];
-                    let c = [cx + dx, cy, cz + dz];
-                    // Bottom left, bottom right, top right, top left.
-                    let corners = [a, c, [c[0], cy + tall, c[2]], [a[0], cy + tall, a[2]]];
-                    let uvs = [[0.0, 0.999], [0.999, 0.999], [0.999, 0.0], [0.0, 0.0]];
-                    let sway = [0.0, 0.0, 1.0, 1.0];
-                    let start = b.pos.len() as u32;
-                    for i in 0..4 {
-                        b.pos.push(corners[i]);
-                        b.nor.push([0.0, 1.0, 0.0]);
-                        b.uv.push(uvs[i]);
-                        b.layer.push([pack_layer(tex, 0), pack_tint_sway(tint, sway[i])]);
-                    }
-                    b.idx.extend_from_slice(&[start, start + 1, start + 2, start, start + 2, start + 3]);
-                    b.idx.extend_from_slice(&[start, start + 2, start + 1, start, start + 3, start + 2]);
-                }
+                push_plant(def, [x as u32, y as u32, z as u32], b);
                 fill(b);
             }
         }
+    }
+}
+
+/// Two crossed quads for a plant in the cell at padded position `x, y, z`.
+fn push_plant(def: &voxel::BlockDef, [x, y, z]: [u32; 3], b: &mut Buffers) {
+    let tex = def.textures[voxel::Face::PosY as usize] as f32;
+    let tint = if def.foliage { 1.0 } else { 0.0 };
+    // A little jitter so a field of grass isn't a grid.
+    let h = x.wrapping_mul(73_856_093) ^ y.wrapping_mul(19_349_663) ^ z.wrapping_mul(83_492_791);
+    let jx = ((h & 0xFF) as f32 / 255.0 - 0.5) * 0.3;
+    let jz = (((h >> 8) & 0xFF) as f32 / 255.0 - 0.5) * 0.3;
+    let tall = 0.85 + ((h >> 16) & 0xFF) as f32 / 255.0 * 0.25;
+    let (cx, cy, cz) = ((x - 1) as f32 + 0.5 + jx, (y - 1) as f32, (z - 1) as f32 + 0.5 + jz);
+    let r = 0.45;
+    for (dx, dz) in [(r, r), (r, -r)] {
+        let a = [cx - dx, cy, cz - dz];
+        let c = [cx + dx, cy, cz + dz];
+        // Bottom left, bottom right, top right, top left.
+        let corners = [a, c, [c[0], cy + tall, c[2]], [a[0], cy + tall, a[2]]];
+        let uvs = [[0.0, 0.999], [0.999, 0.999], [0.999, 0.0], [0.0, 0.0]];
+        let sway = [0.0, 0.0, 1.0, 1.0];
+        let start = b.pos.len() as u32;
+        for i in 0..4 {
+            b.pos.push(corners[i]);
+            b.nor.push([0.0, 1.0, 0.0]);
+            b.uv.push(uvs[i]);
+            b.layer.push([pack_layer(tex, 0), pack_tint_sway(tint, sway[i])]);
+        }
+        b.idx.extend_from_slice(&[start, start + 1, start + 2, start, start + 2, start + 3]);
+        b.idx.extend_from_slice(&[start, start + 2, start + 1, start, start + 3, start + 2]);
     }
 }
 
