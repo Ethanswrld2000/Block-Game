@@ -137,11 +137,7 @@ pub fn act(anim: Anim, t: f32, leg: f32) -> Pose {
     // 0 -> 1 over the first `rise` seconds, back to 0 over the last `rise`.
     let env = |rise: f32| {
         let up = smooth(t / rise);
-        if anim.held() {
-            up
-        } else {
-            up * smooth((len - t) / rise)
-        }
+        if anim.held() { up } else { up * smooth((len - t) / rise) }
     };
     match anim {
         Anim::Wave => {
@@ -158,45 +154,14 @@ pub fn act(anim: Anim, t: f32, leg: f32) -> Pose {
             }
             .scale(e)
         }
-        Anim::Nod => Pose {
-            nod: -0.24 * (t * 1.8 * TAU).sin().abs(),
-            ..Pose::default()
-        }
-        .scale(env(0.15)),
-        Anim::HeadShake => Pose {
-            shake: 0.34 * (t * 2.0 * TAU).sin(),
-            nod: -0.05,
-            ..Pose::default()
-        }
-        .scale(env(0.15)),
+        Anim::Nod => Pose { nod: -0.24 * (t * 1.8 * TAU).sin().abs(), ..Pose::default() }.scale(env(0.15)),
+        Anim::HeadShake => Pose { shake: 0.34 * (t * 2.0 * TAU).sin(), nod: -0.05, ..Pose::default() }.scale(env(0.15)),
         Anim::Shrug => {
             let e = env(0.3);
-            Pose {
-                arm_out: [0.35, 0.35],
-                shoulder: [0.35, 0.35],
-                elbow: [1.2, 1.2],
-                nod: 0.08,
-                roll: 0.04,
-                ..Pose::default()
-            }
-            .scale(e)
+            Pose { arm_out: [0.35, 0.35], shoulder: [0.35, 0.35], elbow: [1.2, 1.2], nod: 0.08, roll: 0.04, ..Pose::default() }.scale(e)
         }
-        Anim::Bow => Pose {
-            lean: 0.65,
-            nod: -0.35,
-            shoulder: [-0.12, -0.12],
-            knee: [0.08, 0.08],
-            ..Pose::default()
-        }
-        .scale(env(0.45)),
-        Anim::Point => Pose {
-            twist: -0.15,
-            shoulder: [0.0, 1.45],
-            arm_out: [0.0, 0.08],
-            elbow: [0.0, -0.1],
-            ..Pose::default()
-        }
-        .scale(env(0.3)),
+        Anim::Bow => Pose { lean: 0.65, nod: -0.35, shoulder: [-0.12, -0.12], knee: [0.08, 0.08], ..Pose::default() }.scale(env(0.45)),
+        Anim::Point => Pose { twist: -0.15, shoulder: [0.0, 1.45], arm_out: [0.0, 0.08], elbow: [0.0, -0.1], ..Pose::default() }.scale(env(0.3)),
         Anim::Cheer => {
             let e = env(0.4);
             let bounce = (t * 2.2 * TAU).sin();
@@ -268,10 +233,7 @@ pub fn idle(t: f32) -> Pose {
         lean: 0.02 + 0.01 * breath,
         twist: 0.03 * (t * 0.23).sin(),
         hip: [0.02 * shift, -0.02 * shift],
-        knee: [
-            0.04 + 0.04 * shift.max(0.0),
-            0.04 + 0.04 * (-shift).max(0.0),
-        ],
+        knee: [0.04 + 0.04 * shift.max(0.0), 0.04 + 0.04 * (-shift).max(0.0)],
         shoulder: [0.03 * breath, 0.03 * (t * 1.7 + 0.6).sin()],
         arm_out: [0.07 + 0.015 * breath, 0.07 + 0.015 * breath],
         elbow: [0.14, 0.16],
@@ -326,10 +288,7 @@ pub fn walk(phase: f32, pace: f32) -> Pose {
         knee: [a * (0.08 + knee * fold(c)), a * (0.08 + knee * fold(-c))],
         shoulder: [-a * arm * ls, a * arm * ls],
         arm_out: [a.min(1.0) * 0.06 + a * 0.02, a.min(1.0) * 0.06 + a * 0.02],
-        elbow: [
-            a * (0.18 + 0.3 * run + 0.22 * curl(lc)),
-            a * (0.18 + 0.3 * run + 0.22 * curl(-lc)),
-        ],
+        elbow: [a * (0.18 + 0.3 * run + 0.22 * curl(lc)), a * (0.18 + 0.3 * run + 0.22 * curl(-lc))],
         ..Pose::default()
     }
 }
@@ -452,18 +411,9 @@ impl Gaze {
         // Pupils cover what the head hasn't turned yet: they lead.
         let px = ((yaw - head_yaw) / PUPIL_REACH + self.dart[0]).clamp(-1.0, 1.0);
         let py = ((pitch - head_pitch) / PUPIL_REACH + self.dart[1]).clamp(-1.0, 1.0);
-        let pupil = [
-            self.pupils[0].step(px, 0.05, dt),
-            self.pupils[1].step(py, 0.05, dt),
-        ];
+        let pupil = [self.pupils[0].step(px, 0.05, dt), self.pupils[1].step(py, 0.05, dt)];
         let twist = (head_yaw.abs() - 0.6).max(0.0) * head_yaw.signum() * 0.5;
-        Look {
-            head_yaw,
-            head_pitch,
-            twist,
-            pupil,
-            blink: self.step_blink(dt),
-        }
+        Look { head_yaw, head_pitch, twist, pupil, blink: self.step_blink(dt) }
     }
 
     fn step_blink(&mut self, dt: f32) -> f32 {
@@ -479,11 +429,7 @@ impl Gaze {
                 self.blink_t = -1.0;
                 // Now and then a second blink straight after.
                 self.double = !self.double && self.rng.unit() < 0.2;
-                self.next_blink = if self.double {
-                    0.08
-                } else {
-                    self.rng.range(1.8, 5.5)
-                };
+                self.next_blink = if self.double { 0.08 } else { self.rng.range(1.8, 5.5) };
             }
         }
         // Lids close fast and open a little slower.
@@ -491,11 +437,7 @@ impl Gaze {
             0.0
         } else {
             let u = self.blink_t / BLINK;
-            if u < 0.4 {
-                (u / 0.4).powf(0.7)
-            } else {
-                1.0 - ((u - 0.4) / 0.6).powf(1.4)
-            }
+            if u < 0.4 { (u / 0.4).powf(0.7) } else { 1.0 - ((u - 0.4) / 0.6).powf(1.4) }
         };
         self.blink
     }
@@ -540,14 +482,8 @@ mod tests {
     #[test]
     fn walk_is_smooth_and_alternates() {
         let a = walk(PI / 2.0, 1.0);
-        assert!(
-            a.hip[0] > 0.3 && a.hip[1] < -0.3,
-            "left forward, right back"
-        );
-        assert!(
-            a.shoulder[0] < 0.0 && a.shoulder[1] > 0.0,
-            "arms swing against the legs"
-        );
+        assert!(a.hip[0] > 0.3 && a.hip[1] < -0.3, "left forward, right back");
+        assert!(a.shoulder[0] < 0.0 && a.shoulder[1] > 0.0, "arms swing against the legs");
         // Standing pace is no motion at all.
         let still = walk(1.3, 0.0);
         assert_eq!(still.hip, [0.0, 0.0]);
@@ -604,10 +540,7 @@ mod tests {
             last = g.step(1.0 / 60.0, Some([0.8, 0.0]));
         }
         assert!((last.head_yaw - 0.8).abs() < 0.02, "head ends up there");
-        assert!(
-            last.pupil[0].abs() < 0.35,
-            "pupils come back near the middle"
-        );
+        assert!(last.pupil[0].abs() < 0.35, "pupils come back near the middle");
         // Too far round for the head alone: it stops at its limit.
         for _ in 0..240 {
             last = g.step(1.0 / 60.0, Some([2.5, 0.0]));
@@ -618,33 +551,15 @@ mod tests {
 
     #[test]
     fn one_off_animations_start_and_end_at_rest() {
-        for a in [
-            Anim::Wave,
-            Anim::Nod,
-            Anim::HeadShake,
-            Anim::Shrug,
-            Anim::Bow,
-            Anim::Point,
-            Anim::Cheer,
-            Anim::Give,
-        ] {
+        for a in [Anim::Wave, Anim::Nod, Anim::HeadShake, Anim::Shrug, Anim::Bow, Anim::Point, Anim::Cheer, Anim::Give] {
             assert_eq!(act(a, 0.0, LEG), Pose::default(), "{a:?} starts at rest");
-            assert!(
-                act(a, a.length(), LEG)
-                    .to_array()
-                    .iter()
-                    .all(|x| x.abs() < 1e-4),
-                "{a:?} ends at rest"
-            );
+            assert!(act(a, a.length(), LEG).to_array().iter().all(|x| x.abs() < 1e-4), "{a:?} ends at rest");
             let mid = act(a, a.length() * 0.4, LEG).to_array();
             assert!(mid.iter().any(|x| x.abs() > 0.05), "{a:?} moves");
             // No snapping from frame to frame.
             for i in 0..200 {
                 let t = a.length() * i as f32 / 200.0;
-                let (x, y) = (
-                    act(a, t, LEG).to_array(),
-                    act(a, t + 1.0 / 60.0, LEG).to_array(),
-                );
+                let (x, y) = (act(a, t, LEG).to_array(), act(a, t + 1.0 / 60.0, LEG).to_array());
                 for j in 0..Pose::JOINTS {
                     assert!((x[j] - y[j]).abs() < 0.2, "{a:?} joint {j} jumps at {t}");
                 }

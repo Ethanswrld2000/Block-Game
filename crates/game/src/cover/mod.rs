@@ -50,14 +50,8 @@ pub struct CoverPlugin;
 
 impl Plugin for CoverPlugin {
     fn build(&self, app: &mut App) {
-        let cfg: CoverConfig = ron::from_str(include_str!("../../../../assets/data/cover.ron"))
-            .unwrap_or_else(|e| panic!("cover.ron: {e}"));
-        app.insert_resource(cfg)
-            .init_resource::<Flowing>()
-            .add_systems(
-                crate::menu::GameUpdate,
-                (settle.after(WeatherSet), flow_water),
-            );
+        let cfg: CoverConfig = ron::from_str(include_str!("../../../../assets/data/cover.ron")).unwrap_or_else(|e| panic!("cover.ron: {e}"));
+        app.insert_resource(cfg).init_resource::<Flowing>().add_systems(crate::menu::GameUpdate, (settle.after(WeatherSet), flow_water));
     }
 }
 
@@ -92,22 +86,10 @@ fn falling(c: &Conditions) -> bool {
 pub fn sky_now(cfg: &CoverConfig, c: &Conditions, temperature: f32) -> Sky {
     let falling = falling(c);
     // Snow melts slowly above freezing, faster the warmer it is and in rain.
-    let warmth = if c.snowing {
-        0.0
-    } else {
-        (temperature / MELT_FULL).clamp(0.0, 1.0)
-    };
+    let warmth = if c.snowing { 0.0 } else { (temperature / MELT_FULL).clamp(0.0, 1.0) };
     Sky {
-        snow: if falling && c.snowing {
-            c.precipitation * cfg.snow
-        } else {
-            0.0
-        },
-        rain: if falling && !c.snowing {
-            c.precipitation * cfg.rain
-        } else {
-            0.0
-        },
+        snow: if falling && c.snowing { c.precipitation * cfg.snow } else { 0.0 },
+        rain: if falling && !c.snowing { c.precipitation * cfg.rain } else { 0.0 },
         melt: cfg.melt * warmth * if falling { 2.0 } else { 1.0 },
         dry: if falling { 0.0 } else { cfg.dry },
     }
@@ -153,15 +135,9 @@ fn settle(
             continue;
         }
         let (x, z) = (here.x + dx, here.z + dz);
-        let Some(at) = rules::surface(&get, reg, kinds, x, z, here.y + SEARCH, here.y - SEARCH)
-        else {
-            continue;
-        };
+        let Some(at) = rules::surface(&get, reg, kinds, x, z, here.y + SEARCH, here.y - SEARCH) else { continue };
         // Only where the sky reaches (not under roofs or overhangs).
-        if world
-            .light_at(at)
-            .is_none_or(|(s, _)| s < voxel::light::MAX)
-        {
+        if world.light_at(at).is_none_or(|(s, _)| s < voxel::light::MAX) {
             continue;
         }
         changes.extend(rules::step(&get, reg, kinds, at, &sky, &mut seed));
@@ -234,13 +210,7 @@ fn flow_water(
     }
     *wait = FLOW_EVERY;
     let get = |p: BlockPos| waters.cell(world.block(p));
-    let moved = flow::pass(
-        &get,
-        &flowing.active,
-        FLOW_BUDGET,
-        worldgen::WORLD_FLOOR,
-        &mut seed,
-    );
+    let moved = flow::pass(&get, &flowing.active, FLOW_BUDGET, worldgen::WORLD_FLOOR, &mut seed);
     flowing.active = moved.next;
     for (p, level) in moved.levels {
         world.set_block(p, waters.block(level));

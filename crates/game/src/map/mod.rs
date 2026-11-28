@@ -17,15 +17,15 @@ use std::sync::Arc;
 use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use bevy::tasks::{AsyncComputeTaskPool, Task, futures::check_ready};
+use bevy::tasks::{futures::check_ready, AsyncComputeTaskPool, Task};
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 use serde::{Deserialize, Serialize};
 use worldgen::{Land, WorldGen};
 
 use crate::camera::{FlyCamera, Menus};
 use crate::player::Player;
-use crate::save::{SaveDir, read_ron, screenshot_run, write_ron};
-use crate::theme::{Theme, colors, sizes, text};
+use crate::save::{read_ron, screenshot_run, write_ron, SaveDir};
+use crate::theme::{colors, sizes, text, Theme};
 use crate::world::Generator;
 
 /// Pixels across the map picture, and blocks per pixel.
@@ -47,12 +47,7 @@ impl Plugin for MapPlugin {
             .init_resource::<MapView>()
             .add_systems(crate::menu::GameStartup, spawn_ui)
             .add_systems(crate::menu::GamePostStartup, load)
-            .add_systems(
-                crate::menu::GameUpdate,
-                (open_close, paint_map, place_marks, click_map, strip)
-                    .chain()
-                    .after(crate::player::PlayerSet),
-            )
+            .add_systems(crate::menu::GameUpdate, (open_close, paint_map, place_marks, click_map, strip).chain().after(crate::player::PlayerSet))
             .add_systems(crate::menu::GameUpdate, save_now_and_then)
             .add_systems(Last, save_on_exit.run_if(crate::menu::in_game));
     }
@@ -77,10 +72,7 @@ pub struct Waypoints {
 impl Waypoints {
     pub fn add(&mut self, pos: Vec3) {
         self.next += 1;
-        self.list.push(Waypoint {
-            name: format!("Waypoint {}", self.next),
-            pos: pos.to_array(),
-        });
+        self.list.push(Waypoint { name: format!("Waypoint {}", self.next), pos: pos.to_array() });
     }
 
     /// The waypoint nearest `at` (flat), within `reach` blocks.
@@ -103,12 +95,7 @@ pub fn pixel(g: &WorldGen, x: i32, z: i32) -> [u8; 4] {
     }
     if c.water > c.height {
         let depth = ((c.water - c.height) as f32 / 24.0).clamp(0.0, 1.0);
-        return [
-            (40.0 - 20.0 * depth) as u8,
-            (90.0 - 40.0 * depth) as u8,
-            (150.0 - 30.0 * depth) as u8,
-            255,
-        ];
+        return [(40.0 - 20.0 * depth) as u8, (90.0 - 40.0 * depth) as u8, (150.0 - 30.0 * depth) as u8, 255];
     }
     let b = g.biomes.get(c.biome);
     let shade = (0.75 + c.height as f32 / 300.0).clamp(0.45, 1.35);
@@ -122,11 +109,7 @@ pub fn paint(g: &WorldGen, cx: i32, cz: i32) -> Vec<u8> {
     let mut out = Vec::with_capacity((PIXELS * PIXELS * 4) as usize);
     for py in 0..PIXELS as i32 {
         for px in 0..PIXELS as i32 {
-            out.extend_from_slice(&pixel(
-                g,
-                cx - half + px * STEP + STEP / 2,
-                cz - half + py * STEP + STEP / 2,
-            ));
+            out.extend_from_slice(&pixel(g, cx - half + px * STEP + STEP / 2, cz - half + py * STEP + STEP / 2));
         }
     }
     out
@@ -197,14 +180,7 @@ fn spawn_ui(mut commands: Commands, theme: Res<Theme>) {
                 });
         });
     commands.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            top: Val::Px(crate::weather_dial::DIAL_SPACE),
-            left: Val::Percent(20.0),
-            width: Val::Percent(60.0),
-            height: Val::Px(40.0),
-            ..default()
-        },
+        Node { position_type: PositionType::Absolute, top: Val::Px(crate::weather_dial::DIAL_SPACE), left: Val::Percent(20.0), width: Val::Percent(60.0), height: Val::Px(40.0), ..default() },
         Strip,
     ));
 }
@@ -231,11 +207,7 @@ fn open_close(
         cursor.grab_mode = CursorGrabMode::None;
         cursor.visible = true;
     }
-    let want = if view.open {
-        Visibility::Inherited
-    } else {
-        Visibility::Hidden
-    };
+    let want = if view.open { Visibility::Inherited } else { Visibility::Hidden };
     if **ui != want {
         **ui = want;
     }
@@ -253,17 +225,7 @@ fn paint_map(
         if let Some((center, data)) = check_ready(task) {
             view.task = None;
             view.center = Some(center);
-            let image = Image::new(
-                Extent3d {
-                    width: PIXELS,
-                    height: PIXELS,
-                    depth_or_array_layers: 1,
-                },
-                TextureDimension::D2,
-                data,
-                TextureFormat::Rgba8UnormSrgb,
-                RenderAssetUsages::RENDER_WORLD,
-            );
+            let image = Image::new(Extent3d { width: PIXELS, height: PIXELS, depth_or_array_layers: 1 }, TextureDimension::D2, data, TextureFormat::Rgba8UnormSrgb, RenderAssetUsages::RENDER_WORLD);
             let handle = images.add(image);
             if let Some(old) = view.image.replace(handle.clone()) {
                 images.remove(&old);
@@ -278,10 +240,7 @@ fn paint_map(
     if view.open && stale {
         let g: Arc<WorldGen> = generator.0.clone();
         let center = (here / STEP as f32).round() * STEP as f32;
-        view.task = Some(
-            AsyncComputeTaskPool::get()
-                .spawn(async move { (center, paint(&g, center.x as i32, center.y as i32)) }),
-        );
+        view.task = Some(AsyncComputeTaskPool::get().spawn(async move { (center, paint(&g, center.x as i32, center.y as i32)) }));
     }
 }
 
@@ -292,11 +251,7 @@ fn mark(uv: Vec2, color: Color, size: f32) -> impl Bundle {
             position_type: PositionType::Absolute,
             left: Val::Percent(uv.x * 100.0),
             top: Val::Percent(uv.y * 100.0),
-            margin: UiRect {
-                left: Val::Px(-size / 2.0),
-                top: Val::Px(-size / 2.0),
-                ..default()
-            },
+            margin: UiRect { left: Val::Px(-size / 2.0), top: Val::Px(-size / 2.0), ..default() },
             width: Val::Px(size),
             height: Val::Px(size),
             border: UiRect::all(Val::Px(2.0)),
@@ -331,10 +286,7 @@ fn place_marks(
         return;
     }
     *last = Some(key);
-    note.0 = format!(
-        "You are at {:.0}, {:.0}, {:.0}",
-        player.pos.x, player.pos.y, player.pos.z
-    );
+    note.0 = format!("You are at {:.0}, {:.0}, {:.0}", player.pos.x, player.pos.y, player.pos.z);
     commands.entity(*marks).despawn_related::<Children>();
     commands.entity(*marks).with_children(|m| {
         for w in &waypoints.list {
@@ -348,21 +300,13 @@ fn place_marks(
                     position_type: PositionType::Absolute,
                     left: Val::Percent(uv.x * 100.0),
                     top: Val::Percent(uv.y * 100.0),
-                    margin: UiRect {
-                        left: Val::Px(9.0),
-                        top: Val::Px(-9.0),
-                        ..default()
-                    },
+                    margin: UiRect { left: Val::Px(9.0), top: Val::Px(-9.0), ..default() },
                     ..default()
                 },
                 text(w.name.clone(), sizes::SMALL, colors::TEXT),
             ));
         }
-        m.spawn(mark(
-            on_map(center, here).clamp(Vec2::ZERO, Vec2::ONE),
-            Color::srgb(0.95, 0.2, 0.15),
-            14.0,
-        ));
+        m.spawn(mark(on_map(center, here).clamp(Vec2::ZERO, Vec2::ONE), Color::srgb(0.95, 0.2, 0.15), 14.0));
     });
 }
 
@@ -387,14 +331,10 @@ fn click_map(
     let (node, tf) = *picture;
     let k = node.inverse_scale_factor();
     let rect = Rect::from_center_size(tf.translation * k, node.size() * k);
-    let Some(cursor) = window.cursor_position().filter(|c| rect.contains(*c)) else {
-        return;
-    };
+    let Some(cursor) = window.cursor_position().filter(|c| rect.contains(*c)) else { return };
     let at = from_map(center, (cursor - rect.min) / rect.size());
     if mouse.just_pressed(MouseButton::Left) {
-        let y = generator.map_or(player.pos.y, |g| {
-            g.0.column(at.x as i32, at.y as i32).height as f32 + 1.0
-        });
+        let y = generator.map_or(player.pos.y, |g| g.0.column(at.x as i32, at.y as i32).height as f32 + 1.0);
         waypoints.add(Vec3::new(at.x, y, at.y));
     } else if mouse.just_pressed(MouseButton::Right)
         && let Some(i) = waypoints.nearest(at, SPAN / PIXELS as f32 * 8.0)
@@ -417,12 +357,7 @@ fn strip(
     root: Single<(Entity, &mut Visibility), With<Strip>>,
 ) {
     let (root, mut vis) = root.into_inner();
-    let want =
-        if menus.open || view.open || (waypoints.list.is_empty() && waypoints.guide.is_empty()) {
-            Visibility::Hidden
-        } else {
-            Visibility::Inherited
-        };
+    let want = if menus.open || view.open || (waypoints.list.is_empty() && waypoints.guide.is_empty()) { Visibility::Hidden } else { Visibility::Inherited };
     if *vis != want {
         *vis = want;
     }
@@ -436,12 +371,7 @@ fn strip(
     commands.entity(root).with_children(|s| {
         let gold = Color::srgb(1.0, 0.82, 0.25);
         let guide = Color::srgb(0.45, 0.9, 1.0);
-        for (w, color) in waypoints
-            .list
-            .iter()
-            .map(|w| (w, gold))
-            .chain(waypoints.guide.iter().map(|w| (w, guide)))
-        {
+        for (w, color) in waypoints.list.iter().map(|w| (w, gold)).chain(waypoints.guide.iter().map(|w| (w, guide))) {
             let to = Vec3::from_array(w.pos);
             let a = bearing(player.pos, cam.yaw, to);
             if a.abs() > STRIP_ANGLE {
@@ -454,26 +384,12 @@ fn strip(
                 left: Val::Percent(x),
                 width: Val::Px(200.0),
                 margin: UiRect::left(Val::Px(-100.0)),
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Center,
+                flex_direction: FlexDirection::Column, align_items: AlignItems::Center,
                 ..default()
             })
             .with_children(|m| {
-                m.spawn((
-                    Node {
-                        width: Val::Px(8.0),
-                        height: Val::Px(8.0),
-                        border: UiRect::all(Val::Px(1.0)),
-                        ..default()
-                    },
-                    BackgroundColor(color),
-                    BorderColor::all(Color::BLACK),
-                ));
-                m.spawn(text(
-                    format!("{} {:.0}m", w.name, d),
-                    sizes::SMALL,
-                    colors::TEXT,
-                ));
+                m.spawn((Node { width: Val::Px(8.0), height: Val::Px(8.0), border: UiRect::all(Val::Px(1.0)), ..default() }, BackgroundColor(color), BorderColor::all(Color::BLACK)));
+                m.spawn(text(format!("{} {:.0}m", w.name, d), sizes::SMALL, colors::TEXT));
             });
         }
     });
@@ -488,12 +404,7 @@ fn load(dir: Res<SaveDir>, mut waypoints: ResMut<Waypoints>) {
     }
 }
 
-fn save_now_and_then(
-    time: Res<Time<Real>>,
-    mut since: Local<f32>,
-    dir: Res<SaveDir>,
-    waypoints: Res<Waypoints>,
-) {
+fn save_now_and_then(time: Res<Time<Real>>, mut since: Local<f32>, dir: Res<SaveDir>, waypoints: Res<Waypoints>) {
     *since += time.delta_secs();
     if *since < 30.0 || screenshot_run() {
         return;

@@ -62,14 +62,7 @@ impl Mat {
             Mat::Broth => (c(0.62, 0.42, 0.16), 0.15),
             Mat::Urn => (c(urn.0, urn.1, urn.2), 0.0),
             Mat::UrnDark => (c(urn.0 * 0.72, urn.1 * 0.7, urn.2 * 0.7), 0.0),
-            Mat::MarkLit => (
-                c(
-                    (urn.0 + 0.6).min(1.0),
-                    (urn.1 + 0.55).min(1.0),
-                    (urn.2 + 0.4).min(1.0),
-                ),
-                3.0,
-            ),
+            Mat::MarkLit => (c((urn.0 + 0.6).min(1.0), (urn.1 + 0.55).min(1.0), (urn.2 + 0.4).min(1.0)), 3.0),
             Mat::MarkUnlit => (c(0.25, 0.2, 0.16), 0.0),
             Mat::Fire => (c(1.0, 0.55, 0.18), 4.0),
             Mat::Brew => (c(0.35, 0.9, 0.45), 1.2),
@@ -125,21 +118,12 @@ pub fn glow_light(parts: &[Part], urn: (f32, f32, f32)) -> Option<(Vec3, Color, 
     }
     (total > 0.0).then(|| {
         let c = rgb / total;
-        (
-            at / total,
-            Color::linear_rgb(c.x, c.y, c.z),
-            (total * GLOW_LUMENS).min(GLOW_LUMENS_MAX),
-        )
+        (at / total, Color::linear_rgb(c.x, c.y, c.z), (total * GLOW_LUMENS).min(GLOW_LUMENS_MAX))
     })
 }
 
 fn b(sx: f32, sy: f32, sz: f32, x: f32, y: f32, z: f32, mat: Mat) -> Part {
-    Part {
-        size: Vec3::new(sx, sy, sz),
-        at: Vec3::new(x, y, z),
-        mat,
-        tilt: 0.0,
-    }
+    Part { size: Vec3::new(sx, sy, sz), at: Vec3::new(x, y, z), mat, tilt: 0.0 }
 }
 
 fn tilted(p: Part, tilt: f32) -> Part {
@@ -149,15 +133,7 @@ fn tilted(p: Part, tilt: f32) -> Part {
 /// Four legs under a top of this size.
 fn legs(v: &mut Vec<Part>, w: f32, d: f32, h: f32, t: f32, mat: Mat) {
     for (sx, sz) in [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)] {
-        v.push(b(
-            t,
-            h,
-            t,
-            sx * (w / 2.0 - t),
-            h / 2.0,
-            sz * (d / 2.0 - t),
-            mat,
-        ));
+        v.push(b(t, h, t, sx * (w / 2.0 - t), h / 2.0, sz * (d / 2.0 - t), mat));
     }
 }
 
@@ -188,16 +164,7 @@ fn golem_body(v: &mut Vec<Part>, awake: bool, hands: bool, face: f32) {
 /// An open pot standing on `foot` (the middle of its base): a floor, four
 /// walls, a lip round the top, and liquid up to `surface`.
 #[allow(clippy::too_many_arguments)]
-fn hollow(
-    v: &mut Vec<Part>,
-    foot: Vec3,
-    w: f32,
-    h: f32,
-    t: f32,
-    mat: Mat,
-    surface: f32,
-    liquid: Mat,
-) {
+fn hollow(v: &mut Vec<Part>, foot: Vec3, w: f32, h: f32, t: f32, mat: Mat, surface: f32, liquid: Mat) {
     let (x, y, z) = (foot.x, foot.y, foot.z);
     v.push(b(w, t, w, x, y + t / 2.0, z, mat));
     let mid = y + h / 2.0;
@@ -217,15 +184,7 @@ fn hollow(
     let floor = y + t;
     // A dark, sooty floor, so the liquid's colour shows.
     v.push(b(inner, 0.004, inner, x, floor + 0.002, z, Mat::Groove));
-    v.push(b(
-        inner,
-        surface - floor,
-        inner,
-        x,
-        (surface + floor) / 2.0,
-        z,
-        liquid,
-    ));
+    v.push(b(inner, surface - floor, inner, x, (surface + floor) / 2.0, z, liquid));
 }
 
 /// The cooking pot's broth surface, in its own frame.
@@ -287,10 +246,7 @@ pub struct Tool {
 /// up and down, the handle runs along +x (as every lifted tool's does).
 fn hammer() -> Vec<Part> {
     use Mat::*;
-    vec![
-        b(0.07, 0.13, 0.08, 0.0, 0.0, 0.0, Iron),
-        b(0.3, 0.035, 0.035, 0.18, 0.0, 0.0, WoodDark),
-    ]
+    vec![b(0.07, 0.13, 0.08, 0.0, 0.0, 0.0, Iron), b(0.3, 0.035, 0.035, 0.18, 0.0, 0.0, WoodDark)]
 }
 
 /// Where the tool bench's hammer hangs: across two pegs on the rack at the
@@ -302,37 +258,18 @@ pub fn tool(kind: StationKind) -> Option<Tool> {
     use Mat::*;
     let kind = kind.base();
     if kind == StationKind::ToolBench {
-        return Some(Tool {
-            rest: HAMMER_REST,
-            rest_turn: Quat::from_rotation_y(std::f32::consts::FRAC_PI_2),
-            parts: hammer(),
-            how: ToolUse::Strike,
-        });
+        return Some(Tool { rest: HAMMER_REST, rest_turn: Quat::from_rotation_y(std::f32::consts::FRAC_PI_2), parts: hammer(), how: ToolUse::Strike });
     }
     let (rest, parts, how) = match kind {
         // A hammerstone resting on the knapping stone.
-        StationKind::CampMat => (
-            Vec3::new(0.35, 0.165, 0.23),
-            vec![b(0.16, 0.09, 0.13, 0.35, 0.175, 0.23, StoneDark)],
-            ToolUse::Strike,
-        ),
-        StationKind::CarpentryBench => (
-            Vec3::new(0.15, 0.852, -0.3),
-            vec![
-                b(0.5, 0.012, 0.11, 0.15, 0.852, -0.3, Stone),
-                b(0.16, 0.06, 0.09, -0.16, 0.87, -0.3, WoodDark),
-            ],
-            ToolUse::Saw,
-        ),
+        StationKind::CampMat => (Vec3::new(0.35, 0.165, 0.23), vec![b(0.16, 0.09, 0.13, 0.35, 0.175, 0.23, StoneDark)], ToolUse::Strike),
+        StationKind::CarpentryBench => {
+            (Vec3::new(0.15, 0.852, -0.3), vec![b(0.5, 0.012, 0.11, 0.15, 0.852, -0.3, Stone), b(0.16, 0.06, 0.09, -0.16, 0.87, -0.3, WoodDark)], ToolUse::Saw)
+        }
         // A wooden mallet lying on the table by the tray.
-        StationKind::CarpentryTable => (
-            Vec3::new(0.6, 0.92, 0.22),
-            vec![
-                b(0.14, 0.12, 0.12, 0.6, 0.92, 0.22, WoodDark),
-                b(0.04, 0.04, 0.24, 0.6, 0.89, 0.06, Wood),
-            ],
-            ToolUse::Strike,
-        ),
+        StationKind::CarpentryTable => {
+            (Vec3::new(0.6, 0.92, 0.22), vec![b(0.14, 0.12, 0.12, 0.6, 0.92, 0.22, WoodDark), b(0.04, 0.04, 0.24, 0.6, 0.89, 0.06, Wood)], ToolUse::Strike)
+        }
         // The drive wheel and its crank handle turn on an axle at the +x end.
         StationKind::MachinationTable => (
             Vec3::new(0.74, 1.16, 0.0),
@@ -347,47 +284,18 @@ pub fn tool(kind: StationKind) -> Option<Tool> {
             ToolUse::Turn(Vec3::X),
         ),
         // Ladles and paddles: the bowl end is where they're held from.
-        StationKind::CookingPot => (
-            Vec3::new(0.6, 0.105, -0.13),
-            vec![
-                b(0.04, 0.03, 0.3, 0.6, 0.095, 0.05, Wood),
-                b(0.11, 0.05, 0.1, 0.6, 0.105, -0.13, WoodDark),
-            ],
-            ToolUse::Stir,
-        ),
-        StationKind::Cauldron => (
-            Vec3::new(0.62, 0.095, -0.14),
-            vec![
-                b(0.04, 0.03, 0.3, 0.62, 0.095, 0.05, Wood),
-                b(0.1, 0.03, 0.12, 0.62, 0.095, -0.14, WoodDark),
-            ],
-            ToolUse::Stir,
-        ),
-        StationKind::CuttingBoard => (
-            Vec3::new(0.28, 0.4875, 0.19),
-            vec![
-                b(0.12, 0.035, 0.045, 0.1, 0.4975, 0.19, WoodDark),
-                b(0.24, 0.015, 0.06, 0.28, 0.4875, 0.19, StoneDark),
-            ],
-            ToolUse::Cut,
-        ),
+        StationKind::CookingPot => (Vec3::new(0.6, 0.105, -0.13), vec![b(0.04, 0.03, 0.3, 0.6, 0.095, 0.05, Wood), b(0.11, 0.05, 0.1, 0.6, 0.105, -0.13, WoodDark)], ToolUse::Stir),
+        StationKind::Cauldron => {
+            (Vec3::new(0.62, 0.095, -0.14), vec![b(0.04, 0.03, 0.3, 0.62, 0.095, 0.05, Wood), b(0.1, 0.03, 0.12, 0.62, 0.095, -0.14, WoodDark)], ToolUse::Stir)
+        }
+        StationKind::CuttingBoard => {
+            (Vec3::new(0.28, 0.4875, 0.19), vec![b(0.12, 0.035, 0.045, 0.1, 0.4975, 0.19, WoodDark), b(0.24, 0.015, 0.06, 0.28, 0.4875, 0.19, StoneDark)], ToolUse::Cut)
+        }
         // The reed fan lies by the fire's mouth.
-        StationKind::SmokingRack => (
-            Vec3::new(0.66, 0.01, 0.42),
-            vec![
-                b(0.24, 0.02, 0.2, 0.66, 0.01, 0.42, Reed),
-                b(0.18, 0.03, 0.03, 0.48, 0.02, 0.42, Wood),
-            ],
-            ToolUse::Fan,
-        ),
-        StationKind::IronAnvil => (
-            Vec3::new(-0.75, 0.565, -0.19),
-            vec![
-                b(0.26, 0.05, 0.05, -0.6, 0.55, -0.19, WoodDark),
-                b(0.08, 0.08, 0.1, -0.75, 0.565, -0.19, Iron),
-            ],
-            ToolUse::Strike,
-        ),
+        StationKind::SmokingRack => (Vec3::new(0.66, 0.01, 0.42), vec![b(0.24, 0.02, 0.2, 0.66, 0.01, 0.42, Reed), b(0.18, 0.03, 0.03, 0.48, 0.02, 0.42, Wood)], ToolUse::Fan),
+        StationKind::IronAnvil => {
+            (Vec3::new(-0.75, 0.565, -0.19), vec![b(0.26, 0.05, 0.05, -0.6, 0.55, -0.19, WoodDark), b(0.08, 0.08, 0.1, -0.75, 0.565, -0.19, Iron)], ToolUse::Strike)
+        }
         // The wheel and its crank turn on the axle.
         StationKind::SharpeningStone => (
             Vec3::new(-0.05, 0.78, -0.02),
@@ -403,28 +311,13 @@ pub fn tool(kind: StationKind) -> Option<Tool> {
         // The focusing dial sits on a short stand beside the plate, facing up.
         StationKind::MagicalLens => (
             Vec3::new(-0.3, 0.22, 0.0),
-            vec![
-                b(0.13, 0.04, 0.13, -0.3, 0.22, 0.0, Brass),
-                b(0.11, 0.03, 0.03, -0.3, 0.255, 0.0, Groove),
-                b(0.03, 0.035, 0.03, -0.3, 0.255, 0.05, Crystal),
-            ],
+            vec![b(0.13, 0.04, 0.13, -0.3, 0.22, 0.0, Brass), b(0.11, 0.03, 0.03, -0.3, 0.255, 0.0, Groove), b(0.03, 0.035, 0.03, -0.3, 0.255, 0.05, Crystal)],
             ToolUse::Turn(Vec3::Y),
         ),
         _ => return None,
     };
-    let parts = parts
-        .into_iter()
-        .map(|p| Part {
-            at: p.at - rest,
-            ..p
-        })
-        .collect();
-    Some(Tool {
-        rest,
-        rest_turn: Quat::IDENTITY,
-        parts,
-        how,
-    })
+    let parts = parts.into_iter().map(|p| Part { at: p.at - rest, ..p }).collect();
+    Some(Tool { rest, rest_turn: Quat::IDENTITY, parts, how })
 }
 
 /// Marks around the urn's belly.
@@ -476,15 +369,7 @@ pub fn parts(kind: StationKind, has: &dyn Fn(&str) -> bool, lit: u32) -> Vec<Par
                 let (s, c) = a.sin_cos();
                 // Pushed out to the nearest face of the square belly.
                 let k = 0.29 / s.abs().max(c.abs());
-                v.push(b(
-                    0.07,
-                    0.07,
-                    0.07,
-                    s * k,
-                    0.3,
-                    c * k,
-                    if i < lit { MarkLit } else { MarkUnlit },
-                ));
+                v.push(b(0.07, 0.07, 0.07, s * k, 0.3, c * k, if i < lit { MarkLit } else { MarkUnlit }));
             }
         }
         StationKind::CampMat => {
@@ -499,11 +384,7 @@ pub fn parts(kind: StationKind, has: &dyn Fn(&str) -> bool, lit: u32) -> Vec<Par
         }
         StationKind::ToolBench => {
             legs(&mut v, 1.06, 0.7, 0.72, 0.1, WoodDark);
-            v.extend([
-                b(1.2, 0.1, 0.8, 0.0, 0.77, 0.0, Wood),
-                b(0.62, 0.012, 0.14, -0.15, 0.826, -0.12, Groove),
-                b(0.26, 0.012, 0.26, 0.32, 0.826, 0.12, Groove),
-            ]);
+            v.extend([b(1.2, 0.1, 0.8, 0.0, 0.77, 0.0, Wood), b(0.62, 0.012, 0.14, -0.15, 0.826, -0.12, Groove), b(0.26, 0.012, 0.26, 0.32, 0.826, 0.12, Groove)]);
             // The hammer's rack at the +x end: a board with two pegs (the hammer is the `tool`).
             v.extend([
                 b(0.04, 0.34, 0.44, 0.565, 0.99, 0.0, WoodDark),
@@ -603,11 +484,7 @@ pub fn parts(kind: StationKind, has: &dyn Fn(&str) -> bool, lit: u32) -> Vec<Par
         StationKind::IronAnvil => {
             // The anvil on its stump (+x), and a low bench (-x) with the
             // hammer, a flux tray and room for a handle.
-            let metal = if has("alchemical_anvil") || has("steel_anvil") {
-                Steel
-            } else {
-                Iron
-            };
+            let metal = if has("alchemical_anvil") || has("steel_anvil") { Steel } else { Iron };
             v.extend([
                 b(0.5, 0.42, 0.46, 0.1, 0.21, 0.0, WoodDark),
                 b(0.34, 0.1, 0.26, 0.1, 0.47, 0.0, metal),
@@ -618,10 +495,7 @@ pub fn parts(kind: StationKind, has: &dyn Fn(&str) -> bool, lit: u32) -> Vec<Par
             for (x, z) in [(-0.8, -0.2), (-0.4, -0.2), (-0.8, 0.2), (-0.4, 0.2)] {
                 v.push(b(0.06, 0.5, 0.06, x, 0.25, z, WoodDark));
             }
-            v.extend([
-                b(0.5, 0.05, 0.5, -0.6, 0.5, 0.0, Wood),
-                b(0.3, 0.02, 0.14, -0.6, 0.535, 0.16, Clay),
-            ]);
+            v.extend([b(0.5, 0.05, 0.5, -0.6, 0.5, 0.0, Wood), b(0.3, 0.02, 0.14, -0.6, 0.535, 0.16, Clay)]);
             if has("alchemical_anvil") {
                 for x in [-0.08, 0.1, 0.28] {
                     v.push(b(0.05, 0.05, 0.01, x, 0.72, 0.145, Spirit));
@@ -640,15 +514,7 @@ pub fn parts(kind: StationKind, has: &dyn Fn(&str) -> bool, lit: u32) -> Vec<Par
                 if i == 4 {
                     continue; // the fire's mouth
                 }
-                v.push(b(
-                    0.14,
-                    0.12,
-                    0.14,
-                    px + a.cos() * r,
-                    0.06,
-                    a.sin() * r,
-                    Stone,
-                ));
+                v.push(b(0.14, 0.12, 0.14, px + a.cos() * r, 0.06, a.sin() * r, Stone));
             }
             for x in [-0.36, -0.54] {
                 for z in [-0.18, 0.18] {
@@ -664,16 +530,7 @@ pub fn parts(kind: StationKind, has: &dyn Fn(&str) -> bool, lit: u32) -> Vec<Par
                 b(0.2, 0.08, 0.34, 0.6, 0.04, 0.0, StoneDark),
             ]);
             // The pot is open: walls round a see-through broth (`Mat::alpha`).
-            hollow(
-                &mut v,
-                Vec3::new(px, 0.14, 0.0),
-                0.54,
-                0.46,
-                0.05,
-                Clay,
-                POT_SURFACE,
-                Broth,
-            );
+            hollow(&mut v, Vec3::new(px, 0.14, 0.0), 0.54, 0.46, 0.05, Clay, POT_SURFACE, Broth);
         }
         StationKind::CuttingBoard => {
             // A stump with a wide board on it, a flint knife along the back and a
@@ -717,18 +574,11 @@ pub fn parts(kind: StationKind, has: &dyn Fn(&str) -> bool, lit: u32) -> Vec<Par
         StationKind::Telescope => {
             let long = if has("improved_telescope") { 1.2 } else { 0.85 };
             for sx in [-1.0f32, 1.0] {
-                v.push(tilted(
-                    b(0.05, 0.9, 0.05, sx * 0.18, 0.43, 0.0, WoodDark),
-                    sx * 0.22,
-                ));
+                v.push(tilted(b(0.05, 0.9, 0.05, sx * 0.18, 0.43, 0.0, WoodDark), sx * 0.22));
             }
             v.push(b(0.05, 0.9, 0.05, 0.0, 0.43, -0.16, WoodDark));
             v.push(tilted(b(long, 0.14, 0.14, 0.05, 0.98, 0.0, Brass), 0.45));
-            let tip = Vec3::new(
-                0.05 + long / 2.0 * 0.45f32.cos(),
-                0.98 + long / 2.0 * 0.45f32.sin(),
-                0.0,
-            );
+            let tip = Vec3::new(0.05 + long / 2.0 * 0.45f32.cos(), 0.98 + long / 2.0 * 0.45f32.sin(), 0.0);
             let lens = if has("diamond_lens") { Crystal } else { Linen };
             v.push(tilted(b(0.04, 0.16, 0.16, tip.x, tip.y, tip.z, lens), 0.45));
         }
@@ -760,16 +610,7 @@ pub fn parts(kind: StationKind, has: &dyn Fn(&str) -> bool, lit: u32) -> Vec<Par
             }
             // An open pot: walls round a see-through brew (`Mat::alpha`).
             let surface = cauldron_surface(has);
-            hollow(
-                &mut v,
-                Vec3::new(cx, 0.2, 0.0),
-                0.62 * s,
-                0.45 * s,
-                0.05,
-                metal,
-                surface,
-                Brew,
-            );
+            hollow(&mut v, Vec3::new(cx, 0.2, 0.0), 0.62 * s, 0.45 * s, 0.05, metal, surface, Brew);
             v.extend([
                 b(0.2, 0.08, 0.2, cx, 0.04, 0.0, Fire),
                 b(0.15, 0.1, 0.1, -0.45, 0.05, -0.17, Stone),
@@ -806,12 +647,7 @@ pub fn parts(kind: StationKind, has: &dyn Fn(&str) -> bool, lit: u32) -> Vec<Par
                 b(0.08, 0.1, 2.0, -0.52, 0.12, 0.0, Wood),
                 b(0.08, 0.1, 2.0, w - 0.52, 0.12, 0.0, Wood),
             ]);
-            for (x, z) in [
-                (-0.52, -1.0),
-                (w - 0.52, -1.0),
-                (-0.52, 1.0),
-                (w - 0.52, 1.0),
-            ] {
+            for (x, z) in [(-0.52, -1.0), (w - 0.52, -1.0), (-0.52, 1.0), (w - 0.52, 1.0)] {
                 v.push(b(0.1, 0.3, 0.1, x, 0.15, z, WoodDark));
             }
             if has("double_bed") {
@@ -884,15 +720,7 @@ pub fn parts(kind: StationKind, has: &dyn Fn(&str) -> bool, lit: u32) -> Vec<Par
                     // A stack of split slats at the bench's end.
                     for (i, y) in [0.05, 0.13, 0.21].into_iter().enumerate() {
                         let x = if i % 2 == 0 { 1.05 } else { 1.08 };
-                        v.push(b(
-                            0.3,
-                            0.07,
-                            0.8,
-                            x,
-                            y,
-                            0.0,
-                            if i % 2 == 0 { Wood } else { WoodDark },
-                        ));
+                        v.push(b(0.3, 0.07, 0.8, x, y, 0.0, if i % 2 == 0 { Wood } else { WoodDark }));
                     }
                 }
                 StationKind::GunsmithBench => {

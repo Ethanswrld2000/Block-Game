@@ -23,18 +23,7 @@ impl Plugin for ChopPlugin {
         app.add_message::<Chop>()
             .init_resource::<TreeShake>()
             .init_resource::<Fallout>()
-            .add_systems(
-                crate::menu::GameUpdate,
-                (
-                    start_shake,
-                    push_to_material,
-                    fell_trees,
-                    swing_falling,
-                    send_fallout,
-                )
-                    .chain()
-                    .after(crate::interact::InteractSet),
-            );
+            .add_systems(crate::menu::GameUpdate, (start_shake, push_to_material, fell_trees, swing_falling, send_fallout).chain().after(crate::interact::InteractSet));
     }
 }
 
@@ -70,20 +59,12 @@ fn start_shake(time: Res<Time>, mut chops: MessageReader<Chop>, mut shake: ResMu
     }
 }
 
-fn push_to_material(
-    shake: Res<TreeShake>,
-    blocks: Res<Blocks>,
-    mut materials: ResMut<Assets<VoxelMaterial>>,
-    mut last: Local<Vec4>,
-) {
+fn push_to_material(shake: Res<TreeShake>, blocks: Res<Blocks>, mut materials: ResMut<Assets<VoxelMaterial>>, mut last: Local<Vec4>) {
     let want = shake.at.extend(shake.amount);
     if want == *last {
         return;
     }
-    for h in [&blocks.material, &blocks.translucent_material]
-        .into_iter()
-        .flatten()
-    {
+    for h in [&blocks.material, &blocks.translucent_material].into_iter().flatten() {
         if let Some(mut m) = materials.get_mut(h) {
             m.extension.shake = want;
         }
@@ -145,11 +126,7 @@ fn fell_trees(
     mut meshes: ResMut<Assets<Mesh>>,
     mut fallout: ResMut<Fallout>,
 ) {
-    let cuts: Vec<BlockPos> = mined
-        .read()
-        .filter(|m| !m.felled && is_trunk(&blocks, m.block))
-        .map(|m| m.pos)
-        .collect();
+    let cuts: Vec<BlockPos> = mined.read().filter(|m| !m.felled && is_trunk(&blocks, m.block)).map(|m| m.pos).collect();
     for cut in cuts {
         let dir = fell::away(cut, [player.pos.x, player.pos.z]);
         for fall in fell::topple(&blocks.registry, |p| world.block(p), cut, dir) {
@@ -161,40 +138,17 @@ fn fell_trees(
                     fallout.0.push((p, b));
                 }
             }
-            let around: Vec<BlockPos> = fall
-                .removed
-                .iter()
-                .flat_map(|r| crate::interact::neighbours(r.0))
-                .collect();
+            let around: Vec<BlockPos> = fall.removed.iter().flat_map(|r| crate::interact::neighbours(r.0)).collect();
             let budget = around.len() + 256;
-            crate::interact::drop_unsupported(&mut world, &blocks, around, budget, |q, qb| {
-                fallout.0.push((q, qb))
-            });
-            let cells: Vec<([i32; 3], BlockId)> = fall
-                .removed
-                .iter()
-                .map(|&(p, b)| ([p.x - cut.x, p.y - cut.y, p.z - cut.z], b))
-                .collect();
+            crate::interact::drop_unsupported(&mut world, &blocks, around, budget, |q, qb| fallout.0.push((q, qb)));
+            let cells: Vec<([i32; 3], BlockId)> = fall.removed.iter().map(|&(p, b)| ([p.x - cut.x, p.y - cut.y, p.z - cut.z], b)).collect();
             let height = cells.iter().map(|c| c.0[1]).max().unwrap_or(0).max(1) as f32;
             let swing = (SWING_BASE + SWING_PER_BLOCK * height).min(SWING_MOST);
-            match (
-                crate::chunk_mesh::loose(&cells, &blocks.registry),
-                &blocks.material,
-            ) {
+            match (crate::chunk_mesh::loose(&cells, &blocks.registry), &blocks.material) {
                 (Some(mesh), Some(mat)) => {
-                    let falling = Falling {
-                        fall,
-                        t: 0.0,
-                        swing,
-                        landed_at: None,
-                    };
+                    let falling = Falling { fall, t: 0.0, swing, landed_at: None };
                     let tf = falling.transform();
-                    commands.spawn((
-                        Mesh3d(meshes.add(mesh)),
-                        MeshMaterial3d::<VoxelMaterial>(mat.clone()),
-                        tf,
-                        falling,
-                    ));
+                    commands.spawn((Mesh3d(meshes.add(mesh)), MeshMaterial3d::<VoxelMaterial>(mat.clone()), tf, falling));
                 }
                 _ => land(&mut world, &blocks, &player, &fall, &mut fallout),
             }
@@ -214,19 +168,12 @@ impl Falling {
         let d = self.fall.dir;
         let dir = Vec3::new(d[0] as f32, 0.0, d[2] as f32);
         let k = (self.t / self.swing).clamp(0.0, 1.0);
-        let turn = Quat::from_axis_angle(
-            Vec3::Y.cross(dir).normalize(),
-            std::f32::consts::FRAC_PI_2 * k * k,
-        );
+        let turn = Quat::from_axis_angle(Vec3::Y.cross(dir).normalize(), std::f32::consts::FRAC_PI_2 * k * k);
         let after = (self.t - self.swing).max(0.0);
         let dropped = (0.5 * GRAVITY * after * after).min(self.fall.drop as f32);
         let p = self.fall.pivot;
         let centre = Vec3::new(p.x as f32, p.y as f32, p.z as f32) + Vec3::splat(0.5);
-        Transform {
-            translation: centre - turn * Vec3::splat(0.5) - Vec3::Y * dropped,
-            rotation: turn,
-            ..default()
-        }
+        Transform { translation: centre - turn * Vec3::splat(0.5) - Vec3::Y * dropped, rotation: turn, ..default() }
     }
 }
 
@@ -252,11 +199,7 @@ fn swing_falling(
         // Keep drawing the tree until the ground it landed on has been
         // remeshed in the background, so nothing blinks out (but not forever).
         let waited = tree.t - tree.landed_at.unwrap_or(tree.t);
-        let pending = tree
-            .fall
-            .placed
-            .iter()
-            .any(|(p, _)| world.needs_mesh(p.chunk()));
+        let pending = tree.fall.placed.iter().any(|(p, _)| world.needs_mesh(p.chunk()));
         if !pending || waited > LAND_WAIT {
             commands.entity(e).despawn();
         }
@@ -279,11 +222,7 @@ fn land(world: &mut World, blocks: &Blocks, player: &Player, fall: &Fall, fallou
 
 fn send_fallout(mut fallout: ResMut<Fallout>, mut mined: MessageWriter<Mined>) {
     for (pos, block) in fallout.0.drain(..) {
-        mined.write(Mined {
-            pos,
-            block,
-            felled: true,
-        });
+        mined.write(Mined { pos, block, felled: true });
     }
 }
 
@@ -308,42 +247,16 @@ mod tests {
         // Each turned cell's middle must line up with `fell::turn`, then drop.
         for dir in [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]] {
             let pivot = BlockPos::new(4, 10, -7);
-            let fall = Fall {
-                pivot,
-                dir,
-                removed: vec![],
-                placed: vec![],
-                lost: vec![],
-                drop: 3,
-            };
-            let mut f = Falling {
-                fall,
-                t: 0.0,
-                swing: 1.5,
-                landed_at: None,
-            };
-            let middle = |f: &Falling, o: [i32; 3]| {
-                f.transform()
-                    .transform_point(Vec3::new(o[0] as f32, o[1] as f32, o[2] as f32) + 0.5)
-            };
+            let fall = Fall { pivot, dir, removed: vec![], placed: vec![], lost: vec![], drop: 3 };
+            let mut f = Falling { fall, t: 0.0, swing: 1.5, landed_at: None };
+            let middle = |f: &Falling, o: [i32; 3]| f.transform().transform_point(Vec3::new(o[0] as f32, o[1] as f32, o[2] as f32) + 0.5);
             let o = [1, 4, -2];
             let start = middle(&f, o);
-            assert!(
-                (start - Vec3::new(5.5, 14.5, -8.5)).length() < 1e-4,
-                "{start}"
-            );
+            assert!((start - Vec3::new(5.5, 14.5, -8.5)).length() < 1e-4, "{start}");
             f.t = f.swing + f.drop_time();
             let t = fell::turn(o, dir);
-            let want = Vec3::new(
-                (pivot.x + t[0]) as f32,
-                (pivot.y + t[1] - 3) as f32,
-                (pivot.z + t[2]) as f32,
-            ) + 0.5;
-            assert!(
-                (middle(&f, o) - want).length() < 1e-3,
-                "{dir:?}: {} vs {want}",
-                middle(&f, o)
-            );
+            let want = Vec3::new((pivot.x + t[0]) as f32, (pivot.y + t[1] - 3) as f32, (pivot.z + t[2]) as f32) + 0.5;
+            assert!((middle(&f, o) - want).length() < 1e-3, "{dir:?}: {} vs {want}", middle(&f, o));
         }
     }
 }

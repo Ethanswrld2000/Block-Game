@@ -1,14 +1,14 @@
 //! Building a floor's blocks, chunk by chunk, in its theme.
 
 use voxel::chunk::CHUNK_VOLUME;
-use voxel::{BlockId, CHUNK_SIZE_I32, Chunk, ChunkPos};
+use voxel::{BlockId, Chunk, ChunkPos, CHUNK_SIZE_I32};
 
 use super::floor::HangKind;
 use super::{Floor, Hazard};
-use crate::WorldGen;
 use crate::dungeons::Aabb;
 use crate::trees::Canvas;
 use crate::util::{hash2, unit};
+use crate::WorldGen;
 
 /// Fill a box, clipped to the canvas's chunk.
 pub(crate) fn fill(c: &mut Canvas, b: &Aabb, block: BlockId) {
@@ -30,19 +30,8 @@ impl WorldGen {
     /// the open space wins.
     pub fn generate_pocket(&self, pos: ChunkPos, floors: &[&Floor]) -> Chunk {
         let origin = pos.origin();
-        let chunk = Aabb {
-            min: [origin.x, origin.y, origin.z],
-            max: [
-                origin.x + CHUNK_SIZE_I32 - 1,
-                origin.y + CHUNK_SIZE_I32 - 1,
-                origin.z + CHUNK_SIZE_I32 - 1,
-            ],
-        };
-        let here: Vec<&Floor> = floors
-            .iter()
-            .copied()
-            .filter(|f| chunk.intersects(&f.bounds))
-            .collect();
+        let chunk = Aabb { min: [origin.x, origin.y, origin.z], max: [origin.x + CHUNK_SIZE_I32 - 1, origin.y + CHUNK_SIZE_I32 - 1, origin.z + CHUNK_SIZE_I32 - 1] };
+        let here: Vec<&Floor> = floors.iter().copied().filter(|f| chunk.intersects(&f.bounds)).collect();
         match here.as_slice() {
             [] => Chunk::filled(BlockId::AIR),
             [f] => Chunk::from_dense(&self.draw_floor(&chunk, f)),
@@ -51,10 +40,7 @@ impl WorldGen {
                     .iter()
                     .map(|f| {
                         let mut open = vec![BlockId::AIR; CHUNK_VOLUME];
-                        let mut c = Canvas {
-                            origin: chunk.min,
-                            dense: &mut open,
-                        };
+                        let mut c = Canvas { origin: chunk.min, dense: &mut open };
                         for s in f.spaces.iter().chain(&f.pits) {
                             fill(&mut c, s, self.delves.parts.slab);
                         }
@@ -82,10 +68,7 @@ impl WorldGen {
         let theme = &d.themes[f.plan.theme.min(d.themes.len() - 1)];
         let parts = d.parts;
         let mut dense = vec![BlockId::AIR; CHUNK_VOLUME];
-        let mut c = Canvas {
-            origin: chunk.min,
-            dense: &mut dense,
-        };
+        let mut c = Canvas { origin: chunk.min, dense: &mut dense };
         // Shells of the theme's wall round every space and pit, a floor under
         // the spaces, then the air carved out.
         for s in f.spaces.iter().chain(&f.pits) {
@@ -95,14 +78,7 @@ impl WorldGen {
             }
         }
         for s in &f.spaces {
-            fill(
-                &mut c,
-                &Aabb {
-                    min: [s.min[0], s.min[1] - 1, s.min[2]],
-                    max: [s.max[0], s.min[1] - 1, s.max[2]],
-                },
-                theme.floor,
-            );
+            fill(&mut c, &Aabb { min: [s.min[0], s.min[1] - 1, s.min[2]], max: [s.max[0], s.min[1] - 1, s.max[2]] }, theme.floor);
         }
         for s in f.spaces.iter().chain(&f.pits) {
             if s.intersects(&chunk) {
@@ -110,14 +86,7 @@ impl WorldGen {
             }
         }
         for s in &f.pits {
-            fill(
-                &mut c,
-                &Aabb {
-                    min: [s.min[0], s.min[1] - 1, s.min[2]],
-                    max: [s.max[0], s.min[1] - 1, s.max[2]],
-                },
-                theme.floor,
-            );
+            fill(&mut c, &Aabb { min: [s.min[0], s.min[1] - 1, s.min[2]], max: [s.max[0], s.min[1] - 1, s.max[2]] }, theme.floor);
         }
         // Walled-in corners.
         for s in &f.solids {
@@ -126,10 +95,7 @@ impl WorldGen {
             }
         }
         // Growth: the theme's moss, mud, roots or frost creeps over walls, floors and ceilings.
-        let seed = self.seed
-            ^ (f.plan.run as u64) << 8
-            ^ f.plan.floor as u64
-            ^ f.plan.dungeon.rotate_left(5);
+        let seed = self.seed ^ (f.plan.run as u64) << 8 ^ f.plan.floor as u64 ^ f.plan.dungeon.rotate_left(5);
         if !theme.growth.is_empty() {
             for y in chunk.min[1]..=chunk.max[1] {
                 for z in chunk.min[2]..=chunk.max[2] {
@@ -156,10 +122,7 @@ impl WorldGen {
                 for z in r.inner.min[2] + 1..r.inner.max[2] {
                     for x in r.inner.min[0] + 1..r.inner.max[0] {
                         let y = r.inner.min[1];
-                        if unit(hash2(seed ^ 0x9001, x / 3, z / 3)) < 0.22
-                            && c.is_air(x, y, z) == Some(true)
-                            && c.is_air(x, y - 1, z) == Some(false)
-                        {
+                        if unit(hash2(seed ^ 0x9001, x / 3, z / 3)) < 0.22 && c.is_air(x, y, z) == Some(true) && c.is_air(x, y - 1, z) == Some(false) {
                             c.put(x, y, z, pool);
                         }
                     }
@@ -226,48 +189,24 @@ impl WorldGen {
         }
         // The start room's way back up: a cobbled arch.
         let w = &f.way_out;
-        fill(
-            &mut c,
-            &Aabb {
-                min: [w.min[0], w.min[1] - 1, w.min[2]],
-                max: [w.max[0], w.min[1] - 1, w.max[2]],
-            },
-            parts.cobblestone,
-        );
+        fill(&mut c, &Aabb { min: [w.min[0], w.min[1] - 1, w.min[2]], max: [w.max[0], w.min[1] - 1, w.max[2]] }, parts.cobblestone);
         dense
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::delve::{FloorPlan, floor};
+    use crate::delve::{floor, FloorPlan};
 
     #[test]
     fn pocket_chunks_build_the_floor() {
         let wg = crate::tests::wg();
-        let f = floor(
-            &wg.delves,
-            &FloorPlan {
-                seed: 42,
-                dungeon: 1,
-                theme: 0,
-                run: 1,
-                floor: 1,
-                floors: 2,
-                chain: true,
-                done: false,
-            },
-        );
+        let f = floor(&wg.delves, &FloorPlan { seed: 42, dungeon: 1, theme: 0, run: 1, floor: 1, floors: 2, chain: true, done: false });
         let [x, y, z] = f.entry.map(|v| v.floor() as i32);
         let c = wg.generate_pocket(voxel::BlockPos::new(x, y, z).chunk(), &[&f]);
         let o = voxel::BlockPos::new(x, y, z).chunk().origin();
-        let at = |x: i32, y: i32, z: i32| {
-            c.get((x - o.x) as usize, (y - o.y) as usize, (z - o.z) as usize)
-        };
-        assert!(
-            at(x, y, z).is_air() && at(x, y + 1, z).is_air(),
-            "room to stand"
-        );
+        let at = |x: i32, y: i32, z: i32| c.get((x - o.x) as usize, (y - o.y) as usize, (z - o.z) as usize);
+        assert!(at(x, y, z).is_air() && at(x, y + 1, z).is_air(), "room to stand");
         assert!(!at(x, y - 1, z).is_air(), "a floor under you");
     }
 
@@ -275,19 +214,7 @@ mod tests {
     fn the_stairwell_opens_into_the_floor_below() {
         let wg = crate::tests::wg();
         for run in 0..6 {
-            let all = crate::delve::floors(
-                &wg.delves,
-                &FloorPlan {
-                    seed: 42,
-                    dungeon: 1,
-                    theme: 0,
-                    run,
-                    floor: 3,
-                    floors: 3,
-                    chain: true,
-                    done: false,
-                },
-            );
+            let all = crate::delve::floors(&wg.delves, &FloorPlan { seed: 42, dungeon: 1, theme: 0, run, floor: 3, floors: 3, chain: true, done: false });
             let refs: Vec<&crate::delve::Floor> = all.iter().collect();
             for a in &all[..2] {
                 let foot = a.stair.unwrap();
@@ -297,28 +224,11 @@ mod tests {
                 let c = wg.generate_pocket(pos.chunk(), &refs);
                 let at = |x: i32, y: i32, z: i32| {
                     let b = voxel::BlockPos::new(x, y, z);
-                    if b.chunk() == pos.chunk() {
-                        c.get((x - o.x) as usize, (y - o.y) as usize, (z - o.z) as usize)
-                    } else {
-                        wg.generate_pocket(b.chunk(), &refs).get(
-                            b.x.rem_euclid(32) as usize,
-                            b.y.rem_euclid(32) as usize,
-                            b.z.rem_euclid(32) as usize,
-                        )
-                    }
+                    if b.chunk() == pos.chunk() { c.get((x - o.x) as usize, (y - o.y) as usize, (z - o.z) as usize) } else { wg.generate_pocket(b.chunk(), &refs).get(b.x.rem_euclid(32) as usize, b.y.rem_euclid(32) as usize, b.z.rem_euclid(32) as usize) }
                 };
-                assert!(
-                    at(x, y, z).is_air() && at(x, y + 1, z).is_air(),
-                    "run {run}: room at the foot"
-                );
-                assert!(
-                    !at(x, y - 1, z).is_air(),
-                    "run {run}: a step under the foot"
-                );
-                assert!(
-                    at(x, y, z + 1).is_air() && at(x, y + 1, z + 1).is_air(),
-                    "run {run}: the way on south is open"
-                );
+                assert!(at(x, y, z).is_air() && at(x, y + 1, z).is_air(), "run {run}: room at the foot");
+                assert!(!at(x, y - 1, z).is_air(), "run {run}: a step under the foot");
+                assert!(at(x, y, z + 1).is_air() && at(x, y + 1, z + 1).is_air(), "run {run}: the way on south is open");
             }
         }
     }

@@ -35,43 +35,27 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let force = args.iter().any(|a| a == "--force");
     let only: Vec<&String> = args.iter().filter(|a| !a.starts_with("--")).collect();
-    let assets = std::env::var_os("BEVY_ASSET_ROOT")
-        .map(|r| PathBuf::from(r).join("assets"))
-        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets"));
+    let assets = std::env::var_os("BEVY_ASSET_ROOT").map(|r| PathBuf::from(r).join("assets")).unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets"));
     let assets = assets.canonicalize().unwrap_or(assets);
-    let text =
-        std::fs::read_to_string(assets.join("data/creatures.ron")).expect("read creatures.ron");
+    let text = std::fs::read_to_string(assets.join("data/creatures.ron")).expect("read creatures.ron");
     let kinds: Vec<Kind> = ron::Options::default()
         .with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME)
         .from_str(&text)
         .unwrap_or_else(|e| panic!("creatures.ron: {e}"));
     let dir = assets.join("textures/creatures");
     std::fs::create_dir_all(dir.join("guides")).expect("create textures/creatures/guides");
-    for k in kinds
-        .iter()
-        .filter(|k| only.is_empty() || only.contains(&&k.name))
-    {
+    for k in kinds.iter().filter(|k| only.is_empty() || only.contains(&&k.name)) {
         let skins: Vec<&String> = k.skin.iter().chain(&k.skins).collect();
         if skins.is_empty() {
-            println!(
-                "{}: no skin listed (add skin: \"{}\" to creatures.ron)",
-                k.name, k.name
-            );
+            println!("{}: no skin listed (add skin: \"{}\" to creatures.ron)", k.name, k.name);
             continue;
         }
         let layout = Layout::new(&k.model);
         println!("{}: {}x{} px", k.name, layout.width, layout.height);
         for (i, (b, net)) in k.model.iter().zip(&layout.nets).enumerate() {
-            let name = if b.name.is_empty() {
-                format!("box {i}")
-            } else {
-                b.name.clone()
-            };
+            let name = if b.name.is_empty() { format!("box {i}") } else { b.name.clone() };
             let (w, h, d) = skin::pixels(b.size);
-            println!(
-                "  {name:<18} at ({:>3}, {:>3})  {w}x{h}x{d} px",
-                net.bounds.x, net.bounds.y
-            );
+            println!("  {name:<18} at ({:>3}, {:>3})  {w}x{h}x{d} px", net.bounds.x, net.bounds.y);
         }
         let guide = dir.join("guides").join(format!("{}.png", k.name));
         draw_guide(k, &layout).save(&guide).expect("write guide");
@@ -80,26 +64,14 @@ fn main() {
             let path = dir.join(format!("{s}.png"));
             if path.exists() && !force {
                 match image::image_dimensions(&path) {
-                    Ok((w, h))
-                        if w * layout.height != h * layout.width || w % layout.width != 0 =>
-                    {
-                        println!(
-                            "  kept   {} -- but it is {w}x{h} and the layout is now {}x{}: repaint it against the guide",
-                            path.display(),
-                            layout.width,
-                            layout.height
-                        )
+                    Ok((w, h)) if w * layout.height != h * layout.width || w % layout.width != 0 => {
+                        println!("  kept   {} -- but it is {w}x{h} and the layout is now {}x{}: repaint it against the guide", path.display(), layout.width, layout.height)
                     }
-                    _ => println!(
-                        "  kept   {} (already painted; --force overwrites)",
-                        path.display()
-                    ),
+                    _ => println!("  kept   {} (already painted; --force overwrites)", path.display()),
                 }
                 continue;
             }
-            draw_starter(k, &layout, v as u32)
-                .save(&path)
-                .expect("write skin");
+            draw_starter(k, &layout, v as u32).save(&path).expect("write skin");
             println!("  wrote  {}", path.display());
         }
     }
@@ -112,8 +84,7 @@ fn srgb8(c: (f32, f32, f32), shade: f32) -> Rgba<u8> {
 
 /// Cheap hash noise, -1..1.
 fn noise(x: u32, y: u32, seed: u32) -> f32 {
-    let mut h =
-        x.wrapping_mul(0x27d4_eb2d) ^ y.wrapping_mul(0x1656_67b1) ^ seed.wrapping_mul(0x9e37_79b9);
+    let mut h = x.wrapping_mul(0x27d4_eb2d) ^ y.wrapping_mul(0x1656_67b1) ^ seed.wrapping_mul(0x9e37_79b9);
     h ^= h >> 15;
     h = h.wrapping_mul(0x85eb_ca6b);
     h ^= h >> 13;
@@ -131,8 +102,7 @@ fn draw_starter(k: &Kind, layout: &Layout, variant: u32) -> RgbaImage {
         for r in net.faces {
             let edged = r.w >= 4 && r.h >= 4;
             for (x, y) in pixels_of(r) {
-                let edge =
-                    edged && (x == r.x || y == r.y || x == r.x + r.w - 1 || y == r.y + r.h - 1);
+                let edge = edged && (x == r.x || y == r.y || x == r.x + r.w - 1 || y == r.y + r.h - 1);
                 let shade = 1.0 + 0.07 * noise(x, y, variant + 1) - if edge { 0.12 } else { 0.0 };
                 img.put_pixel(x, y, srgb8(b.color, shade));
             }
@@ -185,15 +155,7 @@ fn draw_guide(k: &Kind, layout: &Layout) -> RgbaImage {
             let c = face_color(f);
             for (x, y) in pixels_of(r) {
                 let edge = x == r.x || y == r.y || x == r.x + r.w - 1 || y == r.y + r.h - 1;
-                img.put_pixel(
-                    x,
-                    y,
-                    if edge {
-                        c
-                    } else {
-                        Rgba([c[0], c[1], c[2], 40])
-                    },
-                );
+                img.put_pixel(x, y, if edge { c } else { Rgba([c[0], c[1], c[2], 40]) });
             }
             if r.w >= 5 && r.h >= 7 {
                 let (ox, oy) = (r.x + (r.w - 3) / 2, r.y + (r.h - 5) / 2);

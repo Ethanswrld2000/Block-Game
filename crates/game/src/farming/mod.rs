@@ -20,7 +20,7 @@ use voxel::{BlockId, BlockPos};
 use crate::blocks::Blocks;
 use crate::clock::WorldClock;
 use crate::interact::Placed;
-use crate::save::{SaveDir, read_ron, screenshot_run, write_ron};
+use crate::save::{read_ron, screenshot_run, write_ron, SaveDir};
 use crate::world::World;
 
 const FILE: &str = "crops.ron";
@@ -31,18 +31,12 @@ pub struct FarmingPlugin;
 
 impl Plugin for FarmingPlugin {
     fn build(&self, app: &mut App) {
-        let crops = load_crops(include_str!("../../../../assets/data/crops.ron"))
-            .unwrap_or_else(|e| panic!("crops.ron: {e}"));
+        let crops = load_crops(include_str!("../../../../assets/data/crops.ron")).unwrap_or_else(|e| panic!("crops.ron: {e}"));
         regrow::plugin(app);
         app.insert_resource(CropBook(crops))
             .init_resource::<Fields>()
             .add_systems(crate::menu::GamePostStartup, load)
-            .add_systems(
-                crate::menu::GameUpdate,
-                (sow, grow, save_now_and_then)
-                    .chain()
-                    .after(crate::interact::InteractSet),
-            )
+            .add_systems(crate::menu::GameUpdate, (sow, grow, save_now_and_then).chain().after(crate::interact::InteractSet))
             .add_systems(Last, save_on_exit.run_if(crate::menu::in_game));
     }
 }
@@ -65,10 +59,7 @@ pub fn load_crops(text: &str) -> Result<Vec<Crop>, String> {
     let list: Vec<Crop> = ron::from_str(text).map_err(|e| e.to_string())?;
     for c in &list {
         if c.stages.len() < 2 || c.days <= 0.0 {
-            return Err(format!(
-                "crop `{}` needs two or more stages and days above 0",
-                c.name
-            ));
+            return Err(format!("crop `{}` needs two or more stages and days above 0", c.name));
         }
     }
     Ok(list)
@@ -89,10 +80,7 @@ impl CropBook {
     /// The crop and stage a block is, if it is one.
     fn find(&self, blocks: &Blocks, b: BlockId) -> Option<(usize, usize)> {
         let name = &blocks.registry.get(b).name;
-        self.0
-            .iter()
-            .enumerate()
-            .find_map(|(i, c)| c.stages.iter().position(|s| s == name).map(|st| (i, st)))
+        self.0.iter().enumerate().find_map(|(i, c)| c.stages.iter().position(|s| s == name).map(|st| (i, st)))
     }
 }
 
@@ -120,45 +108,27 @@ fn sow(
     mut fields: ResMut<Fields>,
 ) {
     for p in placed.read() {
-        let Some((crop, 0)) = book.find(&blocks, p.block) else {
-            continue;
-        };
+        let Some((crop, 0)) = book.find(&blocks, p.block) else { continue };
         let water = blocks.registry.id("water");
         let mut wet = false;
         'look: for dx in -WET_REACH..=WET_REACH {
             for dz in -WET_REACH..=WET_REACH {
                 for dy in -2..=0 {
-                    if world.block(BlockPos::new(p.pos.x + dx, p.pos.y + dy, p.pos.z + dz)) == water
-                    {
+                    if world.block(BlockPos::new(p.pos.x + dx, p.pos.y + dy, p.pos.z + dz)) == water {
                         wet = true;
                         break 'look;
                     }
                 }
             }
         }
-        fields.0.insert(
-            p.pos,
-            Sown {
-                crop,
-                at: clock.total_days(),
-                wet,
-            },
-        );
+        fields.0.insert(p.pos, Sown { crop, at: clock.total_days(), wet });
     }
 }
 
 /// Every couple of seconds: loaded crops move on to the stage they have reached;
 /// crops that are gone (broken, built over) are forgotten.
 #[allow(clippy::too_many_arguments)]
-fn grow(
-    time: Res<Time>,
-    mut wait: Local<f32>,
-    book: Res<CropBook>,
-    blocks: Res<Blocks>,
-    clock: Res<WorldClock>,
-    mut world: ResMut<World>,
-    mut fields: ResMut<Fields>,
-) {
+fn grow(time: Res<Time>, mut wait: Local<f32>, book: Res<CropBook>, blocks: Res<Blocks>, clock: Res<WorldClock>, mut world: ResMut<World>, mut fields: ResMut<Fields>) {
     *wait -= time.delta_secs();
     if *wait > 0.0 {
         return;
@@ -209,36 +179,18 @@ fn load(dir: Res<SaveDir>, book: Res<CropBook>, mut fields: ResMut<Fields>) {
     let list: Vec<SavedCrop> = read_ron(&dir, FILE).unwrap_or_default();
     for (p, name, at, wet) in list {
         if let Some(crop) = book.0.iter().position(|c| c.name == name) {
-            fields
-                .0
-                .insert(BlockPos::new(p[0], p[1], p[2]), Sown { crop, at, wet });
+            fields.0.insert(BlockPos::new(p[0], p[1], p[2]), Sown { crop, at, wet });
         }
     }
 }
 
 fn store(dir: &SaveDir, book: &CropBook, fields: &Fields) {
-    let list: Vec<SavedCrop> = fields
-        .0
-        .iter()
-        .filter_map(|(p, s)| {
-            Some((
-                [p.x, p.y, p.z],
-                book.0.get(s.crop)?.name.clone(),
-                s.at,
-                s.wet,
-            ))
-        })
-        .collect();
+    let list: Vec<SavedCrop> =
+        fields.0.iter().filter_map(|(p, s)| Some(([p.x, p.y, p.z], book.0.get(s.crop)?.name.clone(), s.at, s.wet))).collect();
     write_ron(dir, FILE, &list);
 }
 
-fn save_now_and_then(
-    time: Res<Time<Real>>,
-    mut since: Local<f32>,
-    dir: Res<SaveDir>,
-    book: Res<CropBook>,
-    fields: Res<Fields>,
-) {
+fn save_now_and_then(time: Res<Time<Real>>, mut since: Local<f32>, dir: Res<SaveDir>, book: Res<CropBook>, fields: Res<Fields>) {
     *since += time.delta_secs();
     if *since < 30.0 || screenshot_run() {
         return;
@@ -247,12 +199,7 @@ fn save_now_and_then(
     store(&dir, &book, &fields);
 }
 
-fn save_on_exit(
-    mut exit: MessageReader<AppExit>,
-    dir: Res<SaveDir>,
-    book: Res<CropBook>,
-    fields: Res<Fields>,
-) {
+fn save_on_exit(mut exit: MessageReader<AppExit>, dir: Res<SaveDir>, book: Res<CropBook>, fields: Res<Fields>) {
     if exit.read().next().is_some() && !screenshot_run() {
         store(&dir, &book, &fields);
     }
@@ -271,10 +218,7 @@ mod tests {
         let barley = &crops()[0];
         assert_eq!(barley.stage(0.0, false), 0);
         assert_eq!(barley.stage(barley.days * 1.01, false), 1);
-        assert_eq!(
-            barley.stage(barley.days * 50.0, false),
-            barley.stages.len() - 1
-        );
+        assert_eq!(barley.stage(barley.days * 50.0, false), barley.stages.len() - 1);
         // Water near: ripe sooner.
         let ripe = barley.days * (barley.stages.len() - 1) as f64;
         assert!(barley.stage(ripe * 0.7, true) > barley.stage(ripe * 0.7, false));
@@ -282,28 +226,16 @@ mod tests {
 
     #[test]
     fn every_crop_stage_is_a_plant_block_and_sown_by_an_item() {
-        let blocks = voxel::BlockRegistry::from_ron(
-            include_str!("../../../../assets/data/blocks.ron"),
-            &voxel::TileSheet::from_ron(include_str!("../../../../assets/textures/blocks.ron"))
-                .unwrap(),
-        )
-        .unwrap();
+        let blocks = voxel::BlockRegistry::from_ron(include_str!("../../../../assets/data/blocks.ron"), &voxel::TileSheet::from_ron(include_str!("../../../../assets/textures/blocks.ron")).unwrap()).unwrap();
         let items = include_str!("../../../../assets/data/items.ron");
         let drops = include_str!("../../../../assets/data/drops.ron");
         for c in crops() {
             for s in &c.stages {
                 let id = blocks.id(s).unwrap_or_else(|| panic!("no block `{s}`"));
                 assert_eq!(blocks.get(id).shape, voxel::Shape::Plant, "{s}");
-                assert!(
-                    drops.contains(&format!("\"{s}\"")),
-                    "drops.ron has nothing for {s}"
-                );
+                assert!(drops.contains(&format!("\"{s}\"")), "drops.ron has nothing for {s}");
             }
-            assert!(
-                items.contains(&format!("Block(\"{}\")", c.stages[0])),
-                "no item sows {}",
-                c.name
-            );
+            assert!(items.contains(&format!("Block(\"{}\")", c.stages[0])), "no item sows {}", c.name);
         }
     }
 }

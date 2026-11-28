@@ -4,9 +4,9 @@
 
 use bevy::prelude::*;
 
-use super::Npc;
 use super::dialogue::Anim;
 use super::talk::Talk;
+use super::Npc;
 use crate::hands::Held;
 use crate::items::ItemId;
 use crate::npc::body::Rig;
@@ -15,8 +15,7 @@ pub struct HandoverPlugin;
 
 impl Plugin for HandoverPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<HandOver>()
-            .add_systems(crate::menu::GameUpdate, (start, let_go).chain());
+        app.add_message::<HandOver>().add_systems(crate::menu::GameUpdate, (start, let_go).chain());
     }
 }
 
@@ -39,28 +38,13 @@ const HELD_SCALE: f32 = 1.6;
 /// Share of `Anim::Give` after which the hand is empty (the arm is all the way out).
 const LET_GO: f32 = 0.6;
 
-fn start(
-    mut commands: Commands,
-    mut msgs: MessageReader<HandOver>,
-    mut talk: ResMut<Talk>,
-    mut npcs: Query<(&mut Npc, &Rig, Option<&Handing>)>,
-    mut seq: Local<u32>,
-) {
+fn start(mut commands: Commands, mut msgs: MessageReader<HandOver>, mut talk: ResMut<Talk>, mut npcs: Query<(&mut Npc, &Rig, Option<&Handing>)>, mut seq: Local<u32>) {
     for m in msgs.read() {
-        let Ok((mut npc, rig, before)) = npcs.get_mut(m.npc) else {
-            continue;
-        };
+        let Ok((mut npc, rig, before)) = npcs.get_mut(m.npc) else { continue };
         if let Some(h) = before {
             commands.entity(h.held).despawn();
         }
-        let held = commands
-            .spawn((
-                Held::holding(m.item),
-                Transform::from_scale(Vec3::splat(HELD_SCALE)),
-                Visibility::default(),
-                ChildOf(rig.hands[1]),
-            ))
-            .id();
+        let held = commands.spawn((Held::holding(m.item), Transform::from_scale(Vec3::splat(HELD_SCALE)), Visibility::default(), ChildOf(rig.hands[1]))).id();
         commands.entity(m.npc).insert(Handing { held, t: 0.0 });
         // In a talk the talk drives its animations; otherwise (a cutscene) set it here.
         if talk.with() == Some(m.npc) {
@@ -73,11 +57,7 @@ fn start(
 }
 
 /// Real time, since a talk pauses the game.
-fn let_go(
-    mut commands: Commands,
-    real: Res<Time<Real>>,
-    mut handing: Query<(Entity, &mut Handing)>,
-) {
+fn let_go(mut commands: Commands, real: Res<Time<Real>>, mut handing: Query<(Entity, &mut Handing)>) {
     for (e, mut h) in &mut handing {
         h.t += real.delta_secs();
         if h.t >= Anim::Give.length() * LET_GO {

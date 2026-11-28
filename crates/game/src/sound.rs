@@ -12,9 +12,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use bevy::audio::{
-    AddAudioSource, AudioSinkPlayback, Decodable, SpatialListener, SpatialScale, Volume,
-};
+use bevy::audio::{AddAudioSource, AudioSinkPlayback, Decodable, SpatialListener, SpatialScale, Volume};
 use bevy::prelude::*;
 use serde::Deserialize;
 use voxel::BlockPos;
@@ -32,18 +30,14 @@ pub struct SoundPlugin;
 
 impl Plugin for SoundPlugin {
     fn build(&self, app: &mut App) {
-        let spec: SoundSpec = ron::from_str(include_str!("../../../assets/data/sounds.ron"))
-            .unwrap_or_else(|e| panic!("sounds.ron: {e}"));
+        let spec: SoundSpec = ron::from_str(include_str!("../../../assets/data/sounds.ron")).unwrap_or_else(|e| panic!("sounds.ron: {e}"));
         app.insert_resource(spec)
             .add_audio_source::<Muffled>()
             .add_message::<PlaySound>()
             .add_systems(crate::menu::GameStartup, load_bank)
             .add_systems(
                 crate::menu::GameUpdate,
-                (
-                    footsteps, mining, fights, spells, level_up, thunder, spirits, play, loops,
-                    muffle, music,
-                )
+                (footsteps, mining, fights, spells, level_up, thunder, spirits, play, loops, muffle, music)
                     .chain()
                     .after(crate::creatures::CreatureSet)
                     .after(crate::survival::SurvivalSet),
@@ -94,11 +88,7 @@ impl SoundSpec {
     /// Volume for a sound: by its name, or the part before the first `_`
     /// (`step_hard_1` -> `step`).
     fn volume(&self, name: &str) -> f32 {
-        self.volumes
-            .get(name)
-            .or_else(|| name.split('_').next().and_then(|p| self.volumes.get(p)))
-            .copied()
-            .unwrap_or(0.5)
+        self.volumes.get(name).or_else(|| name.split('_').next().and_then(|p| self.volumes.get(p))).copied().unwrap_or(0.5)
     }
 }
 
@@ -118,13 +108,7 @@ pub struct PlaySound {
 
 impl PlaySound {
     pub fn new(name: impl Into<String>) -> Self {
-        Self {
-            name: name.into(),
-            gain: 1.0,
-            at: None,
-            ambient: false,
-            speed: None,
-        }
+        Self { name: name.into(), gain: 1.0, at: None, ambient: false, speed: None }
     }
 
     pub fn gain(mut self, gain: f32) -> Self {
@@ -146,13 +130,7 @@ impl PlaySound {
 
     /// An ambient sound from a place in the world.
     pub fn ambient_at(name: impl Into<String>, at: Vec3, gain: f32) -> Self {
-        Self {
-            name: name.into(),
-            gain,
-            at: Some(at),
-            ambient: true,
-            speed: None,
-        }
+        Self { name: name.into(), gain, at: Some(at), ambient: true, speed: None }
     }
 }
 
@@ -163,34 +141,9 @@ struct Bank {
 
 fn load_bank(mut commands: Commands, assets: Res<AssetServer>) {
     let mut names: Vec<String> = [
-        "break",
-        "place",
-        "swing",
-        "hit",
-        "clash",
-        "hurt",
-        "creature_hurt",
-        "spirit",
-        "spell_on",
-        "spell_off",
-        "level_up",
-        "thunder",
-        "wind_loop",
-        "rain_loop",
-        "levitate_loop",
-        "dig_soft",
-        "dig_hard",
-        "dig_wood",
-        "dig_plant",
-        "bird_flap",
-        "ui_open",
-        "ui_close",
-        "ui_tab",
-        "ui_pick",
-        "ui_drop",
-        "ui_equip",
-        "ui_draw",
-        "ui_sheathe",
+        "break", "place", "swing", "hit", "clash", "hurt", "creature_hurt", "spirit", "spell_on", "spell_off", "level_up", "thunder",
+        "wind_loop", "rain_loop", "levitate_loop", "dig_soft", "dig_hard", "dig_wood", "dig_plant",
+        "bird_flap", "ui_open", "ui_close", "ui_tab", "ui_pick", "ui_drop", "ui_equip", "ui_draw", "ui_sheathe",
     ]
     .iter()
     .map(|s| s.to_string())
@@ -201,10 +154,7 @@ fn load_bank(mut commands: Commands, assets: Res<AssetServer>) {
         }
     }
     // Critter calls named in creatures.ron load the first time they're played.
-    let handles = names
-        .into_iter()
-        .map(|n| (n.clone(), assets.load(format!("sounds/{n}.ogg"))))
-        .collect();
+    let handles = names.into_iter().map(|n| (n.clone(), assets.load(format!("sounds/{n}.ogg")))).collect();
     commands.insert_resource(Bank { handles });
 }
 
@@ -271,14 +221,7 @@ struct LowPass<S> {
 
 impl<S: bevy::audio::Source> LowPass<S> {
     fn new(inner: S, cutoff: Arc<AtomicU32>) -> Self {
-        let mut f = Self {
-            inner,
-            cutoff,
-            alpha: 1.0,
-            state: [[0.0; 2]; 8],
-            channel: 0,
-            count: 0,
-        };
+        let mut f = Self { inner, cutoff, alpha: 1.0, state: [[0.0; 2]; 8], channel: 0, count: 0 };
         f.refresh();
         f
     }
@@ -334,24 +277,10 @@ impl<S: bevy::audio::Source> bevy::audio::Source for LowPass<S> {
 }
 
 /// A filtered player for a loaded sound, and the filter's handle.
-fn muffled(
-    assets: &mut Assets<Muffled>,
-    source: &AudioSource,
-    at: Option<Vec3>,
-) -> (AudioPlayer<Muffled>, Filter) {
+fn muffled(assets: &mut Assets<Muffled>, source: &AudioSource, at: Option<Vec3>) -> (AudioPlayer<Muffled>, Filter) {
     let cutoff = Arc::new(AtomicU32::new(OPEN.to_bits()));
-    let h = assets.add(Muffled {
-        source: source.clone(),
-        cutoff: cutoff.clone(),
-    });
-    (
-        AudioPlayer(h),
-        Filter {
-            cutoff,
-            at,
-            blocked: 0.0,
-        },
-    )
+    let h = assets.add(Muffled { source: source.clone(), cutoff: cutoff.clone() });
+    (AudioPlayer(h), Filter { cutoff, at, blocked: 0.0 })
 }
 
 /// Whether a solid block stands between the ears and a sound (the block the
@@ -364,11 +293,10 @@ fn walled(world: &World, blocks: &Blocks, ears: Vec3, at: Vec3) -> bool {
     }
     let source = BlockPos::from_world(at.to_array());
     voxel::raycast::raycast(ears.to_array(), to.to_array(), dist, |p| {
-        p != source
-            && world.block(p).is_some_and(|b| {
-                let def = blocks.registry.get(b);
-                def.solid && def.opaque
-            })
+        p != source && world.block(p).is_some_and(|b| {
+            let def = blocks.registry.get(b);
+            def.solid && def.opaque
+        })
     })
     .is_some()
 }
@@ -387,11 +315,7 @@ fn muffle(
     let ease = (time.delta_secs() * 8.0).min(1.0);
     for mut f in &mut q {
         if let Some(at) = f.at {
-            let target = if walled(&world, &blocks, ears, at) {
-                1.0
-            } else {
-                0.0
-            };
+            let target = if walled(&world, &blocks, ears, at) { 1.0 } else { 0.0 };
             f.blocked += (target - f.blocked) * ease;
         }
         let cutoff = if player.head_in_water {
@@ -464,11 +388,7 @@ fn play(
         if v <= 0.001 {
             continue;
         }
-        let h = bank
-            .handles
-            .entry(m.name.clone())
-            .or_insert_with(|| server.load(format!("sounds/{}.ogg", m.name)))
-            .clone();
+        let h = bank.handles.entry(m.name.clone()).or_insert_with(|| server.load(format!("sounds/{}.ogg", m.name))).clone();
         let Some(source) = sources.get(&h) else {
             if age < LOAD_WAIT {
                 waiting.push((m, age + dt));
@@ -476,27 +396,17 @@ fn play(
             continue;
         };
         let speed = m.speed.unwrap_or_else(|| jitter(&mut seed));
-        let playback = PlaybackSettings::DESPAWN
-            .with_volume(Volume::Linear(v))
-            .with_speed(speed);
+        let playback = PlaybackSettings::DESPAWN.with_volume(Volume::Linear(v)).with_speed(speed);
         let (sound, filter) = muffled(&mut muffled_sounds, source, m.at);
         match m.at {
-            Some(at) => commands.spawn((
-                sound,
-                filter,
-                playback.with_spatial(true).with_spatial_scale(PAN_ONLY),
-                Transform::from_translation(at),
-            )),
+            Some(at) => commands.spawn((sound, filter, playback.with_spatial(true).with_spatial_scale(PAN_ONLY), Transform::from_translation(at))),
             None => commands.spawn((sound, filter, playback)),
         };
     }
 }
 
 fn material_at(world: &World, blocks: &Blocks, p: BlockPos) -> Option<String> {
-    world
-        .block(p)
-        .filter(|b| !b.is_air())
-        .map(|b| blocks.registry.get(b).material.clone())
+    world.block(p).filter(|b| !b.is_air()).map(|b| blocks.registry.get(b).material.clone())
 }
 
 /// A footstep every time the head-bob passes a footfall.
@@ -518,13 +428,7 @@ fn footsteps(
         return;
     }
     *which = (*which + 1 + (step as usize % 2)) % 3;
-    let gain = if player.crouching {
-        0.4
-    } else if player.sprinting {
-        1.3
-    } else {
-        1.0
-    };
+    let gain = if player.crouching { 0.4 } else if player.sprinting { 1.3 } else { 1.0 };
     // Wading: splashes in water, a crunch in thin snow, a slosh in deep snow.
     let w = player.wading;
     let wade = &spec.wade;
@@ -532,11 +436,7 @@ fn footsteps(
         Some((&wade.water, 0.6 + 0.6 * w.water))
     } else if w.snow > 0.0 {
         let deep = w.snow * 8.0 >= wade.deep_from as f32 - 0.01;
-        Some(if deep {
-            (&wade.deep_snow, 1.0)
-        } else {
-            (&wade.snow, 0.8)
-        })
+        Some(if deep { (&wade.deep_snow, 1.0) } else { (&wade.snow, 0.8) })
     } else {
         None
     };
@@ -544,9 +444,7 @@ fn footsteps(
         Some((n, g)) => (n.clone(), g),
         None => {
             let under = BlockPos::from_world((player.pos - Vec3::Y * 0.2).to_array());
-            let Some(material) = material_at(&world, &blocks, under) else {
-                return;
-            };
+            let Some(material) = material_at(&world, &blocks, under) else { return };
             (spec.of(&material).step.clone(), 1.0)
         }
     };
@@ -566,10 +464,7 @@ fn mining(
         let material = &blocks.registry.get(b.block).material;
         // From the block, so a blow off to one side sounds from that side.
         let at = Vec3::new(b.pos.x as f32, b.pos.y as f32, b.pos.z as f32) + Vec3::splat(0.5);
-        out.write(PlaySound {
-            at: Some(at),
-            ..PlaySound::new(spec.of(material).dig.clone())
-        });
+        out.write(PlaySound { at: Some(at), ..PlaySound::new(spec.of(material).dig.clone()) });
     }
     for _ in mined.read() {
         out.write(PlaySound::new("break"));
@@ -579,25 +474,11 @@ fn mining(
     }
 }
 
-fn fights(
-    mut strikes: MessageReader<Strike>,
-    mut hurts: MessageReader<Damage>,
-    bodies: Query<&GlobalTransform>,
-    mut out: MessageWriter<PlaySound>,
-) {
+fn fights(mut strikes: MessageReader<Strike>, mut hurts: MessageReader<Damage>, bodies: Query<&GlobalTransform>, mut out: MessageWriter<PlaySound>) {
     for s in strikes.read() {
-        let at = bodies
-            .get(s.entity)
-            .ok()
-            .map(|g| g.translation() + Vec3::Y * 0.5);
-        out.write(PlaySound {
-            at,
-            ..PlaySound::new("hit")
-        });
-        out.write(PlaySound {
-            at,
-            ..PlaySound::new("creature_hurt")
-        });
+        let at = bodies.get(s.entity).ok().map(|g| g.translation() + Vec3::Y * 0.5);
+        out.write(PlaySound { at, ..PlaySound::new("hit") });
+        out.write(PlaySound { at, ..PlaySound::new("creature_hurt") });
     }
     for d in hurts.read() {
         if d.amount > 0.5 {
@@ -606,11 +487,7 @@ fn fights(
     }
 }
 
-fn spells(
-    spells: Res<Spells>,
-    mut out: MessageWriter<PlaySound>,
-    mut was: Local<(bool, bool, bool)>,
-) {
+fn spells(spells: Res<Spells>, mut out: MessageWriter<PlaySound>, mut was: Local<(bool, bool, bool)>) {
     let now = (spells.levitate, spells.light, spells.warmth);
     for (a, b) in [(was.0, now.0), (was.1, now.1), (was.2, now.2)] {
         if !a && b {
@@ -622,11 +499,7 @@ fn spells(
     *was = now;
 }
 
-fn level_up(
-    progress: Res<Progress>,
-    mut out: MessageWriter<PlaySound>,
-    mut last: Local<Option<u32>>,
-) {
+fn level_up(progress: Res<Progress>, mut out: MessageWriter<PlaySound>, mut last: Local<Option<u32>>) {
     let l = progress.level.level;
     if last.is_some_and(|x| l > x) {
         out.write(PlaySound::new("level_up"));
@@ -637,12 +510,7 @@ fn level_up(
 /// Thunder follows each lightning strike after a delay, as if the strike were
 /// as far off as its bolt (`Conditions::strike_far`): the further, the later,
 /// quieter and deeper.
-fn thunder(
-    time: Res<Time>,
-    conditions: Res<Conditions>,
-    mut out: MessageWriter<PlaySound>,
-    mut state: Local<(u32, Vec<(f32, f32)>)>,
-) {
+fn thunder(time: Res<Time>, conditions: Res<Conditions>, mut out: MessageWriter<PlaySound>, mut state: Local<(u32, Vec<(f32, f32)>)>) {
     let (seen, pending) = &mut *state;
     if conditions.strikes != *seen {
         *seen = conditions.strikes;
@@ -655,11 +523,7 @@ fn thunder(
         if *wait > 0.0 {
             return true;
         }
-        out.write(
-            PlaySound::new("thunder")
-                .gain(1.0 - 0.6 * *far)
-                .speed(1.05 - 0.3 * *far),
-        );
+        out.write(PlaySound::new("thunder").gain(1.0 - 0.6 * *far).speed(1.05 - 0.3 * *far));
         false
     });
 }
@@ -700,26 +564,14 @@ fn music(
     let (lo, hi) = spec.music.gap;
     *wait = lo + (hi - lo) * ((jitter(seed) - 0.9) * 5.0);
     let night = crate::creatures::brain::spirit_hours(clock.hour());
-    let list = if night && !spec.music.night.is_empty() {
-        &spec.music.night
-    } else {
-        &spec.music.day
-    };
+    let list = if night && !spec.music.night.is_empty() { &spec.music.night } else { &spec.music.day };
     if list.is_empty() || level <= 0.001 {
         return;
     }
     let name = &list[*count % list.len()];
     *count += 1;
-    let h = bank
-        .handles
-        .entry(name.clone())
-        .or_insert_with(|| server.load(format!("sounds/{name}.ogg")))
-        .clone();
-    commands.spawn((
-        Music,
-        AudioPlayer(h),
-        PlaybackSettings::DESPAWN.with_volume(Volume::Linear(level)),
-    ));
+    let h = bank.handles.entry(name.clone()).or_insert_with(|| server.load(format!("sounds/{name}.ogg"))).clone();
+    commands.spawn((Music, AudioPlayer(h), PlaybackSettings::DESPAWN.with_volume(Volume::Linear(level))));
 }
 
 /// The music track playing.
@@ -743,9 +595,7 @@ fn spirits(
     *timer = 5.0;
     let nearest = q
         .iter()
-        .filter(|(_, c)| {
-            kinds.get(c.kind).temper == crate::creatures::data::Temper::Spirit && c.fade > 0.5
-        })
+        .filter(|(_, c)| kinds.get(c.kind).temper == crate::creatures::data::Temper::Spirit && c.fade > 0.5)
         .map(|(tf, _)| tf.translation.distance(player.pos))
         .fold(f32::MAX, f32::min);
     if nearest < 24.0 {
@@ -771,31 +621,19 @@ fn loops(
 ) {
     // Each loop starts once its file has loaded (it needs the samples for its filter).
     if let Some(bank) = bank {
-        for (i, l) in [Loop::Wind, Loop::Rain, Loop::Levitate]
-            .into_iter()
-            .enumerate()
-        {
+        for (i, l) in [Loop::Wind, Loop::Rain, Loop::Levitate].into_iter().enumerate() {
             if let Some(source) = bank.handles.get(l.file()).and_then(|h| sources.get(h))
                 && !started[i]
             {
                 started[i] = true;
                 let (sound, filter) = muffled(&mut muffled_sounds, source, None);
-                commands.spawn((
-                    l,
-                    sound,
-                    filter,
-                    PlaybackSettings::LOOP.with_volume(Volume::Linear(0.0)),
-                ));
+                commands.spawn((l, sound, filter, PlaybackSettings::LOOP.with_volume(Volume::Linear(0.0))));
             }
         }
     }
     let dt = time.delta_secs();
     let high = ((player.pos.y - 80.0) / 200.0).clamp(0.0, 1.0);
-    let rain = if conditions.snowing {
-        0.0
-    } else {
-        conditions.precipitation.clamp(0.0, 1.0)
-    };
+    let rain = if conditions.snowing { 0.0 } else { conditions.precipitation.clamp(0.0, 1.0) };
     for (l, mut sink) in &mut q {
         let level = match l {
             Loop::Wind => ((conditions.wind / 20.0).clamp(0.0, 1.0) * 0.8 + high * 0.6).min(1.0),
@@ -808,11 +646,7 @@ fn loops(
                 }
             }
         };
-        let master = if *l == Loop::Levitate {
-            settings.volume
-        } else {
-            settings.volume * settings.ambience
-        };
+        let master = if *l == Loop::Levitate { settings.volume } else { settings.volume * settings.ambience };
         let target = level * spec.volume(l.file()) * master;
         let now = sink.volume().to_linear();
         let next = now + (target - now) * (dt * 1.5).min(1.0);
@@ -848,10 +682,7 @@ mod tests {
         };
         assert!(gain(water, 100.0) > 0.8, "lows pass under water");
         assert!(gain(water, 4000.0) < 0.05, "highs gone under water");
-        assert!(
-            gain(wall, 4000.0) > gain(water, 4000.0) * 5.0,
-            "a wall muffles less than water"
-        );
+        assert!(gain(wall, 4000.0) > gain(water, 4000.0) * 5.0, "a wall muffles less than water");
     }
 
     #[test]
@@ -869,13 +700,10 @@ mod tests {
 
     #[test]
     fn sounds_ron_lists_music_that_exists() {
-        let spec: SoundSpec =
-            ron::from_str(include_str!("../../../assets/data/sounds.ron")).unwrap();
+        let spec: SoundSpec = ron::from_str(include_str!("../../../assets/data/sounds.ron")).unwrap();
         assert!(!spec.music.day.is_empty() && !spec.music.night.is_empty());
         for name in spec.music.day.iter().chain(&spec.music.night) {
-            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../assets/sounds")
-                .join(format!("{name}.ogg"));
+            let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/sounds").join(format!("{name}.ogg"));
             assert!(path.is_file(), "missing {}", path.display());
         }
         assert!(spec.music.gap.0 <= spec.music.gap.1);
@@ -883,13 +711,10 @@ mod tests {
 
     #[test]
     fn wading_sounds_exist() {
-        let spec: SoundSpec =
-            ron::from_str(include_str!("../../../assets/data/sounds.ron")).unwrap();
+        let spec: SoundSpec = ron::from_str(include_str!("../../../assets/data/sounds.ron")).unwrap();
         for name in [&spec.wade.water, &spec.wade.snow, &spec.wade.deep_snow] {
             for i in 0..3 {
-                let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .join("../../assets/sounds")
-                    .join(format!("{name}_{i}.ogg"));
+                let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/sounds").join(format!("{name}_{i}.ogg"));
                 assert!(path.is_file(), "missing {}", path.display());
             }
         }

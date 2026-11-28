@@ -29,12 +29,8 @@ pub struct GuidePlugin;
 
 impl Plugin for GuidePlugin {
     fn build(&self, app: &mut App) {
-        let data = rules::load(include_str!("../../../../assets/data/guide.ron"))
-            .unwrap_or_else(|e| panic!("guide.ron: {e}"));
-        app.insert_resource(GuideBook(data)).add_systems(
-            crate::menu::GameUpdate,
-            guide.after(crate::npc::talk::TalkSet),
-        );
+        let data = rules::load(include_str!("../../../../assets/data/guide.ron")).unwrap_or_else(|e| panic!("guide.ron: {e}"));
+        app.insert_resource(GuideBook(data)).add_systems(crate::menu::GameUpdate, guide.after(crate::npc::talk::TalkSet));
     }
 }
 
@@ -55,9 +51,7 @@ const HOME_TOAST_EVERY: f32 = 8.0;
 /// The block nearest `from`, among `found`.
 pub fn nearest(from: Vec3, found: impl IntoIterator<Item = BlockPos>) -> Option<BlockPos> {
     found.into_iter().min_by(|a, b| {
-        let d = |p: &BlockPos| {
-            Vec3::new(p.x as f32 + 0.5, p.y as f32 + 0.5, p.z as f32 + 0.5).distance_squared(from)
-        };
+        let d = |p: &BlockPos| Vec3::new(p.x as f32 + 0.5, p.y as f32 + 0.5, p.z as f32 + 0.5).distance_squared(from);
         d(a).total_cmp(&d(b))
     })
 }
@@ -78,11 +72,7 @@ fn guide(
     mut story: ResMut<Story>,
     (player, menus, playing): (Res<Player>, Res<Menus>, Res<Playing>),
     (inv, items, world, blocks): (Res<Inventory>, Res<Items>, Res<World>, Res<Blocks>),
-    (camp, urns, sleep): (
-        Res<crate::survival::camp::Camp>,
-        Res<crate::station::Urns>,
-        Res<crate::survival::camp::Sleep>,
-    ),
+    (camp, urns, sleep): (Res<crate::survival::camp::Camp>, Res<crate::station::Urns>, Res<crate::survival::camp::Sleep>),
     places: Res<crate::cutscene::Places>,
     mut waypoints: ResMut<Waypoints>,
     (mut toast, mut start): (MessageWriter<Toast>, MessageWriter<StartCutscene>),
@@ -113,16 +103,9 @@ fn guide(
     let here = BlockPos::from_world((player.pos + Vec3::Y * 0.5).to_array());
     let mut missing = None;
     if step.goal == rules::Goal::Home {
-        missing = crate::station::room_at(&world, &blocks, here)
-            .ok()
-            .map(|room| home_missing(&room, &world, &blocks));
+        missing = crate::station::room_at(&world, &blocks, here).ok().map(|room| home_missing(&room, &world, &blocks));
     }
-    let mut f = rules::Facts {
-        count: Some(&count),
-        camp: camp.bedroll.is_some(),
-        home: missing.as_ref().is_some_and(|m| m.is_empty()),
-        ..Default::default()
-    };
+    let mut f = rules::Facts { count: Some(&count), camp: camp.bedroll.is_some(), home: missing.as_ref().is_some_and(|m| m.is_empty()), ..Default::default() };
     if let rules::Goal::Step(s) = &step.goal
         && urns.has(s)
     {
@@ -136,28 +119,18 @@ fn guide(
         f.flags.insert(flag.clone());
     }
     f.urn_placed = urns.placed.keys().any(|k| k != "ancestral");
-    f.urn = inv
-        .pockets
-        .items
-        .iter()
-        .any(|p| items.get(p.stack.item).name.ends_with("_urn"));
+    f.urn = inv.pockets.items.iter().any(|p| items.get(p.stack.item).name.ends_with("_urn"));
     if rules::met(&step.goal, &f) {
         story.flags.insert(rules::flag(&step.id));
         waypoints.guide.clear();
         st.look = 0.0;
         match book.0.steps.get(i + 1) {
             Some(next) => {
-                toast.write(Toast(format!(
-                    "Done: {}. Next: {} (J for the journal)",
-                    step.title, next.title
-                )));
+                toast.write(Toast(format!("Done: {}. Next: {} (J for the journal)", step.title, next.title)));
             }
             None => {
                 story.flags.insert(rules::DONE.to_string());
-                toast.write(Toast(format!(
-                    "Done: {}. You're on your own from here",
-                    step.title
-                )));
+                toast.write(Toast(format!("Done: {}. You're on your own from here", step.title)));
             }
         }
         return;
@@ -179,10 +152,7 @@ fn guide(
         && st.home_toast <= 0.0
     {
         st.home_toast = HOME_TOAST_EVERY;
-        toast.write(Toast(format!(
-            "This room holds, but it still needs {}",
-            m.join(" and ")
-        )));
+        toast.write(Toast(format!("This room holds, but it still needs {}", m.join(" and "))));
     }
 
     // Point at the nearest blocks it asks for.
@@ -192,36 +162,19 @@ fn guide(
     st.look = LOOK_EVERY;
     let mut marks = Vec::new();
     if let Some(p) = step.place.as_ref().and_then(|name| places.0.get(name)) {
-        marks.push(Waypoint {
-            name: step.title.clone(),
-            pos: p.to_array(),
-        });
+        marks.push(Waypoint { name: step.title.clone(), pos: p.to_array() });
     }
     for m in &step.marks {
         if rules::have(&m.until.0, count) >= m.until.1 {
             continue;
         }
-        let ids: Vec<_> = blocks
-            .registry
-            .iter()
-            .filter(|(_, d)| m.blocks.iter().any(|b| rules::matches(b, &d.name)))
-            .map(|(id, _)| id)
-            .collect();
+        let ids: Vec<_> = blocks.registry.iter().filter(|(_, d)| m.blocks.iter().any(|b| rules::matches(b, &d.name))).map(|(id, _)| id).collect();
         let found = SEARCH.iter().find_map(|r| {
-            let (lo, hi) = (
-                BlockPos::new(here.x - r, here.y - SEARCH_UP, here.z - r),
-                BlockPos::new(here.x + r, here.y + SEARCH_UP, here.z + r),
-            );
-            nearest(
-                player.pos,
-                ids.iter().flat_map(|id| world.find_blocks(lo, hi, *id)),
-            )
+            let (lo, hi) = (BlockPos::new(here.x - r, here.y - SEARCH_UP, here.z - r), BlockPos::new(here.x + r, here.y + SEARCH_UP, here.z + r));
+            nearest(player.pos, ids.iter().flat_map(|id| world.find_blocks(lo, hi, *id)))
         });
         if let Some(p) = found {
-            marks.push(Waypoint {
-                name: m.name.clone(),
-                pos: [p.x as f32 + 0.5, p.y as f32, p.z as f32 + 0.5],
-            });
+            marks.push(Waypoint { name: m.name.clone(), pos: [p.x as f32 + 0.5, p.y as f32, p.z as f32 + 0.5] });
         }
     }
     if waypoints.guide != marks {
@@ -234,10 +187,7 @@ pub fn home_missing(room: &voxel::room::Room, world: &World, blocks: &Blocks) ->
     rules::home_missing(room, |p| {
         world.block(p).map_or(rules::Cell::default(), |b| {
             let d = blocks.registry.get(b);
-            rules::Cell {
-                door: matches!(d.model, Some(voxel::Model::Door)),
-                light: d.light > 0,
-            }
+            rules::Cell { door: matches!(d.model, Some(voxel::Model::Door)), light: d.light > 0 }
         })
     })
 }
@@ -249,11 +199,7 @@ mod tests {
     #[test]
     fn the_nearest_block_wins() {
         let from = Vec3::new(0.5, 10.0, 0.5);
-        let found = [
-            BlockPos::new(20, 10, 0),
-            BlockPos::new(-3, 11, 2),
-            BlockPos::new(0, 40, 0),
-        ];
+        let found = [BlockPos::new(20, 10, 0), BlockPos::new(-3, 11, 2), BlockPos::new(0, 40, 0)];
         assert_eq!(nearest(from, found), Some(BlockPos::new(-3, 11, 2)));
         assert_eq!(nearest(from, []), None);
     }

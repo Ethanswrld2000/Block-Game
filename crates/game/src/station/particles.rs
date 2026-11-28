@@ -11,7 +11,7 @@ use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 
-use super::{Station, StationKind, Urns, models};
+use super::{models, Station, StationKind, Urns};
 use crate::camera::FlyCamera;
 
 /// What a burst throws.
@@ -66,14 +66,8 @@ enum Sprite {
 /// Sprite pictures as rows of pixels: '#' solid, '+' faint, '.' clear.
 fn pixels(s: Sprite) -> &'static [&'static str] {
     match s {
-        Sprite::Bubble => &[
-            "..####..", ".#++++#.", "#+##+++#", "#+#++++#", "#++++++#", "#++++++#", ".#++++#.",
-            "..####..",
-        ],
-        Sprite::Pop => &[
-            "#..##..#", "........", "........", "#......#", "#......#", "........", "........",
-            "#..##..#",
-        ],
+        Sprite::Bubble => &["..####..", ".#++++#.", "#+##+++#", "#+#++++#", "#++++++#", "#++++++#", ".#++++#.", "..####.."],
+        Sprite::Pop => &["#..##..#", "........", "........", "#......#", "#......#", "........", "........", "#..##..#"],
         Sprite::Dot => &["##", "##"],
         Sprite::Star => &["..#..", "..#..", "#####", "..#..", "..#.."],
         Sprite::Puff => &[".####.", "######", "######", "######", "######", ".####."],
@@ -95,17 +89,7 @@ fn sprite_image(s: Sprite) -> Image {
         }
     }
     // Default sampler: nearest, like all the game's pixel art.
-    Image::new(
-        Extent3d {
-            width: w,
-            height: h,
-            depth_or_array_layers: 1,
-        },
-        TextureDimension::D2,
-        data,
-        TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::RENDER_WORLD,
-    )
+    Image::new(Extent3d { width: w, height: h, depth_or_array_layers: 1 }, TextureDimension::D2, data, TextureFormat::Rgba8UnormSrgb, RenderAssetUsages::RENDER_WORLD)
 }
 
 /// One quad mesh, the sprite pictures, and a material per sprite and colour.
@@ -117,55 +101,22 @@ pub(super) struct Pixels {
 }
 
 impl Pixels {
-    fn material(
-        &mut self,
-        assets: &mut Assets<StandardMaterial>,
-        s: Sprite,
-        c: LinearRgba,
-    ) -> Handle<StandardMaterial> {
-        let key = (
-            s,
-            [c.red, c.green, c.blue, c.alpha].map(|v| (v * 100.0) as u16),
-        );
+    fn material(&mut self, assets: &mut Assets<StandardMaterial>, s: Sprite, c: LinearRgba) -> Handle<StandardMaterial> {
+        let key = (s, [c.red, c.green, c.blue, c.alpha].map(|v| (v * 100.0) as u16));
         let image = self.images[&s].clone();
         self.materials
             .entry(key)
             .or_insert_with(|| {
-                assets.add(StandardMaterial {
-                    base_color: c.into(),
-                    base_color_texture: Some(image),
-                    unlit: true,
-                    alpha_mode: AlphaMode::Blend,
-                    double_sided: true,
-                    cull_mode: None,
-                    ..default()
-                })
+                assets.add(StandardMaterial { base_color: c.into(), base_color_texture: Some(image), unlit: true, alpha_mode: AlphaMode::Blend, double_sided: true, cull_mode: None, ..default() })
             })
             .clone()
     }
 }
 
-pub(super) fn setup_pixels(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut images: ResMut<Assets<Image>>,
-) {
+pub(super) fn setup_pixels(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut images: ResMut<Assets<Image>>) {
     let quad = meshes.add(Rectangle::new(1.0, 1.0));
-    let images = [
-        Sprite::Bubble,
-        Sprite::Pop,
-        Sprite::Dot,
-        Sprite::Star,
-        Sprite::Puff,
-    ]
-    .into_iter()
-    .map(|s| (s, images.add(sprite_image(s))))
-    .collect();
-    commands.insert_resource(Pixels {
-        quad,
-        images,
-        materials: HashMap::new(),
-    });
+    let images = [Sprite::Bubble, Sprite::Pop, Sprite::Dot, Sprite::Star, Sprite::Puff].into_iter().map(|s| (s, images.add(sprite_image(s)))).collect();
+    commands.insert_resource(Pixels { quad, images, materials: HashMap::new() });
 }
 
 /// How a particle moves.
@@ -195,130 +146,44 @@ fn rnd(seed: &mut u32) -> f32 {
 }
 
 fn spread(seed: &mut u32, k: f32) -> Vec3 {
-    Vec3::new(
-        rnd(seed) * 2.0 - 1.0,
-        rnd(seed) * 2.0 - 1.0,
-        rnd(seed) * 2.0 - 1.0,
-    ) * k
+    Vec3::new(rnd(seed) * 2.0 - 1.0, rnd(seed) * 2.0 - 1.0, rnd(seed) * 2.0 - 1.0) * k
 }
 
 /// The look and flight of one particle of a burst.
-fn burst_particle(
-    kind: BurstKind,
-    seed: &mut u32,
-) -> (Sprite, LinearRgba, Vec3, f32, (f32, f32), Motion) {
-    let up = |seed: &mut u32, k: f32| {
-        Vec3::new(
-            rnd(seed) * 2.0 - 1.0,
-            0.6 + rnd(seed),
-            rnd(seed) * 2.0 - 1.0,
-        ) * k
-    };
+fn burst_particle(kind: BurstKind, seed: &mut u32) -> (Sprite, LinearRgba, Vec3, f32, (f32, f32), Motion) {
+    let up = |seed: &mut u32, k: f32| Vec3::new(rnd(seed) * 2.0 - 1.0, 0.6 + rnd(seed), rnd(seed) * 2.0 - 1.0) * k;
     let free = |grav, drag| Motion::Free { grav, drag };
     match kind {
         BurstKind::Chips => {
             let g = 0.35 + rnd(seed) * 0.2;
-            (
-                Sprite::Dot,
-                LinearRgba::rgb(g, g, g * 1.05),
-                up(seed, 1.1),
-                0.6,
-                (0.012, 0.01),
-                free(6.0, 1.0),
-            )
+            (Sprite::Dot, LinearRgba::rgb(g, g, g * 1.05), up(seed, 1.1), 0.6, (0.012, 0.01), free(6.0, 1.0))
         }
-        BurstKind::Sparks => (
-            Sprite::Dot,
-            LinearRgba::rgb(4.0, 1.8, 0.4),
-            up(seed, 1.6),
-            0.45,
-            (0.01, 0.004),
-            free(5.0, 1.5),
-        ),
-        BurstKind::Sawdust => (
-            Sprite::Dot,
-            LinearRgba::rgb(0.75, 0.6, 0.38),
-            up(seed, 0.5),
-            1.1,
-            (0.01, 0.008),
-            free(1.2, 3.0),
-        ),
-        BurstKind::Bits => (
-            Sprite::Dot,
-            LinearRgba::rgb(0.7, 0.32, 0.25),
-            up(seed, 0.7),
-            0.55,
-            (0.012, 0.01),
-            free(5.0, 1.0),
-        ),
+        BurstKind::Sparks => (Sprite::Dot, LinearRgba::rgb(4.0, 1.8, 0.4), up(seed, 1.6), 0.45, (0.01, 0.004), free(5.0, 1.5)),
+        BurstKind::Sawdust => (Sprite::Dot, LinearRgba::rgb(0.75, 0.6, 0.38), up(seed, 0.5), 1.1, (0.01, 0.008), free(1.2, 3.0)),
+        BurstKind::Bits => (Sprite::Dot, LinearRgba::rgb(0.7, 0.32, 0.25), up(seed, 0.7), 0.55, (0.012, 0.01), free(5.0, 1.0)),
         BurstKind::Smoke => {
             let g = 0.5 + rnd(seed) * 0.15;
-            (
-                Sprite::Puff,
-                LinearRgba::new(g, g, g, 0.55),
-                Vec3::Y * 0.35 + spread(seed, 0.15),
-                1.4,
-                (0.03, 0.09),
-                free(-0.1, 1.5),
-            )
+            (Sprite::Puff, LinearRgba::new(g, g, g, 0.55), Vec3::Y * 0.35 + spread(seed, 0.15), 1.4, (0.03, 0.09), free(-0.1, 1.5))
         }
-        BurstKind::Splash => (
-            Sprite::Dot,
-            LinearRgba::new(0.75, 0.52, 0.22, 0.85),
-            up(seed, 0.8),
-            0.5,
-            (0.01, 0.008),
-            free(4.5, 0.5),
-        ),
-        BurstKind::BrewSplash => (
-            Sprite::Dot,
-            LinearRgba::new(0.5, 2.0, 0.7, 0.9),
-            up(seed, 0.8),
-            0.5,
-            (0.01, 0.008),
-            free(4.5, 0.5),
-        ),
-        BurstKind::Sparkle => (
-            Sprite::Star,
-            LinearRgba::rgb(1.6, 1.5, 2.4),
-            spread(seed, 0.25) + Vec3::Y * 0.1,
-            0.8,
-            (0.025, 0.0),
-            free(-0.2, 2.0),
-        ),
+        BurstKind::Splash => (Sprite::Dot, LinearRgba::new(0.75, 0.52, 0.22, 0.85), up(seed, 0.8), 0.5, (0.01, 0.008), free(4.5, 0.5)),
+        BurstKind::BrewSplash => (Sprite::Dot, LinearRgba::new(0.5, 2.0, 0.7, 0.9), up(seed, 0.8), 0.5, (0.01, 0.008), free(4.5, 0.5)),
+        BurstKind::Sparkle => (Sprite::Star, LinearRgba::rgb(1.6, 1.5, 2.4), spread(seed, 0.25) + Vec3::Y * 0.1, 0.8, (0.025, 0.0), free(-0.2, 2.0)),
         BurstKind::Wisp => {
             let c = LinearRgba::new(0.35 + rnd(seed) * 0.2, 0.75, 2.2, 0.45);
-            (
-                Sprite::Puff,
-                c,
-                Vec3::Y * (0.35 + rnd(seed) * 0.3) + spread(seed, 0.12),
-                1.2,
-                (0.025, 0.07),
-                free(-0.15, 1.2),
-            )
+            (Sprite::Puff, c, Vec3::Y * (0.35 + rnd(seed) * 0.3) + spread(seed, 0.12), 1.2, (0.025, 0.07), free(-0.15, 1.2))
         }
         BurstKind::Pop => {
             // A flat ring outward, a little up.
             let a = rnd(seed) * std::f32::consts::TAU;
             let v = Vec3::new(a.cos(), 0.4 + rnd(seed) * 0.5, a.sin()) * (0.8 + rnd(seed) * 0.6);
-            let c = if rnd(seed) < 0.5 {
-                LinearRgba::rgb(3.0, 2.4, 0.8)
-            } else {
-                LinearRgba::rgb(1.8, 1.4, 3.0)
-            };
+            let c = if rnd(seed) < 0.5 { LinearRgba::rgb(3.0, 2.4, 0.8) } else { LinearRgba::rgb(1.8, 1.4, 3.0) };
             (Sprite::Star, c, v, 0.7, (0.035, 0.0), free(1.0, 3.0))
         }
     }
 }
 
 /// Throw bursts.
-pub(super) fn spawn_bursts(
-    mut commands: Commands,
-    mut bursts: MessageReader<Burst>,
-    pixels: Option<ResMut<Pixels>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut seed: Local<u32>,
-) {
+pub(super) fn spawn_bursts(mut commands: Commands, mut bursts: MessageReader<Burst>, pixels: Option<ResMut<Pixels>>, mut materials: ResMut<Assets<StandardMaterial>>, mut seed: Local<u32>) {
     let Some(mut pixels) = pixels else {
         bursts.clear();
         return;
@@ -331,39 +196,19 @@ pub(super) fn spawn_bursts(
             let (sprite, color, vel, life, size, motion) = burst_particle(b.kind, &mut seed);
             let mat = pixels.material(&mut materials, sprite, color);
             commands.spawn((
-                Particle {
-                    vel,
-                    age: 0.0,
-                    life: life * (0.75 + rnd(&mut seed) * 0.5),
-                    size,
-                    motion,
-                },
+                Particle { vel, age: 0.0, life: life * (0.75 + rnd(&mut seed) * 0.5), size, motion },
                 Mesh3d(pixels.quad.clone()),
                 MeshMaterial3d(mat),
-                Transform::from_translation(b.at + spread(&mut seed, 0.03))
-                    .with_scale(Vec3::splat(size.0)),
+                Transform::from_translation(b.at + spread(&mut seed, 0.03)).with_scale(Vec3::splat(size.0)),
                 NotShadowCaster,
             ));
         }
         // The pop also leaves a puff where the thing appears.
         if b.kind == BurstKind::Pop {
-            let mat = pixels.material(
-                &mut materials,
-                Sprite::Puff,
-                LinearRgba::new(1.0, 0.95, 0.85, 0.7),
-            );
+            let mat = pixels.material(&mut materials, Sprite::Puff, LinearRgba::new(1.0, 0.95, 0.85, 0.7));
             for _ in 0..6 {
                 commands.spawn((
-                    Particle {
-                        vel: spread(&mut seed, 0.3),
-                        age: 0.0,
-                        life: 0.45,
-                        size: (0.05, 0.14),
-                        motion: Motion::Free {
-                            grav: 0.0,
-                            drag: 4.0,
-                        },
-                    },
+                    Particle { vel: spread(&mut seed, 0.3), age: 0.0, life: 0.45, size: (0.05, 0.14), motion: Motion::Free { grav: 0.0, drag: 4.0 } },
                     Mesh3d(pixels.quad.clone()),
                     MeshMaterial3d(mat.clone()),
                     Transform::from_translation(b.at).with_scale(Vec3::splat(0.05)),
@@ -411,15 +256,9 @@ pub(super) fn spawn_bubbles(
         if st.pos.distance(cam.translation) > NEAR {
             continue;
         }
-        let Some((mid, half)) = models::liquid(st.kind, &has) else {
-            continue;
-        };
+        let Some((mid, half)) = models::liquid(st.kind, &has) else { continue };
         let rate = if cauldron { CAULDRON_RATE } else { POT_RATE };
-        let color = if cauldron {
-            LinearRgba::new(0.7, 2.2, 0.9, 0.95)
-        } else {
-            LinearRgba::new(1.0, 0.9, 0.7, 0.9)
-        };
+        let color = if cauldron { LinearRgba::new(0.7, 2.2, 0.9, 0.95) } else { LinearRgba::new(1.0, 0.9, 0.7, 0.9) };
         let mat = pixels.material(&mut materials, Sprite::Bubble, color);
         // Several a frame when the frame is long.
         let mut n = rate * dt;
@@ -429,25 +268,12 @@ pub(super) fn spawn_bubbles(
             }
             n -= 1.0;
             room -= 1;
-            let off = Vec3::new(
-                (rnd(&mut seed) * 2.0 - 1.0) * half * 0.85,
-                -0.04 - rnd(&mut seed) * 0.1,
-                (rnd(&mut seed) * 2.0 - 1.0) * half * 0.85,
-            );
+            let off = Vec3::new((rnd(&mut seed) * 2.0 - 1.0) * half * 0.85, -0.04 - rnd(&mut seed) * 0.1, (rnd(&mut seed) * 2.0 - 1.0) * half * 0.85);
             let rot = st.rotation();
             let at = st.pos + rot * (mid + off);
             let speed = if cauldron { 0.22 } else { 0.16 };
             commands.spawn((
-                Particle {
-                    vel: Vec3::Y * speed,
-                    age: 0.0,
-                    life: 3.0,
-                    size: (0.016, 0.034),
-                    motion: Motion::Bubble {
-                        surface: st.pos.y + mid.y,
-                        cauldron,
-                    },
-                },
+                Particle { vel: Vec3::Y * speed, age: 0.0, life: 3.0, size: (0.016, 0.034), motion: Motion::Bubble { surface: st.pos.y + mid.y, cauldron } },
                 Mesh3d(pixels.quad.clone()),
                 MeshMaterial3d(mat.clone()),
                 Transform::from_translation(at).with_scale(Vec3::splat(0.016)),
@@ -468,12 +294,7 @@ pub(super) fn move_particles(
     pixels: Option<ResMut<Pixels>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     cam: Single<&Transform, (With<FlyCamera>, Without<Particle>)>,
-    mut parts: Query<(
-        Entity,
-        &mut Particle,
-        &mut Transform,
-        &mut MeshMaterial3d<StandardMaterial>,
-    )>,
+    mut parts: Query<(Entity, &mut Particle, &mut Transform, &mut MeshMaterial3d<StandardMaterial>)>,
     mut bursts: MessageWriter<Burst>,
 ) {
     let Some(mut pixels) = pixels else { return };
@@ -502,23 +323,11 @@ pub(super) fn move_particles(
                         tf.translation.y = surface + 0.01;
                         p.vel = Vec3::ZERO;
                         p.age = 0.0;
-                        let color = if cauldron {
-                            LinearRgba::new(0.7, 2.2, 0.9, 0.95)
-                        } else {
-                            LinearRgba::new(1.0, 0.9, 0.7, 0.9)
-                        };
+                        let color = if cauldron { LinearRgba::new(0.7, 2.2, 0.9, 0.95) } else { LinearRgba::new(1.0, 0.9, 0.7, 0.9) };
                         mat.0 = pixels.material(&mut materials, Sprite::Pop, color);
                         tf.scale = Vec3::splat(p.size.1 * 1.4);
-                        let kind = if cauldron {
-                            BurstKind::BrewSplash
-                        } else {
-                            BurstKind::Splash
-                        };
-                        bursts.write(Burst::new(
-                            tf.translation,
-                            kind,
-                            if cauldron { 3 } else { 1 },
-                        ));
+                        let kind = if cauldron { BurstKind::BrewSplash } else { BurstKind::Splash };
+                        bursts.write(Burst::new(tf.translation, kind, if cauldron { 3 } else { 1 }));
                     } else if p.age > p.life {
                         commands.entity(e).despawn();
                     }
@@ -545,13 +354,7 @@ mod tests {
 
     #[test]
     fn sprite_pictures_are_square_grids() {
-        for s in [
-            Sprite::Bubble,
-            Sprite::Pop,
-            Sprite::Dot,
-            Sprite::Star,
-            Sprite::Puff,
-        ] {
+        for s in [Sprite::Bubble, Sprite::Pop, Sprite::Dot, Sprite::Star, Sprite::Puff] {
             let rows = pixels(s);
             assert!(rows.iter().all(|r| r.len() == rows.len()), "{s:?}");
         }

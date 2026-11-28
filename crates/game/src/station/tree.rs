@@ -14,14 +14,14 @@ use bevy::ui_render::prelude::{MaterialNode, UiMaterial};
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
 use super::urns::{Gives, Progress, State, Step, UrnDef};
-use super::{StationKind, StepDone, UrnBook, Urns, board::Benches};
+use super::{board::Benches, StationKind, StepDone, UrnBook, Urns};
 use crate::camera::{FlyCamera, Menus};
-use crate::inventory::Inventory;
 use crate::inventory::grid::Stack;
+use crate::inventory::Inventory;
 use crate::item_art::ItemArt;
 use crate::items::Items;
 use crate::survival::Toast;
-use crate::theme::{Theme, colors, sizes, text};
+use crate::theme::{colors, sizes, text, Theme};
 
 /// Which urn's tree is open (index into urns.ron).
 #[derive(Resource, Default)]
@@ -115,13 +115,7 @@ pub fn tree_layout(def: &UrnDef) -> Vec<(usize, usize, usize)> {
     for _ in 0..n {
         let mut changed = false;
         for (i, s) in def.steps.iter().enumerate() {
-            let l = s
-                .after
-                .iter()
-                .filter_map(|a| index(a))
-                .map(|j| level[j] + 1)
-                .max()
-                .unwrap_or(0);
+            let l = s.after.iter().filter_map(|a| index(a)).map(|j| level[j] + 1).max().unwrap_or(0);
             if l != level[i] && l <= n {
                 level[i] = l;
                 changed = true;
@@ -137,17 +131,8 @@ pub fn tree_layout(def: &UrnDef) -> Vec<(usize, usize, usize)> {
     for l in 0..levels {
         let mut row: Vec<usize> = (0..n).filter(|&i| level[i] == l).collect();
         let key = |i: usize| {
-            let ps: Vec<f32> = def.steps[i]
-                .after
-                .iter()
-                .filter_map(|a| index(a))
-                .map(|j| x[j])
-                .collect();
-            if ps.is_empty() {
-                0.5
-            } else {
-                ps.iter().sum::<f32>() / ps.len() as f32
-            }
+            let ps: Vec<f32> = def.steps[i].after.iter().filter_map(|a| index(a)).map(|j| x[j]).collect();
+            if ps.is_empty() { 0.5 } else { ps.iter().sum::<f32>() / ps.len() as f32 }
         };
         let keys: Vec<f32> = row.iter().map(|&i| key(i)).collect();
         let mut order: Vec<usize> = (0..row.len()).collect();
@@ -174,22 +159,12 @@ pub(super) fn spawn_tree_ui(mut commands: Commands, mut mats: ResMut<Assets<UrnV
                 align_items: AlignItems::Center,
                 ..default()
             },
-            MaterialNode(mats.add(UrnVoid {
-                params: VoidParams::default(),
-            })),
+            MaterialNode(mats.add(UrnVoid { params: VoidParams::default() })),
             GlobalZIndex(25),
             Visibility::Hidden,
         ))
         .with_children(|c| {
-            c.spawn((
-                TreePanel,
-                Node {
-                    flex_direction: FlexDirection::Column,
-                    ..default()
-                },
-                UiTransform::default(),
-                Visibility::Hidden,
-            ));
+            c.spawn((TreePanel, Node { flex_direction: FlexDirection::Column, ..default() }, UiTransform::default(), Visibility::Hidden));
         });
 }
 
@@ -253,18 +228,12 @@ pub(super) fn tree_animate(
     mut last: Local<Option<usize>>,
     mut hold: Local<Option<Option<f32>>>,
 ) {
-    let hold = *hold.get_or_insert_with(|| {
-        std::env::var("BLOCKGAME_URNOPEN")
-            .ok()
-            .and_then(|v| v.parse().ok())
-    });
+    let hold = *hold.get_or_insert_with(|| std::env::var("BLOCKGAME_URNOPEN").ok().and_then(|v| v.parse().ok()));
     if *last != tree.open {
         *last = tree.open;
         tree.shown = 0.0;
     }
-    let (Some(i), Some(book)) = (tree.open, book) else {
-        return;
-    };
+    let (Some(i), Some(book)) = (tree.open, book) else { return };
     tree.shown += time.delta_secs();
     let t = tree.shown;
     let open = hold.unwrap_or((t / OPEN_SECONDS).min(1.0));
@@ -287,23 +256,14 @@ pub(super) fn tree_animate(
     {
         m.params = VoidParams {
             // The same clock as the mouth's dark in the world (`grab`), so it carries on unbroken.
-            look: Vec4::new(
-                super::grab::void_clock(&time),
-                open,
-                4.0 * window.scale_factor(),
-                0.0,
-            ),
+            look: Vec4::new(super::grab::void_clock(&time), open, 4.0 * window.scale_factor(), 0.0),
             tint: Vec4::new(glow.red, glow.green, glow.blue, 0.55),
             centre: Vec4::new(centre.x, centre.y, radius, 0.0),
         };
     }
     if let Ok((mut vis, mut tf)) = panel.single_mut() {
         let k: f32 = ((open - TREE_AT) / (1.0 - TREE_AT)).clamp(0.0, 1.0);
-        let want = if open >= TREE_AT {
-            Visibility::Inherited
-        } else {
-            Visibility::Hidden
-        };
+        let want = if open >= TREE_AT { Visibility::Inherited } else { Visibility::Hidden };
         if *vis != want {
             *vis = want;
         }
@@ -324,23 +284,9 @@ pub(super) fn tree_click(
     mouse: Res<ButtonInput<MouseButton>>,
     window: Single<&Window, With<PrimaryWindow>>,
     theme: Res<Theme>,
-    mut buttons: Query<
-        (
-            Option<&PutIn>,
-            &ComputedNode,
-            &UiGlobalTransform,
-            &InheritedVisibility,
-            &mut ImageNode,
-        ),
-        (Or<(With<PutIn>, With<ArrangeButton>)>, Without<NodeFrame>),
-    >,
+    mut buttons: Query<(Option<&PutIn>, &ComputedNode, &UiGlobalTransform, &InheritedVisibility, &mut ImageNode), (Or<(With<PutIn>, With<ArrangeButton>)>, Without<NodeFrame>)>,
     mut arrange: ResMut<super::arrange::Arrange>,
-    nodes: Query<(
-        &TreeNode,
-        &ComputedNode,
-        &UiGlobalTransform,
-        &InheritedVisibility,
-    )>,
+    nodes: Query<(&TreeNode, &ComputedNode, &UiGlobalTransform, &InheritedVisibility)>,
     mut frames: Query<(&NodeFrame, &mut ImageNode), Without<PutIn>>,
     (book, items): (Option<Res<UrnBook>>, Res<Items>),
     mut tree: ResMut<TreeUi>,
@@ -350,9 +296,7 @@ pub(super) fn tree_click(
     mut toast: MessageWriter<Toast>,
     mut fly: MessageWriter<super::fly_in::FlyIn>,
 ) {
-    let (Some(i), Some(book)) = (tree.open, book) else {
-        return;
-    };
+    let (Some(i), Some(book)) = (tree.open, book) else { return };
     let def = &book.0.urns[i];
     let p = window.physical_cursor_position();
     // Pointing at a step shows it (it stays shown when the cursor leaves).
@@ -424,20 +368,14 @@ pub(super) fn tree_click(
         put += went;
         if went > 0 {
             // It flies up from below the screen into its picture.
-            fly.write(super::fly_in::FlyIn {
-                item: name.clone(),
-                step: step.clone(),
-            });
+            fly.write(super::fly_in::FlyIn { item: name.clone(), step: step.clone() });
         }
         for f in finished {
             done.write(StepDone(f));
         }
     }
     if put == 0 {
-        toast.write(Toast(format!(
-            "You carry nothing the {} needs yet",
-            s.title
-        )));
+        toast.write(Toast(format!("You carry nothing the {} needs yet", s.title)));
     }
 }
 
@@ -450,12 +388,7 @@ enum Picture {
 
 fn picture(s: &Step, book: &UrnBook, benches: &Benches, items: &Items) -> Picture {
     match &s.gives {
-        Gives::Urn(u) => match book
-            .0
-            .urn(u)
-            .and_then(|u| u.item.as_deref())
-            .and_then(|n| items.id(n))
-        {
+        Gives::Urn(u) => match book.0.urn(u).and_then(|u| u.item.as_deref()).and_then(|n| items.id(n)) {
             Some(id) => Picture::Item(Stack::new(id, 1)),
             None => Picture::Icon("icon_star"),
         },
@@ -468,40 +401,15 @@ fn picture(s: &Step, book: &UrnBook, benches: &Benches, items: &Items) -> Pictur
     }
 }
 
-fn draw_picture(
-    c: &mut ChildSpawnerCommands,
-    theme: &Theme,
-    items: &Items,
-    art: &ItemArt,
-    pic: &Picture,
-    px: f32,
-    dim: bool,
-) {
+fn draw_picture(c: &mut ChildSpawnerCommands, theme: &Theme, items: &Items, art: &ItemArt, pic: &Picture, px: f32, dim: bool) {
     match pic {
         Picture::Item(stack) => {
-            c.spawn(Node {
-                width: Val::Px(px),
-                height: Val::Px(px),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                ..default()
-            })
-            .with_children(|i| crate::inventory::ui::icon(i, items, art, *stack, px, px, false));
+            c.spawn(Node { width: Val::Px(px), height: Val::Px(px), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() })
+                .with_children(|i| crate::inventory::ui::icon(i, items, art, *stack, px, px, false));
         }
         Picture::Icon(name) => {
-            let tint = if dim {
-                Color::srgba(0.6, 0.6, 0.65, 0.7)
-            } else {
-                Color::WHITE
-            };
-            c.spawn((
-                theme.image(name).with_color(tint),
-                Node {
-                    width: Val::Px(px * 0.8),
-                    height: Val::Px(px * 0.8),
-                    ..default()
-                },
-            ));
+            let tint = if dim { Color::srgba(0.6, 0.6, 0.65, 0.7) } else { Color::WHITE };
+            c.spawn((theme.image(name).with_color(tint), Node { width: Val::Px(px * 0.8), height: Val::Px(px * 0.8), ..default() }));
         }
     }
 }
@@ -512,12 +420,7 @@ pub(super) fn tree_build(
     mut commands: Commands,
     theme: Res<Theme>,
     mut tree: ResMut<TreeUi>,
-    (book, items, art, benches): (
-        Option<Res<UrnBook>>,
-        Res<Items>,
-        Option<Res<ItemArt>>,
-        Option<Res<Benches>>,
-    ),
+    (book, items, art, benches): (Option<Res<UrnBook>>, Res<Items>, Option<Res<ItemArt>>, Option<Res<Benches>>),
     (urns, inv): (Res<Urns>, Res<Inventory>),
     mut root: Query<&mut Visibility, (With<TreeRoot>, Without<TreePanel>)>,
     panel: Query<(Entity, Option<&Children>), With<TreePanel>>,
@@ -526,12 +429,8 @@ pub(super) fn tree_build(
     if !tree.dirty && !tree.detail_dirty {
         return;
     }
-    let (Some(book), Some(art), Some(benches)) = (book, art, benches) else {
-        return;
-    };
-    let Ok(mut vis) = root.single_mut() else {
-        return;
-    };
+    let (Some(book), Some(art), Some(benches)) = (book, art, benches) else { return };
+    let Ok(mut vis) = root.single_mut() else { return };
     let Some(i) = tree.open else {
         tree.dirty = false;
         tree.detail_dirty = false;
@@ -564,20 +463,14 @@ pub(super) fn tree_build(
             for k in kids.into_iter().flatten() {
                 commands.entity(*k).despawn();
             }
-            commands.entity(d).with_children(|c| {
-                details(
-                    c, theme, &items, &art, &benches, &book, &inv, def, p, &selected,
-                )
-            });
+            commands.entity(d).with_children(|c| details(c, theme, &items, &art, &benches, &book, &inv, def, p, &selected));
         }
         return;
     }
     tree.dirty = false;
     tree.detail_dirty = false;
     *vis = Visibility::Inherited;
-    let Ok((panel, kids)) = panel.single() else {
-        return;
-    };
+    let Ok((panel, kids)) = panel.single() else { return };
     for k in kids.into_iter().flatten() {
         commands.entity(*k).despawn();
     }
@@ -587,10 +480,7 @@ pub(super) fn tree_build(
     // Centre of a step's box in the tree area (root at the bottom).
     let centre = |k: usize| {
         let (l, slot, count) = spots[k];
-        Vec2::new(
-            TREE_W * (slot as f32 + 0.5) / count as f32,
-            tree_h - ROW * (l as f32 + 0.5),
-        )
+        Vec2::new(TREE_W * (slot as f32 + 0.5) / count as f32, tree_h - ROW * (l as f32 + 0.5))
     };
     commands.entity(panel).insert(Node {
         flex_direction: FlexDirection::Column,
@@ -681,18 +571,8 @@ fn line(c: &mut ChildSpawnerCommands, from: Vec2, to: Vec2, color: Color) {
     let len = d.length();
     let mid = (from + to) * 0.5;
     c.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            left: Val::Px(mid.x - len * 0.5),
-            top: Val::Px(mid.y - 2.0),
-            width: Val::Px(len),
-            height: Val::Px(4.0),
-            ..default()
-        },
-        UiTransform {
-            rotation: Rot2::radians(d.y.atan2(d.x)),
-            ..default()
-        },
+        Node { position_type: PositionType::Absolute, left: Val::Px(mid.x - len * 0.5), top: Val::Px(mid.y - 2.0), width: Val::Px(len), height: Val::Px(4.0), ..default() },
+        UiTransform { rotation: Rot2::radians(d.y.atan2(d.x)), ..default() },
         BackgroundColor(color),
     ));
 }
@@ -732,83 +612,39 @@ fn step_node(
         },
     ))
     .with_children(|n| {
-        n.spawn(Node {
-            width: Val::Px(FRAME),
-            height: Val::Px(FRAME),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            ..default()
-        })
-        .with_children(|f| {
-            // Steps you can fill now breathe a halo in the urn's light.
-            if state == State::Open {
-                f.spawn((
-                    Breathe,
-                    theme.image("node_halo").with_color(glow_of(def)),
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(-14.0),
-                        top: Val::Px(-14.0),
-                        width: Val::Px(FRAME + 28.0),
-                        height: Val::Px(FRAME + 28.0),
-                        ..default()
-                    },
-                ));
-            }
-            let frame = if selected { "slot_selected" } else { "slot" };
-            let tint = match state {
-                State::Done => colors::GOLD,
-                State::Open => Color::WHITE,
-                State::Locked => Color::srgba(0.55, 0.55, 0.6, 0.8),
-            };
-            f.spawn((
-                NodeFrame(s.name.clone()),
-                theme.image(frame).with_color(tint),
-                Node {
-                    width: Val::Px(FRAME),
-                    height: Val::Px(FRAME),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    ..default()
-                },
-            ))
+        n.spawn(Node { width: Val::Px(FRAME), height: Val::Px(FRAME), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() })
             .with_children(|f| {
-                draw_picture(
-                    f,
-                    theme,
-                    items,
-                    art,
-                    &picture(s, book, benches, items),
-                    40.0,
-                    state == State::Locked,
-                )
-            });
-            // Done or locked marks.
-            let mark = match state {
-                State::Done => Some("icon_check"),
-                State::Locked => Some("icon_lock"),
-                State::Open => None,
-            };
-            if let Some(m) = mark {
+                // Steps you can fill now breathe a halo in the urn's light.
+                if state == State::Open {
+                    f.spawn((
+                        Breathe,
+                        theme.image("node_halo").with_color(glow_of(def)),
+                        Node { position_type: PositionType::Absolute, left: Val::Px(-14.0), top: Val::Px(-14.0), width: Val::Px(FRAME + 28.0), height: Val::Px(FRAME + 28.0), ..default() },
+                    ));
+                }
+                let frame = if selected { "slot_selected" } else { "slot" };
+                let tint = match state {
+                    State::Done => colors::GOLD,
+                    State::Open => Color::WHITE,
+                    State::Locked => Color::srgba(0.55, 0.55, 0.6, 0.8),
+                };
                 f.spawn((
-                    theme.image(m),
-                    Node {
-                        position_type: PositionType::Absolute,
-                        right: Val::Px(-8.0),
-                        bottom: Val::Px(-6.0),
-                        width: Val::Px(20.0),
-                        height: Val::Px(20.0),
-                        ..default()
-                    },
-                ));
-            }
-        });
-        n.spawn((
-            theme.bold(sizes::SMALL),
-            Text::new(s.title.clone()),
-            TextColor(title_color),
-            TextLayout::justify(Justify::Center),
-        ));
+                    NodeFrame(s.name.clone()),
+                    theme.image(frame).with_color(tint),
+                    Node { width: Val::Px(FRAME), height: Val::Px(FRAME), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() },
+                ))
+                .with_children(|f| draw_picture(f, theme, items, art, &picture(s, book, benches, items), 40.0, state == State::Locked));
+                // Done or locked marks.
+                let mark = match state {
+                    State::Done => Some("icon_check"),
+                    State::Locked => Some("icon_lock"),
+                    State::Open => None,
+                };
+                if let Some(m) = mark {
+                    f.spawn((theme.image(m), Node { position_type: PositionType::Absolute, right: Val::Px(-8.0), bottom: Val::Px(-6.0), width: Val::Px(20.0), height: Val::Px(20.0), ..default() }));
+                }
+            });
+        n.spawn((theme.bold(sizes::SMALL), Text::new(s.title.clone()), TextColor(title_color), TextLayout::justify(Justify::Center)));
     });
 }
 
@@ -829,252 +665,93 @@ fn details(
     let Some(s) = def.step(name) else { return };
     let state = p.state(s);
     let tier = (s.tier as usize).clamp(1, 3);
-    c.spawn((
-        theme.bold(sizes::HEADING),
-        Text::new(s.title.clone()),
-        TextColor(colors::HEADING),
-    ));
-    let later = if s.later {
-        "  ·  not in the game yet"
-    } else {
-        ""
-    };
-    c.spawn(text(
-        format!(
-            "Tier {}  ·  {}  ·  {}{later}",
-            NUMERALS[tier - 1],
-            TIERS[tier - 1],
-            s.gives.label()
-        ),
-        sizes::SMALL,
-        colors::MUTED,
-    ));
+    c.spawn((theme.bold(sizes::HEADING), Text::new(s.title.clone()), TextColor(colors::HEADING)));
+    let later = if s.later { "  ·  not in the game yet" } else { "" };
+    c.spawn(text(format!("Tier {}  ·  {}  ·  {}{later}", NUMERALS[tier - 1], TIERS[tier - 1], s.gives.label()), sizes::SMALL, colors::MUTED));
     // What you get.
     c.spawn(text("YOU GET", sizes::TINY, colors::GOLD));
-    c.spawn((
-        Node {
-            flex_direction: FlexDirection::Column,
-            padding: UiRect::all(Val::Px(10.0)),
-            row_gap: Val::Px(6.0),
-            ..default()
-        },
-        theme.skin("card"),
-    ))
-    .with_children(|g| {
-        let (head, line) = match &s.gives {
-            Gives::Station(k) => {
-                let t = StationKind::from_name(k).map_or("a station", |k| k.title());
-                (
-                    format!("New station: {t}"),
-                    format!("The {t} appears beside the urn."),
-                )
-            }
-            Gives::Upgrade => ("Upgrade".to_string(), String::new()),
-            Gives::Recipes => {
-                let at: Vec<&str> = {
-                    let mut v: Vec<&str> = benches
-                        .0
-                        .recipes
-                        .iter()
-                        .filter(|r| r.taught_by(&s.name))
-                        .filter_map(|r| StationKind::from_name(&r.station).map(|k| k.title()))
-                        .collect();
-                    v.dedup();
-                    v
-                };
-                let line = if at.is_empty() {
-                    String::new()
-                } else {
-                    format!("Made at the {}.", at.join(" and the "))
-                };
-                ("New recipes".to_string(), line)
-            }
-            Gives::Urn(u) => {
-                let other = book.0.urn(u);
-                let t = other.map_or("an urn", |o| o.title.as_str());
-                let st = other.map_or("", |o| o.station.as_str());
-                (
-                    format!("The {t}"),
-                    format!("Carry it and set it down in a room to start the {st}."),
-                )
-            }
-        };
-        g.spawn(Node {
-            column_gap: Val::Px(10.0),
-            align_items: AlignItems::Center,
-            ..default()
-        })
-        .with_children(|r| {
-            r.spawn(Node {
-                width: Val::Px(44.0),
-                height: Val::Px(44.0),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                flex_shrink: 0.0,
-                ..default()
-            })
-            .with_children(|f| {
-                draw_picture(
-                    f,
-                    theme,
-                    items,
-                    art,
-                    &picture(s, book, benches, items),
-                    40.0,
-                    false,
-                )
-            });
-            r.spawn(Node {
-                flex_direction: FlexDirection::Column,
-                ..default()
-            })
-            .with_children(|r| {
-                r.spawn((
-                    theme.bold(sizes::BODY),
-                    Text::new(head),
-                    TextColor(colors::TEXT),
-                ));
-                if !line.is_empty() {
-                    r.spawn(text(line, sizes::SMALL, colors::MUTED));
+    c.spawn((Node { flex_direction: FlexDirection::Column, padding: UiRect::all(Val::Px(10.0)), row_gap: Val::Px(6.0), ..default() }, theme.skin("card")))
+        .with_children(|g| {
+            let (head, line) = match &s.gives {
+                Gives::Station(k) => {
+                    let t = StationKind::from_name(k).map_or("a station", |k| k.title());
+                    (format!("New station: {t}"), format!("The {t} appears beside the urn."))
                 }
-            });
-        });
-        if matches!(s.gives, Gives::Recipes) {
-            // Every recipe it teaches, as pictures.
-            g.spawn(Node {
-                column_gap: Val::Px(8.0),
-                row_gap: Val::Px(4.0),
-                flex_wrap: FlexWrap::Wrap,
-                ..default()
-            })
-            .with_children(|r| {
-                let mut seen = Vec::new();
-                for rec in benches.0.recipes.iter().filter(|r| r.taught_by(&s.name)) {
-                    if seen.contains(&rec.makes.item) {
-                        continue;
+                Gives::Upgrade => ("Upgrade".to_string(), String::new()),
+                Gives::Recipes => {
+                    let at: Vec<&str> = {
+                        let mut v: Vec<&str> = benches.0.recipes.iter().filter(|r| r.taught_by(&s.name)).filter_map(|r| StationKind::from_name(&r.station).map(|k| k.title())).collect();
+                        v.dedup();
+                        v
+                    };
+                    let line = if at.is_empty() { String::new() } else { format!("Made at the {}.", at.join(" and the ")) };
+                    ("New recipes".to_string(), line)
+                }
+                Gives::Urn(u) => {
+                    let other = book.0.urn(u);
+                    let t = other.map_or("an urn", |o| o.title.as_str());
+                    let st = other.map_or("", |o| o.station.as_str());
+                    (format!("The {t}"), format!("Carry it and set it down in a room to start the {st}."))
+                }
+            };
+            g.spawn(Node { column_gap: Val::Px(10.0), align_items: AlignItems::Center, ..default() }).with_children(|r| {
+                r.spawn(Node { width: Val::Px(44.0), height: Val::Px(44.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, flex_shrink: 0.0, ..default() })
+                    .with_children(|f| draw_picture(f, theme, items, art, &picture(s, book, benches, items), 40.0, false));
+                r.spawn(Node { flex_direction: FlexDirection::Column, ..default() }).with_children(|r| {
+                    r.spawn((theme.bold(sizes::BODY), Text::new(head), TextColor(colors::TEXT)));
+                    if !line.is_empty() {
+                        r.spawn(text(line, sizes::SMALL, colors::MUTED));
                     }
-                    seen.push(rec.makes.item);
-                    r.spawn(Node {
-                        align_items: AlignItems::Center,
-                        column_gap: Val::Px(4.0),
-                        ..default()
-                    })
-                    .with_children(|r| {
-                        r.spawn(Node {
-                            width: Val::Px(30.0),
-                            height: Val::Px(30.0),
-                            ..default()
-                        })
-                        .with_children(|i| {
-                            crate::inventory::ui::icon(
-                                i,
-                                items,
-                                art,
-                                Stack::new(rec.makes.item, 1),
-                                30.0,
-                                30.0,
-                                false,
-                            )
-                        });
-                        r.spawn(text(
-                            items.get(rec.makes.item).title.clone(),
-                            sizes::SMALL,
-                            colors::TEXT,
-                        ));
-                    });
-                }
+                });
             });
-        }
-        if !s.desc.is_empty() {
-            g.spawn(text(s.desc.clone(), sizes::SMALL, colors::MUTED));
-        }
-    });
+            if matches!(s.gives, Gives::Recipes) {
+                // Every recipe it teaches, as pictures.
+                g.spawn(Node { column_gap: Val::Px(8.0), row_gap: Val::Px(4.0), flex_wrap: FlexWrap::Wrap, ..default() }).with_children(|r| {
+                    let mut seen = Vec::new();
+                    for rec in benches.0.recipes.iter().filter(|r| r.taught_by(&s.name)) {
+                        if seen.contains(&rec.makes.item) {
+                            continue;
+                        }
+                        seen.push(rec.makes.item);
+                        r.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(4.0), ..default() }).with_children(|r| {
+                            r.spawn(Node { width: Val::Px(30.0), height: Val::Px(30.0), ..default() })
+                                .with_children(|i| crate::inventory::ui::icon(i, items, art, Stack::new(rec.makes.item, 1), 30.0, 30.0, false));
+                            r.spawn(text(items.get(rec.makes.item).title.clone(), sizes::SMALL, colors::TEXT));
+                        });
+                    }
+                });
+            }
+            if !s.desc.is_empty() {
+                g.spawn(text(s.desc.clone(), sizes::SMALL, colors::MUTED));
+            }
+        });
     // What it takes.
     if state != State::Done {
         c.spawn(text("IT TAKES", sizes::TINY, colors::GOLD));
-        c.spawn(Node {
-            flex_direction: FlexDirection::Column,
-            row_gap: Val::Px(2.0),
-            ..default()
-        })
-        .with_children(|r| {
+        c.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(2.0), ..default() }).with_children(|r| {
             for (item, need) in &s.needs {
                 let Some(id) = items.id(item) else { continue };
                 let have = p.given(&s.name, item).min(*need);
                 let carry = inv.count(id);
                 let full = have >= *need;
-                r.spawn(Node {
-                    align_items: AlignItems::Center,
-                    column_gap: Val::Px(6.0),
-                    ..default()
-                })
-                .with_children(|r| {
+                r.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(6.0), ..default() }).with_children(|r| {
                     let px = super::fly_in::ICON;
-                    r.spawn((
-                        super::fly_in::NeedIcon(item.clone()),
-                        Node {
-                            width: Val::Px(px),
-                            height: Val::Px(px),
-                            flex_shrink: 0.0,
-                            ..default()
-                        },
-                        UiTransform::default(),
-                    ))
-                    .with_children(|i| {
-                        crate::inventory::ui::icon(i, items, art, Stack::new(id, 1), px, px, false)
-                    });
-                    r.spawn((
-                        text(items.get(id).title.clone(), sizes::SMALL, colors::TEXT),
-                        Node {
-                            flex_grow: 1.0,
-                            ..default()
-                        },
-                    ));
-                    r.spawn(text(
-                        format!("{have}/{need}"),
-                        sizes::SMALL,
-                        if full { colors::GOOD } else { colors::TEXT },
-                    ));
-                    let carry_text = if full {
-                        String::new()
-                    } else {
-                        format!("you carry {carry}")
-                    };
-                    r.spawn((
-                        text(
-                            carry_text,
-                            sizes::SMALL,
-                            if carry > 0 {
-                                colors::GOOD
-                            } else {
-                                colors::FAINT
-                            },
-                        ),
-                        Node {
-                            width: Val::Px(110.0),
-                            ..default()
-                        },
-                    ));
+                    r.spawn((super::fly_in::NeedIcon(item.clone()), Node { width: Val::Px(px), height: Val::Px(px), flex_shrink: 0.0, ..default() }, UiTransform::default()))
+                        .with_children(|i| crate::inventory::ui::icon(i, items, art, Stack::new(id, 1), px, px, false));
+                    r.spawn((text(items.get(id).title.clone(), sizes::SMALL, colors::TEXT), Node { flex_grow: 1.0, ..default() }));
+                    r.spawn(text(format!("{have}/{need}"), sizes::SMALL, if full { colors::GOOD } else { colors::TEXT }));
+                    let carry_text = if full { String::new() } else { format!("you carry {carry}") };
+                    r.spawn((text(carry_text, sizes::SMALL, if carry > 0 { colors::GOOD } else { colors::FAINT }), Node { width: Val::Px(110.0), ..default() }));
                 });
             }
         });
     }
     // Put in, or where it stands.
-    c.spawn(Node {
-        margin: UiRect::top(Val::Px(6.0)),
-        column_gap: Val::Px(10.0),
-        align_items: AlignItems::Center,
-        ..default()
-    })
-    .with_children(|r| match state {
+    c.spawn(Node { margin: UiRect::top(Val::Px(6.0)), column_gap: Val::Px(10.0), align_items: AlignItems::Center, ..default() }).with_children(|r| match state {
         State::Open => {
             r.spawn((
                 PutIn(s.name.clone()),
-                Node {
-                    padding: UiRect::axes(Val::Px(18.0), Val::Px(4.0)),
-                    justify_content: JustifyContent::Center,
-                    ..default()
-                },
+                Node { padding: UiRect::axes(Val::Px(18.0), Val::Px(4.0)), justify_content: JustifyContent::Center, ..default() },
                 theme.skin("button"),
                 children![text("Put in", sizes::BODY, colors::TEXT)],
             ));
@@ -1083,18 +760,8 @@ fn details(
             r.spawn(text("Done", sizes::BODY, colors::GOOD));
         }
         State::Locked => {
-            let wait: Vec<String> = s
-                .after
-                .iter()
-                .filter(|a| !p.is_done(a))
-                .filter_map(|a| def.step(a))
-                .map(|x| x.title.clone())
-                .collect();
-            r.spawn(text(
-                format!("After {}", wait.join(" and ")),
-                sizes::BODY,
-                colors::FAINT,
-            ));
+            let wait: Vec<String> = s.after.iter().filter(|a| !p.is_done(a)).filter_map(|a| def.step(a)).map(|x| x.title.clone()).collect();
+            r.spawn(text(format!("After {}", wait.join(" and ")), sizes::BODY, colors::FAINT));
         }
     });
 }
@@ -1139,16 +806,8 @@ mod tests {
             let spots = tree_layout(u);
             let levels = spots.iter().map(|s| s.0 + 1).max().unwrap_or(0);
             let widest = spots.iter().map(|s| s.2).max().unwrap_or(0);
-            assert!(
-                levels as f32 * ROW <= 560.0,
-                "{} is {levels} levels tall",
-                u.name
-            );
-            assert!(
-                widest as f32 * NODE_W <= TREE_W,
-                "{} is {widest} wide",
-                u.name
-            );
+            assert!(levels as f32 * ROW <= 560.0, "{} is {levels} levels tall", u.name);
+            assert!(widest as f32 * NODE_W <= TREE_W, "{} is {widest} wide", u.name);
         }
     }
 }

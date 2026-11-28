@@ -20,10 +20,7 @@ impl Plugin for PeoplePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Posts>()
             .add_systems(crate::menu::GamePostStartup, load)
-            .add_systems(
-                crate::menu::GameUpdate,
-                ((restore_posts, remember_posts).chain(), save_now_and_then),
-            )
+            .add_systems(crate::menu::GameUpdate, ((restore_posts, remember_posts).chain(), save_now_and_then))
             .add_systems(Last, save_on_exit.run_if(crate::menu::in_game));
     }
 }
@@ -59,10 +56,7 @@ fn remember_posts(mut posts: ResMut<Posts>, q: Query<&Npc, Changed<Npc>>) {
         if npc.flags.is_empty() && npc.asked.is_empty() {
             continue;
         }
-        let m = Memory {
-            flags: npc.flags.iter().cloned().collect(),
-            asked: npc.asked.iter().cloned().collect(),
-        };
+        let m = Memory { flags: npc.flags.iter().cloned().collect(), asked: npc.asked.iter().cloned().collect() };
         if posts.0.get(&post) != Some(&m) {
             posts.0.insert(post, m);
         }
@@ -99,20 +93,9 @@ pub fn to_saved(npc: &Npc, kind: &str, pos: Vec3) -> Option<Saved> {
         Order::Stay => SavedOrder::Stay,
         Order::Follow => SavedOrder::Follow,
         // A wander spot not picked yet (NaN) is where it stands.
-        Order::Wander { home } => SavedOrder::Wander(if home.is_nan() {
-            pos.to_array()
-        } else {
-            home.to_array()
-        }),
+        Order::Wander { home } => SavedOrder::Wander(if home.is_nan() { pos.to_array() } else { home.to_array() }),
     };
-    Some(Saved {
-        kind: kind.to_string(),
-        pos: pos.to_array(),
-        yaw: npc.yaw,
-        order,
-        flags: npc.flags.iter().cloned().collect(),
-        asked: npc.asked.iter().cloned().collect(),
-    })
+    Some(Saved { kind: kind.to_string(), pos: pos.to_array(), yaw: npc.yaw, order, flags: npc.flags.iter().cloned().collect(), asked: npc.asked.iter().cloned().collect() })
 }
 
 /// An NPC back from a save (`kind` is its index in npcs.ron).
@@ -121,9 +104,7 @@ pub fn from_saved(s: &Saved, kind: usize) -> Npc {
     npc.order = match s.order {
         SavedOrder::Stay => Order::Stay,
         SavedOrder::Follow => Order::Follow,
-        SavedOrder::Wander(home) => Order::Wander {
-            home: Vec3::from_array(home),
-        },
+        SavedOrder::Wander(home) => Order::Wander { home: Vec3::from_array(home) },
     };
     npc.flags = s.flags.iter().cloned().collect();
     npc.asked = s.asked.iter().cloned().collect();
@@ -131,25 +112,17 @@ pub fn from_saved(s: &Saved, kind: usize) -> Npc {
 }
 
 fn screenshot_run() -> bool {
-    std::env::var_os("BLOCKGAME_SCREENSHOT").is_some()
-        || std::env::var_os("BLOCKGAME_BENCH").is_some()
+    std::env::var_os("BLOCKGAME_SCREENSHOT").is_some() || std::env::var_os("BLOCKGAME_BENCH").is_some()
 }
 
-fn load(
-    dir: Res<SaveDir>,
-    book: Res<NpcBook>,
-    mut posts: ResMut<Posts>,
-    mut spawn: MessageWriter<super::body::SpawnNpc>,
-) {
+fn load(dir: Res<SaveDir>, book: Res<NpcBook>, mut posts: ResMut<Posts>, mut spawn: MessageWriter<super::body::SpawnNpc>) {
     if screenshot_run() {
         return;
     }
     if let Some(p) = crate::save::read_ron::<Posts>(&dir, POSTS_FILE) {
         *posts = p;
     }
-    let Ok(text) = std::fs::read_to_string(dir.file(FILE)) else {
-        return;
-    };
+    let Ok(text) = std::fs::read_to_string(dir.file(FILE)) else { return };
     let list: Vec<Saved> = match ron::from_str(&text) {
         Ok(l) => l,
         Err(e) => {
@@ -162,19 +135,13 @@ fn load(
             warn!("{FILE}: no NPC kind `{}`", s.kind);
             continue;
         };
-        spawn.write(super::body::SpawnNpc {
-            npc: from_saved(s, kind),
-            at: Vec3::from_array(s.pos),
-        });
+        spawn.write(super::body::SpawnNpc { npc: from_saved(s, kind), at: Vec3::from_array(s.pos) });
     }
 }
 
 fn store(dir: &SaveDir, book: &NpcBook, posts: &Posts, q: &Query<(&Transform, &Npc)>) {
     crate::save::write_ron(dir, POSTS_FILE, posts);
-    let list: Vec<Saved> = q
-        .iter()
-        .filter_map(|(tf, n)| to_saved(n, &book.kinds.get(n.kind)?.name, tf.translation))
-        .collect();
+    let list: Vec<Saved> = q.iter().filter_map(|(tf, n)| to_saved(n, &book.kinds.get(n.kind)?.name, tf.translation)).collect();
     match ron::ser::to_string_pretty(&list, ron::ser::PrettyConfig::default()) {
         Ok(text) => {
             if let Err(e) = std::fs::write(dir.file(FILE), text) {
@@ -185,14 +152,7 @@ fn store(dir: &SaveDir, book: &NpcBook, posts: &Posts, q: &Query<(&Transform, &N
     }
 }
 
-fn save_now_and_then(
-    time: Res<Time<Real>>,
-    mut since: Local<f32>,
-    dir: Res<SaveDir>,
-    book: Res<NpcBook>,
-    posts: Res<Posts>,
-    q: Query<(&Transform, &Npc)>,
-) {
+fn save_now_and_then(time: Res<Time<Real>>, mut since: Local<f32>, dir: Res<SaveDir>, book: Res<NpcBook>, posts: Res<Posts>, q: Query<(&Transform, &Npc)>) {
     *since += time.delta_secs();
     if *since < 30.0 || screenshot_run() {
         return;
@@ -201,13 +161,7 @@ fn save_now_and_then(
     store(&dir, &book, &posts, &q);
 }
 
-fn save_on_exit(
-    mut exit: MessageReader<AppExit>,
-    dir: Res<SaveDir>,
-    book: Res<NpcBook>,
-    posts: Res<Posts>,
-    q: Query<(&Transform, &Npc)>,
-) {
+fn save_on_exit(mut exit: MessageReader<AppExit>, dir: Res<SaveDir>, book: Res<NpcBook>, posts: Res<Posts>, q: Query<(&Transform, &Npc)>) {
     if exit.read().next().is_some() && !screenshot_run() {
         store(&dir, &book, &posts, &q);
     }
@@ -220,13 +174,7 @@ mod tests {
     #[test]
     fn post_memories_round_trip() {
         let mut posts = Posts::default();
-        posts.0.insert(
-            u64::MAX - 1,
-            Memory {
-                flags: ["met".to_string()].into(),
-                asked: [("start".to_string(), 2)].into(),
-            },
-        );
+        posts.0.insert(u64::MAX - 1, Memory { flags: ["met".to_string()].into(), asked: [("start".to_string(), 2)].into() });
         let text = ron::to_string(&posts).unwrap();
         assert_eq!(ron::from_str::<Posts>(&text).unwrap(), posts);
     }
@@ -239,9 +187,7 @@ mod tests {
         npc.flags.insert(super::super::RECRUITED.to_string());
         npc.asked.insert(("greet".into(), 1));
         let saved = to_saved(&npc, "Gilm", Vec3::new(5.0, 70.0, -8.0)).unwrap();
-        let text =
-            ron::ser::to_string_pretty(&vec![saved.clone()], ron::ser::PrettyConfig::default())
-                .unwrap();
+        let text = ron::ser::to_string_pretty(&vec![saved.clone()], ron::ser::PrettyConfig::default()).unwrap();
         let back: Vec<Saved> = ron::from_str(&text).unwrap();
         assert_eq!(back, vec![saved]);
         let again = from_saved(&back[0], 3);
@@ -250,10 +196,7 @@ mod tests {
         assert!(again.asked.contains(&("greet".to_string(), 1)));
         // A follower stays a follower.
         npc.order = Order::Follow;
-        assert_eq!(
-            from_saved(&to_saved(&npc, "Gilm", home).unwrap(), 3).order,
-            Order::Follow
-        );
+        assert_eq!(from_saved(&to_saved(&npc, "Gilm", home).unwrap(), 3).order, Order::Follow);
         // Gate guides aren't saved.
         npc.post = Some(7);
         assert!(to_saved(&npc, "Ysolde Marrow", home).is_none());

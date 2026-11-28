@@ -21,8 +21,7 @@ pub struct ShrinePlugin;
 
 impl Plugin for ShrinePlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<UseShrine>()
-            .add_systems(crate::menu::GameUpdate, use_shrine);
+        app.add_message::<UseShrine>().add_systems(crate::menu::GameUpdate, use_shrine);
     }
 }
 
@@ -46,13 +45,8 @@ fn use_shrine(
             continue;
         }
         progress.learned.points += 1;
-        gain.write(GainXp {
-            xp: SHRINE_XP,
-            why: "Sky shrine".into(),
-        });
-        toast.write(Toast(
-            "The shrine's light settles in you: +1 skill point".into(),
-        ));
+        gain.write(GainXp { xp: SHRINE_XP, why: "Sky shrine".into() });
+        toast.write(Toast("The shrine's light settles in you: +1 skill point".into()));
         sound.write(PlaySound::new("craft_shimmer").speed(0.7));
         bursts.write(Burst::new(at, BurstKind::Sparkle, 30));
         bursts.write(Burst::new(at, BurstKind::Pop, 1));

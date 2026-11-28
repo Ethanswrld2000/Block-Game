@@ -9,7 +9,7 @@
 //! from the player standing at spawn.
 
 use bevy::prelude::*;
-use bevy::render::view::screenshot::{Screenshot, save_to_disk};
+use bevy::render::view::screenshot::{save_to_disk, Screenshot};
 
 use crate::world::WorldStats;
 
@@ -18,14 +18,11 @@ pub struct AutoShotPlugin;
 impl Plugin for AutoShotPlugin {
     fn build(&self, app: &mut App) {
         if let Ok(path) = std::env::var("BLOCKGAME_SCREENSHOT") {
-            app.insert_resource(ShotPath(path))
-                .add_systems(crate::menu::GameUpdate, take_shot);
+            app.insert_resource(ShotPath(path)).add_systems(crate::menu::GameUpdate, take_shot);
         }
         if let Ok(spec) = std::env::var("BLOCKGAME_CAMERA") {
-            app.insert_resource(CameraSpec(spec)).add_systems(
-                crate::menu::GamePostStartup,
-                place_camera.after(crate::world::setup_generator),
-            );
+            app.insert_resource(CameraSpec(spec))
+                .add_systems(crate::menu::GamePostStartup, place_camera.after(crate::world::setup_generator));
         }
     }
 }
@@ -66,16 +63,8 @@ fn place_camera(
             fc.yaw = (-d.x).atan2(-d.z);
             fc.pitch = d.y.asin();
         } else {
-            fc.yaw = parts
-                .get(3)
-                .and_then(|v| v.parse::<f32>().ok())
-                .unwrap_or(0.0)
-                .to_radians();
-            fc.pitch = parts
-                .get(4)
-                .and_then(|v| v.parse::<f32>().ok())
-                .unwrap_or(-20.0)
-                .to_radians();
+            fc.yaw = parts.get(3).and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0).to_radians();
+            fc.pitch = parts.get(4).and_then(|v| v.parse::<f32>().ok()).unwrap_or(-20.0).to_radians();
         }
         tf.rotation = Quat::from_euler(EulerRot::YXZ, fc.yaw, fc.pitch, 0.0);
         if walk {
@@ -96,19 +85,11 @@ fn take_shot(
     match state.1 {
         None => {
             // "Settled": nothing queued or in flight for 30 frames in a row.
-            let idle = stats.loaded > 0
-                && stats.queued == 0
-                && stats.gen_in_flight == 0
-                && stats.mesh_in_flight == 0;
+            let idle = stats.loaded > 0 && stats.queued == 0 && stats.gen_in_flight == 0 && stats.mesh_in_flight == 0;
             state.0 = if idle { state.0 + 1 } else { 0 };
             if state.0 > 30 || t > 60.0 {
-                info!(
-                    "autoshot: {} chunks loaded, {} drawn, saving {}",
-                    stats.loaded, stats.meshed, path.0
-                );
-                commands
-                    .spawn(Screenshot::primary_window())
-                    .observe(save_to_disk(path.0.clone()));
+                info!("autoshot: {} chunks loaded, {} drawn, saving {}", stats.loaded, stats.meshed, path.0);
+                commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path.0.clone()));
                 state.1 = Some(t);
             }
         }

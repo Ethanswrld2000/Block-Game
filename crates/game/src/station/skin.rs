@@ -69,13 +69,7 @@ impl Mat {
             Mat::Moss => "moss",
             Mat::Clay => "clay",
             Mat::Urn | Mat::UrnDark => "urn",
-            Mat::Broth
-            | Mat::MarkLit
-            | Mat::MarkUnlit
-            | Mat::Fire
-            | Mat::Brew
-            | Mat::Spirit
-            | Mat::Crystal => return None,
+            Mat::Broth | Mat::MarkLit | Mat::MarkUnlit | Mat::Fire | Mat::Brew | Mat::Spirit | Mat::Crystal => return None,
         })
     }
 
@@ -88,11 +82,7 @@ impl Mat {
 pub fn load_station_art(mut commands: Commands, assets: Res<AssetServer>) {
     let spec: SheetSpec = ron::from_str(include_str!("../../../../assets/textures/stations.ron"))
         .unwrap_or_else(|e| panic!("assets/textures/stations.ron: {e}"));
-    commands.insert_resource(StationArt {
-        sheet: assets.load("textures/stations.png"),
-        spec,
-        tiles: None,
-    });
+    commands.insert_resource(StationArt { sheet: assets.load("textures/stations.png"), spec, tiles: None });
 }
 
 /// Once stations.png is loaded, cut it into one repeating texture per tile.
@@ -101,14 +91,8 @@ pub fn slice_station_art(art: Option<ResMut<StationArt>>, mut images: ResMut<Ass
     if art.ready() {
         return;
     }
-    let Some(sheet) = images.get(&art.sheet) else {
-        return;
-    };
-    let rgba = sheet
-        .clone()
-        .try_into_dynamic()
-        .expect("stations.png must be an image")
-        .to_rgba8();
+    let Some(sheet) = images.get(&art.sheet) else { return };
+    let rgba = sheet.clone().try_into_dynamic().expect("stations.png must be an image").to_rgba8();
     let t = art.spec.tile_size;
     let levels = t.ilog2() + 1;
     let mut tiles = HashMap::new();
@@ -125,11 +109,7 @@ pub fn slice_station_art(art: Option<ResMut<StationArt>>, mut images: ResMut<Ass
             }
         }
         let mut image = Image::new(
-            Extent3d {
-                width: t,
-                height: t,
-                depth_or_array_layers: 1,
-            },
+            Extent3d { width: t, height: t, depth_or_array_layers: 1 },
             TextureDimension::D2,
             vec![0; (t * t * 4) as usize],
             TextureFormat::Rgba8UnormSrgb,
@@ -171,11 +151,7 @@ pub fn material(mat: Mat, urn: (f32, f32, f32), art: Option<&StationArt>) -> Sta
             0.95
         },
         reflectance: if alpha.is_some() { 0.6 } else { 0.5 },
-        alpha_mode: if alpha.is_some() {
-            AlphaMode::Blend
-        } else {
-            AlphaMode::Opaque
-        },
+        alpha_mode: if alpha.is_some() { AlphaMode::Blend } else { AlphaMode::Opaque },
         ..default()
     }
 }
@@ -186,25 +162,11 @@ pub fn material(mat: Mat, urn: (f32, f32, f32), art: Option<&StationArt>) -> Sta
 pub fn uv_at(pos: Vec3, normal: Vec3, size: Vec3) -> [f32; 2] {
     let p = (pos + size * 0.5) * TILES_PER_BLOCK;
     let (u, v) = if normal.x.abs() > 0.5 {
-        (
-            if normal.x > 0.0 {
-                size.z * TILES_PER_BLOCK - p.z
-            } else {
-                p.z
-            },
-            -p.y,
-        )
+        (if normal.x > 0.0 { size.z * TILES_PER_BLOCK - p.z } else { p.z }, -p.y)
     } else if normal.y.abs() > 0.5 {
         (p.x, if normal.y > 0.0 { p.z } else { -p.z })
     } else {
-        (
-            if normal.z > 0.0 {
-                p.x
-            } else {
-                size.x * TILES_PER_BLOCK - p.x
-            },
-            -p.y,
-        )
+        (if normal.z > 0.0 { p.x } else { size.x * TILES_PER_BLOCK - p.x }, -p.y)
     };
     [u, v]
 }
@@ -212,17 +174,12 @@ pub fn uv_at(pos: Vec3, normal: Vec3, size: Vec3) -> [f32; 2] {
 /// A box of this size with world-scale UVs (`uv_at`).
 pub fn box_mesh(size: Vec3) -> Mesh {
     let mut mesh = Mesh::from(Cuboid::new(size.x, size.y, size.z));
-    let (Some(VertexAttributeValues::Float32x3(pos)), Some(VertexAttributeValues::Float32x3(nor))) = (
-        mesh.attribute(Mesh::ATTRIBUTE_POSITION),
-        mesh.attribute(Mesh::ATTRIBUTE_NORMAL),
-    ) else {
+    let (Some(VertexAttributeValues::Float32x3(pos)), Some(VertexAttributeValues::Float32x3(nor))) =
+        (mesh.attribute(Mesh::ATTRIBUTE_POSITION), mesh.attribute(Mesh::ATTRIBUTE_NORMAL))
+    else {
         return mesh;
     };
-    let uvs: Vec<[f32; 2]> = pos
-        .iter()
-        .zip(nor)
-        .map(|(p, n)| uv_at(Vec3::from(*p), Vec3::from(*n), size))
-        .collect();
+    let uvs: Vec<[f32; 2]> = pos.iter().zip(nor).map(|(p, n)| uv_at(Vec3::from(*p), Vec3::from(*n), size)).collect();
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
     mesh
 }
@@ -236,22 +193,13 @@ mod tests {
     fn uvs_follow_world_size_not_box_size() {
         let size = Vec3::new(1.4, 0.1, 0.6);
         let mesh = box_mesh(size);
-        let Some(VertexAttributeValues::Float32x3(nor)) = mesh.attribute(Mesh::ATTRIBUTE_NORMAL)
-        else {
-            panic!()
-        };
-        let Some(VertexAttributeValues::Float32x2(uv)) = mesh.attribute(Mesh::ATTRIBUTE_UV_0)
-        else {
-            panic!()
-        };
+        let Some(VertexAttributeValues::Float32x3(nor)) = mesh.attribute(Mesh::ATTRIBUTE_NORMAL) else { panic!() };
+        let Some(VertexAttributeValues::Float32x2(uv)) = mesh.attribute(Mesh::ATTRIBUTE_UV_0) else { panic!() };
         for face in 0..6 {
             let n = Vec3::from(nor[face * 4]);
             let us: Vec<f32> = (0..4).map(|i| uv[face * 4 + i][0]).collect();
             let vs: Vec<f32> = (0..4).map(|i| uv[face * 4 + i][1]).collect();
-            let span = |v: &[f32]| {
-                v.iter().cloned().fold(f32::MIN, f32::max)
-                    - v.iter().cloned().fold(f32::MAX, f32::min)
-            };
+            let span = |v: &[f32]| v.iter().cloned().fold(f32::MIN, f32::max) - v.iter().cloned().fold(f32::MAX, f32::min);
             let (w, h) = if n.x.abs() > 0.5 {
                 (size.z, size.y)
             } else if n.y.abs() > 0.5 {
@@ -259,16 +207,8 @@ mod tests {
             } else {
                 (size.x, size.y)
             };
-            assert!(
-                (span(&us) - w * TILES_PER_BLOCK).abs() < 1e-5,
-                "face {n}: u span {}",
-                span(&us)
-            );
-            assert!(
-                (span(&vs) - h * TILES_PER_BLOCK).abs() < 1e-5,
-                "face {n}: v span {}",
-                span(&vs)
-            );
+            assert!((span(&us) - w * TILES_PER_BLOCK).abs() < 1e-5, "face {n}: u span {}", span(&us));
+            assert!((span(&vs) - h * TILES_PER_BLOCK).abs() < 1e-5, "face {n}: v span {}", span(&vs));
         }
     }
 
@@ -276,29 +216,15 @@ mod tests {
     /// material has one.
     #[test]
     fn every_textured_material_has_a_tile() {
-        let spec: SheetSpec =
-            ron::from_str(include_str!("../../../../assets/textures/stations.ron")).unwrap();
-        let img = image::open(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../assets/textures/stations.png"
-        ))
-        .unwrap();
+        let spec: SheetSpec = ron::from_str(include_str!("../../../../assets/textures/stations.ron")).unwrap();
+        let img = image::open(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/textures/stations.png")).unwrap();
         let rows = img.height() / spec.tile_size;
         for (name, &i) in &spec.tiles {
-            assert!(
-                i / spec.columns < rows && spec.columns * spec.tile_size <= img.width(),
-                "{name} outside the sheet"
-            );
+            assert!(i / spec.columns < rows && spec.columns * spec.tile_size <= img.width(), "{name} outside the sheet");
         }
         use Mat::*;
-        for m in [
-            Wood, WoodDark, Groove, Stone, StoneDark, Iron, Steel, Brass, Reed, Cloth, Linen, Cord,
-            Hide, Moss, Clay, Urn, UrnDark,
-        ] {
-            assert!(
-                spec.tiles.contains_key(m.tile_name().unwrap()),
-                "{m:?} has no tile"
-            );
+        for m in [Wood, WoodDark, Groove, Stone, StoneDark, Iron, Steel, Brass, Reed, Cloth, Linen, Cord, Hide, Moss, Clay, Urn, UrnDark] {
+            assert!(spec.tiles.contains_key(m.tile_name().unwrap()), "{m:?} has no tile");
         }
     }
 }

@@ -21,14 +21,7 @@ pub struct Floater {
 
 impl Floater {
     pub fn new(key: (String, usize), p: Vec2, r: f32) -> Self {
-        Self {
-            key,
-            p,
-            v: Vec2::ZERO,
-            lean: Vec2::ZERO,
-            lean_v: Vec2::ZERO,
-            r,
-        }
+        Self { key, p, v: Vec2::ZERO, lean: Vec2::ZERO, lean_v: Vec2::ZERO, r }
     }
 }
 
@@ -110,11 +103,7 @@ pub fn step(fs: &mut [Floater], tank: Tank, paddle: Option<Paddle>, dt: f32) {
                 if dist < min {
                     // A slight sideways slant per pair, so things in a row can slip past each other.
                     let slant = ((i * 7 + j * 3) % 5) as f32 * 0.1 - 0.2;
-                    let n = if dist > 1e-5 {
-                        (d / dist + d.perp() / dist * slant).normalize()
-                    } else {
-                        Vec2::new((i as f32).cos(), (i as f32).sin())
-                    };
+                    let n = if dist > 1e-5 { (d / dist + d.perp() / dist * slant).normalize() } else { Vec2::new((i as f32).cos(), (i as f32).sin()) };
                     let push = (min - dist) / 2.0;
                     fs[i].p -= n * push;
                     fs[j].p += n * push;
@@ -148,10 +137,7 @@ mod tests {
     use super::*;
 
     fn tank() -> Tank {
-        Tank {
-            centre: Vec2::new(0.06, 0.0),
-            half: 0.2,
-        }
+        Tank { centre: Vec2::new(0.06, 0.0), half: 0.2 }
     }
 
     fn inside(f: &Floater, t: Tank) -> bool {
@@ -161,11 +147,7 @@ mod tests {
     #[test]
     fn things_stay_inside_the_pot() {
         let t = tank();
-        let mut fs = vec![Floater::new(
-            ("pot_1".into(), 0),
-            Vec2::new(0.06, 0.0),
-            0.04,
-        )];
+        let mut fs = vec![Floater::new(("pot_1".into(), 0), Vec2::new(0.06, 0.0), 0.04)];
         fs[0].v = Vec2::new(3.0, -2.0);
         for _ in 0..240 {
             step(&mut fs, t, None, 1.0 / 60.0);
@@ -176,15 +158,7 @@ mod tests {
     #[test]
     fn things_dont_overlap_each_other() {
         let t = tank();
-        let mut fs: Vec<Floater> = (0..6)
-            .map(|i| {
-                Floater::new(
-                    ("pot_1".into(), i),
-                    Vec2::new(0.06 + i as f32 * 0.001, 0.0),
-                    0.04,
-                )
-            })
-            .collect();
+        let mut fs: Vec<Floater> = (0..6).map(|i| Floater::new(("pot_1".into(), i), Vec2::new(0.06 + i as f32 * 0.001, 0.0), 0.04)).collect();
         for _ in 0..120 {
             step(&mut fs, t, None, 1.0 / 60.0);
         }
@@ -204,16 +178,7 @@ mod tests {
         let mut max_lean: f32 = 0.0;
         for i in 0..20 {
             let at = Vec2::new(-0.1 + i as f32 * 0.012, 0.0);
-            step(
-                &mut fs,
-                t,
-                Some(Paddle {
-                    at,
-                    vel: Vec2::new(0.72, 0.0),
-                    r: 0.05,
-                }),
-                1.0 / 60.0,
-            );
+            step(&mut fs, t, Some(Paddle { at, vel: Vec2::new(0.72, 0.0), r: 0.05 }), 1.0 / 60.0);
             max_lean = max_lean.max(fs[0].lean.length());
         }
         assert!(fs[0].p.x > 0.15, "pushed along: {:?}", fs[0].p);
@@ -221,11 +186,7 @@ mod tests {
         for _ in 0..300 {
             step(&mut fs, t, None, 1.0 / 60.0);
         }
-        assert!(
-            fs[0].lean.length() < 0.01,
-            "upright again: {:?}",
-            fs[0].lean
-        );
+        assert!(fs[0].lean.length() < 0.01, "upright again: {:?}", fs[0].lean);
         assert!(fs[0].v.length() < 0.01, "settled");
     }
 }

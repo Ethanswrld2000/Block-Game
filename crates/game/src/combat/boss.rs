@@ -15,7 +15,7 @@
 use bevy::prelude::*;
 
 use super::data::{AttackKind, BossDef};
-use super::{Foe, FoeBook, Shoot, SpawnFoe, flat};
+use super::{flat, Foe, FoeBook, Shoot, SpawnFoe};
 use crate::player::{Damage, Player};
 use crate::sound::PlaySound;
 use crate::station::particles::{Burst, BurstKind};
@@ -49,11 +49,7 @@ pub fn phase_of(share: f32, phases: &[f32]) -> u8 {
 /// The attack to use now, if any is ready (pure): the first in the list
 /// allowed in this phase whose wait is over.
 pub fn pick(def: &BossDef, phase: u8, cool: &[f32]) -> Option<usize> {
-    def.attacks
-        .iter()
-        .enumerate()
-        .find(|(i, a)| a.phase <= phase && cool.get(*i).is_none_or(|c| *c <= 0.0))
-        .map(|(i, _)| i)
+    def.attacks.iter().enumerate().find(|(i, a)| a.phase <= phase && cool.get(*i).is_none_or(|c| *c <= 0.0)).map(|(i, _)| i)
 }
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -63,16 +59,8 @@ pub(super) fn attacks(
     book: Res<FoeBook>,
     player: Res<Player>,
     mut foes: Query<(Entity, &Transform, &mut Foe, Option<&mut BossState>)>,
-    (mut hits, mut shots, mut spawn): (
-        MessageWriter<Damage>,
-        MessageWriter<Shoot>,
-        MessageWriter<SpawnFoe>,
-    ),
-    (mut sound, mut bursts, mut toast): (
-        MessageWriter<PlaySound>,
-        MessageWriter<Burst>,
-        MessageWriter<Toast>,
-    ),
+    (mut hits, mut shots, mut spawn): (MessageWriter<Damage>, MessageWriter<Shoot>, MessageWriter<SpawnFoe>),
+    (mut sound, mut bursts, mut toast): (MessageWriter<PlaySound>, MessageWriter<Burst>, MessageWriter<Toast>),
     mut ring: Local<f32>,
 ) {
     let dt = time.delta_secs().min(0.05);
@@ -84,19 +72,12 @@ pub(super) fn attacks(
     if show {
         *ring = 0.12;
     }
-    let adds: Vec<u32> = foes
-        .iter()
-        .filter(|(_, _, f, _)| book.kinds[f.kind].boss.is_none())
-        .map(|(_, _, f, _)| f.tag)
-        .collect();
+    let adds: Vec<u32> = foes.iter().filter(|(_, _, f, _)| book.kinds[f.kind].boss.is_none()).map(|(_, _, f, _)| f.tag).collect();
     for (e, tf, mut foe, state) in &mut foes {
         let k = &book.kinds[foe.kind];
         let Some(def) = &k.boss else { continue };
         let Some(mut st) = state else {
-            commands.entity(e).insert(BossState {
-                cool: def.attacks.iter().map(|a| a.every * 0.5).collect(),
-                ..default()
-            });
+            commands.entity(e).insert(BossState { cool: def.attacks.iter().map(|a| a.every * 0.5).collect(), ..default() });
             continue;
         };
         let pos = tf.translation;
@@ -125,9 +106,7 @@ pub(super) fn attacks(
             }
             continue;
         }
-        let Some((i, t, aim)) = st.doing else {
-            continue;
-        };
+        let Some((i, t, aim)) = st.doing else { continue };
         let a = &def.attacks[i];
         let t = t + dt;
         let mut done = false;
@@ -138,20 +117,13 @@ pub(super) fn attacks(
                     if show {
                         for n in 0..10 {
                             let ang = n as f32 / 10.0 * std::f32::consts::TAU + t;
-                            bursts.write(Burst::new(
-                                pos + Vec3::new(ang.cos() * radius, 0.2, ang.sin() * radius),
-                                BurstKind::Smoke,
-                                1,
-                            ));
+                            bursts.write(Burst::new(pos + Vec3::new(ang.cos() * radius, 0.2, ang.sin() * radius), BurstKind::Smoke, 1));
                         }
                     }
                 } else {
                     let to = player.pos - pos;
                     if flat(to).length() < *radius && to.y.abs() < 1.5 {
-                        hits.write(Damage {
-                            amount: damage * foe.boost,
-                            cause: crate::player::DamageCause::Blunt,
-                        });
+                        hits.write(Damage { amount: damage * foe.boost, cause: crate::player::DamageCause::Blunt });
                     }
                     sound.write(PlaySound::new("hit").at(pos).speed(0.4).gain(1.5));
                     sound.write(PlaySound::new("dig_hard").at(pos).speed(0.5));
@@ -166,19 +138,9 @@ pub(super) fn attacks(
                     let dir = (player.pos + Vec3::Y - from).normalize_or_zero();
                     let n = (*count).max(1);
                     for j in 0..n {
-                        let off = if n > 1 {
-                            (j as f32 / (n - 1) as f32 - 0.5) * 0.9
-                        } else {
-                            0.0
-                        };
+                        let off = if n > 1 { (j as f32 / (n - 1) as f32 - 0.5) * 0.9 } else { 0.0 };
                         let vel = Quat::from_rotation_y(off) * dir * 16.0;
-                        shots.write(Shoot {
-                            from,
-                            vel,
-                            damage: damage * foe.boost,
-                            cause: k.cause,
-                            color: (0.7, 0.9, 0.4),
-                        });
+                        shots.write(Shoot { from, vel, damage: damage * foe.boost, cause: k.cause, color: (0.7, 0.9, 0.4) });
                     }
                     sound.write(PlaySound::new("knife").at(from).speed(0.6));
                     done = true;
@@ -199,10 +161,7 @@ pub(super) fn attacks(
                     let to = player.pos - pos;
                     if !st.hit && flat(to).length() < 1.5 && to.y.abs() < 1.6 {
                         st.hit = true;
-                        hits.write(Damage {
-                            amount: damage * foe.boost,
-                            cause: crate::player::DamageCause::Blunt,
-                        });
+                        hits.write(Damage { amount: damage * foe.boost, cause: crate::player::DamageCause::Blunt });
                         sound.write(PlaySound::new("hit").at(player.pos).speed(0.6));
                     }
                     done = t >= a.wind + CHARGE_FOR || foe.bumped;
@@ -211,18 +170,13 @@ pub(super) fn attacks(
             AttackKind::Summon { kind, count } => {
                 foe.want = Vec3::ZERO;
                 if t >= a.wind {
-                    let tag = crate::delve::tag_room(foe.tag)
-                        .map_or(0, |(r, w)| crate::delve::tag(r, w, false));
+                    let tag = crate::delve::tag_room(foe.tag).map_or(0, |(r, w)| crate::delve::tag(r, w, false));
                     let near = adds.iter().filter(|t| **t == tag).count();
                     if let Some(add) = book.kinds.iter().position(|f| &f.name == kind) {
                         for j in 0..(*count as usize).min(MAX_ADDS.saturating_sub(near)) {
                             let ang = j as f32 * 2.1 + t;
                             let at = pos + Vec3::new(ang.cos() * 2.5, 0.5, ang.sin() * 2.5);
-                            spawn.write(SpawnFoe {
-                                tag,
-                                boost: foe.boost,
-                                ..SpawnFoe::new(add, at)
-                            });
+                            spawn.write(SpawnFoe { tag, boost: foe.boost, ..SpawnFoe::new(add, at) });
                             bursts.write(Burst::new(at, BurstKind::Smoke, 8));
                         }
                     }
@@ -260,34 +214,9 @@ pub(super) fn spawn_bar(mut commands: Commands) {
             },
         ))
         .with_children(|c| {
-            c.spawn((
-                BossName,
-                Text::new(""),
-                TextFont {
-                    font_size: FontSize::Px(crate::theme::sizes::HEADING),
-                    ..default()
-                },
-                TextColor(Color::srgb(1.0, 0.86, 0.7)),
-            ));
-            c.spawn((
-                Node {
-                    width: Val::Px(420.0),
-                    height: Val::Px(14.0),
-                    border: UiRect::all(Val::Px(2.0)),
-                    ..default()
-                },
-                BackgroundColor(Color::srgba(0.08, 0.04, 0.04, 0.85)),
-                BorderColor::all(Color::srgb(0.35, 0.25, 0.2)),
-            ))
-            .with_child((
-                BossFill,
-                Node {
-                    width: Val::Percent(100.0),
-                    height: Val::Percent(100.0),
-                    ..default()
-                },
-                BackgroundColor(Color::srgb(0.75, 0.12, 0.1)),
-            ));
+            c.spawn((BossName, Text::new(""), TextFont { font_size: FontSize::Px(crate::theme::sizes::HEADING), ..default() }, TextColor(Color::srgb(1.0, 0.86, 0.7))));
+            c.spawn((Node { width: Val::Px(420.0), height: Val::Px(14.0), border: UiRect::all(Val::Px(2.0)), ..default() }, BackgroundColor(Color::srgba(0.08, 0.04, 0.04, 0.85)), BorderColor::all(Color::srgb(0.35, 0.25, 0.2))))
+                .with_child((BossFill, Node { width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() }, BackgroundColor(Color::srgb(0.75, 0.12, 0.1))));
         });
 }
 
@@ -302,28 +231,14 @@ pub(super) fn bar(
 ) {
     let near = foes
         .iter()
-        .filter(|(tf, f, _)| {
-            f.brain.aware
-                && f.health > 0.0
-                && flat(tf.translation - player.pos).length() < BAR_RANGE
-        })
-        .min_by(|a, b| {
-            a.0.translation
-                .distance(player.pos)
-                .total_cmp(&b.0.translation.distance(player.pos))
-        });
+        .filter(|(tf, f, _)| f.brain.aware && f.health > 0.0 && flat(tf.translation - player.pos).length() < BAR_RANGE)
+        .min_by(|a, b| a.0.translation.distance(player.pos).total_cmp(&b.0.translation.distance(player.pos)));
     for mut v in &mut ui {
-        v.set_if_neq(if near.is_some() {
-            Visibility::Inherited
-        } else {
-            Visibility::Hidden
-        });
+        v.set_if_neq(if near.is_some() { Visibility::Inherited } else { Visibility::Hidden });
     }
     let Some((_, f, st)) = near else { return };
     let k = &book.kinds[f.kind];
-    let coming = st
-        .doing
-        .and_then(|(i, _, _)| k.boss.as_ref().map(|b| b.attacks[i].name.clone()));
+    let coming = st.doing.and_then(|(i, _, _)| k.boss.as_ref().map(|b| b.attacks[i].name.clone()));
     let line = match coming {
         Some(a) => format!("{}  .  {a}!", k.title),
         None => k.title.clone(),
@@ -357,39 +272,17 @@ mod tests {
 
     #[test]
     fn every_boss_has_phases_and_named_attacks() {
-        let kinds =
-            super::super::data::load(include_str!("../../../../assets/data/foes.ron")).unwrap();
-        let bosses: Vec<_> = kinds
-            .iter()
-            .filter_map(|k| k.boss.as_ref().map(|b| (k, b)))
-            .collect();
+        let kinds = super::super::data::load(include_str!("../../../../assets/data/foes.ron")).unwrap();
+        let bosses: Vec<_> = kinds.iter().filter_map(|k| k.boss.as_ref().map(|b| (k, b))).collect();
         assert!(bosses.len() >= 8, "every dungeon boss and warden is phased");
         for (k, b) in bosses {
             assert_eq!(b.phases, vec![0.66, 0.33], "{}", k.name);
-            assert!(
-                (3..=5).contains(&b.attacks.len()),
-                "{}: 3-5 attacks",
-                k.name
-            );
-            assert!(
-                b.attacks.iter().any(|a| a.phase == 0),
-                "{}: something from the start",
-                k.name
-            );
-            assert!(
-                b.attacks
-                    .iter()
-                    .all(|a| a.phase <= 2 && a.wind > 0.2 && a.every > a.wind),
-                "{}",
-                k.name
-            );
+            assert!((3..=5).contains(&b.attacks.len()), "{}: 3-5 attacks", k.name);
+            assert!(b.attacks.iter().any(|a| a.phase == 0), "{}: something from the start", k.name);
+            assert!(b.attacks.iter().all(|a| a.phase <= 2 && a.wind > 0.2 && a.every > a.wind), "{}", k.name);
             for a in &b.attacks {
                 if let AttackKind::Summon { kind, .. } = &a.kind {
-                    assert!(
-                        kinds.iter().any(|f| &f.name == kind && f.boss.is_none()),
-                        "{}: summons `{kind}`",
-                        k.name
-                    );
+                    assert!(kinds.iter().any(|f| &f.name == kind && f.boss.is_none()), "{}: summons `{kind}`", k.name);
                 }
             }
             assert!(k.looks.scale >= 1.1, "{}: bigger than a person", k.name);

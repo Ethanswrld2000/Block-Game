@@ -23,9 +23,7 @@ pub fn cold_level(rules: &Exposure, feels: f32) -> usize {
 /// The blue vignette, 0..1: nothing until the first cold stage, full a little past the last.
 pub fn vignette(rules: &Exposure, feels: f32) -> f32 {
     let stages = rules.stages(Scale::Cold);
-    let (Some(first), Some(last)) = (stages.first(), stages.last()) else {
-        return 0.0;
-    };
+    let (Some(first), Some(last)) = (stages.first(), stages.last()) else { return 0.0 };
     let span = first.at - last.at + VIGNETTE_PAST;
     if span <= 0.0 {
         return 0.0;
@@ -48,12 +46,7 @@ pub struct Shiver {
 impl Default for Shiver {
     fn default() -> Self {
         // The first shiver comes soon after you get cold.
-        Self {
-            amount: 0.0,
-            burst: 0.0,
-            wait: 1.5,
-            seed: 0x9e37_79b9,
-        }
+        Self { amount: 0.0, burst: 0.0, wait: 1.5, seed: 0x9e37_79b9 }
     }
 }
 
@@ -94,11 +87,7 @@ impl Shiver {
                         self.wait = self.between(WAITS[l - 1]);
                     }
                 }
-                if self.burst > 0.0 {
-                    STRENGTH[l - 1]
-                } else {
-                    0.0
-                }
+                if self.burst > 0.0 { STRENGTH[l - 1] } else { 0.0 }
             }
         };
         // Comes on quickly, dies away a little slower.
@@ -112,14 +101,8 @@ pub fn offset(t: f32, amount: f32) -> (f32, f32, f32) {
     if amount <= 0.0 {
         return (0.0, 0.0, 0.0);
     }
-    let wobble = |a: f32, b: f32, c: f32| {
-        ((t * a).sin() + (t * b).sin() * 0.6 + (t * c).sin() * 0.35) / 1.95
-    };
-    (
-        wobble(97.0, 131.0, 61.0) * 0.006 * amount,
-        wobble(83.0, 117.0, 53.0) * 0.004 * amount,
-        wobble(109.0, 73.0, 149.0) * 0.008 * amount,
-    )
+    let wobble = |a: f32, b: f32, c: f32| ((t * a).sin() + (t * b).sin() * 0.6 + (t * c).sin() * 0.35) / 1.95;
+    (wobble(97.0, 131.0, 61.0) * 0.006 * amount, wobble(83.0, 117.0, 53.0) * 0.004 * amount, wobble(109.0, 73.0, 149.0) * 0.008 * amount)
 }
 
 #[cfg(test)]
@@ -159,10 +142,7 @@ mod tests {
         assert_eq!(none, 0.0);
         assert!(chilly > 0.0, "chilly should shiver now and then");
         assert!(chilly < 30.0, "chilly shivers only now and then: {chilly}");
-        assert!(
-            freezing > chilly * 2.0,
-            "freezing {freezing} vs chilly {chilly}"
-        );
+        assert!(freezing > chilly * 2.0, "freezing {freezing} vs chilly {chilly}");
         assert!(freezing < 100.0, "freezing still has gaps: {freezing}");
         assert!(deadly > 119.0, "deadly cold never stops: {deadly}");
     }

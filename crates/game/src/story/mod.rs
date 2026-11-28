@@ -10,31 +10,25 @@ use std::collections::BTreeSet;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
-use crate::book::{Book, BookLook, INK_FAINT, ink};
 use crate::camera::{FlyCamera, Menus};
 use crate::cutscene::{Places, Playing, StartCutscene, Story};
 use crate::inventory::Inventory;
 use crate::items::Items;
-use crate::npc::{Npc, NpcBook, Order, body::SpawnNpc, talk::Talk};
+use crate::npc::{body::SpawnNpc, talk::Talk, Npc, NpcBook, Order};
 use crate::player::Player;
-use crate::theme::{NoShadow, Theme, colors, sizes, text};
+use crate::book::{ink, Book, BookLook, INK_FAINT};
+use crate::theme::{colors, sizes, text, NoShadow, Theme};
 use beats::StoryData;
 
 pub struct StoryPlugin;
 
 impl Plugin for StoryPlugin {
     fn build(&self, app: &mut App) {
-        let data = beats::load(include_str!("../../../../assets/data/story.ron"))
-            .unwrap_or_else(|e| panic!("story.ron: {e}"));
+        let data = beats::load(include_str!("../../../../assets/data/story.ron")).unwrap_or_else(|e| panic!("story.ron: {e}"));
         app.insert_resource(StoryBook(data))
             .init_resource::<Journal>()
             .add_systems(crate::menu::GameStartup, spawn_journal)
-            .add_systems(
-                crate::menu::GameUpdate,
-                (note, check_beats, prisoners, journal)
-                    .chain()
-                    .after(crate::npc::talk::TalkSet),
-            );
+            .add_systems(crate::menu::GameUpdate, (note, check_beats, prisoners, journal).chain().after(crate::npc::talk::TalkSet));
     }
 }
 
@@ -58,10 +52,7 @@ fn note(
     urns: Res<crate::station::Urns>,
     scope: Option<Res<crate::station::telescope::Scope>>,
 ) {
-    if let Some(k) = talk
-        .with()
-        .and_then(|e| npcs.get(e).ok())
-        .and_then(|n| npc_book.kinds.get(n.kind))
+    if let Some(k) = talk.with().and_then(|e| npcs.get(e).ok()).and_then(|n| npc_book.kinds.get(n.kind))
         && !story.met.contains(&k.dialogue)
     {
         story.met.insert(k.dialogue.clone());
@@ -71,9 +62,7 @@ fn note(
     }
     let keys = book.0.dated();
     let (flags, played) = (story.flags.clone(), story.played.clone());
-    beats::note_days(&mut story.when, &keys, clock.day, |k| {
-        beats::key_true(k, &flags, &played, |s| urns.has(s))
-    });
+    beats::note_days(&mut story.when, &keys, clock.day, |k| beats::key_true(k, &flags, &played, |s| urns.has(s)));
 }
 
 /// Starts the first beat whose conditions hold (when nothing else is going on).
@@ -86,19 +75,8 @@ fn check_beats(
     playing: Res<Playing>,
     (player, talk, menus, places): (Res<Player>, Res<Talk>, Res<Menus>, Res<Places>),
     (npc_book, npcs): (Res<NpcBook>, Query<(&Transform, &Npc), Without<FlyCamera>>),
-    (world, blocks, clock, survival): (
-        Res<crate::world::World>,
-        Res<crate::blocks::Blocks>,
-        Res<crate::clock::WorldClock>,
-        Res<crate::survival::Survival>,
-    ),
-    (urns, inv, items, below, encounters): (
-        Res<crate::station::Urns>,
-        Res<Inventory>,
-        Res<Items>,
-        Option<Res<crate::delve::Below>>,
-        Res<crate::encounter::Encounters>,
-    ),
+    (world, blocks, clock, survival): (Res<crate::world::World>, Res<crate::blocks::Blocks>, Res<crate::clock::WorldClock>, Res<crate::survival::Survival>),
+    (urns, inv, items, below, encounters): (Res<crate::station::Urns>, Res<Inventory>, Res<Items>, Option<Res<crate::delve::Below>>, Res<crate::encounter::Encounters>),
     mut start: MessageWriter<StartCutscene>,
 ) {
     *timer -= time.delta_secs();
@@ -106,13 +84,7 @@ fn check_beats(
         return;
     }
     *timer = CHECK_EVERY;
-    if playing.busy()
-        || !player.ready
-        || talk.active()
-        || menus.open
-        || menus.still
-        || survival.dead_for.is_some()
-    {
+    if playing.busy() || !player.ready || talk.active() || menus.open || menus.still || survival.dead_for.is_some() {
         return;
     }
     let mut f = beats::Facts {
@@ -132,12 +104,7 @@ fn check_beats(
     f.base.hour = clock.hour();
     f.base.flags = Some(&story.flags);
     // Urns you have: carried, set down, or growing.
-    f.urns = urns
-        .placed
-        .keys()
-        .chain(urns.progress.keys())
-        .cloned()
-        .collect();
+    f.urns = urns.placed.keys().chain(urns.progress.keys()).cloned().collect();
     for p in &inv.pockets.items {
         if let Some(n) = items.get(p.stack.item).name.strip_suffix("_urn") {
             f.urns.insert(n.to_string());
@@ -182,62 +149,31 @@ fn prisoners(
             commands.entity(e).despawn();
         }
     }
-    let (Some(floor), Some(run)) = (floor, run) else {
-        return;
-    };
-    for (who, chain, at_floor, found, boss_room) in [
-        ("liora", 2, 2, "liora_found", false),
-        ("messler", 1, 2, "messler_found", true),
-    ] {
-        let Some(kind) = npc_book.kinds.iter().position(|k| k.dialogue == who) else {
-            continue;
-        };
+    let (Some(floor), Some(run)) = (floor, run) else { return };
+    for (who, chain, at_floor, found, boss_room) in [("liora", 2, 2, "liora_found", false), ("messler", 1, 2, "messler_found", true)] {
+        let Some(kind) = npc_book.kinds.iter().position(|k| k.dialogue == who) else { continue };
         if run.chain != Some(chain) || run.floor != at_floor || (boss_room && !run.boss_down) {
             continue;
         }
-        if story.flags.contains(found)
-            || npcs
-                .iter()
-                .any(|(_, n)| n.kind == kind && n.post != Some(PRISON_POST))
-        {
+        if story.flags.contains(found) || npcs.iter().any(|(_, n)| n.kind == kind && n.post != Some(PRISON_POST)) {
             continue;
         }
-        let Some(at) = prison_spot(&floor, boss_room) else {
-            continue;
-        };
+        let Some(at) = prison_spot(&floor, boss_room) else { continue };
         let mut npc = Npc::new(kind, 0.0);
         npc.order = Order::Stay;
         npc.post = Some(PRISON_POST);
-        spawn.write(SpawnNpc {
-            npc,
-            at: Vec3::from_array(at),
-        });
+        spawn.write(SpawnNpc { npc, at: Vec3::from_array(at) });
     }
 }
 
 /// Where a prisoner waits (feet): the middle of a fight room (or ambush) half way along, or of
 /// the boss room (pure).
 pub fn prison_spot(floor: &worldgen::Floor, boss_room: bool) -> Option<[f32; 3]> {
-    let fights: Vec<usize> = (0..floor.rooms.len())
-        .filter(|&i| {
-            matches!(
-                floor.rooms[i].kind,
-                worldgen::RoomType::Fight | worldgen::RoomType::Ambush
-            )
-        })
-        .collect();
-    let i = if boss_room {
-        floor.boss_room
-    } else {
-        *fights.get(fights.len() / 2)?
-    };
+    let fights: Vec<usize> = (0..floor.rooms.len()).filter(|&i| matches!(floor.rooms[i].kind, worldgen::RoomType::Fight | worldgen::RoomType::Ambush)).collect();
+    let i = if boss_room { floor.boss_room } else { *fights.get(fights.len() / 2)? };
     let r = &floor.rooms.get(i)?.inner;
     // Off the very middle (the boss stood there, and pillars may).
-    let mid = floor.room_free_spot(i).unwrap_or([
-        (r.min[0] + r.max[0]) / 2,
-        floor.floor_y,
-        (r.min[2] + r.max[2]) / 2,
-    ]);
+    let mid = floor.room_free_spot(i).unwrap_or([(r.min[0] + r.max[0]) / 2, floor.floor_y, (r.min[2] + r.max[2]) / 2]);
     Some([mid[0] as f32 + 0.5, mid[1] as f32, mid[2] as f32 + 0.5])
 }
 
@@ -245,10 +181,7 @@ pub fn prison_spot(floor: &worldgen::Floor, boss_room: bool) -> Option<[f32; 3]>
 
 /// The guide's journal entries (title, text): each step done ("(done)", no text), then
 /// the one under way. Empty until the guide starts.
-pub fn guide_entries(
-    data: &crate::guide::rules::GuideData,
-    flags: &BTreeSet<String>,
-) -> Vec<(String, String)> {
+pub fn guide_entries(data: &crate::guide::rules::GuideData, flags: &BTreeSet<String>) -> Vec<(String, String)> {
     use crate::guide::rules;
     if !flags.contains(rules::ON) {
         return Vec::new();
@@ -296,20 +229,8 @@ fn spawn_journal(mut commands: Commands) {
             JournalUi,
         ))
         .with_children(|root| {
-            root.spawn(text(
-                "Left / Right or wheel   turn the page        J or Esc   close",
-                sizes::SMALL,
-                colors::MUTED,
-            ));
-            crate::book::build(
-                root,
-                BookLook {
-                    sides: 2,
-                    page: Vec2::new(330.0, 430.0),
-                    wheel: true,
-                },
-                (),
-            );
+            root.spawn(text("Left / Right or wheel   turn the page        J or Esc   close", sizes::SMALL, colors::MUTED));
+            crate::book::build(root, BookLook { sides: 2, page: Vec2::new(330.0, 430.0), wheel: true }, ());
         });
 }
 
@@ -330,12 +251,7 @@ fn journal(
     mut forced: Local<bool>,
     guide: Res<crate::guide::GuideBook>,
 ) {
-    let combo = keys.any_pressed([
-        KeyCode::ControlLeft,
-        KeyCode::ControlRight,
-        KeyCode::SuperLeft,
-        KeyCode::SuperRight,
-    ]);
+    let combo = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight, KeyCode::SuperLeft, KeyCode::SuperRight]);
     let auto = !*forced && std::env::var_os("BLOCKGAME_JOURNAL").is_some();
     *forced = true;
     let toggle = auto || (keys.just_pressed(KeyCode::KeyJ) && !combo);
@@ -350,41 +266,19 @@ fn journal(
         j.shown = usize::MAX;
     }
     let (mut vis, kids) = ui.into_inner();
-    let want = if j.open {
-        Visibility::Inherited
-    } else {
-        Visibility::Hidden
-    };
+    let want = if j.open { Visibility::Inherited } else { Visibility::Hidden };
     if *vis != want {
         *vis = want;
     }
-    let Some(book_e) = kids.iter().find(|e| books.contains(*e)) else {
-        return;
-    };
-    let Ok(mut book) = books.get_mut(book_e) else {
-        return;
-    };
+    let Some(book_e) = kids.iter().find(|e| books.contains(*e)) else { return };
+    let Ok(mut book) = books.get_mut(book_e) else { return };
     if !j.open {
         return;
     }
     // The clues, split into pages by how much they say.
     // `BLOCKGAME_JOURNAL=all` shows every clue (screenshots).
-    let all: Vec<String> = if std::env::var("BLOCKGAME_JOURNAL").is_ok_and(|v| v == "all") {
-        data.0.clues.keys().cloned().collect()
-    } else {
-        story.clues.clone()
-    };
-    let mut clues: Vec<(String, String)> = all
-        .iter()
-        .map(|id| {
-            data.0
-                .clues
-                .get(id)
-                .map_or((id.clone(), String::new()), |c| {
-                    (c.title.clone(), c.text.clone())
-                })
-        })
-        .collect();
+    let all: Vec<String> = if std::env::var("BLOCKGAME_JOURNAL").is_ok_and(|v| v == "all") { data.0.clues.keys().cloned().collect() } else { story.clues.clone() };
+    let mut clues: Vec<(String, String)> = all.iter().map(|id| data.0.clues.get(id).map_or((id.clone(), String::new()), |c| (c.title.clone(), c.text.clone()))).collect();
     // The guide's steps come first: the ones done, ticked off, then the one under way.
     let guide_steps = guide_entries(&guide.0, &story.flags);
     let progress = guide_steps.len();
@@ -406,30 +300,14 @@ fn journal(
         commands.entity(page_e).despawn_related::<Children>();
         commands.entity(page_e).with_children(|l| {
             if n == 0 {
-                l.spawn((
-                    theme.bold(sizes::TITLE),
-                    Text::new("Journal"),
-                    TextColor(crate::book::INK),
-                    NoShadow,
-                ));
+                l.spawn((theme.bold(sizes::TITLE), Text::new("Journal"), TextColor(crate::book::INK), NoShadow));
                 if clues.is_empty() {
                     l.spawn(ink("Nothing written down yet.", sizes::BODY, INK_FAINT));
                 }
             }
             for (title, body) in pages.get(n).map_or(&clues[0..0], |r| &clues[r.clone()]) {
-                l.spawn(Node {
-                    flex_direction: FlexDirection::Column,
-                    row_gap: Val::Px(4.0),
-                    margin: UiRect::bottom(Val::Px(8.0)),
-                    ..default()
-                })
-                .with_children(|c| {
-                    c.spawn((
-                        theme.bold(sizes::LABEL),
-                        Text::new(title.clone()),
-                        TextColor(crate::book::INK),
-                        NoShadow,
-                    ));
+                l.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(4.0), margin: UiRect::bottom(Val::Px(8.0)), ..default() }).with_children(|c| {
+                    c.spawn((theme.bold(sizes::LABEL), Text::new(title.clone()), TextColor(crate::book::INK), NoShadow));
                     c.spawn(ink(body.clone(), sizes::BODY, INK_FAINT));
                 });
             }
@@ -449,44 +327,23 @@ mod tests {
     fn the_raid_runs_start_to_finish() {
         let data = beats::load(include_str!("../../../../assets/data/story.ron")).unwrap();
         let scenes = script::load(include_str!("../../../../assets/data/cutscenes.ron")).unwrap();
-        let encounters =
-            rules::load(include_str!("../../../../assets/data/encounters.ron")).unwrap();
+        let encounters = rules::load(include_str!("../../../../assets/data/encounters.ron")).unwrap();
         // The night after Messler's story, at camp.
         let played: BTreeSet<String> = ["C10".to_string()].into();
-        let mut f = beats::Facts {
-            day: 4,
-            played: Some(&played),
-            ..Default::default()
-        };
+        let mut f = beats::Facts { day: 4, played: Some(&played), ..Default::default() };
         f.base.hour = 22.0;
         f.base.places.insert("camp".into(), Vec3::ZERO);
         f.base.player = Vec3::new(2.0, 0.0, 0.0);
-        assert_eq!(
-            beats::next(&data.beats, &f).map(|b| b.play.as_str()),
-            Some("C11")
-        );
+        assert_eq!(beats::next(&data.beats, &f).map(|b| b.play.as_str()), Some("C11"));
         // C11 runs to its encounter and waits there.
         let c11 = scenes.iter().find(|c| c.id == "C11").unwrap();
         let mut r = Runner::default();
         let mut started = Vec::new();
-        let said = Status {
-            line_said: true,
-            arrived: true,
-            cleared: false,
-        };
+        let said = Status { line_said: true, arrived: true, cleared: false };
         for _ in 0..100 {
             started.extend(r.tick(&c11.steps, 0.5, said));
         }
-        let fight = started
-            .iter()
-            .find_map(|&i| {
-                if let Step::Encounter(id) = &c11.steps[i] {
-                    Some(id.clone())
-                } else {
-                    None
-                }
-            })
-            .expect("C11 starts an encounter");
+        let fight = started.iter().find_map(|&i| if let Step::Encounter(id) = &c11.steps[i] { Some(id.clone()) } else { None }).expect("C11 starts an encounter");
         assert_eq!(fight, "raid_camp");
         assert!(!r.over(&c11.steps), "waits for the fight");
         // The encounter: an airship comes down, court soldiers drop, all fall.
@@ -494,10 +351,7 @@ mod tests {
         assert!(matches!(def.from, rules::From::Airship(_)));
         assert!(def.foes.iter().all(|(k, _)| k == "court_soldier"));
         let foes = include_str!("../../../../assets/data/foes.ron");
-        assert!(
-            foes.contains("name: \"court_soldier\"") && foes.contains("close: Some("),
-            "soldiers shoot and cut"
-        );
+        assert!(foes.contains("name: \"court_soldier\"") && foes.contains("close: Some("), "soldiers shoot and cut");
         let mut run = rules::Running::start(def, [0.0; 3]);
         assert_eq!(run.tick(0.1, true), Some(rules::Go::Ship));
         let mut spawned = false;
@@ -507,14 +361,7 @@ mod tests {
         assert!(spawned);
         assert!(run.slain(run.total), "all beaten");
         // C11 ends; C12 follows.
-        r.tick(
-            &c11.steps,
-            0.1,
-            Status {
-                cleared: true,
-                ..said
-            },
-        );
+        r.tick(&c11.steps, 0.1, Status { cleared: true, ..said });
         assert!(r.over(&c11.steps));
         let next = def.then.cutscene.clone().expect("C12 follows");
         let c12 = scenes.iter().find(|c| c.id == next).unwrap();
@@ -525,19 +372,9 @@ mod tests {
         }
         assert!(r.over(&c12.steps));
         let did = |want: &dyn Fn(&Step) -> bool| done.iter().any(|&i| want(&c12.steps[i]));
-        assert!(
-            did(&|s| matches!(s, Step::Remove(a) if a == "bram")),
-            "Bram leaves the ancestral urn"
-        );
-        assert!(
-            did(&|s| matches!(s, Step::Place(_, b) if b == "grave")),
-            "his grave"
-        );
-        assert!(
-            did(&|s| matches!(s, Step::Swap { to, .. } if to == "burnt_stem"))
-                && did(&|s| matches!(s, Step::Swap { to, .. } if to == "burnt_cap")),
-            "Sporrow burnt"
-        );
+        assert!(did(&|s| matches!(s, Step::Remove(a) if a == "bram")), "Bram leaves the ancestral urn");
+        assert!(did(&|s| matches!(s, Step::Place(_, b) if b == "grave")), "his grave");
+        assert!(did(&|s| matches!(s, Step::Swap { to, .. } if to == "burnt_stem")) && did(&|s| matches!(s, Step::Swap { to, .. } if to == "burnt_cap")), "Sporrow burnt");
         let blocks = include_str!("../../../../assets/data/blocks.ron");
         for b in ["burnt_stem", "burnt_cap", "grave"] {
             assert!(blocks.contains(&format!("name: \"{b}\"")), "no block {b}");
@@ -546,13 +383,9 @@ mod tests {
 
     #[test]
     fn the_journal_walks_through_the_guide_one_step_at_a_time() {
-        let data =
-            crate::guide::rules::load(include_str!("../../../../assets/data/guide.ron")).unwrap();
+        let data = crate::guide::rules::load(include_str!("../../../../assets/data/guide.ron")).unwrap();
         let mut flags = BTreeSet::new();
-        assert!(
-            guide_entries(&data, &flags).is_empty(),
-            "nothing before the opening"
-        );
+        assert!(guide_entries(&data, &flags).is_empty(), "nothing before the opening");
         flags.insert("guide_on".to_string());
         let e = guide_entries(&data, &flags);
         assert_eq!(e.len(), 1);
@@ -565,40 +398,18 @@ mod tests {
 
     #[test]
     fn prisoners_wait_in_a_fight_room_and_the_boss_room() {
-        let tiles =
-            voxel::TileSheet::from_ron(include_str!("../../../../assets/textures/blocks.ron"))
-                .unwrap();
-        let reg = voxel::BlockRegistry::from_ron(
-            include_str!("../../../../assets/data/blocks.ron"),
-            &tiles,
-        )
-        .unwrap();
-        let d = worldgen::Delves::load(
-            include_str!("../../../../assets/data/dungeons.ron"),
-            include_str!("../../../../assets/data/rooms.ron"),
-            &reg,
-        )
-        .unwrap();
+        let tiles = voxel::TileSheet::from_ron(include_str!("../../../../assets/textures/blocks.ron")).unwrap();
+        let reg = voxel::BlockRegistry::from_ron(include_str!("../../../../assets/data/blocks.ron"), &tiles).unwrap();
+        let d = worldgen::Delves::load(include_str!("../../../../assets/data/dungeons.ron"), include_str!("../../../../assets/data/rooms.ron"), &reg).unwrap();
         for run in 1..6 {
-            let plan = worldgen::FloorPlan {
-                seed: 7,
-                dungeon: 2,
-                theme: 1,
-                run,
-                floor: 2,
-                floors: 3,
-                chain: true,
-                done: false,
-            };
+            let plan = worldgen::FloorPlan { seed: 7, dungeon: 2, theme: 1, run, floor: 2, floors: 3, chain: true, done: false };
             let f = worldgen::delve::floor(&d, &plan);
             let spot = prison_spot(&f, false).expect("a fight room");
             let r = f.room_at(spot).expect("in a room");
-            assert!(matches!(
-                f.rooms[r].kind,
-                worldgen::RoomType::Fight | worldgen::RoomType::Ambush
-            ));
+            assert!(matches!(f.rooms[r].kind, worldgen::RoomType::Fight | worldgen::RoomType::Ambush));
             let boss = prison_spot(&f, true).unwrap();
             assert_eq!(f.room_at(boss), Some(f.boss_room));
         }
     }
+
 }

@@ -101,26 +101,14 @@ impl Delve {
     /// The floor a new run of this dungeon starts on.
     pub fn start_floor(&self, dungeon: u64, floors: u8) -> u8 {
         let r = self.of(dungeon);
-        if r.done {
-            1
-        } else {
-            (r.cleared + 1).clamp(1, floors.max(1))
-        }
+        if r.done { 1 } else { (r.cleared + 1).clamp(1, floors.max(1)) }
     }
 
     /// Start a run.
     pub fn begin(&mut self, dungeon: u64, chain: Option<u8>, floors: u8) -> Run {
         self.runs += 1;
         let floor = self.start_floor(dungeon, floors);
-        Run {
-            number: self.runs,
-            dungeon,
-            chain,
-            floor,
-            floors,
-            boss_down: false,
-            unlocked: false,
-        }
+        Run { number: self.runs, dungeon, chain, floor, floors, boss_down: false, unlocked: false }
     }
 
     /// The floor's boss fell (or there was none: a cleared dungeon's last floor).
@@ -158,20 +146,13 @@ impl Delve {
 
     /// The furthest story dungeon cleared (0 = none), given their ids by place.
     pub fn chain_cleared(&self, ids: &[(u8, u64)]) -> u8 {
-        ids.iter()
-            .filter(|(_, id)| self.done(*id))
-            .map(|(n, _)| *n)
-            .max()
-            .unwrap_or(0)
+        ids.iter().filter(|(_, id)| self.done(*id)).map(|(n, _)| *n).max().unwrap_or(0)
     }
 }
 
 /// How many of each thing to take away when you fall below: whatever you
 /// carry now beyond what you carried in.
-pub fn lost_on_death<K: Ord + Clone>(
-    brought: &BTreeMap<K, u32>,
-    now: &BTreeMap<K, u32>,
-) -> BTreeMap<K, u32> {
+pub fn lost_on_death<K: Ord + Clone>(brought: &BTreeMap<K, u32>, now: &BTreeMap<K, u32>) -> BTreeMap<K, u32> {
     now.iter()
         .filter_map(|(k, &n)| {
             let had = brought.get(k).copied().unwrap_or(0);
@@ -203,11 +184,7 @@ pub enum LockStep {
 
 impl Lock {
     pub fn new(rooms: Vec<usize>, waves: u8) -> Self {
-        Self {
-            rooms,
-            wave: 0,
-            waves: waves.max(1),
-        }
+        Self { rooms, wave: 0, waves: waves.max(1) }
     }
 
     /// `left`: foes of this lock still standing.
@@ -239,41 +216,18 @@ mod tests {
         let mut d = Delve::default();
         let mut r = d.begin(1, Some(1), 2);
         assert_eq!((r.number, r.floor), (1, 1));
-        assert_eq!(
-            d.stair(&mut r),
-            Stair::Sealed,
-            "sealed while the boss stands"
-        );
+        assert_eq!(d.stair(&mut r), Stair::Sealed, "sealed while the boss stands");
         let r2 = d.begin(1, Some(1), 2);
-        assert_eq!(
-            (r2.number, r2.floor),
-            (2, 1),
-            "leaving before the boss changes nothing"
-        );
+        assert_eq!((r2.number, r2.floor), (2, 1), "leaving before the boss changes nothing");
         assert!(!d.boss_down(&mut r));
-        assert_eq!(
-            d.start_floor(1, 2),
-            2,
-            "the next run may start a floor down"
-        );
+        assert_eq!(d.start_floor(1, 2), 2, "the next run may start a floor down");
         r.unlocked = true;
         assert_eq!(d.stair(&mut r), Stair::Down(2));
-        assert!(
-            !r.boss_down && !r.unlocked,
-            "a new floor, a new boss and key"
-        );
+        assert!(!r.boss_down && !r.unlocked, "a new floor, a new boss and key");
         assert!(d.boss_down(&mut r), "the last boss clears it");
         assert!(d.done(1));
-        assert_eq!(
-            d.stair(&mut r),
-            Stair::Sealed,
-            "no stair past the last floor"
-        );
-        assert_eq!(
-            d.start_floor(1, 2),
-            1,
-            "a cleared dungeon starts from the top again"
-        );
+        assert_eq!(d.stair(&mut r), Stair::Sealed, "no stair past the last floor");
+        assert_eq!(d.start_floor(1, 2), 1, "a cleared dungeon starts from the top again");
         assert!(!d.boss_down(&mut r), "only the first time counts");
         // Other dungeons are their own.
         assert_eq!(d.start_floor(9, 3), 1);
@@ -287,11 +241,7 @@ mod tests {
         assert_eq!(d.claim_urn(2), Some("gear_urn"));
         assert_eq!(d.claim_urn(3), Some("hearth_urn"));
         assert_eq!(d.claim_urn(4), Some("vehicle_urn"));
-        assert_eq!(
-            d.claim_urn(5),
-            None,
-            "the star urn waits on the castle's tower"
-        );
+        assert_eq!(d.claim_urn(5), None, "the star urn waits on the castle's tower");
         let ids = [(1, 10), (2, 20), (3, 30)];
         assert_eq!(d.chain_cleared(&ids), 0);
         let mut r = d.begin(20, Some(2), 1);
@@ -309,29 +259,16 @@ mod tests {
     fn dying_costs_only_what_you_picked_up() {
         let brought = BTreeMap::from([("sword", 1), ("bread", 4), ("coin", 2)]);
         let now = BTreeMap::from([("sword", 1), ("bread", 2), ("coin", 7), ("dagger", 1)]);
-        assert_eq!(
-            lost_on_death(&brought, &now),
-            BTreeMap::from([("coin", 5), ("dagger", 1)])
-        );
+        assert_eq!(lost_on_death(&brought, &now), BTreeMap::from([("coin", 5), ("dagger", 1)]));
     }
 
     #[test]
     fn saves_round_trip_and_old_ones_carry_over() {
-        let mut d = Delve {
-            runs: 3,
-            ..Default::default()
-        };
-        d.dungeons.insert(
-            1,
-            Remembered {
-                cleared: 1,
-                done: false,
-            },
-        );
+        let mut d = Delve { runs: 3, ..Default::default() };
+        d.dungeons.insert(1, Remembered { cleared: 1, done: false });
         let back: Delve = ron::from_str(&ron::to_string(&d).unwrap()).unwrap();
         assert_eq!(back, d);
-        let mut old: Delve =
-            ron::from_str("(runs: 3, deepest: 4, cleared: 4, urns: [1, 2])").unwrap();
+        let mut old: Delve = ron::from_str("(runs: 3, deepest: 4, cleared: 4, urns: [1, 2])").unwrap();
         old.upgrade(1, 2);
         assert!(old.done(1));
         assert_eq!(old.urns, BTreeSet::from([1, 2]));
@@ -346,16 +283,8 @@ mod tests {
         assert_eq!(l.step(0), LockStep::Wave(2));
         assert_eq!(l.step(0), LockStep::Open);
         assert!(locks(RoomType::Fight, true, false));
-        assert!(
-            !locks(RoomType::Fight, true, true),
-            "cleared rooms stay open"
-        );
-        for k in [
-            RoomType::Rest,
-            RoomType::Treasure,
-            RoomType::Puzzle,
-            RoomType::Shop,
-        ] {
+        assert!(!locks(RoomType::Fight, true, true), "cleared rooms stay open");
+        for k in [RoomType::Rest, RoomType::Treasure, RoomType::Puzzle, RoomType::Shop] {
             assert!(!locks(k, true, false), "{k:?} never locks");
         }
     }

@@ -8,11 +8,11 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use voxel::{BlockId, CHUNK_SIZE_I32, ChunkPos};
+use voxel::{BlockId, ChunkPos, CHUNK_SIZE_I32};
 
 use crate::trees::Canvas;
 use crate::util::{hash2, unit};
-use crate::{SEA_LEVEL, WorldGen};
+use crate::{WorldGen, SEA_LEVEL};
 
 const BARROW_CELL: i32 = 448;
 const BARROW_CHANCE: f32 = 0.6;
@@ -53,21 +53,8 @@ impl Village {
     pub fn warded(&self, x: i32, y: i32, z: i32) -> bool {
         let r = self.radius + 4;
         let (dx, dz) = (x - self.center[0], z - self.center[2]);
-        let bottom = self
-            .huts
-            .iter()
-            .map(|h| h.ground)
-            .min()
-            .unwrap_or(self.center[1])
-            .min(self.center[1])
-            - 3;
-        let top = self
-            .huts
-            .iter()
-            .map(|h| h.floor + 7)
-            .max()
-            .unwrap_or(self.center[1])
-            .max(self.center[1] + 5);
+        let bottom = self.huts.iter().map(|h| h.ground).min().unwrap_or(self.center[1]).min(self.center[1]) - 3;
+        let top = self.huts.iter().map(|h| h.floor + 7).max().unwrap_or(self.center[1]).max(self.center[1] + 5);
         dx * dx + dz * dz <= r * r && (bottom..=top).contains(&y)
     }
 }
@@ -87,16 +74,12 @@ pub struct Barrow {
 
 impl Barrow {
     pub fn contains(&self, x: i32, y: i32, z: i32) -> bool {
-        (self.min[0]..=self.max[0]).contains(&x)
-            && (self.min[1]..=self.max[1]).contains(&y)
-            && (self.min[2]..=self.max[2]).contains(&z)
+        (self.min[0]..=self.max[0]).contains(&x) && (self.min[1]..=self.max[1]).contains(&y) && (self.min[2]..=self.max[2]).contains(&z)
     }
 
     /// Under the spirit ward: the whole barrow, its ring of stones and the mound over it.
     pub fn warded(&self, x: i32, y: i32, z: i32) -> bool {
-        (self.min[0] - 5..=self.max[0]).contains(&x)
-            && (self.min[1]..=self.max[1] + 3).contains(&y)
-            && (self.min[2]..=self.max[2]).contains(&z)
+        (self.min[0] - 5..=self.max[0]).contains(&x) && (self.min[1]..=self.max[1] + 3).contains(&y) && (self.min[2]..=self.max[2]).contains(&z)
     }
 }
 
@@ -109,11 +92,7 @@ pub(crate) struct Cache {
     pub(crate) dungeons: CellCache<crate::dungeons::Dungeon>,
 }
 
-pub(crate) fn cached<T>(
-    map: &CellCache<T>,
-    key: (i32, i32),
-    make: impl FnOnce() -> Option<T>,
-) -> Option<Arc<T>> {
+pub(crate) fn cached<T>(map: &CellCache<T>, key: (i32, i32), make: impl FnOnce() -> Option<T>) -> Option<Arc<T>> {
     if let Some(v) = map.lock().unwrap().get(&key) {
         return v.clone();
     }
@@ -126,17 +105,8 @@ pub(crate) fn cached<T>(
     v
 }
 
-pub(crate) const BARROW_KIN: [&str; 10] = [
-    "Ama", "Brannoc", "Cael", "Dunmora", "Elsa", "Fenwyr", "Gorran", "Hild", "Ithel", "Morwen",
-];
-const BARROW_KIND: [&str; 6] = [
-    "Barrow of",
-    "Sleep of",
-    "Long House of",
-    "Hollow of",
-    "Mound of",
-    "Rest of",
-];
+pub(crate) const BARROW_KIN: [&str; 10] = ["Ama", "Brannoc", "Cael", "Dunmora", "Elsa", "Fenwyr", "Gorran", "Hild", "Ithel", "Morwen"];
+const BARROW_KIND: [&str; 6] = ["Barrow of", "Sleep of", "Long House of", "Hollow of", "Mound of", "Rest of"];
 
 pub(crate) fn pick<'a>(list: &[&'a str], h: u64) -> &'a str {
     list[(h % list.len() as u64) as usize]
@@ -172,9 +142,7 @@ impl WorldGen {
                 if x + r < x0 || x - r > x1 || z + r < z0 || z - r > z1 {
                     continue;
                 }
-                if let Some(b) = cached(&self.structures.barrows, (cx, cz), || {
-                    self.build_barrow(h, x, z)
-                }) {
+                if let Some(b) = cached(&self.structures.barrows, (cx, cz), || self.build_barrow(h, x, z)) {
                     out.push(b);
                 }
             }
@@ -184,10 +152,7 @@ impl WorldGen {
 
     fn build_barrow(&self, h: u64, x: i32, z: i32) -> Option<Barrow> {
         let col = self.column(x, z);
-        if col.land != crate::Land::Main
-            || col.height < SEA_LEVEL + 1
-            || col.climate.overhang > 0.02
-        {
+        if col.land != crate::Land::Main || col.height < SEA_LEVEL + 1 || col.climate.overhang > 0.02 {
             return None;
         }
         let depth = 14 + (h >> 40) as i32 % 8;
@@ -198,11 +163,7 @@ impl WorldGen {
         if self.column(hall[0] + 14, z).land != crate::Land::Main {
             return None;
         }
-        let name = format!(
-            "The {} {}",
-            pick(&BARROW_KIND, h >> 11),
-            pick(&BARROW_KIN, h >> 23)
-        );
+        let name = format!("The {} {}", pick(&BARROW_KIND, h >> 11), pick(&BARROW_KIN, h >> 23));
         let barrow = Barrow {
             id: h,
             name,
@@ -212,15 +173,8 @@ impl WorldGen {
             max: [hall[0] + 14, surface + 1, z + 14],
         };
         // Keep out of dungeons.
-        let area = crate::dungeons::Aabb {
-            min: [barrow.min[0] - 6, barrow.min[1] - 2, barrow.min[2] - 2],
-            max: [barrow.max[0] + 2, barrow.max[1] + 4, barrow.max[2] + 2],
-        };
-        if self
-            .dungeons_in(area.min[0], area.min[2], area.max[0], area.max[2])
-            .iter()
-            .any(|d| d.bounds.intersects(&area))
-        {
+        let area = crate::dungeons::Aabb { min: [barrow.min[0] - 6, barrow.min[1] - 2, barrow.min[2] - 2], max: [barrow.max[0] + 2, barrow.max[1] + 4, barrow.max[2] + 2] };
+        if self.dungeons_in(area.min[0], area.min[2], area.max[0], area.max[2]).iter().any(|d| d.bounds.intersects(&area)) {
             return None;
         }
         Some(barrow)
@@ -231,27 +185,11 @@ impl WorldGen {
 pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) {
     let o = pos.origin();
     let (x0, z0, x1, z1) = (o.x, o.z, o.x + CHUNK_SIZE_I32 - 1, o.z + CHUNK_SIZE_I32 - 1);
-    let mut canvas = Canvas {
-        origin: [o.x, o.y, o.z],
-        dense,
-    };
+    let mut canvas = Canvas { origin: [o.x, o.y, o.z], dense };
     let (lo, hi) = (o.y, o.y + CHUNK_SIZE_I32 - 1);
     for v in wg.villages_in(x0, z0, x1, z1) {
-        let top = v
-            .huts
-            .iter()
-            .map(|h| h.floor + 6)
-            .max()
-            .unwrap_or(0)
-            .max(v.center[1] + 4);
-        let bottom = v
-            .huts
-            .iter()
-            .map(|h| h.ground)
-            .min()
-            .unwrap_or(0)
-            .min(v.center[1])
-            - 2;
+        let top = v.huts.iter().map(|h| h.floor + 6).max().unwrap_or(0).max(v.center[1] + 4);
+        let bottom = v.huts.iter().map(|h| h.ground).min().unwrap_or(0).min(v.center[1]) - 2;
         if top < lo || bottom > hi {
             continue;
         }
@@ -264,12 +202,7 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) {
         draw_barrow(wg, &mut canvas, &b);
     }
     let near = |b: &crate::dungeons::Aabb| {
-        b.min[0] - 4 <= x1
-            && b.max[0] + 4 >= x0
-            && b.min[2] - 4 <= z1
-            && b.max[2] + 4 >= z0
-            && b.max[1] + 2 >= lo
-            && b.min[1] - 40 <= hi
+        b.min[0] - 4 <= x1 && b.max[0] + 4 >= x0 && b.min[2] - 4 <= z1 && b.max[2] + 4 >= z0 && b.max[1] + 2 >= lo && b.min[1] - 40 <= hi
     };
     if let Some(f) = wg.gilm_forge().filter(|f| near(&f.bounds)) {
         crate::landmarks::draw_forge(wg, &mut canvas, f);
@@ -355,16 +288,7 @@ fn draw_barrow(wg: &WorldGen, c: &mut Canvas, b: &Barrow) {
 /// A hollow room centred at (x, z) with its floor surface at y: walls `wall`,
 /// floor `floor`, inner half-width `r`, inner height `height`.
 #[allow(clippy::too_many_arguments)]
-fn room(
-    c: &mut Canvas,
-    wall: BlockId,
-    floor: BlockId,
-    x: i32,
-    y: i32,
-    z: i32,
-    r: i32,
-    height: i32,
-) {
+fn room(c: &mut Canvas, wall: BlockId, floor: BlockId, x: i32, y: i32, z: i32, r: i32, height: i32) {
     for dz in -r - 1..=r + 1 {
         for dx in -r - 1..=r + 1 {
             let inside = dx.abs() <= r && dz.abs() <= r;
@@ -389,11 +313,7 @@ mod tests {
         let r = crate::MAIN_RADIUS as i32 + 400;
         let villages = g.villages_in(cx - r, cz - r, cx + r, cz + r);
         let barrows = g.barrows_in(cx - r, cz - r, cx + r, cz + r);
-        assert!(
-            villages.iter().all(|v| v.name == "Sporrow"),
-            "{} villages",
-            villages.len()
-        );
+        assert!(villages.iter().all(|v| v.name == "Sporrow"), "{} villages", villages.len());
         assert!(barrows.len() >= 6, "{} barrows", barrows.len());
     }
 }

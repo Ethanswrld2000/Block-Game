@@ -18,7 +18,7 @@ use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 use super::dialogue::{Act, Anim, Mood, Offer};
 use super::motion::Spring;
 use super::voice::{self, Speech};
-use super::{EYES, Npc, NpcBook, Order};
+use super::{Npc, NpcBook, Order, EYES};
 use crate::camera::{FlyCamera, Menus};
 use crate::sound::PlaySound;
 use crate::theme::{self, colors, sizes};
@@ -27,23 +27,14 @@ pub struct TalkPlugin;
 
 impl Plugin for TalkPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Talk>()
-            .add_systems(crate::menu::GameStartup, spawn_ui)
-            .add_systems(
-                crate::menu::GameUpdate,
-                (
-                    prompt,
-                    input.in_set(TalkInput),
-                    run.in_set(TalkRun),
-                    camera,
-                    hide_hud,
-                    draw,
-                )
-                    .chain()
-                    .in_set(TalkSet)
-                    .after(super::NpcSet)
-                    .after(crate::interact::InteractSet),
-            );
+        app.init_resource::<Talk>().add_systems(crate::menu::GameStartup, spawn_ui).add_systems(
+            crate::menu::GameUpdate,
+            (prompt, input.in_set(TalkInput), run.in_set(TalkRun), camera, hide_hud, draw)
+                .chain()
+                .in_set(TalkSet)
+                .after(super::NpcSet)
+                .after(crate::interact::InteractSet),
+        );
     }
 }
 
@@ -186,52 +177,23 @@ struct ReplyText(usize);
 struct Prompt;
 
 fn spawn_ui(mut commands: Commands, theme: Res<theme::Theme>) {
-    let bar = |height_pct: f32| Node {
-        width: Val::Percent(100.0),
-        height: Val::Percent(height_pct),
-        flex_shrink: 0.0,
-        overflow: Overflow::clip(),
-        ..default()
-    };
+    let bar = |height_pct: f32| Node { width: Val::Percent(100.0), height: Val::Percent(height_pct), flex_shrink: 0.0, overflow: Overflow::clip(), ..default() };
     commands
         .spawn((
             TalkUi,
-            Node {
-                position_type: PositionType::Absolute,
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                flex_direction: FlexDirection::Column,
-                ..default()
-            },
+            Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), flex_direction: FlexDirection::Column, ..default() },
             GlobalZIndex(15),
             Visibility::Hidden,
         ))
         .with_children(|ui| {
             ui.spawn((
                 TopBar,
-                Node {
-                    padding: UiRect::axes(Val::Percent(6.0), Val::Px(14.0)),
-                    align_items: AlignItems::FlexEnd,
-                    column_gap: Val::Px(14.0),
-                    ..bar(0.0)
-                },
+                Node { padding: UiRect::axes(Val::Percent(6.0), Val::Px(14.0)), align_items: AlignItems::FlexEnd, column_gap: Val::Px(14.0), ..bar(0.0) },
                 BackgroundColor(Color::BLACK),
             ))
             .with_children(|b| {
-                b.spawn((
-                    NameText,
-                    Text::new(""),
-                    theme.bold(sizes::TITLE),
-                    TextColor(colors::HEADING),
-                ));
-                b.spawn((
-                    TitleText,
-                    theme::text("", sizes::LABEL, colors::MUTED),
-                    Node {
-                        margin: UiRect::bottom(Val::Px(4.0)),
-                        ..default()
-                    },
-                ));
+                b.spawn((NameText, Text::new(""), theme.bold(sizes::TITLE), TextColor(colors::HEADING)));
+                b.spawn((TitleText, theme::text("", sizes::LABEL, colors::MUTED), Node { margin: UiRect::bottom(Val::Px(4.0)), ..default() }));
             });
             // Replies, between the bars on the left.
             ui.spawn((
@@ -240,11 +202,7 @@ fn spawn_ui(mut commands: Commands, theme: Res<theme::Theme>) {
                     flex_grow: 1.0,
                     flex_direction: FlexDirection::Column,
                     justify_content: JustifyContent::FlexEnd,
-                    padding: UiRect {
-                        left: Val::Percent(6.0),
-                        bottom: Val::Px(18.0),
-                        ..default()
-                    },
+                    padding: UiRect { left: Val::Percent(6.0), bottom: Val::Px(18.0), ..default() },
                     row_gap: Val::Px(4.0),
                     ..default()
                 },
@@ -253,14 +211,7 @@ fn spawn_ui(mut commands: Commands, theme: Res<theme::Theme>) {
                 for i in 0..MAX_REPLIES {
                     r.spawn((
                         Reply(i),
-                        Node {
-                            padding: UiRect::axes(Val::Px(14.0), Val::Px(5.0)),
-                            column_gap: Val::Px(10.0),
-                            align_items: AlignItems::Center,
-                            align_self: AlignSelf::FlexStart,
-                            display: Display::None,
-                            ..default()
-                        },
+                        Node { padding: UiRect::axes(Val::Px(14.0), Val::Px(5.0)), column_gap: Val::Px(10.0), align_items: AlignItems::Center, align_self: AlignSelf::FlexStart, display: Display::None, ..default() },
                         BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.55)),
                     ))
                     .with_children(|row| {
@@ -281,51 +232,28 @@ fn spawn_ui(mut commands: Commands, theme: Res<theme::Theme>) {
                 BackgroundColor(Color::BLACK),
             ))
             .with_children(|b| {
-                b.spawn((
-                    LineText,
-                    theme::text("", sizes::LABEL, colors::TEXT),
-                    TextLayout::justify(Justify::Center),
-                ));
-                b.spawn((
-                    HintText,
-                    theme::text("", sizes::SMALL, colors::FAINT),
-                    Node {
-                        margin: UiRect::top(Val::Px(6.0)),
-                        ..default()
-                    },
-                ));
+                b.spawn((LineText, theme::text("", sizes::LABEL, colors::TEXT), TextLayout::justify(Justify::Center)));
+                b.spawn((HintText, theme::text("", sizes::SMALL, colors::FAINT), Node { margin: UiRect::top(Val::Px(6.0)), ..default() }));
             });
         });
     // "E  Talk to ..." under the crosshair.
-    commands
-        .spawn((
-            Prompt,
-            Node {
-                position_type: PositionType::Absolute,
-                width: Val::Percent(100.0),
-                top: Val::Percent(55.0),
-                justify_content: JustifyContent::Center,
-                ..default()
-            },
-            Visibility::Hidden,
-        ))
-        .with_children(|p| {
-            p.spawn(theme::text("", sizes::LABEL, colors::TEXT));
-        });
+    commands.spawn((
+        Prompt,
+        Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), top: Val::Percent(55.0), justify_content: JustifyContent::Center, ..default() },
+        Visibility::Hidden,
+    ))
+    .with_children(|p| {
+        p.spawn(theme::text("", sizes::LABEL, colors::TEXT));
+    });
 }
 
 /// The NPC under the crosshair within reach, if any.
-fn aimed(
-    cam: &Transform,
-    npcs: &Query<(Entity, &Transform, &mut Npc), Without<FlyCamera>>,
-) -> Option<Entity> {
+fn aimed(cam: &Transform, npcs: &Query<(Entity, &Transform, &mut Npc), Without<FlyCamera>>) -> Option<Entity> {
     let (o, d) = (cam.translation, cam.forward().as_vec3());
     npcs.iter()
         .filter_map(|(e, tf, _)| {
             let (min, max) = super::body::talk_box(tf.translation);
-            crate::interact::ray_box(o, d, min, max)
-                .filter(|&t| t <= REACH)
-                .map(|t| (e, t))
+            crate::interact::ray_box(o, d, min, max).filter(|&t| t <= REACH).map(|t| (e, t))
         })
         .min_by(|a, b| a.1.total_cmp(&b.1))
         .map(|(e, _)| e)
@@ -348,32 +276,16 @@ fn prompt(
     // `BLOCKGAME_TALK=1` talks to the nearest NPC in reach (screenshots).
     let auto = std::env::var_os("BLOCKGAME_TALK").is_some();
     let nearest = || {
-        npcs.iter()
-            .map(|(e, tf, _)| (e, tf.translation.distance(cam.0.translation)))
-            .filter(|(_, d)| *d < REACH * 2.0)
-            .min_by(|a, b| a.1.total_cmp(&b.1))
-            .map(|(e, _)| e)
+        npcs.iter().map(|(e, tf, _)| (e, tf.translation.distance(cam.0.translation))).filter(|(_, d)| *d < REACH * 2.0).min_by(|a, b| a.1.total_cmp(&b.1)).map(|(e, _)| e)
     };
-    let target = if talk.active() || menus.open {
-        None
-    } else {
-        aimed(cam.0, &npcs).or_else(|| if auto { nearest() } else { None })
-    };
-    let want = if target.is_some() {
-        Visibility::Inherited
-    } else {
-        Visibility::Hidden
-    };
+    let target = if talk.active() || menus.open { None } else { aimed(cam.0, &npcs).or_else(|| if auto { nearest() } else { None }) };
+    let want = if target.is_some() { Visibility::Inherited } else { Visibility::Hidden };
     if *vis != want {
         *vis = want;
     }
     let Some(e) = target else { return };
-    let Ok((_, _, mut npc)) = npcs.get_mut(e) else {
-        return;
-    };
-    let Some(kind) = book.kinds.get(npc.kind) else {
-        return;
-    };
+    let Ok((_, _, mut npc)) = npcs.get_mut(e) else { return };
+    let Some(kind) = book.kinds.get(npc.kind) else { return };
     if let Some(mut t) = kids.first().and_then(|k| texts.get_mut(*k).ok()) {
         let s = format!("E   Talk to {}", kind.name);
         if t.0 != s {
@@ -384,9 +296,7 @@ fn prompt(
     if !start {
         return;
     }
-    let Some(tree) = book.trees.get(&kind.dialogue) else {
-        return;
-    };
+    let Some(tree) = book.trees.get(&kind.dialogue) else { return };
     // Begin: the NPC stops and turns to you; time stops.
     npc.talking = true;
     npc.vel = Vec3::ZERO;
@@ -409,12 +319,7 @@ fn prompt(
 }
 
 fn begin_node(talk: &mut Talk, book: &NpcBook, npc: &Npc, node: String) {
-    let anim = book
-        .kinds
-        .get(npc.kind)
-        .and_then(|k| book.trees.get(&k.dialogue))
-        .and_then(|t| t.nodes.get(&node))
-        .and_then(|n| n.anim);
+    let anim = book.kinds.get(npc.kind).and_then(|k| book.trees.get(&k.dialogue)).and_then(|t| t.nodes.get(&node)).and_then(|n| n.anim);
     if let Some(a) = anim {
         talk.acts = talk.acts.wrapping_add(1);
         talk.act = Some((a, talk.acts));
@@ -426,16 +331,8 @@ fn begin_node(talk: &mut Talk, book: &NpcBook, npc: &Npc, node: String) {
 }
 
 fn begin_line(talk: &mut Talk, book: &NpcBook, npc: &Npc, t: f32) {
-    let Some(kind) = book.kinds.get(npc.kind) else {
-        return;
-    };
-    let Some(node) = book
-        .trees
-        .get(&kind.dialogue)
-        .and_then(|tr| tr.nodes.get(&talk.node))
-    else {
-        return;
-    };
+    let Some(kind) = book.kinds.get(npc.kind) else { return };
+    let Some(node) = book.trees.get(&kind.dialogue).and_then(|tr| tr.nodes.get(&talk.node)) else { return };
     let id = node.say.get(talk.line).map_or("", |s| s.as_str());
     talk.text = fill(book.lines.text(id), &talk.vars);
     talk.recorded = crate::lines::voice(id) != crate::lines::Voice::Babble;
@@ -465,12 +362,7 @@ fn input(
     mut talk: ResMut<Talk>,
     mut npcs: Query<&mut Npc>,
     window: Single<&Window, With<PrimaryWindow>>,
-    rows: Query<(
-        &Reply,
-        &ComputedNode,
-        &UiGlobalTransform,
-        &InheritedVisibility,
-    )>,
+    rows: Query<(&Reply, &ComputedNode, &UiGlobalTransform, &InheritedVisibility)>,
 ) {
     let Some(e) = talk.with else { return };
     if talk.leaving {
@@ -488,12 +380,7 @@ fn input(
         talk.leaving = true;
         return;
     };
-    let go = keys.any_just_pressed([
-        KeyCode::Space,
-        KeyCode::KeyE,
-        KeyCode::Enter,
-        KeyCode::NumpadEnter,
-    ]);
+    let go = keys.any_just_pressed([KeyCode::Space, KeyCode::KeyE, KeyCode::Enter, KeyCode::NumpadEnter]);
     if talk.choosing {
         let n = talk.offers.len();
         if n == 0 {
@@ -505,22 +392,11 @@ fn input(
         if keys.any_just_pressed([KeyCode::KeyW, KeyCode::ArrowUp]) {
             talk.selected = (talk.selected + n - 1) % n;
         }
-        let digits = [
-            KeyCode::Digit1,
-            KeyCode::Digit2,
-            KeyCode::Digit3,
-            KeyCode::Digit4,
-            KeyCode::Digit5,
-            KeyCode::Digit6,
-            KeyCode::Digit7,
-            KeyCode::Digit8,
-        ];
+        let digits = [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4, KeyCode::Digit5, KeyCode::Digit6, KeyCode::Digit7, KeyCode::Digit8];
         let mut pick = digits.iter().take(n).position(|k| keys.just_pressed(*k));
         // The mouse picks what it's over.
         if let Some(p) = window.physical_cursor_position()
-            && let Some((r, ..)) = rows
-                .iter()
-                .find(|(r, node, tf, v)| r.0 < n && v.get() && node.contains_point(**tf, p))
+            && let Some((r, ..)) = rows.iter().find(|(r, node, tf, v)| r.0 < n && v.get() && node.contains_point(**tf, p))
         {
             talk.selected = r.0;
             if mouse.just_pressed(MouseButton::Left) {
@@ -547,12 +423,8 @@ fn input(
 
 /// After a line: the next line, the replies, the next node or the end.
 fn next_line(talk: &mut Talk, book: &NpcBook, npc: &Npc) {
-    let Some(kind) = book.kinds.get(npc.kind) else {
-        return;
-    };
-    let Some(tree) = book.trees.get(&kind.dialogue) else {
-        return;
-    };
+    let Some(kind) = book.kinds.get(npc.kind) else { return };
+    let Some(tree) = book.trees.get(&kind.dialogue) else { return };
     let Some(node) = tree.nodes.get(&talk.node) else {
         talk.leaving = true;
         return;
@@ -585,15 +457,9 @@ fn next_line(talk: &mut Talk, book: &NpcBook, npc: &Npc) {
 }
 
 fn choose(talk: &mut Talk, book: &NpcBook, npc: &mut Npc, i: usize) {
-    let Some(offer) = talk.offers.get(i).cloned() else {
-        return;
-    };
-    let Some(kind) = book.kinds.get(npc.kind) else {
-        return;
-    };
-    let Some(tree) = book.trees.get(&kind.dialogue) else {
-        return;
-    };
+    let Some(offer) = talk.offers.get(i).cloned() else { return };
+    let Some(kind) = book.kinds.get(npc.kind) else { return };
+    let Some(tree) = book.trees.get(&kind.dialogue) else { return };
     let node = talk.node.clone();
     let mut asked = std::mem::take(&mut npc.asked);
     let out = tree.pick(&node, offer.index, &mut npc.flags, &mut asked);
@@ -634,11 +500,7 @@ fn run(
     cam: Single<&Transform, With<FlyCamera>>,
     mut sounds: MessageWriter<PlaySound>,
     mut cursor: Single<&mut CursorOptions, With<PrimaryWindow>>,
-    (mut commands, server, settings): (
-        Commands,
-        Res<AssetServer>,
-        Option<Res<crate::settings::Settings>>,
-    ),
+    (mut commands, server, settings): (Commands, Res<AssetServer>, Option<Res<crate::settings::Settings>>),
 ) {
     let dt = real.delta_secs().min(0.05);
     let Some(e) = talk.with else { return };
@@ -662,9 +524,7 @@ fn run(
             if let Order::Wander { home } = npc.order
                 && home.is_nan()
             {
-                npc.order = Order::Wander {
-                    home: tf.translation,
-                };
+                npc.order = Order::Wander { home: tf.translation };
             }
             talk.with = None;
             talk.bars = Spring::default();
@@ -681,11 +541,7 @@ fn run(
     // A `then` hop into a new node: enter it and start its first line.
     if talk.text.is_empty() && !talk.choosing {
         let node = talk.node.clone();
-        if let Some(tree) = book
-            .kinds
-            .get(npc.kind)
-            .and_then(|k| book.trees.get(&k.dialogue))
-        {
+        if let Some(tree) = book.kinds.get(npc.kind).and_then(|k| book.trees.get(&k.dialogue)) {
             tree.enter(&node, &mut npc.flags);
         }
         begin_node(&mut talk, &book, &npc, node);
@@ -702,40 +558,22 @@ fn run(
     let pitch = book.kinds.get(npc.kind).map_or(1.0, |k| k.voice.pitch);
     if talk.recorded && before < 0.0 && talk.t >= 0.0 {
         let volume = settings.as_ref().map_or(1.0, |s| s.volume);
-        crate::lines::play_recording(
-            &mut commands,
-            &server,
-            &talk.line_id,
-            volume,
-            Some(tf.translation + Vec3::Y * EYES),
-        );
+        crate::lines::play_recording(&mut commands, &server, &talk.line_id, volume, Some(tf.translation + Vec3::Y * EYES));
     }
     let recorded = talk.recorded;
     for s in talk.speech.starting(before, talk.t).filter(|_| !recorded) {
         // A little pitch movement per syllable, like speech has.
         let lilt = 1.0 + 0.07 * ((s.start * 7.3).sin() + 0.5 * (s.start * 2.1).cos());
-        sounds.write(PlaySound {
-            at: Some(tf.translation + Vec3::Y * EYES),
-            ..PlaySound::new(format!("voice_{}", s.vowel)).speed(pitch * lilt)
-        });
+        sounds.write(PlaySound { at: Some(tf.translation + Vec3::Y * EYES), ..PlaySound::new(format!("voice_{}", s.vowel)).speed(pitch * lilt) });
     }
     let speaking = talk.t >= 0.0 && talk.t < talk.speech.length;
-    npc.mouth = if speaking {
-        talk.speech.mouth(talk.t)
-    } else {
-        (0.0, 0.8)
-    };
+    npc.mouth = if speaking { talk.speech.mouth(talk.t) } else { (0.0, 0.8) };
     npc.speaking = if speaking { 1.0 } else { 0.0 };
     npc.mood = talk.mood;
     npc.act = talk.act;
     // The last line of a node done: show the replies straight away.
     if !talk.choosing && talk.t >= talk.speech.length + 0.15 {
-        let last = book
-            .kinds
-            .get(npc.kind)
-            .and_then(|k| book.trees.get(&k.dialogue))
-            .and_then(|t| t.nodes.get(&talk.node))
-            .is_some_and(|n| talk.line + 1 >= n.say.len() && !n.choices.is_empty());
+        let last = book.kinds.get(npc.kind).and_then(|k| book.trees.get(&k.dialogue)).and_then(|t| t.nodes.get(&talk.node)).is_some_and(|n| talk.line + 1 >= n.say.len() && !n.choices.is_empty());
         if last {
             next_line(&mut talk, &book, &npc);
         }
@@ -743,12 +581,7 @@ fn run(
 }
 
 /// Ease the view round to frame the speaker and zoom in a little.
-fn camera(
-    real: Res<Time<Real>>,
-    mut talk: ResMut<Talk>,
-    npcs: Query<&Transform, (With<Npc>, Without<FlyCamera>)>,
-    cam: Single<(&mut Transform, &mut FlyCamera, &mut Projection)>,
-) {
+fn camera(real: Res<Time<Real>>, mut talk: ResMut<Talk>, npcs: Query<&Transform, (With<Npc>, Without<FlyCamera>)>, cam: Single<(&mut Transform, &mut FlyCamera, &mut Projection)>) {
     let Some(e) = talk.with else { return };
     let dt = real.delta_secs().min(0.05);
     let (mut tf, mut fly, mut proj) = cam.into_inner();
@@ -777,32 +610,12 @@ fn camera(
 #[allow(clippy::type_complexity)]
 fn hide_hud(
     mut talk: ResMut<Talk>,
-    mut roots: Query<
-        (Entity, &mut Visibility),
-        (
-            With<Node>,
-            Without<ChildOf>,
-            Without<TalkUi>,
-            Without<Prompt>,
-            Without<KeepShown>,
-        ),
-    >,
+    mut roots: Query<(Entity, &mut Visibility), (With<Node>, Without<ChildOf>, Without<TalkUi>, Without<Prompt>, Without<KeepShown>)>,
     mut hands: Query<&mut Visibility, (With<crate::hands::HandRoot>, Without<Node>)>,
-    mut ui: Single<
-        &mut Visibility,
-        (
-            With<TalkUi>,
-            Without<crate::hands::HandRoot>,
-            Without<Prompt>,
-        ),
-    >,
+    mut ui: Single<&mut Visibility, (With<TalkUi>, Without<crate::hands::HandRoot>, Without<Prompt>)>,
 ) {
     let on = talk.active() || talk.scene.is_some();
-    let want = if on {
-        Visibility::Inherited
-    } else {
-        Visibility::Hidden
-    };
+    let want = if on { Visibility::Inherited } else { Visibility::Hidden };
     if **ui != want {
         **ui = want;
     }
@@ -845,10 +658,7 @@ fn draw(
         Query<(&ReplyTone, &mut Text)>,
         Query<(&ReplyText, &mut Text, &mut TextColor)>,
     )>,
-    mut rows: Query<
-        (&Reply, &mut Node, &mut BackgroundColor),
-        (Without<TopBar>, Without<BottomBar>),
-    >,
+    mut rows: Query<(&Reply, &mut Node, &mut BackgroundColor), (Without<TopBar>, Without<BottomBar>)>,
 ) {
     let set = |t: &mut Text, s: &str| {
         if t.0 != s {
@@ -886,24 +696,14 @@ fn draw(
     let bars = talk.bars.x.clamp(0.0, 1.0);
     top.height = Val::Percent(TOP_BAR * bars);
     bottom.height = Val::Percent(BOTTOM_BAR * bars);
-    let Some(kind) = npcs.get(e).ok().and_then(|n| book.kinds.get(n.kind)) else {
-        return;
-    };
+    let Some(kind) = npcs.get(e).ok().and_then(|n| book.kinds.get(n.kind)) else { return };
     for mut t in &mut texts.p0() {
         set(&mut t, &kind.name);
     }
     for mut t in &mut texts.p1() {
         set(&mut t, &kind.title);
     }
-    let shown: String = talk
-        .text
-        .chars()
-        .take(if talk.t < 0.0 {
-            0
-        } else {
-            talk.speech.shown(talk.t)
-        })
-        .collect();
+    let shown: String = talk.text.chars().take(if talk.t < 0.0 { 0 } else { talk.speech.shown(talk.t) }).collect();
     for mut t in &mut texts.p2() {
         set(&mut t, &shown);
     }
@@ -919,18 +719,11 @@ fn draw(
     }
     let show = talk.choosing && !talk.leaving;
     for (ReplyTone(i), mut t) in &mut texts.p4() {
-        let s = talk
-            .offers
-            .get(*i)
-            .and_then(|o| o.tone.as_ref())
-            .map(|t| format!("[{t}]"))
-            .unwrap_or_default();
+        let s = talk.offers.get(*i).and_then(|o| o.tone.as_ref()).map(|t| format!("[{t}]")).unwrap_or_default();
         set(&mut t, &s);
     }
     for (ReplyText(i), mut t, mut color) in &mut texts.p5() {
-        let Some(o) = talk.offers.get(*i) else {
-            continue;
-        };
+        let Some(o) = talk.offers.get(*i) else { continue };
         set(&mut t, &format!("{}.  {}", i + 1, o.text));
         let c = if *i == talk.selected {
             colors::HEADING
@@ -944,11 +737,7 @@ fn draw(
         }
     }
     for (Reply(i), mut node, mut bg) in &mut rows {
-        let d = if show && *i < talk.offers.len() {
-            Display::Flex
-        } else {
-            Display::None
-        };
+        let d = if show && *i < talk.offers.len() { Display::Flex } else { Display::None };
         if node.display != d {
             node.display = d;
         }

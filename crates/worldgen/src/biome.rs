@@ -129,22 +129,14 @@ impl Biomes {
     pub fn from_ron(text: &str, blocks: &BlockRegistry) -> Result<Self, String> {
         let specs: Vec<BiomeSpec> = ron::from_str(text).map_err(|e| format!("biomes.ron: {e}"))?;
         let block = |biome: &str, name: &str| {
-            blocks
-                .id(name)
-                .ok_or_else(|| format!("biome '{biome}' uses unknown block '{name}'"))
+            blocks.id(name).ok_or_else(|| format!("biome '{biome}' uses unknown block '{name}'"))
         };
         let mut list = Vec::new();
         for s in specs {
             let plants = s
                 .plants
                 .iter()
-                .map(|p| {
-                    Ok(Plant {
-                        block: block(&s.name, &p.block)?,
-                        chance: p.chance,
-                        shore: p.shore,
-                    })
-                })
+                .map(|p| Ok(Plant { block: block(&s.name, &p.block)?, chance: p.chance, shore: p.shore }))
                 .collect::<Result<Vec<_>, String>>()?;
             list.push(Biome {
                 surface: block(&s.name, &s.surface)?,
@@ -168,26 +160,14 @@ impl Biomes {
         }
         for b in &list {
             if b.guaranteed.is_some() && b.region != Region::Main {
-                return Err(format!(
-                    "biome '{}': only main island biomes can be guaranteed",
-                    b.name
-                ));
+                return Err(format!("biome '{}': only main island biomes can be guaranteed", b.name));
             }
         }
-        if !list
-            .iter()
-            .any(|b| b.region == Region::Main && b.guaranteed.is_none())
-        {
+        if !list.iter().any(|b| b.region == Region::Main && b.guaranteed.is_none()) {
             return Err("biomes.ron needs a main island biome".into());
         }
-        let sky = list
-            .iter()
-            .position(|b| b.region == Region::Sky)
-            .ok_or("biomes.ron needs a sky biome")?;
-        let spawn = list
-            .iter()
-            .position(|b| b.name == "great_swamp")
-            .ok_or("biomes.ron needs a 'great_swamp' biome")?;
+        let sky = list.iter().position(|b| b.region == Region::Sky).ok_or("biomes.ron needs a sky biome")?;
+        let spawn = list.iter().position(|b| b.name == "great_swamp").ok_or("biomes.ron needs a 'great_swamp' biome")?;
         Ok(Self { list, sky, spawn })
     }
 
@@ -205,42 +185,26 @@ impl Biomes {
 
     /// Is any biome listed for this region?
     pub fn has(&self, region: Region) -> bool {
-        self.list
-            .iter()
-            .any(|b| b.region == region && b.guaranteed.is_none())
+        self.list.iter().any(|b| b.region == region && b.guaranteed.is_none())
     }
 
     /// Biomes placed once per world, by index.
     pub fn guaranteed(&self) -> impl Iterator<Item = (usize, Guaranteed)> + '_ {
-        self.list
-            .iter()
-            .enumerate()
-            .filter_map(|(i, b)| b.guaranteed.map(|g| (i, g)))
+        self.list.iter().enumerate().filter_map(|(i, b)| b.guaranteed.map(|g| (i, g)))
     }
 
     /// Pick a main island biome from climate and height above sea level.
     pub fn select(&self, temperature: f32, humidity: f32, height: i32) -> usize {
-        self.select_in(Region::Main, temperature, humidity, height)
-            .unwrap_or(self.spawn)
+        self.select_in(Region::Main, temperature, humidity, height).unwrap_or(self.spawn)
     }
 
     /// Pick a biome of a region from climate and height (above sea level, or above
     /// the island's base off the main island). `None` if the region lists none
     /// that fit. Guaranteed biomes are never picked here.
-    pub fn select_in(
-        &self,
-        region: Region,
-        temperature: f32,
-        humidity: f32,
-        height: i32,
-    ) -> Option<usize> {
+    pub fn select_in(&self, region: Region, temperature: f32, humidity: f32, height: i32) -> Option<usize> {
         let mut best: Option<(f32, usize)> = None;
         for (i, b) in self.list.iter().enumerate() {
-            if b.region != region
-                || b.guaranteed.is_some()
-                || height < b.min_height
-                || height > b.max_height
-            {
+            if b.region != region || b.guaranteed.is_some() || height < b.min_height || height > b.max_height {
                 continue;
             }
             let d = (temperature - b.temperature).powi(2) + (humidity - b.humidity).powi(2);

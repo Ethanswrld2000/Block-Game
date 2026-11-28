@@ -8,15 +8,13 @@ use bevy::prelude::*;
 use crate::inventory::PickedUp;
 use crate::item_art::ItemArt;
 use crate::items::{ItemId, Items};
-use crate::theme::{self, Theme, colors, sizes};
+use crate::theme::{self, colors, sizes, Theme};
 
 pub struct PickupsPlugin;
 
 impl Plugin for PickupsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Feed>()
-            .add_systems(crate::menu::GamePostStartup, spawn)
-            .add_systems(crate::menu::GameUpdate, (take, show).chain());
+        app.init_resource::<Feed>().add_systems(crate::menu::GamePostStartup, spawn).add_systems(crate::menu::GameUpdate, (take, show).chain());
     }
 }
 
@@ -67,24 +65,13 @@ impl Feed {
         if count == 0 {
             return;
         }
-        if let Some(n) = self
-            .notes
-            .iter_mut()
-            .rev()
-            .find(|n| n.item == item && now - n.bumped <= MERGE && !n.fading(now))
-        {
+        if let Some(n) = self.notes.iter_mut().rev().find(|n| n.item == item && now - n.bumped <= MERGE && !n.fading(now)) {
             n.count += count;
             n.bumped = now;
             return;
         }
         self.next += 1;
-        self.notes.push(Note {
-            id: self.next,
-            item,
-            count,
-            born: now,
-            bumped: now,
-        });
+        self.notes.push(Note { id: self.next, item, count, born: now, bumped: now });
         while self.notes.len() > MOST {
             self.notes.remove(0);
         }
@@ -146,13 +133,7 @@ fn show(
     art: Option<Res<ItemArt>>,
     feed: Res<Feed>,
     root: Single<Entity, With<FeedRoot>>,
-    mut notes: Query<(
-        Entity,
-        &mut NoteUi,
-        &mut UiTransform,
-        &mut ImageNode,
-        &Children,
-    )>,
+    mut notes: Query<(Entity, &mut NoteUi, &mut UiTransform, &mut ImageNode, &Children)>,
     mut texts: Query<(&mut Text, &mut TextColor), With<NoteText>>,
     mut pics: Query<&mut ImageNode, Without<NoteUi>>,
     kids: Query<&Children>,
@@ -165,9 +146,7 @@ fn show(
         }
     }
     for n in &feed.notes {
-        let Some((_, mut ui, mut tf, mut frame, children)) =
-            notes.iter_mut().find(|(_, ui, ..)| ui.id == n.id)
-        else {
+        let Some((_, mut ui, mut tf, mut frame, children)) = notes.iter_mut().find(|(_, ui, ..)| ui.id == n.id) else {
             spawn_note(&mut commands, *root, &theme, &items, art.as_deref(), n);
             continue;
         };
@@ -176,16 +155,9 @@ fn show(
         // In: slides from the right in 3 steps. Added to: a small hop left.
         // Out: slides back right as it fades, in the fade's steps.
         let slide_in = 12.0 * (1.0 - theme::stepped((now - n.born) / theme::SNAP, 3));
-        let bump = if n.bumped > n.born {
-            -6.0 * (1.0 - theme::stepped((now - n.bumped) / theme::SNAP, 3))
-        } else {
-            0.0
-        };
+        let bump = if n.bumped > n.born { -6.0 * (1.0 - theme::stepped((now - n.bumped) / theme::SNAP, 3)) } else { 0.0 };
         let out = (1.0 - a) * 16.0;
-        let want = UiTransform {
-            translation: Val2::px(slide_in + bump + out, 0.0),
-            ..default()
-        };
+        let want = UiTransform { translation: Val2::px(slide_in + bump + out, 0.0), ..default() };
         if *tf != want {
             *tf = want;
         }
@@ -217,61 +189,24 @@ fn line(items: &Items, n: &Note) -> String {
     format!("+{}  {}", n.count, items.get(n.item).title)
 }
 
-fn spawn_note(
-    commands: &mut Commands,
-    root: Entity,
-    theme: &Theme,
-    items: &Items,
-    art: Option<&ItemArt>,
-    n: &Note,
-) {
+fn spawn_note(commands: &mut Commands, root: Entity, theme: &Theme, items: &Items, art: Option<&ItemArt>, n: &Note) {
     commands
         .spawn((
-            NoteUi {
-                id: n.id,
-                count: n.count,
-            },
+            NoteUi { id: n.id, count: n.count },
             ChildOf(root),
-            Node {
-                align_items: AlignItems::Center,
-                column_gap: Val::Px(8.0),
-                padding: UiRect::new(Val::Px(8.0), Val::Px(12.0), Val::Px(4.0), Val::Px(4.0)),
-                ..default()
-            },
-            UiTransform {
-                translation: Val2::px(12.0, 0.0),
-                ..default()
-            },
+            Node { align_items: AlignItems::Center, column_gap: Val::Px(8.0), padding: UiRect::new(Val::Px(8.0), Val::Px(12.0), Val::Px(4.0), Val::Px(4.0)), ..default() },
+            UiTransform { translation: Val2::px(12.0, 0.0), ..default() },
             theme.skin("panel_light"),
         ))
         .with_children(|c| {
-            c.spawn(Node {
-                width: Val::Px(ICON),
-                height: Val::Px(ICON),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                ..default()
-            })
-            .with_children(|p| {
-                if let Some((img, size)) =
-                    art.and_then(|a| Some((a.image(n.item)?, a.size(n.item)?)))
-                {
+            c.spawn(Node { width: Val::Px(ICON), height: Val::Px(ICON), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() }).with_children(|p| {
+                if let Some((img, size)) = art.and_then(|a| Some((a.image(n.item)?, a.size(n.item)?))) {
                     let s = size.as_vec2();
                     let k = 2.0f32.min(ICON / s.x).min(ICON / s.y);
-                    p.spawn((
-                        img,
-                        Node {
-                            width: Val::Px(s.x * k),
-                            height: Val::Px(s.y * k),
-                            ..default()
-                        },
-                    ));
+                    p.spawn((img, Node { width: Val::Px(s.x * k), height: Val::Px(s.y * k), ..default() }));
                 }
             });
-            c.spawn((
-                NoteText,
-                theme::text(line(items, n), sizes::BODY, colors::TEXT),
-            ));
+            c.spawn((NoteText, theme::text(line(items, n), sizes::BODY, colors::TEXT)));
         });
 }
 

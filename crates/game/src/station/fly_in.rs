@@ -7,7 +7,7 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
-use super::forge::{APPEAR, GATHER, ease_out_back, gather_strength};
+use super::forge::{ease_out_back, gather_strength, APPEAR, GATHER};
 use super::tree::{NodeFrame, TreeUi};
 use crate::inventory::grid::Stack;
 use crate::item_art::ItemArt;
@@ -56,45 +56,22 @@ pub(super) fn flight(from: Vec2, to: Vec2, t: f32) -> (Vec2, f32, f32) {
     let k = (t / GATHER).clamp(0.0, 1.0);
     let pull = k * k * (3.0 - 2.0 * k);
     let sway = (t * 9.0).sin() * 14.0 * (1.0 - pull) * pull.min(0.5) * 2.0;
-    (
-        from.lerp(to, pull) + Vec2::new(sway, 0.0),
-        1.0 + 0.35 * (1.0 - pull * pull),
-        gather_strength(t),
-    )
+    (from.lerp(to, pull) + Vec2::new(sway, 0.0), 1.0 + 0.35 * (1.0 - pull * pull), gather_strength(t))
 }
 
 /// Start a flier for each thing put in.
-pub(super) fn launch(
-    mut commands: Commands,
-    mut put: MessageReader<FlyIn>,
-    theme: Res<Theme>,
-    items: Res<Items>,
-    art: Option<Res<ItemArt>>,
-    mut sound: MessageWriter<PlaySound>,
-) {
+pub(super) fn launch(mut commands: Commands, mut put: MessageReader<FlyIn>, theme: Res<Theme>, items: Res<Items>, art: Option<Res<ItemArt>>, mut sound: MessageWriter<PlaySound>) {
     let Some(art) = art else {
         put.clear();
         return;
     };
     let mut n = 0;
     for f in put.read() {
-        let Some(id) = items.id(&f.item) else {
-            continue;
-        };
+        let Some(id) = items.id(&f.item) else { continue };
         commands
             .spawn((
-                Flier {
-                    item: f.item.clone(),
-                    step: f.step.clone(),
-                    t: -STAGGER * n as f32,
-                    from: None,
-                },
-                Node {
-                    position_type: PositionType::Absolute,
-                    width: Val::Px(ICON),
-                    height: Val::Px(ICON),
-                    ..default()
-                },
+                Flier { item: f.item.clone(), step: f.step.clone(), t: -STAGGER * n as f32, from: None },
+                Node { position_type: PositionType::Absolute, width: Val::Px(ICON), height: Val::Px(ICON), ..default() },
                 UiTransform::default(),
                 GlobalZIndex(26),
                 Visibility::Hidden,
@@ -102,17 +79,8 @@ pub(super) fn launch(
             .with_children(|c| {
                 c.spawn((
                     FlierGlow,
-                    theme
-                        .image("slot_glow")
-                        .with_color(Color::WHITE.with_alpha(0.0)),
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(-7.0),
-                        top: Val::Px(-7.0),
-                        width: Val::Px(ICON + 14.0),
-                        height: Val::Px(ICON + 14.0),
-                        ..default()
-                    },
+                    theme.image("slot_glow").with_color(Color::WHITE.with_alpha(0.0)),
+                    Node { position_type: PositionType::Absolute, left: Val::Px(-7.0), top: Val::Px(-7.0), width: Val::Px(ICON + 14.0), height: Val::Px(ICON + 14.0), ..default() },
                 ));
                 crate::inventory::ui::icon(c, &items, &art, Stack::new(id, 1), ICON, ICON, false);
             });
@@ -130,14 +98,7 @@ pub(super) fn fly(
     time: Res<Time<Real>>,
     tree: Res<TreeUi>,
     window: Single<&Window, With<PrimaryWindow>>,
-    mut fliers: Query<(
-        Entity,
-        &mut Flier,
-        &mut Node,
-        &mut UiTransform,
-        &mut Visibility,
-        &Children,
-    )>,
+    mut fliers: Query<(Entity, &mut Flier, &mut Node, &mut UiTransform, &mut Visibility, &Children)>,
     mut glows: Query<&mut ImageNode, With<FlierGlow>>,
     needs: Query<(Entity, &NeedIcon, &UiGlobalTransform, &InheritedVisibility)>,
     frames: Query<(&NodeFrame, &UiGlobalTransform)>,
@@ -157,23 +118,13 @@ pub(super) fn fly(
             continue;
         }
         // Its picture under "It takes", else (the step got finished) the step on the tree.
-        let need = needs
-            .iter()
-            .find(|(_, n, _, v)| n.0 == f.item && v.get())
-            .map(|(e, _, g, _)| (Some(e), g.translation));
-        let Some((target, at)) = need.or_else(|| {
-            frames
-                .iter()
-                .find(|(n, _)| n.0 == f.step)
-                .map(|(_, g)| (None, g.translation))
-        }) else {
+        let need = needs.iter().find(|(_, n, _, v)| n.0 == f.item && v.get()).map(|(e, _, g, _)| (Some(e), g.translation));
+        let Some((target, at)) = need.or_else(|| frames.iter().find(|(n, _)| n.0 == f.step).map(|(_, g)| (None, g.translation))) else {
             commands.entity(e).despawn();
             continue;
         };
         let to = at / scale - Vec2::splat(ICON * 0.5);
-        let from = *f
-            .from
-            .get_or_insert(Vec2::new(to.x, window.height() + BELOW));
+        let from = *f.from.get_or_insert(Vec2::new(to.x, window.height() + BELOW));
         if f.t >= GATHER {
             commands.entity(e).despawn();
             sound.write(PlaySound::new("craft_pop").gain(1.0));
@@ -218,9 +169,7 @@ mod tests {
         assert!((p - to).length() < 1e-3, "lands at {p}");
         assert!((s - 1.0).abs() < 1e-3);
         // Always rising, never past the picture.
-        let ys: Vec<f32> = (0..=60)
-            .map(|i| flight(from, to, i as f32 * GATHER / 60.0).0.y)
-            .collect();
+        let ys: Vec<f32> = (0..=60).map(|i| flight(from, to, i as f32 * GATHER / 60.0).0.y).collect();
         assert!(ys.windows(2).all(|w| w[1] <= w[0] + 1e-3));
     }
 }

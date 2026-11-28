@@ -5,7 +5,7 @@
 //! cliff faces. Small rocks (pebbles) are scattered on bare ground too.
 
 use voxel::chunk::index;
-use voxel::{BlockId, CHUNK_SIZE, CHUNK_SIZE_I32, ChunkPos};
+use voxel::{BlockId, ChunkPos, CHUNK_SIZE, CHUNK_SIZE_I32};
 
 use crate::util::{hash2, smoothstep, unit};
 use crate::{Column, WorldGen};
@@ -14,21 +14,13 @@ use crate::{Column, WorldGen};
 const PEBBLES: f32 = 0.006;
 const PEBBLES_STONY: f32 = 0.02;
 
-pub(crate) fn place(
-    wg: &WorldGen,
-    pos: ChunkPos,
-    cols: &[[Column; CHUNK_SIZE]; CHUNK_SIZE],
-    dense: &mut [BlockId],
-) {
+pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, cols: &[[Column; CHUNK_SIZE]; CHUNK_SIZE], dense: &mut [BlockId]) {
     let o = pos.origin();
     let villages = wg.villages_in(o.x, o.z, o.x + CHUNK_SIZE_I32, o.z + CHUNK_SIZE_I32);
     for (lz, row) in cols.iter().enumerate() {
         for (lx, col) in row.iter().enumerate() {
             let biome = wg.biomes.get(col.biome);
-            if col.land == crate::Land::Void
-                || col.climate.overhang > 0.02
-                || col.height < col.water
-            {
+            if col.land == crate::Land::Void || col.climate.overhang > 0.02 || col.height < col.water {
                 continue;
             }
             // The plant goes in the block above the ground.
@@ -57,8 +49,7 @@ pub(crate) fn place(
                 continue;
             }
             // Patches thicken plants; even the gaps between them keep some.
-            let patch = 0.45
-                + smoothstep(-0.45, 0.35, wg.plant_patch.get_noise_2d(x as f32, z as f32)) * 1.1;
+            let patch = 0.45 + smoothstep(-0.45, 0.35, wg.plant_patch.get_noise_2d(x as f32, z as f32)) * 1.1;
             for (i, p) in biome.plants.iter().enumerate() {
                 if p.shore && col.height > col.water.saturating_add(1) {
                     continue;

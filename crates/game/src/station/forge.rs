@@ -49,13 +49,7 @@ pub(super) struct Forge {
 
 impl Forge {
     pub fn new(to: Vec3, used: Vec<(String, usize)>) -> Self {
-        Self {
-            to,
-            used,
-            t: 0.0,
-            popped: false,
-            sparkle: 0.0,
-        }
+        Self { to, used, t: 0.0, popped: false, sparkle: 0.0 }
     }
 }
 
@@ -94,29 +88,9 @@ fn wear(
     strength: f32,
 ) {
     let Some(m) = std.get(&base.0) else { return };
-    let size = m
-        .base_color_texture
-        .as_ref()
-        .and_then(|i| images.get(i))
-        .map_or(Vec2::splat(256.0), |i| i.size_f32());
-    let mat = glints.add(GlintMaterial {
-        base: m.clone(),
-        extension: GlintExtension {
-            glint: Vec4::new(strength, 0.0, size.x, size.y),
-        },
-    });
-    commands
-        .entity(e)
-        .remove::<MeshMaterial3d<StandardMaterial>>()
-        .insert((
-            MeshMaterial3d(mat.clone()),
-            Glint {
-                base: base.0.clone(),
-                mat,
-                from: tf.translation,
-                scale: tf.scale.x,
-            },
-        ));
+    let size = m.base_color_texture.as_ref().and_then(|i| images.get(i)).map_or(Vec2::splat(256.0), |i| i.size_f32());
+    let mat = glints.add(GlintMaterial { base: m.clone(), extension: GlintExtension { glint: Vec4::new(strength, 0.0, size.x, size.y) } });
+    commands.entity(e).remove::<MeshMaterial3d<StandardMaterial>>().insert((MeshMaterial3d(mat.clone()), Glint { base: base.0.clone(), mat, from: tf.translation, scale: tf.scale.x }));
 }
 
 /// Run the craft coming together.
@@ -125,16 +99,7 @@ pub(super) fn forge(
     mut commands: Commands,
     time: Res<Time>,
     mut at: ResMut<AtBench>,
-    plain: Query<
-        (
-            Entity,
-            &Transform,
-            &MeshMaterial3d<StandardMaterial>,
-            Has<MadeModel>,
-            Option<&PartOf>,
-        ),
-        (With<BoardModel>, Without<Glint>),
-    >,
+    plain: Query<(Entity, &Transform, &MeshMaterial3d<StandardMaterial>, Has<MadeModel>, Option<&PartOf>), (With<BoardModel>, Without<Glint>)>,
     mut glinting: Query<(Entity, &mut Transform, &Glint)>,
     std: Res<Assets<StandardMaterial>>,
     images: Res<Assets<Image>>,
@@ -147,10 +112,7 @@ pub(super) fn forge(
         at.forge = None;
         // Left mid-craft: whatever still glints goes back to its own look.
         for (e, _, g) in &glinting {
-            commands
-                .entity(e)
-                .remove::<(Glint, MeshMaterial3d<GlintMaterial>)>()
-                .insert(MeshMaterial3d(g.base.clone()));
+            commands.entity(e).remove::<(Glint, MeshMaterial3d<GlintMaterial>)>().insert(MeshMaterial3d(g.base.clone()));
         }
         return;
     };
@@ -167,11 +129,8 @@ pub(super) fn forge(
     }
     f.t += dt;
     // Screenshots: `BLOCKGAME_FORGE=0.8` holds the gathering there.
-    if let Some(hold) = *hold.get_or_insert_with(|| {
-        std::env::var("BLOCKGAME_FORGE")
-            .ok()
-            .and_then(|v| v.parse().ok())
-    }) && !f.popped
+    if let Some(hold) = *hold.get_or_insert_with(|| std::env::var("BLOCKGAME_FORGE").ok().and_then(|v| v.parse().ok()))
+        && !f.popped
     {
         f.t = f.t.min(hold);
     }
@@ -184,8 +143,7 @@ pub(super) fn forge(
         let n = glinting.iter().count().max(1) as f32;
         for (i, (_, mut tf, g)) in glinting.iter_mut().enumerate() {
             let a = now * (2.0 + 4.0 * k) + i as f32 / n * std::f32::consts::TAU;
-            let orbit =
-                Vec3::new(a.cos(), 0.0, a.sin()) * 0.05 * (1.0 - pull) * pull.min(0.5) * 2.0;
+            let orbit = Vec3::new(a.cos(), 0.0, a.sin()) * 0.05 * (1.0 - pull) * pull.min(0.5) * 2.0;
             tf.translation = g.from.lerp(mid, pull) + orbit;
             tf.scale = Vec3::splat(g.scale * (1.0 - 0.35 * pull * pull));
             tf.rotate_y(dt * 6.0 * k);
@@ -227,10 +185,7 @@ pub(super) fn forge(
             m.extension.glint.y = now;
         }
         if k >= 1.0 {
-            commands
-                .entity(e)
-                .remove::<(Glint, MeshMaterial3d<GlintMaterial>)>()
-                .insert(MeshMaterial3d(g.base.clone()));
+            commands.entity(e).remove::<(Glint, MeshMaterial3d<GlintMaterial>)>().insert(MeshMaterial3d(g.base.clone()));
         }
     }
     at.forge = if k >= 1.0 { None } else { Some(f) };
@@ -244,9 +199,7 @@ mod tests {
     fn the_glint_grows_in_flashes_to_full() {
         assert_eq!(gather_strength(0.0), 0.0);
         // Flashes: it doesn't only rise.
-        let s: Vec<f32> = (0..=150)
-            .map(|i| gather_strength(i as f32 * GATHER / 150.0))
-            .collect();
+        let s: Vec<f32> = (0..=150).map(|i| gather_strength(i as f32 * GATHER / 150.0)).collect();
         assert!(s.windows(2).any(|w| w[1] < w[0]), "flashes");
         // Stronger late than early.
         let early: f32 = s[..50].iter().sum();

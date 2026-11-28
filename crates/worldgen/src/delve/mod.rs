@@ -17,10 +17,7 @@ pub(crate) use draw::fill;
 use serde::Deserialize;
 use voxel::{BlockId, BlockRegistry};
 
-pub use floor::{
-    ChestKind, ChestSpot, Doorway, Floor, FloorPlan, HangKind, Hanging, HazardSpot, Link, Puzzle,
-    Reward, Room, floor, floors,
-};
+pub use floor::{floor, floors, ChestKind, ChestSpot, Doorway, Floor, FloorPlan, HangKind, Hanging, HazardSpot, Link, Puzzle, Reward, Room};
 
 /// Where the floors are built: far out in the empty sky, above every island
 /// (sky islands stop at y 600) and under the ceiling.
@@ -92,16 +89,7 @@ pub enum Hazard {
 }
 
 impl Hazard {
-    pub const ALL: [Hazard; 8] = [
-        Hazard::Spikes,
-        Hazard::Pit,
-        Hazard::Oil,
-        Hazard::Barrel,
-        Hazard::Darts,
-        Hazard::Blade,
-        Hazard::Collapse,
-        Hazard::FireJet,
-    ];
+    pub const ALL: [Hazard; 8] = [Hazard::Spikes, Hazard::Pit, Hazard::Oil, Hazard::Barrel, Hazard::Darts, Hazard::Blade, Hazard::Collapse, Hazard::FireJet];
 }
 
 /// How a floor's puzzle room is solved.
@@ -222,20 +210,10 @@ pub struct Delves {
 }
 
 impl Delves {
-    pub fn load(
-        dungeons_ron: &str,
-        rooms_ron: &str,
-        blocks: &BlockRegistry,
-    ) -> Result<Self, String> {
-        let d: DungeonsRon =
-            ron::from_str(dungeons_ron).map_err(|e| format!("dungeons.ron: {e}"))?;
-        let rooms: Vec<RoomDef> =
-            ron::from_str(rooms_ron).map_err(|e| format!("rooms.ron: {e}"))?;
-        let b = |n: &str| {
-            blocks
-                .id(n)
-                .ok_or_else(|| format!("dungeons need block '{n}'"))
-        };
+    pub fn load(dungeons_ron: &str, rooms_ron: &str, blocks: &BlockRegistry) -> Result<Self, String> {
+        let d: DungeonsRon = ron::from_str(dungeons_ron).map_err(|e| format!("dungeons.ron: {e}"))?;
+        let rooms: Vec<RoomDef> = ron::from_str(rooms_ron).map_err(|e| format!("rooms.ron: {e}"))?;
+        let b = |n: &str| blocks.id(n).ok_or_else(|| format!("dungeons need block '{n}'"));
         // Every block a floor is built of keeps the outside out: no leaves, ice
         // or glass (light and wind would come through, and you could see the sky).
         let solid = |n: &str| -> Result<BlockId, String> {
@@ -252,11 +230,7 @@ impl Delves {
                 wall: solid(&def.wall)?,
                 floor: solid(&def.floor)?,
                 pillar: solid(&def.pillar)?,
-                growth: def
-                    .growth
-                    .iter()
-                    .map(|n| solid(n))
-                    .collect::<Result<_, _>>()?,
+                growth: def.growth.iter().map(|n| solid(n)).collect::<Result<_, _>>()?,
                 pools: def.pools.as_deref().map(b).transpose()?,
                 def,
             });
@@ -266,55 +240,24 @@ impl Delves {
         }
         for c in &d.chain {
             if !themes.iter().any(|t| t.def.name == c.theme) {
-                return Err(format!(
-                    "dungeons.ron: chain theme '{}' isn't a theme",
-                    c.theme
-                ));
+                return Err(format!("dungeons.ron: chain theme '{}' isn't a theme", c.theme));
             }
             if !(1..=MAX_FLOORS).contains(&c.floors) {
-                return Err(format!(
-                    "dungeons.ron: {} has {} floors (1-{MAX_FLOORS})",
-                    c.name, c.floors
-                ));
+                return Err(format!("dungeons.ron: {} has {} floors (1-{MAX_FLOORS})", c.name, c.floors));
             }
         }
         for r in &rooms {
-            if r.half.0.0 < 3
-                || r.half.1.0 < 3
-                || r.half.0.1 > floor::CAP
-                || r.half.1.1 > floor::CAP
-                || r.half.0.0 > r.half.0.1
-                || r.half.1.0 > r.half.1.1
-            {
-                return Err(format!(
-                    "rooms.ron: {} half sizes must be 3..={}",
-                    r.name,
-                    floor::CAP
-                ));
+            if r.half.0 .0 < 3 || r.half.1 .0 < 3 || r.half.0 .1 > floor::CAP || r.half.1 .1 > floor::CAP || r.half.0 .0 > r.half.0 .1 || r.half.1 .0 > r.half.1 .1 {
+                return Err(format!("rooms.ron: {} half sizes must be 3..={}", r.name, floor::CAP));
             }
             if r.height.0 < 4 || r.height.0 > r.height.1 {
                 return Err(format!("rooms.ron: {} is too low", r.name));
             }
         }
         // Every kind of room a floor needs has a template.
-        for k in [
-            RoomType::Start,
-            RoomType::Fight,
-            RoomType::Trap,
-            RoomType::Puzzle,
-            RoomType::Ambush,
-            RoomType::Treasure,
-            RoomType::Rest,
-            RoomType::Shop,
-            RoomType::Boss,
-        ] {
-            if !rooms
-                .iter()
-                .any(|r| r.kind == k && r.min_floor <= 1 && r.themes.is_empty())
-            {
-                return Err(format!(
-                    "rooms.ron: no {k:?} room for every theme and floor"
-                ));
+        for k in [RoomType::Start, RoomType::Fight, RoomType::Trap, RoomType::Puzzle, RoomType::Ambush, RoomType::Treasure, RoomType::Rest, RoomType::Shop, RoomType::Boss] {
+            if !rooms.iter().any(|r| r.kind == k && r.min_floor <= 1 && r.themes.is_empty()) {
+                return Err(format!("rooms.ron: no {k:?} room for every theme and floor"));
             }
         }
         let parts = Parts {
@@ -328,12 +271,7 @@ impl Delves {
             chest: b("chest")?,
             cobblestone: b("cobblestone")?,
         };
-        Ok(Self {
-            themes,
-            chain: d.chain,
-            rooms,
-            parts,
-        })
+        Ok(Self { themes, chain: d.chain, rooms, parts })
     }
 
     pub fn theme_named(&self, name: &str) -> Option<usize> {
@@ -343,17 +281,8 @@ impl Delves {
     /// Pick a template of `kind` for a theme and floor, from a number in 0..1.
     pub fn pick_room(&self, kind: RoomType, theme: usize, floor: u8, u: f32) -> usize {
         let name = &self.themes[theme].def.name;
-        let fits = |r: &&RoomDef| {
-            r.kind == kind
-                && r.min_floor <= floor
-                && (r.themes.is_empty() || r.themes.contains(name))
-        };
-        let total: f32 = self
-            .rooms
-            .iter()
-            .filter(fits)
-            .map(|r| r.weight.max(0.0))
-            .sum();
+        let fits = |r: &&RoomDef| r.kind == kind && r.min_floor <= floor && (r.themes.is_empty() || r.themes.contains(name));
+        let total: f32 = self.rooms.iter().filter(fits).map(|r| r.weight.max(0.0)).sum();
         let mut left = u.clamp(0.0, 0.9999) * total;
         let mut last = 0;
         for (i, r) in self.rooms.iter().enumerate() {
@@ -386,17 +315,9 @@ impl Delves {
 
 #[cfg(test)]
 pub(crate) fn test_delves() -> Delves {
-    let tiles =
-        voxel::TileSheet::from_ron(include_str!("../../../../assets/textures/blocks.ron")).unwrap();
-    let reg =
-        voxel::BlockRegistry::from_ron(include_str!("../../../../assets/data/blocks.ron"), &tiles)
-            .unwrap();
-    Delves::load(
-        include_str!("../../../../assets/data/dungeons.ron"),
-        include_str!("../../../../assets/data/rooms.ron"),
-        &reg,
-    )
-    .unwrap()
+    let tiles = voxel::TileSheet::from_ron(include_str!("../../../../assets/textures/blocks.ron")).unwrap();
+    let reg = voxel::BlockRegistry::from_ron(include_str!("../../../../assets/data/blocks.ron"), &tiles).unwrap();
+    Delves::load(include_str!("../../../../assets/data/dungeons.ron"), include_str!("../../../../assets/data/rooms.ron"), &reg).unwrap()
 }
 
 #[cfg(test)]
@@ -416,12 +337,7 @@ mod tests {
     #[test]
     fn room_picks_follow_kind_floor_and_weight() {
         let d = test_delves();
-        for k in [
-            RoomType::Fight,
-            RoomType::Trap,
-            RoomType::Boss,
-            RoomType::Puzzle,
-        ] {
+        for k in [RoomType::Fight, RoomType::Trap, RoomType::Boss, RoomType::Puzzle] {
             for i in 0..50 {
                 let r = &d.rooms[d.pick_room(k, 0, 1, i as f32 / 50.0)];
                 assert_eq!(r.kind, k);
@@ -429,13 +345,8 @@ mod tests {
             }
         }
         // Over enough rolls every fight template shows up on a deep floor.
-        let seen: std::collections::HashSet<_> = (0..200)
-            .map(|i| d.pick_room(RoomType::Fight, 0, 4, i as f32 / 200.0))
-            .collect();
-        assert_eq!(
-            seen.len(),
-            d.rooms.iter().filter(|r| r.kind == RoomType::Fight).count()
-        );
+        let seen: std::collections::HashSet<_> = (0..200).map(|i| d.pick_room(RoomType::Fight, 0, 4, i as f32 / 200.0)).collect();
+        assert_eq!(seen.len(), d.rooms.iter().filter(|r| r.kind == RoomType::Fight).count());
         // Hazard picks never give `Any`.
         assert!((0..100).all(|i| d.pick_hazard(1, i as f32 / 100.0) != Hazard::Any));
     }

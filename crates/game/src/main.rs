@@ -2,38 +2,19 @@
 
 mod airship;
 mod atmosphere;
-mod autoshot;
 mod avatar;
+mod autoshot;
 mod bench;
-mod blocks;
 mod book;
+mod blocks;
 mod camera;
-mod cast;
-mod chest_lid;
-mod chop;
 mod chunk_mesh;
 mod clock;
 mod clouds;
 mod combat;
-mod cover;
 mod creatures;
-mod cutscene;
-mod debug;
-mod delve;
-mod dungeon;
-mod encounter;
 mod farming;
-mod glowcaps;
-mod guide;
-mod hands;
-mod hud;
-mod interact;
-mod inventory;
-mod item_art;
-mod items;
-mod journey;
 mod lightning;
-mod lines;
 mod lod;
 mod map;
 mod menu;
@@ -43,18 +24,37 @@ mod places;
 mod player;
 mod pov;
 mod precipitation;
+mod cover;
 mod progress;
+mod debug;
+mod delve;
+mod dungeon;
+mod glowcaps;
+mod guide;
+mod hands;
+mod hud;
+mod cast;
+mod chest_lid;
+mod chop;
+mod interact;
+mod inventory;
+mod item_art;
+mod items;
 mod quality;
+mod journey;
+mod lines;
+mod cutscene;
+mod story;
+mod encounter;
 mod save;
 mod settings;
 mod shrine;
 mod sky;
 mod sound;
 mod station;
-mod story;
+mod theme;
 mod survival;
 mod swing;
-mod theme;
 mod torches;
 mod weather;
 mod weather_dial;
@@ -118,35 +118,8 @@ fn main() {
             survival::SurvivalPlugin,
             inventory::InventoryPlugin,
         ))
-        .add_plugins((
-            creatures::CreaturesPlugin,
-            places::PlacesPlugin,
-            progress::ProgressPlugin,
-            station::StationPlugin,
-            airship::AirshipPlugin,
-            settings::SettingsPlugin,
-            sound::SoundPlugin,
-            bench::BenchPlugin,
-            npc::NpcPlugin,
-            avatar::AvatarPlugin,
-            combat::CombatPlugin,
-            dungeon::DungeonPlugin,
-        ))
-        .add_plugins((
-            delve::DelvePlugin,
-            cast::CastPlugin,
-            lines::LinesPlugin,
-            encounter::EncounterPlugin,
-            cutscene::CutscenePlugin,
-            story::StoryPlugin,
-            map::MapPlugin,
-            farming::FarmingPlugin,
-            book::BookPlugin,
-            journey::JourneyPlugin,
-            guide::GuidePlugin,
-            shrine::ShrinePlugin,
-            pickups::PickupsPlugin,
-        ))
+        .add_plugins((creatures::CreaturesPlugin, places::PlacesPlugin, progress::ProgressPlugin, station::StationPlugin, airship::AirshipPlugin, settings::SettingsPlugin, sound::SoundPlugin, bench::BenchPlugin, npc::NpcPlugin, avatar::AvatarPlugin, combat::CombatPlugin, dungeon::DungeonPlugin))
+        .add_plugins((delve::DelvePlugin, cast::CastPlugin, lines::LinesPlugin, encounter::EncounterPlugin, cutscene::CutscenePlugin, story::StoryPlugin, map::MapPlugin, farming::FarmingPlugin, book::BookPlugin, journey::JourneyPlugin, guide::GuidePlugin, shrine::ShrinePlugin, pickups::PickupsPlugin))
         .run();
     menu::relaunch_to_title();
 }

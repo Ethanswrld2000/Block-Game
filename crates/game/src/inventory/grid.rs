@@ -42,11 +42,7 @@ pub struct Grid {
 
 impl Grid {
     pub fn new(w: u8, h: u8) -> Self {
-        Self {
-            w,
-            h,
-            items: Vec::new(),
-        }
+        Self { w, h, items: Vec::new() }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -62,15 +58,7 @@ impl Grid {
     }
 
     /// Would an item fit with its corner at (x, y)? `ignore` skips one placed item.
-    pub fn fits(
-        &self,
-        items: &Items,
-        item: ItemId,
-        x: u8,
-        y: u8,
-        rotated: bool,
-        ignore: Option<usize>,
-    ) -> bool {
+    pub fn fits(&self, items: &Items, item: ItemId, x: u8, y: u8, rotated: bool, ignore: Option<usize>) -> bool {
         let (w, h) = dims(items, item, rotated);
         if x as u16 + w as u16 > self.w as u16 || y as u16 + h as u16 > self.h as u16 {
             return false;
@@ -89,12 +77,7 @@ impl Grid {
         if stack.count == 0 || !self.fits(items, stack.item, x, y, rotated, None) {
             return false;
         }
-        self.items.push(Placed {
-            stack,
-            x,
-            y,
-            rotated,
-        });
+        self.items.push(Placed { stack, x, y, rotated });
         true
     }
 
@@ -122,35 +105,22 @@ impl Grid {
             stack.count -= room;
         }
         while stack.count > 0 {
-            let Some((x, y, rotated)) = self.free_spot(items, stack.item) else {
-                return Some(stack);
-            };
+            let Some((x, y, rotated)) = self.free_spot(items, stack.item) else { return Some(stack) };
             let n = stack.count.min(max);
-            self.items.push(Placed {
-                stack: Stack::new(stack.item, n),
-                x,
-                y,
-                rotated,
-            });
+            self.items.push(Placed { stack: Stack::new(stack.item, n), x, y, rotated });
             stack.count -= n;
         }
         None
     }
 
     pub fn count(&self, item: ItemId) -> u32 {
-        self.items
-            .iter()
-            .filter(|p| p.stack.item == item)
-            .map(|p| p.stack.count as u32)
-            .sum()
+        self.items.iter().filter(|p| p.stack.item == item).map(|p| p.stack.count as u32).sum()
     }
 
     /// Take up to `n` of an item, smallest stacks first. Returns how many.
     pub fn remove(&mut self, item: ItemId, n: u32) -> u32 {
         let mut left = n;
-        let mut order: Vec<usize> = (0..self.items.len())
-            .filter(|i| self.items[*i].stack.item == item)
-            .collect();
+        let mut order: Vec<usize> = (0..self.items.len()).filter(|i| self.items[*i].stack.item == item).collect();
         order.sort_by_key(|i| self.items[*i].stack.count);
         for i in order {
             if left == 0 {
@@ -166,10 +136,7 @@ impl Grid {
     }
 
     pub fn mass(&self, items: &Items) -> f32 {
-        self.items
-            .iter()
-            .map(|p| items.get(p.stack.item).mass * p.stack.count as f32)
-            .sum()
+        self.items.iter().map(|p| items.get(p.stack.item).mass * p.stack.count as f32).sum()
     }
 
     pub fn to_save(&self, items: &Items) -> GridSave {
@@ -179,13 +146,7 @@ impl Grid {
             items: self
                 .items
                 .iter()
-                .map(|p| PlacedSave {
-                    item: items.get(p.stack.item).name.clone(),
-                    count: p.stack.count,
-                    x: p.x,
-                    y: p.y,
-                    rotated: p.rotated,
-                })
+                .map(|p| PlacedSave { item: items.get(p.stack.item).name.clone(), count: p.stack.count, x: p.x, y: p.y, rotated: p.rotated })
                 .collect(),
         }
     }
@@ -196,9 +157,7 @@ impl Grid {
         let mut g = Grid::new(w, h);
         let mut spill = Vec::new();
         for p in &save.items {
-            let Some(id) = items.id(&p.item) else {
-                continue;
-            };
+            let Some(id) = items.id(&p.item) else { continue };
             let stack = Stack::new(id, p.count.min(items.get(id).stack));
             if !g.place(items, stack, p.x, p.y, p.rotated)
                 && let Some(left) = g.add(items, stack)
@@ -244,10 +203,7 @@ mod tests {
         assert_eq!(g.add(&items, Stack::new(pick, 1)), None);
         assert!(g.items[0].rotated);
         // 3x2 used; a second pickaxe has no room.
-        assert_eq!(
-            g.add(&items, Stack::new(pick, 1)),
-            Some(Stack::new(pick, 1))
-        );
+        assert_eq!(g.add(&items, Stack::new(pick, 1)), Some(Stack::new(pick, 1)));
         assert_eq!(g.at(&items, 2, 1), Some(0));
         assert_eq!(g.at(&items, 3, 0), None);
     }
@@ -259,10 +215,7 @@ mod tests {
         let mut g = Grid::new(2, 1);
         assert_eq!(g.add(&items, Stack::new(dirt, 40)), None);
         assert_eq!(g.items.len(), 2);
-        assert_eq!(
-            g.add(&items, Stack::new(dirt, 30)),
-            Some(Stack::new(dirt, 6))
-        );
+        assert_eq!(g.add(&items, Stack::new(dirt, 30)), Some(Stack::new(dirt, 6)));
         assert_eq!(g.count(dirt), 64);
         assert_eq!(g.remove(dirt, 50), 50);
         assert_eq!(g.count(dirt), 14);

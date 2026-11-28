@@ -5,12 +5,12 @@ use bevy::prelude::*;
 use voxel::BlockPos;
 
 use crate::blocks::Blocks;
-use crate::camera::FlyCamera;
 use crate::clock::{Seasons, WorldClock};
-use crate::interact::Target;
 use crate::lod::LodTiles;
-use crate::player::{MoveMode, Player};
 use crate::weather::{Conditions, WeatherKinds, WeatherState};
+use crate::camera::FlyCamera;
+use crate::interact::Target;
+use crate::player::{MoveMode, Player};
 use crate::world::{Generator, ViewDistance, World, WorldStats};
 
 pub struct DebugOverlayPlugin;
@@ -30,10 +30,7 @@ fn spawn_overlay(mut commands: Commands, theme: Res<crate::theme::Theme>) {
     commands.spawn((
         DebugText,
         Text::new(""),
-        TextFont {
-            font_size: bevy::text::FontSize::Px(crate::theme::sizes::BODY),
-            ..default()
-        },
+        TextFont { font_size: bevy::text::FontSize::Px(crate::theme::sizes::BODY), ..default() },
         TextColor(Color::WHITE),
         Node {
             position_type: PositionType::Absolute,
@@ -47,20 +44,14 @@ fn spawn_overlay(mut commands: Commands, theme: Res<crate::theme::Theme>) {
     // Crosshair.
     let size = theme.size("crosshair");
     commands.spawn((
-        theme
-            .image("crosshair")
-            .with_color(Color::srgba(1.0, 1.0, 1.0, 0.85)),
+        theme.image("crosshair").with_color(Color::srgba(1.0, 1.0, 1.0, 0.85)),
         Node {
             position_type: PositionType::Absolute,
             left: Val::Percent(50.0),
             top: Val::Percent(50.0),
             width: Val::Px(size.x),
             height: Val::Px(size.y),
-            margin: UiRect {
-                left: Val::Px(-size.x / 2.0),
-                top: Val::Px(-size.y / 2.0),
-                ..default()
-            },
+            margin: UiRect { left: Val::Px(-size.x / 2.0), top: Val::Px(-size.y / 2.0), ..default() },
             ..default()
         },
     ));
@@ -79,11 +70,7 @@ fn toggle_overlay(
     }
     let on = &settings.debug_overlay;
     let busy = menus.open || card.is_some_and(|c| c.up());
-    let want = if *on && !busy {
-        Visibility::Inherited
-    } else {
-        Visibility::Hidden
-    };
+    let want = if *on && !busy { Visibility::Inherited } else { Visibility::Hidden };
     for mut v in &mut q {
         if *v != want {
             *v = want;
@@ -110,11 +97,7 @@ impl SkyInfo<'_> {
         if self.conditions.precipitation > 0.05 && self.conditions.snowing {
             weather.push_str(" (snow)");
         }
-        let fast = if self.clock.speed > 1.0 {
-            "  >> fast"
-        } else {
-            ""
-        };
+        let fast = if self.clock.speed > 1.0 { "  >> fast" } else { "" };
         let moon = crate::sky::moon_phase_name(crate::sky::moon_phase(&self.clock));
         format!(
             "time   day {}  {:02}:{:02}  {} (day {} of {}), {moon}{fast}\nweather {weather}  (F4 next)  far tiles {}",
@@ -143,14 +126,8 @@ fn update_overlay(
     sky: SkyInfo,
     mut text: Query<&mut Text, With<DebugText>>,
 ) {
-    let fps = diagnostics
-        .get(&FrameTimeDiagnosticsPlugin::FPS)
-        .and_then(|d| d.smoothed())
-        .unwrap_or(0.0);
-    let ms = diagnostics
-        .get(&FrameTimeDiagnosticsPlugin::FRAME_TIME)
-        .and_then(|d| d.smoothed())
-        .unwrap_or(0.0);
+    let fps = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS).and_then(|d| d.smoothed()).unwrap_or(0.0);
+    let ms = diagnostics.get(&FrameTimeDiagnosticsPlugin::FRAME_TIME).and_then(|d| d.smoothed()).unwrap_or(0.0);
     let Ok((tf, fc)) = cam.single() else { return };
     let cam_speed = fc.speed;
     let p = tf.translation;
@@ -164,23 +141,13 @@ fn update_overlay(
         }
         None => "nothing".into(),
     };
-    let biome = generator
-        .map(|g| g.0.biome_at(block.x, block.y, block.z).title.clone())
-        .unwrap_or_default();
+    let biome = generator.map(|g| g.0.biome_at(block.x, block.y, block.z).title.clone()).unwrap_or_default();
     let (player, mode) = body;
     let mut state = match *mode {
         MoveMode::Fly => "flying (F to walk)".to_string(),
         MoveMode::Walk => {
-            let mut s = format!(
-                "walking (F to fly)  {:.1} b/s",
-                Vec2::new(player.vel.x, player.vel.z).length()
-            );
-            for (on, word) in [
-                (player.on_ground, "ground"),
-                (player.in_water, "water"),
-                (player.crouching, "crouch"),
-                (player.sprinting, "sprint"),
-            ] {
+            let mut s = format!("walking (F to fly)  {:.1} b/s", Vec2::new(player.vel.x, player.vel.z).length());
+            for (on, word) in [(player.on_ground, "ground"), (player.in_water, "water"), (player.crouching, "crouch"), (player.sprinting, "sprint")] {
                 if on {
                     s.push_str("  ");
                     s.push_str(word);
@@ -206,20 +173,10 @@ fn update_overlay(
              F3 hide | click: capture mouse | Esc: release | hold T: fast time\n\
              1-9 or wheel: pick item | left click: mine | right click: place, open chest, hold to eat | Shift: sprint | Ctrl/C: crouch\n\
              Tab: inventory | B: make or pack up camp | Z: sleep at camp | test: F7 stab, F8 club blow, F9 dev menu",
-            p.x,
-            p.y,
-            p.z,
-            chunk.x,
-            chunk.y,
-            chunk.z,
+            p.x, p.y, p.z, chunk.x, chunk.y, chunk.z,
             sky.describe(),
-            stats.loaded,
-            stats.meshed,
-            stats.queued,
-            stats.unsaved,
-            stats.gen_in_flight,
-            stats.mesh_in_flight,
-            stats.chunk_kib,
+            stats.loaded, stats.meshed, stats.queued, stats.unsaved,
+            stats.gen_in_flight, stats.mesh_in_flight, stats.chunk_kib,
             view.chunks,
             cam_speed,
         );

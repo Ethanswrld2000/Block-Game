@@ -10,7 +10,7 @@ use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 
 use super::stamina;
-use super::{Foe, FoeBook, ahead_of, ai, feel, flat, traits};
+use super::{ahead_of, ai, feel, flat, traits, Foe, FoeBook};
 use crate::camera::{FlyCamera, Menus};
 use crate::player::{MoveMode, Player};
 use crate::sound::PlaySound;
@@ -49,12 +49,7 @@ pub struct KickPlugin;
 
 impl Plugin for KickPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Kicking>().add_systems(
-            crate::menu::GameUpdate,
-            (spawn_leg, pose_leg)
-                .chain()
-                .after(crate::player::PlayerSet),
-        );
+        app.init_resource::<Kicking>().add_systems(crate::menu::GameUpdate, (spawn_leg, pose_leg).chain().after(crate::player::PlayerSet));
     }
 }
 
@@ -63,17 +58,9 @@ type Key<const N: usize> = (f32, [f32; N]);
 
 fn sample<const N: usize>(keys: &[Key<N>], t: f32) -> [f32; N] {
     let t = t.clamp(0.0, 1.0);
-    let i = keys
-        .iter()
-        .position(|k| k.0 >= t)
-        .unwrap_or(keys.len() - 1)
-        .max(1);
+    let i = keys.iter().position(|k| k.0 >= t).unwrap_or(keys.len() - 1).max(1);
     let (a, b) = (keys[i - 1], keys[i]);
-    let x = if b.0 > a.0 {
-        (t - a.0) / (b.0 - a.0)
-    } else {
-        1.0
-    };
+    let x = if b.0 > a.0 { (t - a.0) / (b.0 - a.0) } else { 1.0 };
     let x = x * x * (3.0 - 2.0 * x);
     std::array::from_fn(|j| a.1[j] + (b.1[j] - a.1[j]) * x)
 }
@@ -178,11 +165,7 @@ pub(super) fn kick(
             let to = tf.translation - player.pos;
             flat(to).length() <= REACH + super::HALF && to.y.abs() < 1.5 && ahead_of(ahead, to, ARC)
         })
-        .min_by(|a, b| {
-            flat(a.0.translation - player.pos)
-                .length()
-                .total_cmp(&flat(b.0.translation - player.pos).length())
-        });
+        .min_by(|a, b| flat(a.0.translation - player.pos).length().total_cmp(&flat(b.0.translation - player.pos).length()));
     let Some((tf, mut foe)) = target else { return };
     let k = &book.kinds[foe.kind];
     let backstab = if foe.brain.aware { 1.0 } else { ai::BACKSTAB };
@@ -210,45 +193,18 @@ fn spawn_leg(
     if !have.is_empty() {
         return;
     }
-    let cloth = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.24, 0.2, 0.16),
-        perceptual_roughness: 0.95,
-        ..default()
-    });
-    let leather = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.13, 0.1, 0.08),
-        perceptual_roughness: 0.8,
-        ..default()
-    });
+    let cloth = materials.add(StandardMaterial { base_color: Color::srgb(0.24, 0.2, 0.16), perceptual_roughness: 0.95, ..default() });
+    let leather = materials.add(StandardMaterial { base_color: Color::srgb(0.13, 0.1, 0.08), perceptual_roughness: 0.8, ..default() });
     commands
-        .spawn((
-            LegView,
-            Transform::default(),
-            Visibility::Hidden,
-            ChildOf(*cam),
-        ))
+        .spawn((LegView, Transform::default(), Visibility::Hidden, ChildOf(*cam)))
         .with_children(|leg| {
             // The shin runs forward (-z) from the knee; the boot is at its end.
-            leg.spawn((
-                Mesh3d(meshes.add(Cuboid::new(0.2, 0.2, 0.62))),
-                MeshMaterial3d(cloth),
-                Transform::from_xyz(0.0, 0.0, -0.31),
-                NotShadowCaster,
-            ));
-            leg.spawn((
-                Mesh3d(meshes.add(Cuboid::new(0.24, 0.3, 0.26))),
-                MeshMaterial3d(leather),
-                Transform::from_xyz(0.0, 0.04, -0.72),
-                NotShadowCaster,
-            ));
+            leg.spawn((Mesh3d(meshes.add(Cuboid::new(0.2, 0.2, 0.62))), MeshMaterial3d(cloth), Transform::from_xyz(0.0, 0.0, -0.31), NotShadowCaster));
+            leg.spawn((Mesh3d(meshes.add(Cuboid::new(0.24, 0.3, 0.26))), MeshMaterial3d(leather), Transform::from_xyz(0.0, 0.04, -0.72), NotShadowCaster));
         });
 }
 
-fn pose_leg(
-    kicking: Res<Kicking>,
-    view: Res<crate::camera::View>,
-    mut leg: Query<(&mut Transform, &mut Visibility), With<LegView>>,
-) {
+fn pose_leg(kicking: Res<Kicking>, view: Res<crate::camera::View>, mut leg: Query<(&mut Transform, &mut Visibility), With<LegView>>) {
     for (mut tf, mut vis) in &mut leg {
         let want = match kicking.t {
             Some(t) if !view.pulled => {
@@ -270,10 +226,7 @@ mod tests {
     #[test]
     fn the_leg_is_out_furthest_when_the_foot_lands() {
         let reach = |t: f32| -leg_view(t).0.z;
-        let furthest = (0..=200)
-            .map(|i| i as f32 / 200.0)
-            .max_by(|a, b| reach(*a).total_cmp(&reach(*b)))
-            .unwrap();
+        let furthest = (0..=200).map(|i| i as f32 / 200.0).max_by(|a, b| reach(*a).total_cmp(&reach(*b))).unwrap();
         assert!((furthest - CONTACT).abs() < 0.01, "{furthest}");
         // Out of view at rest, both ends.
         assert!(leg_view(0.0).0.y < -1.0 && leg_view(1.0).0.y < -1.0);

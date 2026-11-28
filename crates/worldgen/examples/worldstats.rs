@@ -6,21 +6,13 @@ use voxel::{BlockRegistry, TileSheet};
 use worldgen::WorldGen;
 
 fn main() {
-    let seed: u64 = std::env::var("SEED")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0x005E_ED0F_5A4D);
+    let seed: u64 = std::env::var("SEED").ok().and_then(|s| s.parse().ok()).unwrap_or(0x005E_ED0F_5A4D);
     let tiles = TileSheet::from_ron(include_str!("../../../assets/textures/blocks.ron")).unwrap();
-    let reg =
-        BlockRegistry::from_ron(include_str!("../../../assets/data/blocks.ron"), &tiles).unwrap();
+    let reg = BlockRegistry::from_ron(include_str!("../../../assets/data/blocks.ron"), &tiles).unwrap();
     let g = WorldGen::new(seed, &reg, include_str!("../../../assets/data/biomes.ron")).unwrap();
 
     let spawn = g.find_spawn();
-    println!(
-        "spawn {:?} in {}",
-        spawn,
-        g.biome_at(spawn[0], spawn[1], spawn[2]).title
-    );
+    println!("spawn {:?} in {}", spawn, g.biome_at(spawn[0], spawn[1], spawn[2]).title);
 
     let size = 4096;
     let step = 16;
@@ -62,10 +54,7 @@ fn main() {
             }
         }
     }
-    println!(
-        "highest peak near spawn {:?}, an island near spawn {:?}",
-        peak, island
-    );
+    println!("highest peak near spawn {:?}, an island near spawn {:?}", peak, island);
     let total: usize = counts.values().sum();
     for (k, v) in &counts {
         println!("  {k:12} {:5.1}%", *v as f32 * 100.0 / total as f32);

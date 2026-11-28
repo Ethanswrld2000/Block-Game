@@ -13,10 +13,10 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{AsBindGroup, ShaderType};
 use bevy::shader::ShaderRef;
 
-use crate::atmosphere::Atmos;
 use crate::blocks::{Blocks, VoxelMaterial};
 use crate::camera::FlyCamera;
 use crate::clock::{Seasons, WorldClock};
+use crate::atmosphere::Atmos;
 use crate::weather::{Conditions, LocalClimate};
 
 /// Radius of the sky sphere. The camera's far plane is beyond it.
@@ -119,16 +119,9 @@ impl Plugin for SkyPlugin {
         app.add_plugins(MaterialPlugin::<SkyMaterial>::default())
             .init_resource::<SkyStars>()
             .insert_resource(ClearColor(Color::srgb(0.46, 0.53, 0.47)))
-            .insert_resource(GlobalAmbientLight {
-                color: Color::WHITE,
-                brightness: 400.0,
-                ..default()
-            })
+            .insert_resource(GlobalAmbientLight { color: Color::WHITE, brightness: 400.0, ..default() })
             .add_systems(crate::menu::GameStartup, spawn_sky)
-            .add_systems(
-                crate::menu::GameUpdate,
-                (update_sky, follow_camera, season_tint, night_glow),
-            );
+            .add_systems(crate::menu::GameUpdate, (update_sky, follow_camera, season_tint, night_glow));
     }
 }
 
@@ -138,18 +131,10 @@ pub struct Sun;
 #[derive(Component)]
 pub struct SkyDome;
 
-fn spawn_sky(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<SkyMaterial>>,
-) {
+fn spawn_sky(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<SkyMaterial>>) {
     commands.spawn((
         Sun,
-        DirectionalLight {
-            illuminance: 9_000.0,
-            shadow_maps_enabled: true,
-            ..default()
-        },
+        DirectionalLight { illuminance: 9_000.0, shadow_maps_enabled: true, ..default() },
         Transform::default().looking_to(Vec3::new(-0.4, -1.0, -0.6), Vec3::Y),
     ));
     commands.spawn((
@@ -162,9 +147,7 @@ fn spawn_sky(
                 cull_mode: None,
                 ..default()
             },
-            extension: SkyExtension {
-                params: SkyParams::default(),
-            },
+            extension: SkyExtension { params: SkyParams::default() },
         })),
         Transform::default(),
         NotShadowCaster,
@@ -183,12 +166,7 @@ pub fn sun_direction(time: f32, daylight: f32) -> Vec3 {
         let night = (time - set).rem_euclid(1.0) / (1.0 - (set - rise));
         PI + night * PI
     };
-    Vec3::new(
-        angle.cos(),
-        angle.sin() * SUN_TILT.cos(),
-        angle.sin() * SUN_TILT.sin(),
-    )
-    .normalize()
+    Vec3::new(angle.cos(), angle.sin() * SUN_TILT.cos(), angle.sin() * SUN_TILT.sin()).normalize()
 }
 
 /// Axis the sky turns around: perpendicular to the sun's path.
@@ -216,14 +194,8 @@ pub fn moon_lit(phase: f32) -> f32 {
 
 pub fn moon_phase_name(phase: f32) -> &'static str {
     const NAMES: [&str; 8] = [
-        "new moon",
-        "waxing crescent",
-        "first quarter",
-        "waxing gibbous",
-        "full moon",
-        "waning gibbous",
-        "last quarter",
-        "waning crescent",
+        "new moon", "waxing crescent", "first quarter", "waxing gibbous",
+        "full moon", "waning gibbous", "last quarter", "waning crescent",
     ];
     NAMES[((phase * 8.0 + 0.5) as usize) % 8]
 }
@@ -233,12 +205,7 @@ pub fn moon_phase_name(phase: f32) -> &'static str {
 /// moon, beside it at new moon), on a path tilted differently from the sun's.
 pub fn moon_direction(time: f32, phase: f32) -> Vec3 {
     let a = (time - 0.25 - phase) * TAU;
-    Vec3::new(
-        a.cos(),
-        a.sin() * MOON_TILT.cos(),
-        a.sin() * MOON_TILT.sin(),
-    )
-    .normalize()
+    Vec3::new(a.cos(), a.sin() * MOON_TILT.cos(), a.sin() * MOON_TILT.sin()).normalize()
 }
 
 fn srgb(r: f32, g: f32, b: f32) -> Vec3 {
@@ -308,9 +275,7 @@ pub fn update_sky(
     horizon *= dim;
     // Middle of the sky: between the two, a touch deeper in colour.
     let mid_raw = horizon.lerp(zenith, 0.55);
-    let mid = Vec3::splat(luma(mid_raw))
-        .lerp(mid_raw, 1.0 + 0.25 * (1.0 - cloudy))
-        .max(Vec3::ZERO);
+    let mid = Vec3::splat(luma(mid_raw)).lerp(mid_raw, 1.0 + 0.25 * (1.0 - cloudy)).max(Vec3::ZERO);
     let flash = weather.flash;
     horizon += Vec3::splat(flash * 0.35);
 
@@ -345,8 +310,7 @@ pub fn update_sky(
     let tint = night_tint.lerp(sky_tint, day).min(Vec3::ONE);
     ambient.color = Color::linear_rgb(tint.x, tint.y, tint.z);
     let night_light = 42.0 + 58.0 * lit * moon_amount;
-    ambient.brightness =
-        (night_light + 1_100.0 * day) * (0.55 + 0.45 * weather.light) + flash * 2500.0;
+    ambient.brightness = (night_light + 1_100.0 * day) * (0.55 + 0.45 * weather.light) + flash * 2500.0;
 
     // Fog. Terrain fogs itself towards the sky in the direction you look (see
     // `atmosphere`, same numbers as the dome below); Bevy's fog covers the rest
@@ -360,10 +324,7 @@ pub fn update_sky(
         let glow = sunset_color * (sunset * (1.0 - cloudy));
         fog.directional_light_color = Color::linear_rgba(glow.x, glow.y, glow.z, 0.6 * sunset);
         fog.directional_light_exponent = 12.0;
-        fog.falloff = FogFalloff::Linear {
-            start: visibility * 0.2,
-            end: visibility,
-        };
+        fog.falloff = FogFalloff::Linear { start: visibility * 0.2, end: visibility };
     }
     atmos.params.horizon = horizon.extend(visibility * 0.2);
     atmos.params.glow = sc.extend(visibility);
@@ -414,28 +375,18 @@ pub fn update_sky(
             sun_dir: sun.extend(glow_amount),
             sun_color: sc.extend(1.0),
             moon_dir: moon.extend(0.35 + 0.65 * (1.0 - day)),
-            extra: Vec4::new(
-                (1.0 - smoothstep(-0.32, -0.08, sun.y)) * 1.4,
-                lit,
-                flash * 0.6,
-                cloudy,
-            ),
+            extra: Vec4::new((1.0 - smoothstep(-0.32, -0.08, sun.y)) * 1.4, lit, flash * 0.6, cloudy),
             star_x: inv.x_axis.extend(0.0),
             star_y: inv.y_axis.extend(0.0),
             star_z: inv.z_axis.extend(0.0),
             mid: mid.extend(1.0),
             haze: Vec4::new(
                 day_haze,
-                if MILKY_WAY {
-                    1.0 - smoothstep(-0.3, 0.0, sun.y)
-                } else {
-                    0.0
-                },
+                if MILKY_WAY { 1.0 - smoothstep(-0.3, 0.0, sun.y) } else { 0.0 },
                 fog_veil(visibility),
                 sky_stars.scope,
             ),
-            bow: rainbow_centre(sun)
-                .extend(weather.rainbow * smoothstep(0.0, 0.08, sun.y) * (1.0 - 0.7 * cloudy)),
+            bow: rainbow_centre(sun).extend(weather.rainbow * smoothstep(0.0, 0.08, sun.y) * (1.0 - 0.7 * cloudy)),
             named,
         };
     }
@@ -449,10 +400,7 @@ pub fn rainbow_centre(sun: Vec3) -> Vec3 {
     Vec3::new(anti.x, anti.y.max(-0.25), anti.z).normalize_or(Vec3::NEG_Y)
 }
 
-fn follow_camera(
-    cam: Query<&Transform, (With<FlyCamera>, Without<SkyDome>)>,
-    mut dome: Query<&mut Transform, With<SkyDome>>,
-) {
+fn follow_camera(cam: Query<&Transform, (With<FlyCamera>, Without<SkyDome>)>, mut dome: Query<&mut Transform, With<SkyDome>>) {
     if let (Ok(c), Ok(mut d)) = (cam.single(), dome.single_mut()) {
         d.translation = c.translation;
     }
@@ -489,23 +437,15 @@ fn season_tint(
     mut last: Local<Vec4>,
 ) {
     let p = seasons.at(&clock);
-    let (a, b) = (
-        seasons.list[p.current].foliage,
-        seasons.list[p.next].foliage,
-    );
+    let (a, b) = (seasons.list[p.current].foliage, seasons.list[p.next].foliage);
     let ca = Vec3::new(a.color.0, a.color.1, a.color.2);
     let cb = Vec3::new(b.color.0, b.color.1, b.color.2);
-    let tint = ca
-        .lerp(cb, p.blend)
-        .extend(a.amount + (b.amount - a.amount) * p.blend);
+    let tint = ca.lerp(cb, p.blend).extend(a.amount + (b.amount - a.amount) * p.blend);
     if (tint - *last).abs().max_element() < 0.005 {
         return;
     }
     let mut done = false;
-    for h in [&blocks.material, &blocks.translucent_material]
-        .into_iter()
-        .flatten()
-    {
+    for h in [&blocks.material, &blocks.translucent_material].into_iter().flatten() {
         if let Some(mut m) = materials.get_mut(h) {
             m.extension.season = tint;
             done = true;
@@ -528,10 +468,7 @@ mod tests {
 
     #[test]
     fn mist_hides_the_sky_and_clear_days_dont() {
-        let kinds = crate::weather::WeatherKinds::from_ron(include_str!(
-            "../../../assets/data/weather.ron"
-        ))
-        .unwrap();
+        let kinds = crate::weather::WeatherKinds::from_ron(include_str!("../../../assets/data/weather.ron")).unwrap();
         let vis = |n: &str| kinds.list[kinds.find(n).unwrap()].visibility;
         assert_eq!(fog_veil(vis("mist")), 1.0);
         assert_eq!(fog_veil(vis("clear")), 0.0);
@@ -546,10 +483,7 @@ mod tests {
         let star = |t| star_rotation(t) * Vec3::X;
         let sun_moved = sun_direction(a, 0.5).angle_between(sun_direction(b, 0.5));
         let star_moved = star(a).angle_between(star(b));
-        assert!(
-            (star_moved - sun_moved * STAR_TURNS_PER_DAY).abs() < 1e-3,
-            "{star_moved} vs {sun_moved}"
-        );
+        assert!((star_moved - sun_moved * STAR_TURNS_PER_DAY).abs() < 1e-3, "{star_moved} vs {sun_moved}");
         // The moon keeps near the sun's pace (it slips back a little each day
         // through `moon_phase`), far quicker than the stars.
         let moon_moved = moon_direction(a, 0.3).angle_between(moon_direction(b, 0.3));
@@ -569,11 +503,7 @@ mod tests {
         assert_eq!(moon_phase_name(0.5), "full moon");
         assert_eq!(moon_phase_name(0.99), "new moon");
         // The moon rises later each day: at the same hour it sits further back.
-        let c = |day| WorldClock {
-            day,
-            time: 0.0,
-            speed: 1.0,
-        };
+        let c = |day| WorldClock { day, time: 0.0, speed: 1.0 };
         let (p0, p1) = (moon_phase(&c(0)), moon_phase(&c(1)));
         assert!(((p1 - p0).rem_euclid(1.0) - 1.0 / LUNAR_DAYS as f32).abs() < 1e-4);
     }

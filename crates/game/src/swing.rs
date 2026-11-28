@@ -83,11 +83,7 @@ struct Key<const N: usize> {
 type Hand = Key<6>;
 
 const fn key(t: f32, pos: [f32; 3], rot: [f32; 3], ease: Ease) -> Hand {
-    Key {
-        t,
-        v: [pos[0], pos[1], pos[2], rot[0], rot[1], rot[2]],
-        ease,
-    }
+    Key { t, v: [pos[0], pos[1], pos[2], rot[0], rot[1], rot[2]], ease }
 }
 
 const REST: Hand = key(0.0, [0.0; 3], [0.0; 3], Ease::InOut);
@@ -95,17 +91,9 @@ const REST: Hand = key(0.0, [0.0; 3], [0.0; 3], Ease::InOut);
 /// Values `t` (0..1) of the way through a list of keys.
 fn sample<const N: usize>(keys: &[Key<N>], t: f32) -> [f32; N] {
     let t = t.clamp(0.0, 1.0);
-    let i = keys
-        .iter()
-        .position(|k| k.t >= t)
-        .unwrap_or(keys.len() - 1)
-        .max(1);
+    let i = keys.iter().position(|k| k.t >= t).unwrap_or(keys.len() - 1).max(1);
     let (a, b) = (keys[i - 1], keys[i]);
-    let x = if b.t > a.t {
-        b.ease.apply((t - a.t) / (b.t - a.t))
-    } else {
-        1.0
-    };
+    let x = if b.t > a.t { b.ease.apply((t - a.t) / (b.t - a.t)) } else { 1.0 };
     std::array::from_fn(|j| a.v[j] + (b.v[j] - a.v[j]) * x)
 }
 
@@ -130,12 +118,7 @@ const CHOP: [Hand; 7] = [
     key(0.42, [0.15, 0.04, 0.10], [-0.35, -1.0, -0.4], Ease::InOut),
     key(0.54, [-0.17, 0.05, -0.15], [-0.38, 1.1, 0.3], Ease::In),
     key(0.60, [-0.145, 0.055, -0.13], [-0.35, 0.96, 0.26], Ease::Out),
-    key(
-        0.74,
-        [-0.14, 0.05, -0.125],
-        [-0.34, 0.93, 0.25],
-        Ease::InOut,
-    ),
+    key(0.74, [-0.14, 0.05, -0.125], [-0.34, 0.93, 0.25], Ease::InOut),
     key(1.0, [0.0; 3], [0.0; 3], Ease::InOut),
 ];
 
@@ -148,12 +131,7 @@ const OVERHEAD: [Hand; 7] = [
     key(0.42, [0.02, 0.19, 0.10], [1.25, 0.04, 0.0], Ease::InOut),
     key(0.54, [-0.07, -0.03, -0.13], [-0.62, 0.12, 0.0], Ease::In),
     key(0.60, [-0.065, -0.02, -0.12], [-0.5, 0.11, 0.0], Ease::Out),
-    key(
-        0.74,
-        [-0.06, -0.015, -0.115],
-        [-0.47, 0.1, 0.0],
-        Ease::InOut,
-    ),
+    key(0.74, [-0.06, -0.015, -0.115], [-0.47, 0.1, 0.0], Ease::InOut),
     key(1.0, [0.0; 3], [0.0; 3], Ease::InOut),
 ];
 
@@ -245,12 +223,7 @@ const SMASH: [Hand; 7] = [
     key(0.42, [0.02, 0.2, 0.1], [1.3, 0.04, 0.0], Ease::InOut),
     key(0.54, [-0.07, -0.06, -0.14], [-0.8, 0.1, 0.0], Ease::In),
     key(0.60, [-0.065, -0.05, -0.13], [-0.7, 0.1, 0.0], Ease::Out),
-    key(
-        0.74,
-        [-0.06, -0.045, -0.125],
-        [-0.66, 0.1, 0.0],
-        Ease::InOut,
-    ),
+    key(0.74, [-0.06, -0.045, -0.125], [-0.66, 0.1, 0.0], Ease::InOut),
     key(1.0, [0.0; 3], [0.0; 3], Ease::InOut),
 ];
 
@@ -302,336 +275,116 @@ const HOLD: [f32; 10] = [0.0, 0.0, 0.3, 0.08, 0.0, 0.75, 0.0, 0.15, 0.0, 0.0];
 
 const BODY_JAB: [Body; 5] = [
     limbs(0.0, HOLD, Ease::InOut),
-    limbs(
-        0.15,
-        [-0.1, 0.0, 0.5, 0.1, 0.0, 1.4, 0.0, 0.15, 0.2, 0.0],
-        Ease::InOut,
-    ),
-    limbs(
-        0.45,
-        [0.2, 0.1, 1.45, 0.05, 0.25, 0.1, -0.2, 0.3, 0.0, 0.0],
-        Ease::In,
-    ),
-    limbs(
-        0.55,
-        [0.18, 0.09, 1.35, 0.05, 0.22, 0.2, -0.18, 0.3, 0.0, 0.0],
-        Ease::Out,
-    ),
+    limbs(0.15, [-0.1, 0.0, 0.5, 0.1, 0.0, 1.4, 0.0, 0.15, 0.2, 0.0], Ease::InOut),
+    limbs(0.45, [0.2, 0.1, 1.45, 0.05, 0.25, 0.1, -0.2, 0.3, 0.0, 0.0], Ease::In),
+    limbs(0.55, [0.18, 0.09, 1.35, 0.05, 0.22, 0.2, -0.18, 0.3, 0.0, 0.0], Ease::Out),
     limbs(1.0, HOLD, Ease::InOut),
 ];
 
 const BODY_CHOP: [Body; 7] = [
     limbs(0.0, HOLD, Ease::InOut),
-    limbs(
-        0.10,
-        [0.05, 0.03, 0.25, 0.08, 0.05, 0.85, 0.05, 0.2, 0.0, 0.0],
-        Ease::InOut,
-    ),
-    limbs(
-        0.42,
-        [-0.85, -0.04, 1.35, 0.35, -1.35, 0.55, 0.9, 0.9, -1.3, -1.4],
-        Ease::InOut,
-    ),
-    limbs(
-        0.54,
-        [0.55, 0.14, 1.45, 0.05, 0.6, 0.1, 1.2, 0.35, -1.3, -1.4],
-        Ease::In,
-    ),
-    limbs(
-        0.60,
-        [0.45, 0.12, 1.42, 0.05, 0.5, 0.15, 1.15, 0.35, -1.25, -1.4],
-        Ease::Out,
-    ),
-    limbs(
-        0.74,
-        [0.43, 0.12, 1.4, 0.05, 0.48, 0.16, 1.1, 0.35, -1.25, -1.4],
-        Ease::InOut,
-    ),
+    limbs(0.10, [0.05, 0.03, 0.25, 0.08, 0.05, 0.85, 0.05, 0.2, 0.0, 0.0], Ease::InOut),
+    limbs(0.42, [-0.85, -0.04, 1.35, 0.35, -1.35, 0.55, 0.9, 0.9, -1.3, -1.4], Ease::InOut),
+    limbs(0.54, [0.55, 0.14, 1.45, 0.05, 0.6, 0.1, 1.2, 0.35, -1.3, -1.4], Ease::In),
+    limbs(0.60, [0.45, 0.12, 1.42, 0.05, 0.5, 0.15, 1.15, 0.35, -1.25, -1.4], Ease::Out),
+    limbs(0.74, [0.43, 0.12, 1.4, 0.05, 0.48, 0.16, 1.1, 0.35, -1.25, -1.4], Ease::InOut),
     limbs(1.0, HOLD, Ease::InOut),
 ];
 
 const BODY_OVERHEAD: [Body; 7] = [
     limbs(0.0, HOLD, Ease::InOut),
-    limbs(
-        0.10,
-        [0.0, 0.04, 0.2, 0.08, 0.0, 0.85, 0.0, 0.15, 0.0, 0.0],
-        Ease::InOut,
-    ),
-    limbs(
-        0.42,
-        [-0.15, -0.15, 2.6, 0.15, 0.2, 0.3, 2.3, 0.6, 0.4, 0.0],
-        Ease::InOut,
-    ),
-    limbs(
-        0.54,
-        [0.1, 0.38, 1.2, 0.05, 0.25, 0.1, 0.8, 0.3, -1.1, 0.0],
-        Ease::In,
-    ),
-    limbs(
-        0.60,
-        [0.08, 0.33, 1.28, 0.05, 0.24, 0.12, 0.85, 0.3, -1.05, 0.0],
-        Ease::Out,
-    ),
-    limbs(
-        0.74,
-        [0.08, 0.32, 1.3, 0.05, 0.23, 0.13, 0.85, 0.3, -1.05, 0.0],
-        Ease::InOut,
-    ),
+    limbs(0.10, [0.0, 0.04, 0.2, 0.08, 0.0, 0.85, 0.0, 0.15, 0.0, 0.0], Ease::InOut),
+    limbs(0.42, [-0.15, -0.15, 2.6, 0.15, 0.2, 0.3, 2.3, 0.6, 0.4, 0.0], Ease::InOut),
+    limbs(0.54, [0.1, 0.38, 1.2, 0.05, 0.25, 0.1, 0.8, 0.3, -1.1, 0.0], Ease::In),
+    limbs(0.60, [0.08, 0.33, 1.28, 0.05, 0.24, 0.12, 0.85, 0.3, -1.05, 0.0], Ease::Out),
+    limbs(0.74, [0.08, 0.32, 1.3, 0.05, 0.23, 0.13, 0.85, 0.3, -1.05, 0.0], Ease::InOut),
     limbs(1.0, HOLD, Ease::InOut),
 ];
 
 const BODY_SLASH: [Body; 6] = [
     limbs(0.0, HOLD, Ease::InOut),
-    limbs(
-        0.08,
-        [0.04, 0.02, 0.3, 0.08, 0.04, 0.8, 0.0, 0.15, 0.0, 0.0],
-        Ease::InOut,
-    ),
-    limbs(
-        0.38,
-        [-0.7, -0.06, 2.3, 0.45, -0.9, 0.9, 0.2, 0.3, 0.5, -1.0],
-        Ease::InOut,
-    ),
-    limbs(
-        0.50,
-        [0.6, 0.16, 1.1, 0.05, 0.75, 0.1, -0.1, 0.3, -1.2, -1.2],
-        Ease::In,
-    ),
-    limbs(
-        0.62,
-        [0.55, 0.18, 0.95, 0.05, 0.7, 0.15, -0.1, 0.3, -1.25, -1.2],
-        Ease::Out,
-    ),
+    limbs(0.08, [0.04, 0.02, 0.3, 0.08, 0.04, 0.8, 0.0, 0.15, 0.0, 0.0], Ease::InOut),
+    limbs(0.38, [-0.7, -0.06, 2.3, 0.45, -0.9, 0.9, 0.2, 0.3, 0.5, -1.0], Ease::InOut),
+    limbs(0.50, [0.6, 0.16, 1.1, 0.05, 0.75, 0.1, -0.1, 0.3, -1.2, -1.2], Ease::In),
+    limbs(0.62, [0.55, 0.18, 0.95, 0.05, 0.7, 0.15, -0.1, 0.3, -1.25, -1.2], Ease::Out),
     limbs(1.0, HOLD, Ease::InOut),
 ];
 
 const BODY_SLASH_BACK: [Body; 6] = [
     limbs(0.0, HOLD, Ease::InOut),
-    limbs(
-        0.08,
-        [-0.04, 0.02, 0.3, 0.08, -0.04, 0.8, 0.0, 0.15, 0.0, 0.0],
-        Ease::InOut,
-    ),
-    limbs(
-        0.36,
-        [0.55, -0.04, 1.6, 0.05, 0.95, 1.0, 0.1, 0.3, 0.4, 1.0],
-        Ease::InOut,
-    ),
-    limbs(
-        0.50,
-        [-0.6, 0.14, 1.3, 0.6, -0.7, 0.1, -0.1, 0.3, -1.1, 1.2],
-        Ease::In,
-    ),
-    limbs(
-        0.62,
-        [-0.55, 0.15, 1.2, 0.6, -0.65, 0.15, -0.1, 0.3, -1.15, 1.2],
-        Ease::Out,
-    ),
+    limbs(0.08, [-0.04, 0.02, 0.3, 0.08, -0.04, 0.8, 0.0, 0.15, 0.0, 0.0], Ease::InOut),
+    limbs(0.36, [0.55, -0.04, 1.6, 0.05, 0.95, 1.0, 0.1, 0.3, 0.4, 1.0], Ease::InOut),
+    limbs(0.50, [-0.6, 0.14, 1.3, 0.6, -0.7, 0.1, -0.1, 0.3, -1.1, 1.2], Ease::In),
+    limbs(0.62, [-0.55, 0.15, 1.2, 0.6, -0.65, 0.15, -0.1, 0.3, -1.15, 1.2], Ease::Out),
     limbs(1.0, HOLD, Ease::InOut),
 ];
 
 const BODY_HEAVY: [Body; 7] = [
     limbs(0.0, HOLD, Ease::InOut),
-    limbs(
-        0.08,
-        [0.0, 0.04, 0.2, 0.08, 0.0, 0.85, 0.0, 0.15, 0.0, 0.0],
-        Ease::InOut,
-    ),
-    limbs(
-        0.40,
-        [-0.2, -0.22, 2.8, 0.15, 0.25, 0.4, 2.5, 0.6, 0.6, 0.0],
-        Ease::InOut,
-    ),
-    limbs(
-        0.52,
-        [0.1, 0.5, 1.1, 0.05, 0.3, 0.05, 1.0, 0.2, -1.3, 0.0],
-        Ease::In,
-    ),
-    limbs(
-        0.60,
-        [0.08, 0.45, 1.18, 0.05, 0.28, 0.08, 1.02, 0.2, -1.25, 0.0],
-        Ease::Out,
-    ),
-    limbs(
-        0.76,
-        [0.08, 0.44, 1.2, 0.05, 0.27, 0.1, 1.0, 0.2, -1.25, 0.0],
-        Ease::InOut,
-    ),
+    limbs(0.08, [0.0, 0.04, 0.2, 0.08, 0.0, 0.85, 0.0, 0.15, 0.0, 0.0], Ease::InOut),
+    limbs(0.40, [-0.2, -0.22, 2.8, 0.15, 0.25, 0.4, 2.5, 0.6, 0.6, 0.0], Ease::InOut),
+    limbs(0.52, [0.1, 0.5, 1.1, 0.05, 0.3, 0.05, 1.0, 0.2, -1.3, 0.0], Ease::In),
+    limbs(0.60, [0.08, 0.45, 1.18, 0.05, 0.28, 0.08, 1.02, 0.2, -1.25, 0.0], Ease::Out),
+    limbs(0.76, [0.08, 0.44, 1.2, 0.05, 0.27, 0.1, 1.0, 0.2, -1.25, 0.0], Ease::InOut),
     limbs(1.0, HOLD, Ease::InOut),
 ];
 
 const BODY_DIG: [Body; 7] = [
     limbs(0.0, HOLD, Ease::InOut),
-    limbs(
-        0.10,
-        [0.0, 0.03, 0.25, 0.08, 0.0, 0.85, 0.3, 0.4, 0.0, 0.0],
-        Ease::InOut,
-    ),
-    limbs(
-        0.36,
-        [-0.2, -0.05, 0.6, 0.1, 0.1, 1.2, 0.9, 0.9, 0.6, 0.0],
-        Ease::InOut,
-    ),
-    limbs(
-        0.50,
-        [0.15, 0.35, 0.9, 0.05, 0.2, 0.15, 0.7, 0.3, -1.2, 0.0],
-        Ease::In,
-    ),
-    limbs(
-        0.58,
-        [0.13, 0.33, 0.92, 0.05, 0.2, 0.18, 0.72, 0.3, -1.15, 0.0],
-        Ease::Out,
-    ),
-    limbs(
-        0.78,
-        [0.35, 0.1, 1.3, 0.1, 0.4, 0.5, 1.1, 0.6, -0.3, -0.6],
-        Ease::InOut,
-    ),
+    limbs(0.10, [0.0, 0.03, 0.25, 0.08, 0.0, 0.85, 0.3, 0.4, 0.0, 0.0], Ease::InOut),
+    limbs(0.36, [-0.2, -0.05, 0.6, 0.1, 0.1, 1.2, 0.9, 0.9, 0.6, 0.0], Ease::InOut),
+    limbs(0.50, [0.15, 0.35, 0.9, 0.05, 0.2, 0.15, 0.7, 0.3, -1.2, 0.0], Ease::In),
+    limbs(0.58, [0.13, 0.33, 0.92, 0.05, 0.2, 0.18, 0.72, 0.3, -1.15, 0.0], Ease::Out),
+    limbs(0.78, [0.35, 0.1, 1.3, 0.1, 0.4, 0.5, 1.1, 0.6, -0.3, -0.6], Ease::InOut),
     limbs(1.0, HOLD, Ease::InOut),
 ];
 
 const BODY_THRUST: [Body; 6] = [
     limbs(0.0, HOLD, Ease::InOut),
-    limbs(
-        0.08,
-        [0.0, 0.02, 0.3, 0.08, 0.0, 0.85, 0.0, 0.15, 0.0, 0.0],
-        Ease::InOut,
-    ),
-    limbs(
-        0.34,
-        [-0.35, -0.06, 0.9, 0.15, -0.2, 1.7, 0.1, 0.3, 0.0, 0.0],
-        Ease::InOut,
-    ),
-    limbs(
-        0.46,
-        [0.3, 0.18, 1.5, 0.05, 0.15, 0.05, -0.2, 0.3, 0.0, 0.0],
-        Ease::In,
-    ),
-    limbs(
-        0.58,
-        [0.28, 0.16, 1.45, 0.05, 0.14, 0.1, -0.2, 0.3, 0.0, 0.0],
-        Ease::Out,
-    ),
+    limbs(0.08, [0.0, 0.02, 0.3, 0.08, 0.0, 0.85, 0.0, 0.15, 0.0, 0.0], Ease::InOut),
+    limbs(0.34, [-0.35, -0.06, 0.9, 0.15, -0.2, 1.7, 0.1, 0.3, 0.0, 0.0], Ease::InOut),
+    limbs(0.46, [0.3, 0.18, 1.5, 0.05, 0.15, 0.05, -0.2, 0.3, 0.0, 0.0], Ease::In),
+    limbs(0.58, [0.28, 0.16, 1.45, 0.05, 0.14, 0.1, -0.2, 0.3, 0.0, 0.0], Ease::Out),
     limbs(1.0, HOLD, Ease::InOut),
 ];
 
 const BODY_LUNGE: [Body; 7] = [
     limbs(0.0, HOLD, Ease::InOut),
-    limbs(
-        0.08,
-        [0.0, 0.03, 0.25, 0.08, 0.0, 0.85, 0.0, 0.15, 0.0, 0.0],
-        Ease::InOut,
-    ),
-    limbs(
-        0.40,
-        [-0.5, -0.12, 0.8, 0.2, -0.3, 1.9, 0.3, 0.5, 0.0, 0.0],
-        Ease::InOut,
-    ),
-    limbs(
-        0.52,
-        [0.45, 0.3, 1.55, 0.05, 0.2, 0.0, -0.4, 0.3, 0.0, 0.0],
-        Ease::In,
-    ),
-    limbs(
-        0.62,
-        [0.43, 0.28, 1.5, 0.05, 0.19, 0.05, -0.4, 0.3, 0.0, 0.0],
-        Ease::Out,
-    ),
-    limbs(
-        0.76,
-        [0.42, 0.27, 1.48, 0.05, 0.18, 0.06, -0.38, 0.3, 0.0, 0.0],
-        Ease::InOut,
-    ),
+    limbs(0.08, [0.0, 0.03, 0.25, 0.08, 0.0, 0.85, 0.0, 0.15, 0.0, 0.0], Ease::InOut),
+    limbs(0.40, [-0.5, -0.12, 0.8, 0.2, -0.3, 1.9, 0.3, 0.5, 0.0, 0.0], Ease::InOut),
+    limbs(0.52, [0.45, 0.3, 1.55, 0.05, 0.2, 0.0, -0.4, 0.3, 0.0, 0.0], Ease::In),
+    limbs(0.62, [0.43, 0.28, 1.5, 0.05, 0.19, 0.05, -0.4, 0.3, 0.0, 0.0], Ease::Out),
+    limbs(0.76, [0.42, 0.27, 1.48, 0.05, 0.18, 0.06, -0.38, 0.3, 0.0, 0.0], Ease::InOut),
     limbs(1.0, HOLD, Ease::InOut),
 ];
 
 const BODY_SPIN: [Body; 7] = [
     limbs(0.0, HOLD, Ease::InOut),
-    limbs(
-        0.10,
-        [0.05, 0.03, 0.25, 0.08, 0.05, 0.85, 0.05, 0.2, 0.0, 0.0],
-        Ease::InOut,
-    ),
-    limbs(
-        0.42,
-        [-1.2, -0.05, 1.35, 0.4, -1.5, 0.5, 1.0, 0.9, -1.3, -1.4],
-        Ease::InOut,
-    ),
-    limbs(
-        0.56,
-        [0.9, 0.16, 1.45, 0.05, 0.8, 0.1, 1.2, 0.35, -1.3, -1.4],
-        Ease::In,
-    ),
-    limbs(
-        0.64,
-        [0.8, 0.14, 1.42, 0.05, 0.72, 0.14, 1.15, 0.35, -1.25, -1.4],
-        Ease::Out,
-    ),
-    limbs(
-        0.78,
-        [0.75, 0.13, 1.4, 0.05, 0.68, 0.15, 1.1, 0.35, -1.25, -1.4],
-        Ease::InOut,
-    ),
+    limbs(0.10, [0.05, 0.03, 0.25, 0.08, 0.05, 0.85, 0.05, 0.2, 0.0, 0.0], Ease::InOut),
+    limbs(0.42, [-1.2, -0.05, 1.35, 0.4, -1.5, 0.5, 1.0, 0.9, -1.3, -1.4], Ease::InOut),
+    limbs(0.56, [0.9, 0.16, 1.45, 0.05, 0.8, 0.1, 1.2, 0.35, -1.3, -1.4], Ease::In),
+    limbs(0.64, [0.8, 0.14, 1.42, 0.05, 0.72, 0.14, 1.15, 0.35, -1.25, -1.4], Ease::Out),
+    limbs(0.78, [0.75, 0.13, 1.4, 0.05, 0.68, 0.15, 1.1, 0.35, -1.25, -1.4], Ease::InOut),
     limbs(1.0, HOLD, Ease::InOut),
 ];
 
 const BODY_SMASH: [Body; 7] = [
     limbs(0.0, HOLD, Ease::InOut),
-    limbs(
-        0.10,
-        [0.0, 0.04, 0.2, 0.08, 0.0, 0.85, 0.0, 0.15, 0.0, 0.0],
-        Ease::InOut,
-    ),
-    limbs(
-        0.42,
-        [-0.15, -0.18, 2.7, 0.15, 0.2, 0.3, 2.4, 0.6, 0.5, 0.0],
-        Ease::InOut,
-    ),
-    limbs(
-        0.54,
-        [0.1, 0.42, 1.1, 0.05, 0.25, 0.1, 0.85, 0.3, -1.2, 0.0],
-        Ease::In,
-    ),
-    limbs(
-        0.60,
-        [0.08, 0.38, 1.16, 0.05, 0.24, 0.12, 0.88, 0.3, -1.15, 0.0],
-        Ease::Out,
-    ),
-    limbs(
-        0.74,
-        [0.08, 0.37, 1.18, 0.05, 0.23, 0.13, 0.88, 0.3, -1.15, 0.0],
-        Ease::InOut,
-    ),
+    limbs(0.10, [0.0, 0.04, 0.2, 0.08, 0.0, 0.85, 0.0, 0.15, 0.0, 0.0], Ease::InOut),
+    limbs(0.42, [-0.15, -0.18, 2.7, 0.15, 0.2, 0.3, 2.4, 0.6, 0.5, 0.0], Ease::InOut),
+    limbs(0.54, [0.1, 0.42, 1.1, 0.05, 0.25, 0.1, 0.85, 0.3, -1.2, 0.0], Ease::In),
+    limbs(0.60, [0.08, 0.38, 1.16, 0.05, 0.24, 0.12, 0.88, 0.3, -1.15, 0.0], Ease::Out),
+    limbs(0.74, [0.08, 0.37, 1.18, 0.05, 0.23, 0.13, 0.88, 0.3, -1.15, 0.0], Ease::InOut),
     limbs(1.0, HOLD, Ease::InOut),
 ];
 
 const BODY_SLAM: [Body; 7] = [
     limbs(0.0, HOLD, Ease::InOut),
-    limbs(
-        0.10,
-        [0.0, 0.04, 0.2, 0.08, 0.0, 0.85, 0.0, 0.15, 0.0, 0.0],
-        Ease::InOut,
-    ),
-    limbs(
-        0.42,
-        [-0.2, -0.28, 2.9, 0.15, 0.25, 0.4, 2.7, 0.6, 0.7, 0.0],
-        Ease::InOut,
-    ),
-    limbs(
-        0.54,
-        [0.1, 0.6, 0.9, 0.05, 0.3, 0.05, 0.9, 0.2, -1.4, 0.0],
-        Ease::In,
-    ),
-    limbs(
-        0.62,
-        [0.08, 0.55, 0.95, 0.05, 0.28, 0.08, 0.92, 0.2, -1.35, 0.0],
-        Ease::Out,
-    ),
-    limbs(
-        0.78,
-        [0.08, 0.53, 0.97, 0.05, 0.27, 0.1, 0.92, 0.2, -1.35, 0.0],
-        Ease::InOut,
-    ),
+    limbs(0.10, [0.0, 0.04, 0.2, 0.08, 0.0, 0.85, 0.0, 0.15, 0.0, 0.0], Ease::InOut),
+    limbs(0.42, [-0.2, -0.28, 2.9, 0.15, 0.25, 0.4, 2.7, 0.6, 0.7, 0.0], Ease::InOut),
+    limbs(0.54, [0.1, 0.6, 0.9, 0.05, 0.3, 0.05, 0.9, 0.2, -1.4, 0.0], Ease::In),
+    limbs(0.62, [0.08, 0.55, 0.95, 0.05, 0.28, 0.08, 0.92, 0.2, -1.35, 0.0], Ease::Out),
+    limbs(0.78, [0.08, 0.53, 0.97, 0.05, 0.27, 0.1, 0.92, 0.2, -1.35, 0.0], Ease::InOut),
     limbs(1.0, HOLD, Ease::InOut),
 ];
 
@@ -649,17 +402,7 @@ const SHIELD_UP: [f32; 6] = [-0.17, 0.12, -0.02, 1.5, 0.05, 0.0];
 
 impl Limbs {
     fn from_array(v: [f32; 10]) -> Self {
-        Self {
-            twist: v[0],
-            lean: v[1],
-            shoulder: v[2],
-            arm_out: v[3],
-            yaw: v[4],
-            elbow: v[5],
-            left_shoulder: v[6],
-            left_elbow: v[7],
-            wrist: [v[8], v[9]],
-        }
+        Self { twist: v[0], lean: v[1], shoulder: v[2], arm_out: v[3], yaw: v[4], elbow: v[5], left_shoulder: v[6], left_elbow: v[7], wrist: [v[8], v[9]] }
     }
 
     /// Arms holding something out in front, ready to use it.
@@ -684,42 +427,23 @@ impl Limbs {
     }
 
     fn to_array(self) -> [f32; 10] {
-        [
-            self.twist,
-            self.lean,
-            self.shoulder,
-            self.arm_out,
-            self.yaw,
-            self.elbow,
-            self.left_shoulder,
-            self.left_elbow,
-            self.wrist[0],
-            self.wrist[1],
-        ]
+        [self.twist, self.lean, self.shoulder, self.arm_out, self.yaw, self.elbow, self.left_shoulder, self.left_elbow, self.wrist[0], self.wrist[1]]
     }
 }
 
 /// The first-person hand's offset and turn while blocking with a sword.
 pub fn guard_pose() -> (Vec3, Quat) {
     let v = GUARD;
-    (
-        Vec3::new(v[0], v[1], v[2]),
-        Quat::from_euler(EulerRot::XYZ, v[3], v[4], v[5]),
-    )
+    (Vec3::new(v[0], v[1], v[2]), Quat::from_euler(EulerRot::XYZ, v[3], v[4], v[5]))
 }
 
 /// The left hand's offset and turn holding a shield, `up` (0..1) of the way
 /// to raised, `bash` (0..1 through a bash) shoving it out ahead. In the right
 /// hand's frame (`hands` mirrors it for the left).
 pub fn shield_pose(up: f32, bash: Option<f32>) -> (Vec3, Quat) {
-    let v: [f32; 6] = std::array::from_fn(|i| {
-        SHIELD_REST[i] + (SHIELD_UP[i] - SHIELD_REST[i]) * up.clamp(0.0, 1.0)
-    });
+    let v: [f32; 6] = std::array::from_fn(|i| SHIELD_REST[i] + (SHIELD_UP[i] - SHIELD_REST[i]) * up.clamp(0.0, 1.0));
     let shove = bash.map_or(0.0, crate::combat::shield::bash_reach);
-    (
-        Vec3::new(v[0], v[1], v[2] - shove * 0.22),
-        Quat::from_euler(EulerRot::XYZ, v[3], v[4], v[5]),
-    )
+    (Vec3::new(v[0], v[1], v[2] - shove * 0.22), Quat::from_euler(EulerRot::XYZ, v[3], v[4], v[5]))
 }
 
 impl Swing {
@@ -798,25 +522,12 @@ impl Swing {
     /// The hand's offset and turn `t` (0..1) of the way through a swing.
     pub fn pose(self, t: f32) -> (Vec3, Quat) {
         let v = sample(self.keys(), t);
-        (
-            Vec3::new(v[0], v[1], v[2]),
-            Quat::from_euler(EulerRot::XYZ, v[3], v[4], v[5]),
-        )
+        (Vec3::new(v[0], v[1], v[2]), Quat::from_euler(EulerRot::XYZ, v[3], v[4], v[5]))
     }
 
     /// A fighting swing (a weapon's move): it hits foes in its arc and never mines.
     pub fn fights(self) -> bool {
-        matches!(
-            self,
-            Swing::Slash
-                | Swing::SlashBack
-                | Swing::Heavy
-                | Swing::Thrust
-                | Swing::Lunge
-                | Swing::Spin
-                | Swing::Smash
-                | Swing::Slam
-        )
+        matches!(self, Swing::Slash | Swing::SlashBack | Swing::Heavy | Swing::Thrust | Swing::Lunge | Swing::Spin | Swing::Smash | Swing::Slam)
     }
 
     /// The body's arms `t` (0..1) of the way through a swing (third person).
@@ -847,11 +558,7 @@ pub fn lands(swing: Swing, before: f32, after: f32) -> bool {
 /// each swing does one blow's share of it. Total time comes out close to the
 /// old continuous mining: the first blow lands at the contact moment.
 pub fn blow_share(swing: Swing, seconds: f32) -> f32 {
-    if seconds <= 0.0 {
-        1.0
-    } else {
-        swing.period() / seconds
-    }
+    if seconds <= 0.0 { 1.0 } else { swing.period() / seconds }
 }
 
 #[cfg(test)]
@@ -898,15 +605,9 @@ mod tests {
         for s in ALL {
             for t in [0.0, 1.0] {
                 let (p, q) = s.pose(t);
-                assert!(
-                    p.length() < 1e-5 && q.angle_between(Quat::IDENTITY) < 1e-5,
-                    "{s:?} at {t}"
-                );
+                assert!(p.length() < 1e-5 && q.angle_between(Quat::IDENTITY) < 1e-5, "{s:?} at {t}");
                 let (a, b) = (sample(s.body_keys(), t), HOLD);
-                assert!(
-                    a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1e-5),
-                    "{s:?} body at {t}"
-                );
+                assert!(a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1e-5), "{s:?} body at {t}");
             }
         }
     }
@@ -929,15 +630,8 @@ mod tests {
         // The tool is furthest into its strike exactly at contact: the
         // moment the hit is counted is the moment it looks like it hits.
         for s in ALL {
-            let deepest = (0..=1000)
-                .map(|i| i as f32 / 1000.0)
-                .min_by(|a, b| drive(s, *a).total_cmp(&drive(s, *b)))
-                .unwrap();
-            assert!(
-                (deepest - s.contact()).abs() < 0.002,
-                "{s:?}: deepest at {deepest}, blow at {}",
-                s.contact()
-            );
+            let deepest = (0..=1000).map(|i| i as f32 / 1000.0).min_by(|a, b| drive(s, *a).total_cmp(&drive(s, *b))).unwrap();
+            assert!((deepest - s.contact()).abs() < 0.002, "{s:?}: deepest at {deepest}, blow at {}", s.contact());
         }
     }
 
@@ -946,10 +640,7 @@ mod tests {
         for s in ALL {
             let c = s.contact();
             let speed = |t: f32| (drive(s, t) - drive(s, t - 0.01)).abs();
-            assert!(
-                speed(c) > speed(c - 0.08),
-                "{s:?} should hit hardest at contact"
-            );
+            assert!(speed(c) > speed(c - 0.08), "{s:?} should hit hardest at contact");
             // Winding up is slower than the strike.
             assert!(speed(c) > 2.0 * speed(0.3), "{s:?}");
         }
@@ -970,17 +661,9 @@ mod tests {
         assert!(p0.x - p1.x > 0.3 && (p0.y - p1.y).abs() < 0.08);
         // The body does the same: the axe twists the torso across, the pick
         // raises the arm high and brings it down.
-        let (a, b) = (
-            Swing::Chop.limbs(windup),
-            Swing::Chop.limbs(Swing::Chop.contact()),
-        );
-        assert!(
-            b.twist - a.twist > 1.0 && b.yaw - a.yaw > 1.2 && (b.shoulder - a.shoulder).abs() < 0.3
-        );
-        let (a, b) = (
-            Swing::Overhead.limbs(windup),
-            Swing::Overhead.limbs(Swing::Overhead.contact()),
-        );
+        let (a, b) = (Swing::Chop.limbs(windup), Swing::Chop.limbs(Swing::Chop.contact()));
+        assert!(b.twist - a.twist > 1.0 && b.yaw - a.yaw > 1.2 && (b.shoulder - a.shoulder).abs() < 0.3);
+        let (a, b) = (Swing::Overhead.limbs(windup), Swing::Overhead.limbs(Swing::Overhead.contact()));
         assert!(a.shoulder - b.shoulder > 1.2 && (b.twist - a.twist).abs() < 0.4);
     }
 
@@ -1010,10 +693,7 @@ mod tests {
         assert!(Swing::Heavy.period() > Swing::Slash.period() * 1.5);
         // Charging holds the arm on the way to the wind-up, ending there.
         assert_eq!(Swing::Heavy.windup(), HEAVY_WINDUP);
-        assert_eq!(
-            charge_pose(Swing::Heavy, 1.0),
-            Swing::Heavy.pose(HEAVY_WINDUP)
-        );
+        assert_eq!(charge_pose(Swing::Heavy, 1.0), Swing::Heavy.pose(HEAVY_WINDUP));
         assert_eq!(charge_pose(Swing::Heavy, 0.0), Swing::Heavy.pose(0.0));
         assert!(Swing::Heavy.fights() && Swing::SlashBack.fights() && !Swing::Chop.fights());
     }
@@ -1024,10 +704,7 @@ mod tests {
         for s in [Swing::Thrust, Swing::Lunge] {
             let (p0, q0) = s.pose(s.windup());
             let (p1, q1) = s.pose(s.contact());
-            assert!(
-                p0.z - p1.z > 0.25 && (yaw(q1) - yaw(q0)).abs() < 0.4,
-                "{s:?}"
-            );
+            assert!(p0.z - p1.z > 0.25 && (yaw(q1) - yaw(q0)).abs() < 0.4, "{s:?}");
         }
         assert!(Swing::Lunge.period() > Swing::Thrust.period() * 1.5);
         // The spin sweeps wider than the chop; the slam drops further than the smash.

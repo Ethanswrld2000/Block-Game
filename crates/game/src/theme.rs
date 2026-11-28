@@ -13,39 +13,24 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 use bevy::sprite::{BorderRect, TextureSlicer};
 use bevy::text::FontSize;
-use bevy::ui::VisualBox;
 use bevy::ui::widget::NodeImageMode;
+use bevy::ui::VisualBox;
 use serde::Deserialize;
 
 pub struct ThemePlugin;
 
 impl Plugin for ThemePlugin {
     fn build(&self, app: &mut App) {
-        let spec: SheetSpec = ron::from_str(include_str!("../../../assets/textures/ui.ron"))
-            .unwrap_or_else(|e| panic!("ui.ron: {e}"));
+        let spec: SheetSpec = ron::from_str(include_str!("../../../assets/textures/ui.ron")).unwrap_or_else(|e| panic!("ui.ron: {e}"));
         // The game's font replaces Bevy's built-in one, so every piece of
         // text uses it without asking.
         let bold = {
             let mut fonts = app.world_mut().resource_mut::<Assets<Font>>();
-            let _ = fonts.insert(
-                AssetId::default(),
-                Font::from_bytes(include_bytes!("../../../assets/fonts/ui.ttf").to_vec()),
-            );
-            fonts.add(Font::from_bytes(
-                include_bytes!("../../../assets/fonts/ui_bold.ttf").to_vec(),
-            ))
+            let _ = fonts.insert(AssetId::default(), Font::from_bytes(include_bytes!("../../../assets/fonts/ui.ttf").to_vec()));
+            fonts.add(Font::from_bytes(include_bytes!("../../../assets/fonts/ui_bold.ttf").to_vec()))
         };
-        let sheet = app
-            .world()
-            .resource::<AssetServer>()
-            .load("textures/ui.png");
-        app.insert_resource(Theme {
-            sheet,
-            sprites: spec.sprites,
-            scale: spec.scale,
-            bold,
-        })
-        .add_systems(PostUpdate, shadow_all_text);
+        let sheet = app.world().resource::<AssetServer>().load("textures/ui.png");
+        app.insert_resource(Theme { sheet, sprites: spec.sprites, scale: spec.scale, bold }).add_systems(PostUpdate, shadow_all_text);
     }
 }
 
@@ -81,10 +66,7 @@ impl Theme {
             Some(s) => *s,
             None => {
                 warn_once!("ui.ron has no sprite '{name}'");
-                SpriteSpec {
-                    rect: (0, 0, 1, 1),
-                    slice: None,
-                }
+                SpriteSpec { rect: (0, 0, 1, 1), slice: None }
             }
         }
     }
@@ -96,10 +78,7 @@ impl Theme {
         let (x, y, w, h) = s.rect;
         let mode = match s.slice {
             Some((l, t, r, b)) => NodeImageMode::Sliced(TextureSlicer {
-                border: BorderRect {
-                    min_inset: Vec2::new(l as f32, t as f32),
-                    max_inset: Vec2::new(r as f32, b as f32),
-                },
+                border: BorderRect { min_inset: Vec2::new(l as f32, t as f32), max_inset: Vec2::new(r as f32, b as f32) },
                 max_corner_scale: self.scale,
                 ..default()
             }),
@@ -107,12 +86,7 @@ impl Theme {
         };
         ImageNode {
             image: self.sheet.clone(),
-            rect: Some(Rect::new(
-                x as f32,
-                y as f32,
-                (x + w) as f32,
-                (y + h) as f32,
-            )),
+            rect: Some(Rect::new(x as f32, y as f32, (x + w) as f32, (y + h) as f32)),
             image_mode: mode,
             visual_box: VisualBox::BorderBox,
             ..default()
@@ -132,15 +106,7 @@ impl Theme {
     /// A sprite at its own size times the pixel scale, e.g. an icon.
     pub fn icon(&self, name: &str) -> impl Bundle {
         let size = self.size(name);
-        (
-            self.image(name),
-            Node {
-                width: Val::Px(size.x),
-                height: Val::Px(size.y),
-                flex_shrink: 0.0,
-                ..default()
-            },
-        )
+        (self.image(name), Node { width: Val::Px(size.x), height: Val::Px(size.y), flex_shrink: 0.0, ..default() })
     }
 
     /// A sprite's size on screen, in points.
@@ -151,11 +117,7 @@ impl Theme {
 
     /// The bold face.
     pub fn bold(&self, size: f32) -> TextFont {
-        TextFont {
-            font: self.bold.clone().into(),
-            font_size: FontSize::Px(size),
-            ..default()
-        }
+        TextFont { font: self.bold.clone().into(), font_size: FontSize::Px(size), ..default() }
     }
 }
 
@@ -216,22 +178,11 @@ pub mod sizes {
 }
 
 /// The shadow put under text so it reads on any background.
-pub const SHADOW: TextShadow = TextShadow {
-    offset: Vec2::new(2.0, 2.0),
-    color: Color::srgba(0.0, 0.0, 0.0, 0.9),
-};
+pub const SHADOW: TextShadow = TextShadow { offset: Vec2::new(2.0, 2.0), color: Color::srgba(0.0, 0.0, 0.0, 0.9) };
 
 /// A piece of text in the game's font, with a shadow.
 pub fn text(s: impl Into<String>, size: f32, color: Color) -> impl Bundle {
-    (
-        Text::new(s),
-        TextFont {
-            font_size: FontSize::Px(size),
-            ..default()
-        },
-        TextColor(color),
-        SHADOW,
-    )
+    (Text::new(s), TextFont { font_size: FontSize::Px(size), ..default() }, TextColor(color), SHADOW)
 }
 
 /// Text that should have no shadow (e.g. on a light button).
@@ -240,10 +191,7 @@ pub struct NoShadow;
 
 /// Every piece of UI text gets a shadow unless it has one or asks not to.
 #[allow(clippy::type_complexity)]
-fn shadow_all_text(
-    mut commands: Commands,
-    q: Query<Entity, (Added<Text>, Without<TextShadow>, Without<NoShadow>)>,
-) {
+fn shadow_all_text(mut commands: Commands, q: Query<Entity, (Added<Text>, Without<TextShadow>, Without<NoShadow>)>) {
     for e in &q {
         commands.entity(e).insert(SHADOW);
     }
@@ -261,10 +209,7 @@ mod tests {
         let mut last = 0.0;
         for i in 1..100 {
             let v = stepped(i as f32 / 100.0, 4);
-            assert!(
-                (v * 4.0 - (v * 4.0).round()).abs() < 1e-5,
-                "{v} is between steps"
-            );
+            assert!((v * 4.0 - (v * 4.0).round()).abs() < 1e-5, "{v} is between steps");
             assert!(v >= last);
             last = v;
         }
@@ -275,60 +220,16 @@ mod tests {
 
     #[test]
     fn sheet_lists_what_the_game_uses() {
-        let spec: super::SheetSpec =
-            ron::from_str(include_str!("../../../assets/textures/ui.ron")).unwrap();
+        let spec: super::SheetSpec = ron::from_str(include_str!("../../../assets/textures/ui.ron")).unwrap();
         for name in [
-            "panel",
-            "panel_light",
-            "inset",
-            "header",
-            "tooltip",
-            "banner",
-            "divider",
-            "slot",
-            "slot_hover",
-            "slot_selected",
-            "item",
-            "button",
-            "button_hover",
-            "button_down",
-            "button_off",
-            "bar",
-            "fill",
-            "knob",
-            "node_major",
-            "node_minor",
-            "node_halo",
-            "crosshair",
-            "icon_damage",
-            "icon_fatigue",
-            "icon_blood",
-            "icon_injuries",
-            "icon_food",
-            "icon_air",
-            "icon_warmth",
-            "icon_load",
-            "icon_focus",
-            "icon_xp",
-            "icon_levitate",
-            "icon_light",
-            "icon_lock",
-            "icon_check",
-            "icon_close",
-            "icon_camp",
-            "icon_temp",
-            "icon_cold",
-            "white",
+            "panel", "panel_light", "inset", "header", "tooltip", "banner", "divider", "slot", "slot_hover", "slot_selected", "item", "button",
+            "button_hover", "button_down", "button_off", "bar", "fill", "knob", "node_major", "node_minor", "node_halo", "crosshair",
+            "icon_damage", "icon_fatigue", "icon_blood", "icon_injuries", "icon_food", "icon_air", "icon_warmth", "icon_load", "icon_focus",
+            "icon_xp", "icon_levitate", "icon_light", "icon_lock", "icon_check", "icon_close", "icon_camp", "icon_temp", "icon_cold", "white",
         ] {
-            let s = spec
-                .sprites
-                .get(name)
-                .unwrap_or_else(|| panic!("missing {name}"));
+            let s = spec.sprites.get(name).unwrap_or_else(|| panic!("missing {name}"));
             if let Some((l, t, r, b)) = s.slice {
-                assert!(
-                    l + r < s.rect.2 && t + b < s.rect.3,
-                    "{name}: slice bigger than the sprite"
-                );
+                assert!(l + r < s.rect.2 && t + b < s.rect.3, "{name}: slice bigger than the sprite");
             }
         }
     }

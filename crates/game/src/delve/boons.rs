@@ -12,11 +12,11 @@ use worldgen::delve::Reward;
 
 use super::locks::RoomCleared;
 use super::{Below, DelveSet};
-use crate::inventory::Spill;
 use crate::inventory::grid::Stack;
 use crate::inventory::loot::Loot;
+use crate::inventory::Spill;
 use crate::items::Items;
-use crate::npc::{Npc, NpcBook, Order, body::SpawnNpc};
+use crate::npc::{body::SpawnNpc, Npc, NpcBook, Order};
 use crate::player::Player;
 use crate::sound::PlaySound;
 use crate::survival::health::Layer;
@@ -26,17 +26,10 @@ pub struct BoonsPlugin;
 
 impl Plugin for BoonsPlugin {
     fn build(&self, app: &mut App) {
-        let data: BoonData = ron::from_str(include_str!("../../../../assets/data/boons.ron"))
-            .unwrap_or_else(|e| panic!("boons.ron: {e}"));
+        let data: BoonData = ron::from_str(include_str!("../../../../assets/data/boons.ron")).unwrap_or_else(|e| panic!("boons.ron: {e}"));
         app.insert_resource(data)
             .init_resource::<Boons>()
-            .add_systems(
-                crate::menu::GameUpdate,
-                (forget, reward, mend, thirst, shopkeeper)
-                    .chain()
-                    .after(DelveSet)
-                    .after(super::locks::LocksSet),
-            );
+            .add_systems(crate::menu::GameUpdate, (forget, reward, mend, thirst, shopkeeper).chain().after(DelveSet).after(super::locks::LocksSet));
     }
 }
 
@@ -75,60 +68,23 @@ impl Boons {
         self.taken.iter().filter_map(f).sum()
     }
     pub fn might(&self) -> f32 {
-        self.sum(|e| {
-            if let Effect::Might(v) = e {
-                Some(*v)
-            } else {
-                None
-            }
-        })
+        self.sum(|e| if let Effect::Might(v) = e { Some(*v) } else { None })
     }
     /// Never more than 60% off.
     pub fn ward(&self) -> f32 {
-        self.sum(|e| {
-            if let Effect::Ward(v) = e {
-                Some(*v)
-            } else {
-                None
-            }
-        })
-        .min(0.6)
+        self.sum(|e| if let Effect::Ward(v) = e { Some(*v) } else { None }).min(0.6)
     }
     pub fn fleet(&self) -> f32 {
-        self.sum(|e| {
-            if let Effect::Fleet(v) = e {
-                Some(*v)
-            } else {
-                None
-            }
-        })
+        self.sum(|e| if let Effect::Fleet(v) = e { Some(*v) } else { None })
     }
     pub fn mend(&self) -> f32 {
-        self.sum(|e| {
-            if let Effect::Mend(v) = e {
-                Some(*v)
-            } else {
-                None
-            }
-        })
+        self.sum(|e| if let Effect::Mend(v) = e { Some(*v) } else { None })
     }
     pub fn thirst(&self) -> f32 {
-        self.sum(|e| {
-            if let Effect::Thirst(v) = e {
-                Some(*v)
-            } else {
-                None
-            }
-        })
+        self.sum(|e| if let Effect::Thirst(v) = e { Some(*v) } else { None })
     }
     pub fn fortune(&self) -> f32 {
-        self.sum(|e| {
-            if let Effect::Fortune(v) = e {
-                Some(*v)
-            } else {
-                None
-            }
-        })
+        self.sum(|e| if let Effect::Fortune(v) = e { Some(*v) } else { None })
     }
 }
 
@@ -155,24 +111,16 @@ fn reward(
     player: Res<Player>,
     mut s: ResMut<Survival>,
     mut dice: Local<u32>,
-    (mut spill, mut toast, mut sound): (
-        MessageWriter<Spill>,
-        MessageWriter<Toast>,
-        MessageWriter<PlaySound>,
-    ),
+    (mut spill, mut toast, mut sound): (MessageWriter<Spill>, MessageWriter<Toast>, MessageWriter<PlaySound>),
 ) {
     let (Some(floor), Some(run)) = (below.floor.clone(), below.run) else {
         cleared.clear();
         return;
     };
     for RoomCleared(r) in cleared.read() {
-        let Some(room) = floor.rooms.get(*r) else {
-            continue;
-        };
+        let Some(room) = floor.rooms.get(*r) else { continue };
         let mut roll = || {
-            *dice = dice
-                .wrapping_mul(1_664_525)
-                .wrapping_add(1_013_904_223 ^ *r as u32);
+            *dice = dice.wrapping_mul(1_664_525).wrapping_add(1_013_904_223 ^ *r as u32);
             (*dice >> 8) as f32 / (1u32 << 24) as f32
         };
         let at = Vec3::from_array(room.middle().map(|v| v as f32)) + Vec3::new(0.5, 1.0, 0.5);
@@ -180,10 +128,7 @@ fn reward(
             Some(Reward::Coin) => {
                 let n = coin_for(run.floor, roll(), boons.fortune());
                 if let Some(coin) = items.id("old_coin") {
-                    spill.write(Spill {
-                        stack: Stack::new(coin, n),
-                        at,
-                    });
+                    spill.write(Spill { stack: Stack::new(coin, n), at });
                 }
                 toast.write(Toast(format!("Reward: {n} old coin")));
             }
@@ -223,11 +168,7 @@ fn mend(time: Res<Time>, boons: Res<Boons>, mut s: ResMut<Survival>) {
     }
 }
 
-fn thirst(
-    mut slain: MessageReader<crate::combat::FoeSlain>,
-    boons: Res<Boons>,
-    mut s: ResMut<Survival>,
-) {
+fn thirst(mut slain: MessageReader<crate::combat::FoeSlain>, boons: Res<Boons>, mut s: ResMut<Survival>) {
     let t = boons.thirst();
     for f in slain.read() {
         if t > 0.0 && super::tag_room(f.tag).is_some() {
@@ -241,14 +182,7 @@ fn thirst(
 pub const SHOP_POST: u64 = u64::MAX - 7;
 
 /// Tallow stands in the shop room of a floor that has one.
-fn shopkeeper(
-    mut commands: Commands,
-    below: Res<Below>,
-    book: Res<NpcBook>,
-    npcs: Query<(Entity, &Npc)>,
-    mut spawn: MessageWriter<SpawnNpc>,
-    mut on: Local<Option<(u32, u8)>>,
-) {
+fn shopkeeper(mut commands: Commands, below: Res<Below>, book: Res<NpcBook>, npcs: Query<(Entity, &Npc)>, mut spawn: MessageWriter<SpawnNpc>, mut on: Local<Option<(u32, u8)>>) {
     let here = below.run.map(|r| (r.number, r.floor));
     if here == *on {
         return;
@@ -259,19 +193,12 @@ fn shopkeeper(
             commands.entity(e).despawn();
         }
     }
-    let Some(at) = below.floor.as_ref().and_then(|f| f.shop) else {
-        return;
-    };
-    let Some(kind) = book.kinds.iter().position(|k| k.dialogue == "tallow") else {
-        return;
-    };
+    let Some(at) = below.floor.as_ref().and_then(|f| f.shop) else { return };
+    let Some(kind) = book.kinds.iter().position(|k| k.dialogue == "tallow") else { return };
     let mut npc = Npc::new(kind, 0.0);
     npc.order = Order::Stay;
     npc.post = Some(SHOP_POST);
-    spawn.write(SpawnNpc {
-        npc,
-        at: Vec3::new(at[0] as f32 + 0.5, at[1] as f32, at[2] as f32 + 0.5),
-    });
+    spawn.write(SpawnNpc { npc, at: Vec3::new(at[0] as f32 + 0.5, at[1] as f32, at[2] as f32 + 0.5) });
 }
 
 #[cfg(test)]
@@ -284,12 +211,7 @@ mod tests {
         assert!(d.boons.len() >= 6);
         let mut b = Boons::default();
         assert_eq!(b.might(), 0.0);
-        b.taken = vec![
-            Effect::Might(0.2),
-            Effect::Might(0.2),
-            Effect::Ward(0.5),
-            Effect::Ward(0.5),
-        ];
+        b.taken = vec![Effect::Might(0.2), Effect::Might(0.2), Effect::Ward(0.5), Effect::Ward(0.5)];
         assert!((b.might() - 0.4).abs() < 1e-6, "they stack");
         assert_eq!(b.ward(), 0.6, "ward is capped");
     }

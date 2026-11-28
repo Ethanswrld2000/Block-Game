@@ -79,11 +79,7 @@ pub enum Event<'a> {
     Slain(&'a str),
     Made(&'a str),
     /// Where you are now: biome name, height, on a sky island.
-    At {
-        biome: &'a str,
-        y: f32,
-        sky: bool,
-    },
+    At { biome: &'a str, y: f32, sky: bool },
     /// A place you've found (its key, like `barrow:12`).
     Found(&'a str),
 }
@@ -98,9 +94,7 @@ impl When {
             (When::Reach(biomes), Event::At { biome, .. }) => biomes.iter().any(|x| x == biome),
             (When::Below(h), Event::At { y, .. }) => y < *h,
             (When::Sky, Event::At { sky, .. }) => sky,
-            (When::Find(prefix), Event::Found(key)) => {
-                key.split(':').next() == Some(prefix.as_str())
-            }
+            (When::Find(prefix), Event::Found(key)) => key.split(':').next() == Some(prefix.as_str()),
             _ => false,
         }
     }
@@ -176,8 +170,7 @@ mod tests {
     use super::*;
 
     fn data() -> JourneyData {
-        JourneyData::parse(include_str!("../../../../assets/data/journey.ron"))
-            .expect("journey.ron")
+        JourneyData::parse(include_str!("../../../../assets/data/journey.ron")).expect("journey.ron")
     }
 
     #[test]
@@ -210,14 +203,10 @@ mod tests {
             }
             for g in &r.goals {
                 match &g.when {
-                    When::Mine(list) => list
-                        .iter()
-                        .for_each(|b| assert!(has(blocks, b), "block {b}")),
+                    When::Mine(list) => list.iter().for_each(|b| assert!(has(blocks, b), "block {b}")),
                     When::Slay(k) => assert!(has(creatures, k), "creature {k}"),
                     When::Make(i) => assert!(has(items, i), "item {i}"),
-                    When::Reach(list) => list
-                        .iter()
-                        .for_each(|b| assert!(has(biomes, b), "biome {b}")),
+                    When::Reach(list) => list.iter().for_each(|b| assert!(has(biomes, b), "biome {b}")),
                     _ => {}
                 }
             }
@@ -242,17 +231,7 @@ mod tests {
         .unwrap();
         let mut j = Journey::default();
         // Something from a later region counts early.
-        assert_eq!(
-            j.record(
-                &d,
-                Event::At {
-                    biome: "dunes",
-                    y: 0.0,
-                    sky: false
-                }
-            ),
-            vec![(1, 0)]
-        );
+        assert_eq!(j.record(&d, Event::At { biome: "dunes", y: 0.0, sky: false }), vec![(1, 0)]);
         assert!(j.record(&d, Event::Mined("reeds")).is_empty());
         assert_eq!(j.progress(&d.regions[0].goals[0]), (1, 2));
         assert!(j.advance(&d).is_empty());
@@ -264,25 +243,8 @@ mod tests {
         assert_eq!(j.current(&d).unwrap().name, "b");
         assert!(j.record(&d, Event::Found("dungeon:3")).is_empty());
         assert_eq!(j.record(&d, Event::Found("barrow:7")), vec![(1, 2)]);
-        assert!(
-            j.record(
-                &d,
-                Event::At {
-                    biome: "x",
-                    y: -50.0,
-                    sky: false
-                }
-            )
-            .is_empty()
-        );
-        j.record(
-            &d,
-            Event::At {
-                biome: "x",
-                y: -150.0,
-                sky: false,
-            },
-        );
+        assert!(j.record(&d, Event::At { biome: "x", y: -50.0, sky: false }).is_empty());
+        j.record(&d, Event::At { biome: "x", y: -150.0, sky: false });
         assert_eq!(j.advance(&d), vec![1]);
         assert!(j.current(&d).is_none());
     }

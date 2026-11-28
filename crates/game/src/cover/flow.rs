@@ -47,8 +47,7 @@ pub struct Waters {
 impl Waters {
     pub fn new(reg: &BlockRegistry) -> Self {
         let water = reg.id("water");
-        let puddle: [BlockId; 8] =
-            std::array::from_fn(|i| reg.expect(&format!("puddle_{}", i + 1)));
+        let puddle: [BlockId; 8] = std::array::from_fn(|i| reg.expect(&format!("puddle_{}", i + 1)));
         let level = reg
             .iter()
             .map(|(id, d)| {
@@ -73,12 +72,7 @@ impl Waters {
     pub fn cell(&self, b: Option<BlockId>) -> Cell {
         match b {
             None => Cell::Unloaded,
-            Some(b) => self
-                .level
-                .get(b.0 as usize)
-                .copied()
-                .flatten()
-                .map_or(Cell::Wall, Cell::Water),
+            Some(b) => self.level.get(b.0 as usize).copied().flatten().map_or(Cell::Wall, Cell::Water),
         }
     }
 
@@ -108,14 +102,7 @@ pub struct Flow {
 pub const ENDLESS: usize = 11;
 
 const SIDES: [[i32; 3]; 4] = [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]];
-const AROUND: [[i32; 3]; 6] = [
-    [1, 0, 0],
-    [-1, 0, 0],
-    [0, 1, 0],
-    [0, -1, 0],
-    [0, 0, 1],
-    [0, 0, -1],
-];
+const AROUND: [[i32; 3]; 6] = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
 
 fn add(p: BlockPos, d: [i32; 3]) -> BlockPos {
     BlockPos::new(p.x + d[0], p.y + d[1], p.z + d[2])
@@ -145,13 +132,7 @@ fn reach(p: BlockPos, cap: usize, through: impl Fn(BlockPos) -> bool) -> Vec<Blo
 /// pass). `get` reads the world; the pass sees its own changes as it goes, so
 /// only endless bodies add water and only falls out of the world take it away.
 /// `floor` is the lowest y water can be at.
-pub fn pass(
-    get: &impl Fn(BlockPos) -> Cell,
-    active: &HashSet<BlockPos>,
-    budget: usize,
-    floor: i32,
-    seed: &mut u64,
-) -> Flow {
+pub fn pass(get: &impl Fn(BlockPos) -> Cell, active: &HashSet<BlockPos>, budget: usize, floor: i32, seed: &mut u64) -> Flow {
     let mut flow = Flow::default();
     // Source blocks known to be in an endless body (true) or a small one (false).
     let mut endless: HashMap<BlockPos, bool> = HashMap::new();
@@ -163,12 +144,8 @@ pub fn pass(
     }
     let mut moved: Vec<BlockPos> = Vec::new();
     for p in cells {
-        let look = |q: BlockPos, levels: &HashMap<BlockPos, u8>| {
-            levels.get(&q).map_or_else(|| get(q), |l| Cell::Water(*l))
-        };
-        let Cell::Water(start) = look(p, &flow.levels) else {
-            continue;
-        };
+        let look = |q: BlockPos, levels: &HashMap<BlockPos, u8>| levels.get(&q).map_or_else(|| get(q), |l| Cell::Water(*l));
+        let Cell::Water(start) = look(p, &flow.levels) else { continue };
         if start == 0 {
             continue;
         }
@@ -176,11 +153,10 @@ pub fn pass(
         let down = BlockPos::new(p.x, p.y - 1, p.z);
         let below = look(down, &flow.levels);
         let sides = SIDES.map(|d| add(p, d));
-        let set =
-            |q: BlockPos, v: u8, levels: &mut HashMap<BlockPos, u8>, moved: &mut Vec<BlockPos>| {
-                levels.insert(q, v);
-                moved.push(q);
-            };
+        let set = |q: BlockPos, v: u8, levels: &mut HashMap<BlockPos, u8>, moved: &mut Vec<BlockPos>| {
+            levels.insert(q, v);
+            moved.push(q);
+        };
 
         // Part of a big body: fill below and any lower side, stay full.
         if start == 8 {
@@ -212,12 +188,7 @@ pub fn pass(
         }
 
         // Open all round: out to the five at once.
-        if below == Cell::Water(0)
-            && sides
-                .iter()
-                .all(|q| look(*q, &flow.levels) == Cell::Water(0))
-            && p.y > floor
-        {
+        if below == Cell::Water(0) && sides.iter().all(|q| look(*q, &flow.levels) == Cell::Water(0)) && p.y > floor {
             let (share, extra) = (l / 5, l % 5);
             if share > 0 {
                 for q in sides {
@@ -252,9 +223,7 @@ pub fn pass(
                 break;
             }
             let q = sides[(first + k) % 4];
-            let Cell::Water(n) = look(q, &flow.levels) else {
-                continue;
-            };
+            let Cell::Water(n) = look(q, &flow.levels) else { continue };
             let falls = matches!(look(BlockPos::new(q.x, q.y - 1, q.z), &flow.levels), Cell::Water(b) if b < 8);
             if n + 1 < l || (n < l && falls) {
                 set(q, n + 1, &mut flow.levels, &mut moved);
@@ -267,10 +236,7 @@ pub fn pass(
     }
     for p in moved {
         for q in around(p) {
-            let wet = flow
-                .levels
-                .get(&q)
-                .map_or_else(|| get(q), |l| Cell::Water(*l));
+            let wet = flow.levels.get(&q).map_or_else(|| get(q), |l| Cell::Water(*l));
             if matches!(wet, Cell::Water(l) if l > 0) {
                 flow.next.insert(q);
             }
@@ -292,10 +258,7 @@ mod tests {
 
     impl Pool {
         fn new() -> Self {
-            Self {
-                walls: HashSet::new(),
-                water: HashMap::new(),
-            }
+            Self { walls: HashSet::new(), water: HashMap::new() }
         }
 
         fn floor(&mut self, y: i32) {
@@ -371,13 +334,7 @@ mod tests {
     fn open_all_round_gives_its_water_out_at_once() {
         let mut p = Pool::new();
         p.water.insert(BlockPos::new(0, 4, 0), 8);
-        let flow = pass(
-            &|q| p.get(q),
-            &HashSet::from([BlockPos::new(0, 4, 0)]),
-            100,
-            -100,
-            &mut 7,
-        );
+        let flow = pass(&|q| p.get(q), &HashSet::from([BlockPos::new(0, 4, 0)]), 100, -100, &mut 7);
         assert_eq!(flow.levels[&BlockPos::new(0, 4, 0)], 0);
         assert_eq!(flow.levels[&BlockPos::new(0, 3, 0)], 4, "most goes down");
         for d in SIDES {
@@ -411,13 +368,7 @@ mod tests {
         for x in 0..3 {
             assert_eq!(level(&p, x, -2, 0), 8, "the trench filled right up");
         }
-        assert!(
-            p.water
-                .iter()
-                .filter(|(q, _)| q.x < 0)
-                .all(|(_, l)| *l == 8),
-            "the lake stays full"
-        );
+        assert!(p.water.iter().filter(|(q, _)| q.x < 0).all(|(_, l)| *l == 8), "the lake stays full");
     }
 
     #[test]
@@ -458,36 +409,22 @@ mod tests {
         let mut p = Pool::new();
         p.water.insert(BlockPos::new(0, -8, 0), 3);
         p.walls.insert(BlockPos::new(1, -8, 0));
-        let flow = pass(
-            &|q| p.get(q),
-            &HashSet::from([BlockPos::new(0, -8, 0)]),
-            100,
-            -100,
-            &mut 7,
-        );
+        let flow = pass(&|q| p.get(q), &HashSet::from([BlockPos::new(0, -8, 0)]), 100, -100, &mut 7);
         assert_eq!(flow.lost, 3);
         assert_eq!(flow.levels[&BlockPos::new(0, -8, 0)], 0);
     }
 
     #[test]
     fn levels_map_to_blocks_and_back() {
-        let tiles =
-            voxel::TileSheet::from_ron(include_str!("../../../../assets/textures/blocks.ron"))
-                .unwrap();
-        let reg =
-            BlockRegistry::from_ron(include_str!("../../../../assets/data/blocks.ron"), &tiles)
-                .unwrap();
+        let tiles = voxel::TileSheet::from_ron(include_str!("../../../../assets/textures/blocks.ron")).unwrap();
+        let reg = BlockRegistry::from_ron(include_str!("../../../../assets/data/blocks.ron"), &tiles).unwrap();
         let w = Waters::new(&reg);
         assert_eq!(w.block(8), reg.expect("water"));
         assert_eq!(w.block(0), BlockId::AIR);
         for l in 0..=8 {
             assert_eq!(w.level(w.block(l)), l);
         }
-        assert_eq!(
-            w.cell(Some(reg.expect("tall_grass"))),
-            Cell::Water(0),
-            "washed away"
-        );
+        assert_eq!(w.cell(Some(reg.expect("tall_grass"))), Cell::Water(0), "washed away");
         assert_eq!(w.cell(Some(reg.expect("dirt"))), Cell::Wall);
         assert_eq!(w.cell(Some(reg.expect("snow_layer_2"))), Cell::Wall);
         assert_eq!(w.cell(None), Cell::Unloaded);

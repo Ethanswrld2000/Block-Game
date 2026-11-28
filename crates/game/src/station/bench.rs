@@ -59,10 +59,8 @@ pub enum Special {
 }
 
 /// What the iron anvil takes in its tray to raise an item from each quality.
-pub const UPGRADE: [(crate::quality::Quality, &str, u16); 2] = [
-    (crate::quality::Quality::Plain, "mold_bloom", 2),
-    (crate::quality::Quality::Fine, "deepstone_shard", 2),
-];
+pub const UPGRADE: [(crate::quality::Quality, &str, u16); 2] =
+    [(crate::quality::Quality::Plain, "mold_bloom", 2), (crate::quality::Quality::Fine, "deepstone_shard", 2)];
 
 /// Odds of quality (plain, fine, masterwork, relic) for weapons, tools,
 /// shields and armor made at a bench: now and then one comes out fine.
@@ -103,9 +101,7 @@ pub struct Recipe {
 impl Recipe {
     /// Whether finishing this urn step (or study) is part of what teaches it.
     pub fn taught_by(&self, step: &str) -> bool {
-        self.unlock
-            .as_deref()
-            .is_some_and(|u| u.split('+').any(|p| p == step))
+        self.unlock.as_deref().is_some_and(|u| u.split('+').any(|p| p == step))
     }
 }
 
@@ -141,11 +137,7 @@ pub struct SlotDef {
 }
 
 const fn plain(name: &'static str, cap: u16) -> SlotDef {
-    SlotDef {
-        name,
-        cap,
-        kind: SlotKind::Plain,
-    }
+    SlotDef { name, cap, kind: SlotKind::Plain }
 }
 
 /// The tool bench: a long groove for the handle and a hollow for the material.
@@ -159,54 +151,25 @@ pub const CARPENTRY_TABLE_SLOTS: [SlotDef; 2] = [plain("top", 8), plain("joint",
 
 /// The machination table: the keel on the slipway, rigging and envelope in
 /// their trays, and the engine's metal in the gear box.
-pub const MACHINATION_SLOTS: [SlotDef; 4] = [
-    plain("keel", 8),
-    plain("rigging", 8),
-    plain("envelope", 4),
-    plain("engine", 8),
-];
+pub const MACHINATION_SLOTS: [SlotDef; 4] = [plain("keel", 8), plain("rigging", 8), plain("envelope", 4), plain("engine", 8)];
 
 /// The camp mat: what lies on the mat, and what binds it.
 pub const CAMP_MAT_SLOTS: [SlotDef; 2] = [plain("base", 8), plain("tie", 8)];
 
 /// The cooking pot: up to four kinds of things in the pot, and the fire under it.
 pub const COOKING_POT_SLOTS: [SlotDef; 5] = [
-    SlotDef {
-        name: "pot_1",
-        cap: 6,
-        kind: SlotKind::Mix,
-    },
-    SlotDef {
-        name: "pot_2",
-        cap: 6,
-        kind: SlotKind::Mix,
-    },
-    SlotDef {
-        name: "pot_3",
-        cap: 6,
-        kind: SlotKind::Mix,
-    },
-    SlotDef {
-        name: "pot_4",
-        cap: 6,
-        kind: SlotKind::Mix,
-    },
-    SlotDef {
-        name: "fire",
-        cap: 8,
-        kind: SlotKind::Fire,
-    },
+    SlotDef { name: "pot_1", cap: 6, kind: SlotKind::Mix },
+    SlotDef { name: "pot_2", cap: 6, kind: SlotKind::Mix },
+    SlotDef { name: "pot_3", cap: 6, kind: SlotKind::Mix },
+    SlotDef { name: "pot_4", cap: 6, kind: SlotKind::Mix },
+    SlotDef { name: "fire", cap: 8, kind: SlotKind::Fire },
 ];
 
 /// The cutting board: one thing on the board at a time, cut with the knife.
 pub const CUTTING_BOARD_SLOTS: [SlotDef; 1] = [plain("board", 4)];
 
 const fn fire(cap: u16) -> SlotDef {
-    SlotDef {
-        name: "fire",
-        cap,
-        kind: SlotKind::Fire,
-    }
+    SlotDef { name: "fire", cap, kind: SlotKind::Fire }
 }
 
 /// The smoking rack: what hangs on the rack, and the fire under it.
@@ -223,21 +186,9 @@ pub const LENS_SLOTS: [SlotDef; 1] = [plain("plate", 1)];
 
 /// The cauldron: up to three kinds of things in the brew, and the fire under it.
 pub const CAULDRON_SLOTS: [SlotDef; 4] = [
-    SlotDef {
-        name: "brew_1",
-        cap: 4,
-        kind: SlotKind::Mix,
-    },
-    SlotDef {
-        name: "brew_2",
-        cap: 4,
-        kind: SlotKind::Mix,
-    },
-    SlotDef {
-        name: "brew_3",
-        cap: 4,
-        kind: SlotKind::Mix,
-    },
+    SlotDef { name: "brew_1", cap: 4, kind: SlotKind::Mix },
+    SlotDef { name: "brew_2", cap: 4, kind: SlotKind::Mix },
+    SlotDef { name: "brew_3", cap: 4, kind: SlotKind::Mix },
     fire(8),
 ];
 
@@ -265,10 +216,7 @@ pub fn slots_of(station: &str) -> &'static [SlotDef] {
 }
 
 fn kind_of(station: &str, slot: &str) -> SlotKind {
-    slots_of(station)
-        .iter()
-        .find(|d| d.name == slot)
-        .map_or(SlotKind::Plain, |d| d.kind)
+    slots_of(station).iter().find(|d| d.name == slot).map_or(SlotKind::Plain, |d| d.kind)
 }
 
 /// How many of each thing lie in a station's mix slots, all slots together.
@@ -285,11 +233,7 @@ fn mixed(station: &str, board: &Board) -> BTreeMap<ItemId, u32> {
 impl BenchData {
     pub fn from_ron(text: &str, items: &Items) -> Result<Self, String> {
         let spec: BenchesSpec = ron::from_str(text).map_err(|e| format!("benches.ron: {e}"))?;
-        let item = |n: &str| {
-            items
-                .id(n)
-                .ok_or_else(|| format!("benches.ron: unknown item '{n}'"))
-        };
+        let item = |n: &str| items.id(n).ok_or_else(|| format!("benches.ron: unknown item '{n}'"));
         let mut fuel = BTreeMap::new();
         for (n, heat) in &spec.fuel {
             if *heat == 0 {
@@ -305,64 +249,38 @@ impl BenchData {
             }
             let mut slots = BTreeMap::new();
             for (name, (it, n)) in &r.slots {
-                let Some(def) = defs
-                    .iter()
-                    .find(|d| d.name == name && d.kind == SlotKind::Plain)
-                else {
-                    return Err(format!(
-                        "benches.ron: the {} has no '{name}' slot",
-                        r.station
-                    ));
+                let Some(def) = defs.iter().find(|d| d.name == name && d.kind == SlotKind::Plain) else {
+                    return Err(format!("benches.ron: the {} has no '{name}' slot", r.station));
                 };
                 if *n == 0 || *n > def.cap {
-                    return Err(format!(
-                        "benches.ron: {n} {it} don't fit the {name} slot (it holds {})",
-                        def.cap
-                    ));
+                    return Err(format!("benches.ron: {n} {it} don't fit the {name} slot (it holds {})", def.cap));
                 }
                 slots.insert(name.clone(), Stack::new(item(it)?, *n));
             }
             let pots: Vec<&SlotDef> = defs.iter().filter(|d| d.kind == SlotKind::Mix).collect();
             if !r.mix.is_empty() && pots.is_empty() {
-                return Err(format!(
-                    "benches.ron: the {} has no pot to mix in",
-                    r.station
-                ));
+                return Err(format!("benches.ron: the {} has no pot to mix in", r.station));
             }
             if r.mix.len() > pots.len() {
-                return Err(format!(
-                    "benches.ron: the {} pot holds {} kinds of things, not {}",
-                    r.station,
-                    pots.len(),
-                    r.mix.len()
-                ));
+                return Err(format!("benches.ron: the {} pot holds {} kinds of things, not {}", r.station, pots.len(), r.mix.len()));
             }
             let mut mix: Vec<Stack> = Vec::new();
             for (it, n) in &r.mix {
                 let id = item(it)?;
                 let cap = pots.iter().map(|d| d.cap).min().unwrap_or(0);
                 if *n == 0 || *n > cap || mix.iter().any(|s| s.item == id) {
-                    return Err(format!(
-                        "benches.ron: {n} {it} in the {} (each kind once, up to {cap})",
-                        r.station
-                    ));
+                    return Err(format!("benches.ron: {n} {it} in the {} (each kind once, up to {cap})", r.station));
                 }
                 mix.push(Stack::new(id, *n));
             }
             let fire = defs.iter().find(|d| d.kind == SlotKind::Fire);
             if r.heat > 0 {
                 let Some(f) = fire else {
-                    return Err(format!(
-                        "benches.ron: the {} has no fire for heat",
-                        r.station
-                    ));
+                    return Err(format!("benches.ron: the {} has no fire for heat", r.station));
                 };
                 let best = fuel.values().max().copied().unwrap_or(0) * f.cap as u32;
                 if r.heat > best {
-                    return Err(format!(
-                        "benches.ron: heat {} is more than a full fire gives ({best})",
-                        r.heat
-                    ));
+                    return Err(format!("benches.ron: heat {} is more than a full fire gives ({best})", r.heat));
                 }
             }
             if slots.is_empty() && mix.is_empty() {
@@ -394,13 +312,7 @@ impl BenchData {
             if let Some(sh) = spec.sharpen
                 && matches!(items.get(i).kind, crate::items::ItemKind::Tool { .. })
             {
-                recipes.push(one(
-                    "sharpening_stone",
-                    "edge",
-                    i,
-                    sh.work,
-                    Special::Sharpen,
-                ));
+                recipes.push(one("sharpening_stone", "edge", i, sh.work, Special::Sharpen));
             }
             if let Some(st) = spec.study {
                 recipes.push(one("magical_lens", "plate", i, st.work, Special::Study));
@@ -413,34 +325,17 @@ impl BenchData {
                 }
             }
         }
-        Ok(Self {
-            recipes,
-            fuel,
-            sharpen: spec.sharpen,
-            learned: Default::default(),
-            items: Some(items.clone()),
-        })
+        Ok(Self { recipes, fuel, sharpen: spec.sharpen, learned: Default::default(), items: Some(items.clone()) })
     }
 
     /// The heat the fire slot's fuel gives.
     pub fn heat_of(&self, station: &str, board: &Board) -> u32 {
-        board
-            .slots
-            .iter()
-            .filter(|(s, _)| kind_of(station, s) == SlotKind::Fire)
-            .map(|(_, f)| self.fuel.get(&f.item).copied().unwrap_or(0) * f.count as u32)
-            .sum()
+        board.slots.iter().filter(|(s, _)| kind_of(station, s) == SlotKind::Fire).map(|(_, f)| self.fuel.get(&f.item).copied().unwrap_or(0) * f.count as u32).sum()
     }
 
     /// How many of the fuel in the fire a recipe burns.
     fn burns(&self, station: &str, r: &Recipe, board: &Board) -> u16 {
-        let per = board
-            .slots
-            .iter()
-            .find(|(s, _)| kind_of(station, s) == SlotKind::Fire)
-            .and_then(|(_, f)| self.fuel.get(&f.item))
-            .copied()
-            .unwrap_or(1);
+        let per = board.slots.iter().find(|(s, _)| kind_of(station, s) == SlotKind::Fire).and_then(|(_, f)| self.fuel.get(&f.item)).copied().unwrap_or(1);
         r.heat.div_ceil(per) as u16
     }
 
@@ -451,25 +346,13 @@ impl BenchData {
         // only one of the quality it starts from.
         let same = |have: ItemId, want: ItemId| match (r.special, &self.items) {
             (Special::None, _) | (_, None) => have == want,
-            (Special::Upgrade(q), Some(items)) => {
-                items.get(have).base == want && items.get(have).quality == q
-            }
+            (Special::Upgrade(q), Some(items)) => items.get(have).base == want && items.get(have).quality == q,
             (_, Some(items)) => items.get(have).base == want,
         };
-        let plain_ok = r.slots.iter().all(|(s, want)| {
-            board
-                .slots
-                .get(s)
-                .is_some_and(|have| same(have.item, want.item) && have.count >= want.count)
-        }) && board
-            .slots
-            .keys()
-            .all(|s| kind_of(station, s) != SlotKind::Plain || r.slots.contains_key(s));
+        let plain_ok = r.slots.iter().all(|(s, want)| board.slots.get(s).is_some_and(|have| same(have.item, want.item) && have.count >= want.count))
+            && board.slots.keys().all(|s| kind_of(station, s) != SlotKind::Plain || r.slots.contains_key(s));
         let pot = mixed(station, board);
-        let mix_ok = pot.len() == r.mix.len()
-            && r.mix
-                .iter()
-                .all(|want| pot.get(&want.item).is_some_and(|n| *n >= want.count as u32));
+        let mix_ok = pot.len() == r.mix.len() && r.mix.iter().all(|want| pot.get(&want.item).is_some_and(|n| *n >= want.count as u32));
         let fire_ok = !heat || r.heat == 0 || self.heat_of(station, board) >= r.heat;
         plain_ok && mix_ok && fire_ok
     }
@@ -481,13 +364,7 @@ impl BenchData {
         self.recipes
             .iter()
             .filter(|r| r.station == station && self.knows(r) && self.fits(station, r, board, true))
-            .max_by_key(|r| {
-                r.slots
-                    .values()
-                    .chain(&r.mix)
-                    .map(|s| s.count as u32)
-                    .sum::<u32>()
-            })
+            .max_by_key(|r| r.slots.values().chain(&r.mix).map(|s| s.count as u32).sum::<u32>())
     }
 
     /// A recipe the board would make if only the fire were hotter: it, and the heat there is.
@@ -498,19 +375,8 @@ impl BenchData {
         let r = self
             .recipes
             .iter()
-            .filter(|r| {
-                r.station == station
-                    && self.knows(r)
-                    && r.heat > 0
-                    && self.fits(station, r, board, false)
-            })
-            .max_by_key(|r| {
-                r.slots
-                    .values()
-                    .chain(&r.mix)
-                    .map(|s| s.count as u32)
-                    .sum::<u32>()
-            })?;
+            .filter(|r| r.station == station && self.knows(r) && r.heat > 0 && self.fits(station, r, board, false))
+            .max_by_key(|r| r.slots.values().chain(&r.mix).map(|s| s.count as u32).sum::<u32>())?;
         Some((r, self.heat_of(station, board)))
     }
 
@@ -521,16 +387,12 @@ impl BenchData {
 
     /// The recipes a bench knows now (not the sharpening and study ones made for every item).
     pub fn for_station<'a>(&'a self, station: &'a str) -> impl Iterator<Item = &'a Recipe> + 'a {
-        self.recipes
-            .iter()
-            .filter(move |r| r.station == station && r.special == Special::None && self.knows(r))
+        self.recipes.iter().filter(move |r| r.station == station && r.special == Special::None && self.knows(r))
     }
 
     /// Whether the urn has taught this recipe (or it needs no teaching).
     pub fn knows(&self, r: &Recipe) -> bool {
-        r.unlock
-            .as_ref()
-            .is_none_or(|u| u.split('+').all(|p| self.learned.contains(p)))
+        r.unlock.as_ref().is_none_or(|u| u.split('+').all(|p| self.learned.contains(p)))
     }
 }
 
@@ -565,8 +427,7 @@ impl Board {
         match self.slots.get_mut(slot.name) {
             None => {
                 let n = held.count.min(slot.cap);
-                self.slots
-                    .insert(slot.name.to_string(), Stack::new(held.item, n));
+                self.slots.insert(slot.name.to_string(), Stack::new(held.item, n));
                 (held.count > n).then(|| Stack::new(held.item, held.count - n))
             }
             Some(have) if have.item == held.item => {
@@ -582,15 +443,9 @@ impl Board {
     /// Put what's in hand into the pot: onto the same thing if it's there,
     /// else into an empty part of it. Returns what's left in hand.
     pub fn put_mix(&mut self, defs: &[SlotDef], held: Stack) -> Option<Stack> {
-        let pots: Vec<SlotDef> = defs
-            .iter()
-            .filter(|d| d.kind == SlotKind::Mix)
-            .copied()
-            .collect();
+        let pots: Vec<SlotDef> = defs.iter().filter(|d| d.kind == SlotKind::Mix).copied().collect();
         let mut rest = Some(held);
-        let same = pots
-            .iter()
-            .filter(|d| self.slots.get(d.name).is_some_and(|s| s.item == held.item));
+        let same = pots.iter().filter(|d| self.slots.get(d.name).is_some_and(|s| s.item == held.item));
         let empty = pots.iter().filter(|d| !self.slots.contains_key(d.name));
         let order: Vec<SlotDef> = same.chain(empty).copied().collect();
         for d in order {
@@ -605,10 +460,7 @@ impl Board {
 
     /// Pick the last kind of thing back out of the pot.
     pub fn take_mix(&mut self, defs: &[SlotDef]) -> Option<Stack> {
-        let d = defs
-            .iter()
-            .rev()
-            .find(|d| d.kind == SlotKind::Mix && self.slots.contains_key(d.name))?;
+        let d = defs.iter().rev().find(|d| d.kind == SlotKind::Mix && self.slots.contains_key(d.name))?;
         self.take(d.name)
     }
 
@@ -632,10 +484,7 @@ impl Board {
         };
         self.work += 1;
         if self.work < r.work {
-            return Work::Knock {
-                done: self.work,
-                of: r.work,
-            };
+            return Work::Knock { done: self.work, of: r.work };
         }
         self.work = 0;
         let burn = data.burns(station, &r, self);
@@ -643,23 +492,11 @@ impl Board {
         // every item (one better for an upgrade); a made weapon or tool is
         // now and then a fine one.
         self.rolls = self.rolls.wrapping_add(1);
-        let mut rng = crate::creatures::brain::Rng(
-            0x9E37_79B9_7F4A_7C15 ^ self.rolls.wrapping_mul(0xD1B5_4A32_D192_ED03) | 1,
-        );
-        let first = r
-            .slots
-            .keys()
-            .next()
-            .and_then(|k| self.slots.get(k))
-            .map(|s| s.item);
+        let mut rng = crate::creatures::brain::Rng(0x9E37_79B9_7F4A_7C15 ^ self.rolls.wrapping_mul(0xD1B5_4A32_D192_ED03) | 1);
+        let first = r.slots.keys().next().and_then(|k| self.slots.get(k)).map(|s| s.item);
         let makes = match (r.special, &data.items, first) {
-            (Special::None, Some(items), _) => Stack::new(
-                items.roll(r.makes.item, BENCH_LUCK, &mut rng),
-                r.makes.count,
-            ),
-            (Special::Upgrade(_), Some(items), Some(have)) => {
-                Stack::new(items.upgraded(have, &mut rng).unwrap_or(have), 1)
-            }
+            (Special::None, Some(items), _) => Stack::new(items.roll(r.makes.item, BENCH_LUCK, &mut rng), r.makes.count),
+            (Special::Upgrade(_), Some(items), Some(have)) => Stack::new(items.upgraded(have, &mut rng).unwrap_or(have), 1),
             (_, Some(_), Some(have)) => Stack::new(have, 1),
             _ => r.makes,
         };
@@ -709,8 +546,7 @@ mod tests {
 
     fn data() -> (Items, BenchData) {
         let (_, items) = crate::items::tests::load();
-        let data = BenchData::from_ron(include_str!("../../../../assets/data/benches.ron"), &items)
-            .unwrap();
+        let data = BenchData::from_ron(include_str!("../../../../assets/data/benches.ron"), &items).unwrap();
         (items, data)
     }
 
@@ -727,13 +563,7 @@ mod tests {
         assert_eq!(b.put(base, Stack::new(id("small_rock"), 1)), None);
         let r = data.matching("camp_mat", &b).unwrap();
         for k in 1..r.work {
-            assert_eq!(
-                b.strike(&data, "camp_mat"),
-                Work::Knock {
-                    done: k,
-                    of: r.work
-                }
-            );
+            assert_eq!(b.strike(&data, "camp_mat"), Work::Knock { done: k, of: r.work });
         }
         let made = Stack::new(id("rough_axe"), 1);
         assert_eq!(b.strike(&data, "camp_mat"), Work::Made(made));
@@ -752,15 +582,9 @@ mod tests {
         let mut b = Board::default();
         b.put(handle, Stack::new(id("stick"), 1));
         b.put(material, Stack::new(id("cobblestone"), 2));
-        assert_eq!(
-            data.matching("tool_bench", &b).unwrap().makes.item,
-            id("stone_axe")
-        );
+        assert_eq!(data.matching("tool_bench", &b).unwrap().makes.item, id("stone_axe"));
         b.put(material, Stack::new(id("cobblestone"), 1));
-        assert_eq!(
-            data.matching("tool_bench", &b).unwrap().makes.item,
-            id("stone_pickaxe")
-        );
+        assert_eq!(data.matching("tool_bench", &b).unwrap().makes.item, id("stone_pickaxe"));
     }
 
     #[test]
@@ -771,20 +595,10 @@ mod tests {
         let mut b = Board::default();
         b.put(handle, Stack::new(id("stick"), 1));
         b.put(material, Stack::new(id("flint"), 2));
-        assert!(
-            data.matching("tool_bench", &b).is_none(),
-            "the spear needs the improved tool bench"
-        );
-        assert!(
-            !data
-                .for_station("tool_bench")
-                .any(|r| r.makes.item == id("flint_spear"))
-        );
+        assert!(data.matching("tool_bench", &b).is_none(), "the spear needs the improved tool bench");
+        assert!(!data.for_station("tool_bench").any(|r| r.makes.item == id("flint_spear")));
         data.learned.insert("improved_tool_bench".into());
-        assert_eq!(
-            data.matching("tool_bench", &b).unwrap().makes.item,
-            id("flint_spear")
-        );
+        assert_eq!(data.matching("tool_bench", &b).unwrap().makes.item, id("flint_spear"));
     }
 
     #[test]
@@ -792,10 +606,7 @@ mod tests {
         let (items, data) = data();
         let id = |n| items.id(n).unwrap();
         let [bed, _] = CARPENTRY_SLOTS;
-        for (station, makes) in [
-            ("carpentry_bench", Stack::new(id("planks"), 2)),
-            ("block_crafter", Stack::new(id("wood_slats"), 2)),
-        ] {
+        for (station, makes) in [("carpentry_bench", Stack::new(id("planks"), 2)), ("block_crafter", Stack::new(id("wood_slats"), 2))] {
             let mut b = Board::default();
             b.put(bed, Stack::new(id("raw_wood"), 1));
             let made = loop {
@@ -805,13 +616,7 @@ mod tests {
             };
             assert_eq!(made, makes, "{station}");
         }
-        assert!(
-            matches!(
-                items.get(id("wood_slats")).kind,
-                crate::items::ItemKind::Block(_)
-            ),
-            "slats are a block you can place"
-        );
+        assert!(matches!(items.get(id("wood_slats")).kind, crate::items::ItemKind::Block(_)), "slats are a block you can place");
     }
 
     #[test]
@@ -828,15 +633,8 @@ mod tests {
             let mut b = Board::default();
             b.put(top, Stack::new(id(wood), n));
             b.put(joint, Stack::new(id(with), m));
-            assert_eq!(
-                cook(&mut b, &data, "carpentry_table"),
-                Stack::new(id(makes), 4),
-                "{makes}"
-            );
-            assert!(
-                matches!(items.get(id(makes)).kind, crate::items::ItemKind::Block(_)),
-                "{makes} is a block you can place"
-            );
+            assert_eq!(cook(&mut b, &data, "carpentry_table"), Stack::new(id(makes), 4), "{makes}");
+            assert!(matches!(items.get(id(makes)).kind, crate::items::ItemKind::Block(_)), "{makes} is a block you can place");
         }
     }
 
@@ -850,13 +648,8 @@ mod tests {
         b.put(rigging, Stack::new(id("cordage"), 6));
         b.put(envelope, Stack::new(id("hide"), 4));
         b.put(engine, Stack::new(id("raw_iron"), 6));
-        assert_eq!(
-            cook(&mut b, &data, "machination_table"),
-            Stack::new(id("airship"), 1)
-        );
-        assert!(
-            matches!(&items.get(id("airship")).kind, crate::items::ItemKind::Machine(m) if m == "airship")
-        );
+        assert_eq!(cook(&mut b, &data, "machination_table"), Stack::new(id("airship"), 1));
+        assert!(matches!(&items.get(id("airship")).kind, crate::items::ItemKind::Machine(m) if m == "airship"));
     }
 
     fn cook(b: &mut Board, data: &BenchData, station: &str) -> Stack {
@@ -875,18 +668,9 @@ mod tests {
         let fire = COOKING_POT_SLOTS[4];
         let mut b = Board::default();
         // Berries first, then strips, then reeds: order doesn't matter.
-        assert_eq!(
-            b.put_mix(&COOKING_POT_SLOTS, Stack::new(id("marsh_berries"), 1)),
-            None
-        );
-        assert_eq!(
-            b.put_mix(&COOKING_POT_SLOTS, Stack::new(id("meat_strips"), 3)),
-            None
-        );
-        assert_eq!(
-            b.put_mix(&COOKING_POT_SLOTS, Stack::new(id("chopped_reeds"), 2)),
-            None
-        );
+        assert_eq!(b.put_mix(&COOKING_POT_SLOTS, Stack::new(id("marsh_berries"), 1)), None);
+        assert_eq!(b.put_mix(&COOKING_POT_SLOTS, Stack::new(id("meat_strips"), 3)), None);
+        assert_eq!(b.put_mix(&COOKING_POT_SLOTS, Stack::new(id("chopped_reeds"), 2)), None);
         // No fire yet: stirring does nothing, and says why.
         assert_eq!(b.strike(&data, "cooking_pot"), Work::Nothing);
         let (r, have) = data.needs_heat("cooking_pot", &b).unwrap();
@@ -895,16 +679,9 @@ mod tests {
         b.put(fire, Stack::new(id("stick"), 2));
         assert!(data.matching("cooking_pot", &b).is_none());
         assert_eq!(data.needs_heat("cooking_pot", &b).unwrap().1, 2);
-        assert_eq!(
-            b.put(fire, Stack::new(id("peat"), 2)),
-            Some(Stack::new(id("stick"), 2)),
-            "peat swaps the sticks out"
-        );
+        assert_eq!(b.put(fire, Stack::new(id("peat"), 2)), Some(Stack::new(id("stick"), 2)), "peat swaps the sticks out");
         assert!(data.matching("cooking_pot", &b).is_some());
-        assert_eq!(
-            cook(&mut b, &data, "cooking_pot"),
-            Stack::new(id("bog_stew"), 2)
-        );
+        assert_eq!(cook(&mut b, &data, "cooking_pot"), Stack::new(id("bog_stew"), 2));
         // The pot is empty; one peat (3 heat) of the two burned.
         assert!(b.slots.keys().all(|k| k == "fire"));
         assert_eq!(b.slots.get("fire"), Some(&Stack::new(id("peat"), 1)));
@@ -917,18 +694,12 @@ mod tests {
         let mut b = Board::default();
         b.put(COOKING_POT_SLOTS[4], Stack::new(id("coal"), 1));
         b.put_mix(&COOKING_POT_SLOTS, Stack::new(id("raw_meat"), 1));
-        assert_eq!(
-            data.matching("cooking_pot", &b).unwrap().makes.item,
-            id("roast_meat")
-        );
+        assert_eq!(data.matching("cooking_pot", &b).unwrap().makes.item, id("roast_meat"));
         b.put_mix(&COOKING_POT_SLOTS, Stack::new(id("small_rock"), 1));
         assert!(data.matching("cooking_pot", &b).is_none());
         assert!(data.needs_heat("cooking_pot", &b).is_none());
         // Taking the last thing out of the pot fixes it.
-        assert_eq!(
-            b.take_mix(&COOKING_POT_SLOTS),
-            Some(Stack::new(id("small_rock"), 1))
-        );
+        assert_eq!(b.take_mix(&COOKING_POT_SLOTS), Some(Stack::new(id("small_rock"), 1)));
         assert!(data.matching("cooking_pot", &b).is_some());
     }
 
@@ -941,19 +712,10 @@ mod tests {
             assert_eq!(b.put_mix(&COOKING_POT_SLOTS, Stack::new(id(n), 1)), None);
         }
         // A fifth kind doesn't fit; more of one already there does, up to the slot's size.
-        assert_eq!(
-            b.put_mix(&COOKING_POT_SLOTS, Stack::new(id("clay"), 1)),
-            Some(Stack::new(id("clay"), 1))
-        );
-        assert_eq!(
-            b.put_mix(&COOKING_POT_SLOTS, Stack::new(id("stick"), 7)),
-            Some(Stack::new(id("stick"), 2))
-        );
+        assert_eq!(b.put_mix(&COOKING_POT_SLOTS, Stack::new(id("clay"), 1)), Some(Stack::new(id("clay"), 1)));
+        assert_eq!(b.put_mix(&COOKING_POT_SLOTS, Stack::new(id("stick"), 7)), Some(Stack::new(id("stick"), 2)));
         assert_eq!(b.slots.get("pot_2"), Some(&Stack::new(id("stick"), 6)));
-        assert!(
-            !b.slots.contains_key("fire"),
-            "nothing spills into the fire"
-        );
+        assert!(!b.slots.contains_key("fire"), "nothing spills into the fire");
     }
 
     #[test]
@@ -997,20 +759,11 @@ mod tests {
         let mut b = Board::default();
         b.put(handle, Stack::new(id("stick"), 1));
         b.put(anvil, Stack::new(id("raw_iron"), 3));
-        assert_eq!(
-            data.matching("iron_anvil", &b).unwrap().makes.item,
-            id("iron_pickaxe")
-        );
+        assert_eq!(data.matching("iron_anvil", &b).unwrap().makes.item, id("iron_pickaxe"));
         b.put(flux, Stack::new(id("coal"), 2));
-        assert!(
-            data.matching("iron_anvil", &b).is_none(),
-            "coal in the tray spoils an iron pick"
-        );
+        assert!(data.matching("iron_anvil", &b).is_none(), "coal in the tray spoils an iron pick");
         data.learned.insert("steel_anvil".into());
-        assert_eq!(
-            cook(&mut b, &data, "iron_anvil"),
-            Stack::new(id("steel_pickaxe"), 1)
-        );
+        assert_eq!(cook(&mut b, &data, "iron_anvil"), Stack::new(id("steel_pickaxe"), 1));
     }
 
     #[test]
@@ -1020,15 +773,9 @@ mod tests {
         let [rack, fire] = SMOKING_RACK_SLOTS;
         let mut b = Board::default();
         b.put(rack, Stack::new(id("raw_meat"), 2));
-        assert_eq!(
-            data.needs_heat("smoking_rack", &b).unwrap().0.makes,
-            Stack::new(id("cured_meat"), 2)
-        );
+        assert_eq!(data.needs_heat("smoking_rack", &b).unwrap().0.makes, Stack::new(id("cured_meat"), 2));
         b.put(fire, Stack::new(id("peat"), 1));
-        assert_eq!(
-            cook(&mut b, &data, "smoking_rack"),
-            Stack::new(id("cured_meat"), 2)
-        );
+        assert_eq!(cook(&mut b, &data, "smoking_rack"), Stack::new(id("cured_meat"), 2));
         assert!(!b.slots.contains_key("fire"), "the peat burned");
     }
 
@@ -1038,35 +785,17 @@ mod tests {
         let id = |n| items.id(n).unwrap();
         let mut b = Board::default();
         b.put(SHARPENING_SLOTS[0], Stack::new(id("stone_axe"), 1));
-        assert_eq!(
-            data.matching("sharpening_stone", &b).unwrap().special,
-            Special::Sharpen
-        );
-        assert_eq!(
-            cook(&mut b, &data, "sharpening_stone"),
-            Stack::new(id("stone_axe"), 1)
-        );
+        assert_eq!(data.matching("sharpening_stone", &b).unwrap().special, Special::Sharpen);
+        assert_eq!(cook(&mut b, &data, "sharpening_stone"), Stack::new(id("stone_axe"), 1));
         let mut b = Board::default();
         b.put(SHARPENING_SLOTS[0], Stack::new(id("stick"), 1));
-        assert!(
-            data.matching("sharpening_stone", &b).is_none(),
-            "a stick has no edge"
-        );
+        assert!(data.matching("sharpening_stone", &b).is_none(), "a stick has no edge");
         let mut b = Board::default();
         b.put(LENS_SLOTS[0], Stack::new(id("cloud_moss"), 1));
-        assert_eq!(
-            data.matching("magical_lens", &b).unwrap().special,
-            Special::Study
-        );
-        assert_eq!(
-            cook(&mut b, &data, "magical_lens"),
-            Stack::new(id("cloud_moss"), 1)
-        );
+        assert_eq!(data.matching("magical_lens", &b).unwrap().special, Special::Study);
+        assert_eq!(cook(&mut b, &data, "magical_lens"), Stack::new(id("cloud_moss"), 1));
         // Neither lists a recipe per item.
-        assert_eq!(
-            data.for_station("sharpening_stone").count() + data.for_station("magical_lens").count(),
-            0
-        );
+        assert_eq!(data.for_station("sharpening_stone").count() + data.for_station("magical_lens").count(), 0);
     }
 
     #[test]
@@ -1079,15 +808,9 @@ mod tests {
         b.put_mix(&CAULDRON_SLOTS, Stack::new(id("cloud_moss"), 2));
         assert!(data.matching("cauldron", &b).is_none(), "not studied yet");
         data.learned.insert("lens:cloud_moss".into());
-        assert_eq!(
-            data.matching("cauldron", &b).unwrap().makes,
-            Stack::new(id("levitation_draught"), 1)
-        );
+        assert_eq!(data.matching("cauldron", &b).unwrap().makes, Stack::new(id("levitation_draught"), 1));
         data.learned.insert("steel_cauldron".into());
-        assert_eq!(
-            cook(&mut b, &data, "cauldron"),
-            Stack::new(id("levitation_draught"), 2)
-        );
+        assert_eq!(cook(&mut b, &data, "cauldron"), Stack::new(id("levitation_draught"), 2));
     }
 
     #[test]
@@ -1098,15 +821,9 @@ mod tests {
         b.put(COOKING_POT_SLOTS[4], Stack::new(id("coal"), 1));
         b.put_mix(&COOKING_POT_SLOTS, Stack::new(id("chopped_reeds"), 3));
         b.put_mix(&COOKING_POT_SLOTS, Stack::new(id("marsh_berries"), 3));
-        assert_eq!(
-            data.matching("cooking_pot", &b).unwrap().makes.item,
-            id("reed_broth")
-        );
+        assert_eq!(data.matching("cooking_pot", &b).unwrap().makes.item, id("reed_broth"));
         data.learned.insert("herb_rack".into());
-        assert_eq!(
-            data.matching("cooking_pot", &b).unwrap().makes.item,
-            id("bog_stew")
-        );
+        assert_eq!(data.matching("cooking_pot", &b).unwrap().makes.item, id("bog_stew"));
     }
 
     #[test]
@@ -1116,19 +833,10 @@ mod tests {
         let [handle, material] = TOOL_BENCH_SLOTS;
         let mut b = Board::default();
         // The groove takes one stick; the rest stays in hand.
-        assert_eq!(
-            b.put(handle, Stack::new(id("stick"), 3)),
-            Some(Stack::new(id("stick"), 2))
-        );
-        assert_eq!(
-            b.put(material, Stack::new(id("small_rock"), 6)),
-            Some(Stack::new(id("small_rock"), 2))
-        );
+        assert_eq!(b.put(handle, Stack::new(id("stick"), 3)), Some(Stack::new(id("stick"), 2)));
+        assert_eq!(b.put(material, Stack::new(id("small_rock"), 6)), Some(Stack::new(id("small_rock"), 2)));
         // Something else swaps with what's there.
-        assert_eq!(
-            b.put(handle, Stack::new(id("small_rock"), 1)),
-            Some(Stack::new(id("stick"), 1))
-        );
+        assert_eq!(b.put(handle, Stack::new(id("small_rock"), 1)), Some(Stack::new(id("stick"), 1)));
         assert_eq!(b.take("handle"), Some(Stack::new(id("small_rock"), 1)));
         assert_eq!(b.take("handle"), None);
     }
@@ -1145,10 +853,7 @@ mod tests {
         b.put(handle, Stack::new(id("stick"), 1));
         b.put(material, Stack::new(id("small_rock"), 1));
         while !matches!(b.strike(&data, "tool_bench"), Work::Made(_)) {}
-        assert_eq!(
-            b.slots.get("material"),
-            Some(&Stack::new(id("small_rock"), 1))
-        );
+        assert_eq!(b.slots.get("material"), Some(&Stack::new(id("small_rock"), 1)));
     }
 
     #[test]
@@ -1158,16 +863,10 @@ mod tests {
         let [handle, material] = TOOL_BENCH_SLOTS;
         let mut b = Board::default();
         b.put(material, Stack::new(id("small_rock"), 4));
-        assert_eq!(
-            data.matching("tool_bench", &b).unwrap().makes.item,
-            id("cobblestone")
-        );
+        assert_eq!(data.matching("tool_bench", &b).unwrap().makes.item, id("cobblestone"));
         let mut b = Board::default();
         b.put(handle, Stack::new(id("stick"), 1));
         b.put(material, Stack::new(id("small_rock"), 2));
-        assert_eq!(
-            data.matching("tool_bench", &b).unwrap().makes.item,
-            id("stone_shovel")
-        );
+        assert_eq!(data.matching("tool_bench", &b).unwrap().makes.item, id("stone_shovel"));
     }
 }

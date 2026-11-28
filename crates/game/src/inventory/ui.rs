@@ -27,7 +27,7 @@ use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 use voxel::BlockPos;
 
 use super::crafting::{Recipes, Station};
-use super::grid::{Grid, Stack, dims};
+use super::grid::{dims, Grid, Stack};
 use super::world_items::Spill;
 use super::{Chests, Inventory};
 use crate::camera::{FlyCamera, Menus};
@@ -36,10 +36,10 @@ use crate::item_art::ItemArt;
 use crate::items::{ItemId, ItemKind, Items, WearSlot};
 use crate::player::Player;
 use crate::sound::PlaySound;
-use crate::survival::Survival;
 use crate::survival::camp::{Camp, Sleep};
 use crate::survival::health::Layer;
-use crate::theme::{self, Theme, colors, sizes};
+use crate::survival::Survival;
+use crate::theme::{self, colors, sizes, Theme};
 
 /// One grid cell: item sprites are 20 px per cell, drawn at 2x.
 const CELL: f32 = 40.0;
@@ -59,19 +59,7 @@ impl Plugin for InventoryUiPlugin {
             .add_systems(crate::menu::GameStartup, open_for_screenshot)
             .add_systems(
                 crate::menu::GameUpdate,
-                (
-                    open_close,
-                    hover,
-                    click,
-                    keys,
-                    scroll,
-                    refresh,
-                    rebuild,
-                    follow_cursor,
-                    animate,
-                )
-                    .chain()
-                    .after(crate::interact::InteractSet),
+                (open_close, hover, click, keys, scroll, refresh, rebuild, follow_cursor, animate).chain().after(crate::interact::InteractSet),
             )
             .add_plugins(super::preview::PreviewPlugin);
     }
@@ -110,9 +98,7 @@ impl Tab {
 
     /// `BLOCKGAME_INVENTORY=items|equipment|stats|abilities`.
     fn parse(s: &str) -> Option<Tab> {
-        Tab::ALL
-            .into_iter()
-            .find(|t| t.title().eq_ignore_ascii_case(s))
+        Tab::ALL.into_iter().find(|t| t.title().eq_ignore_ascii_case(s))
     }
 }
 
@@ -259,15 +245,8 @@ struct Tooltip;
 #[derive(Component)]
 pub struct TreeArea;
 
-fn open_for_screenshot(
-    mut ui: ResMut<InvUi>,
-    mut menus: ResMut<Menus>,
-    mut motion: ResMut<Motion>,
-) {
-    let tab = match (
-        std::env::var("BLOCKGAME_INVENTORY"),
-        std::env::var_os("BLOCKGAME_SKILLTREE"),
-    ) {
+fn open_for_screenshot(mut ui: ResMut<InvUi>, mut menus: ResMut<Menus>, mut motion: ResMut<Motion>) {
+    let tab = match (std::env::var("BLOCKGAME_INVENTORY"), std::env::var_os("BLOCKGAME_SKILLTREE")) {
         (_, Some(_)) => Some(Tab::Abilities),
         (Ok(v), _) => Some(Tab::parse(&v).unwrap_or(Tab::Items)),
         _ => None,
@@ -283,11 +262,7 @@ fn open_for_screenshot(
     }
 }
 
-fn grid_mut<'a>(
-    inv: &'a mut Inventory,
-    chests: &'a mut Chests,
-    g: GridRef,
-) -> Option<&'a mut Grid> {
+fn grid_mut<'a>(inv: &'a mut Inventory, chests: &'a mut Chests, g: GridRef) -> Option<&'a mut Grid> {
     match g {
         GridRef::Pockets => Some(&mut inv.pockets),
         GridRef::Chest(p) => Some(chests.grid(p)),
@@ -295,25 +270,14 @@ fn grid_mut<'a>(
 }
 
 /// Put what the cursor holds back where it came from (or in the pockets, or on the ground).
-fn put_back(
-    h: Held,
-    inv: &mut Inventory,
-    chests: &mut Chests,
-    items: &Items,
-    at: Vec3,
-    spill: &mut MessageWriter<Spill>,
-) {
+fn put_back(h: Held, inv: &mut Inventory, chests: &mut Chests, items: &Items, at: Vec3, spill: &mut MessageWriter<Spill>) {
     let back = match h.from {
-        Origin::Grid(g, x, y, r) => {
-            grid_mut(inv, chests, g).is_some_and(|grid| grid.place(items, h.stack, x, y, r))
-        }
+        Origin::Grid(g, x, y, r) => grid_mut(inv, chests, g).is_some_and(|grid| grid.place(items, h.stack, x, y, r)),
         Origin::LeftHand if inv.left.is_none() => {
             inv.left = Some(h.stack);
             true
         }
-        Origin::Weapon if inv.weapon.is_none() && h.stack.count == 1 => {
-            inv.arm(items, h.stack.item).is_ok()
-        }
+        Origin::Weapon if inv.weapon.is_none() && h.stack.count == 1 => inv.arm(items, h.stack.item).is_ok(),
         _ => false,
     };
     if !back && let Some(left) = inv.add(items, h.stack) {
@@ -335,10 +299,7 @@ fn open_close(
     (mut spill, mut sound): (MessageWriter<Spill>, MessageWriter<PlaySound>),
     mut cursor: Single<&mut CursorOptions, With<PrimaryWindow>>,
     loot: Option<Res<super::loot::Loot>>,
-    (generator, below): (
-        Option<Res<crate::world::Generator>>,
-        Option<Res<crate::delve::Below>>,
-    ),
+    (generator, below): (Option<Res<crate::world::Generator>>, Option<Res<crate::delve::Below>>),
     mut seed: Local<u64>,
 ) {
     motion.now = real.elapsed_secs();
@@ -346,9 +307,7 @@ fn open_close(
     let mut want = ui.open;
     // Another screen (the pause menu, a bench) has the mouse: Tab, I and K wait.
     let free = ui.open || !menus.open;
-    if (free && keys.just_pressed(KeyCode::Tab))
-        || (ui.open && (keys.just_pressed(KeyCode::Escape) || keys.just_pressed(KeyCode::KeyI)))
-    {
+    if (free && keys.just_pressed(KeyCode::Tab)) || (ui.open && (keys.just_pressed(KeyCode::Escape) || keys.just_pressed(KeyCode::KeyI))) {
         want = !ui.open;
     } else if free && keys.just_pressed(KeyCode::KeyI) {
         want = true;
@@ -376,14 +335,8 @@ fn open_close(
         {
             // A chest found in the world: fill it the first time it's opened.
             let p = m.0;
-            let in_barrow = generator
-                .0
-                .barrows_in(p.x - 1, p.z - 1, p.x + 1, p.z + 1)
-                .iter()
-                .any(|b| b.contains(p.x, p.y, p.z));
-            *seed = seed.wrapping_add(0x9E37_79B9_7F4A_7C15)
-                ^ (p.x as u64).wrapping_mul(31)
-                ^ (p.z as u64).wrapping_mul(1_000_003);
+            let in_barrow = generator.0.barrows_in(p.x - 1, p.z - 1, p.x + 1, p.z + 1).iter().any(|b| b.contains(p.x, p.y, p.z));
+            *seed = seed.wrapping_add(0x9E37_79B9_7F4A_7C15) ^ (p.x as u64).wrapping_mul(31) ^ (p.z as u64).wrapping_mul(1_000_003);
             let mut rng = crate::creatures::brain::Rng(*seed | 1);
             let grid = chests.grid(p);
             let table = if let Some(t) = below.as_ref().and_then(|b| b.chest_table(p)) {
@@ -404,10 +357,7 @@ fn open_close(
     // (Personal storage, the fridge and the golem's pack aren't in the world: they stay open until you close them.)
     if let Some(c) = ui.chest
         && !super::virtual_chest(c)
-        && (Vec3::new(c.x as f32 + 0.5, c.y as f32 + 0.5, c.z as f32 + 0.5)
-            .distance(player.pos + Vec3::Y)
-            > 6.0
-            || !chests.map.contains_key(&c))
+        && (Vec3::new(c.x as f32 + 0.5, c.y as f32 + 0.5, c.z as f32 + 0.5).distance(player.pos + Vec3::Y) > 6.0 || !chests.map.contains_key(&c))
     {
         ui.chest = None;
         ui.dirty = true;
@@ -471,9 +421,7 @@ fn hover(
                 continue;
             }
             Zone::Grid(g, w, h) => {
-                let Some(n) = node.normalize_point(*tf, p) else {
-                    continue;
-                };
+                let Some(n) = node.normalize_point(*tf, p) else { continue };
                 let x = (((n.x + 0.5) * w as f32).floor() as i32).clamp(0, w as i32 - 1) as u8;
                 let y = (((n.y + 0.5) * h as f32).floor() as i32).clamp(0, h as i32 - 1) as u8;
                 Hover::Cell(g, x, y)
@@ -494,13 +442,7 @@ fn hover(
 
 /// Put a held stack into a grid at a cell: onto a matching stack, into free
 /// space, or swapping with the one item in the way.
-fn drop_into(
-    grid: &mut Grid,
-    items: &Items,
-    held: Held,
-    at: (u8, u8),
-    g: GridRef,
-) -> Result<Option<Held>, &'static str> {
+fn drop_into(grid: &mut Grid, items: &Items, held: Held, at: (u8, u8), g: GridRef) -> Result<Option<Held>, &'static str> {
     if let Some(i) = grid.at(items, at.0, at.1) {
         let p = grid.items[i];
         let max = items.get(p.stack.item).stack;
@@ -508,10 +450,7 @@ fn drop_into(
             let n = (max - p.stack.count).min(held.stack.count);
             grid.items[i].stack.count += n;
             let left = held.stack.count - n;
-            return Ok((left > 0).then_some(Held {
-                stack: Stack::new(held.stack.item, left),
-                ..held
-            }));
+            return Ok((left > 0).then_some(Held { stack: Stack::new(held.stack.item, left), ..held }));
         }
     }
     if grid.place(items, held.stack, at.0, at.1, held.rotated) {
@@ -529,23 +468,10 @@ fn drop_into(
             }
         }
     }
-    if in_way.len() == 1
-        && grid.fits(
-            items,
-            held.stack.item,
-            at.0,
-            at.1,
-            held.rotated,
-            Some(in_way[0]),
-        )
-    {
+    if in_way.len() == 1 && grid.fits(items, held.stack.item, at.0, at.1, held.rotated, Some(in_way[0])) {
         let p = grid.items.remove(in_way[0]);
         grid.place(items, held.stack, at.0, at.1, held.rotated);
-        return Ok(Some(Held {
-            stack: p.stack,
-            rotated: p.rotated,
-            from: Origin::Grid(g, p.x, p.y, p.rotated),
-        }));
+        return Ok(Some(Held { stack: p.stack, rotated: p.rotated, from: Origin::Grid(g, p.x, p.y, p.rotated) }));
     }
     Err("No room there")
 }
@@ -559,16 +485,9 @@ fn into_left_hand(inv: &mut Inventory, items: &Items, held: Held) -> Option<Held
         let n = (max - s.count.min(max)).min(held.stack.count);
         s.count += n;
         let rest = held.stack.count - n;
-        return (rest > 0).then_some(Held {
-            stack: Stack::new(held.stack.item, rest),
-            ..held
-        });
+        return (rest > 0).then_some(Held { stack: Stack::new(held.stack.item, rest), ..held });
     }
-    inv.hold_left(held.stack).map(|old| Held {
-        stack: old,
-        rotated: false,
-        from: Origin::LeftHand,
-    })
+    inv.hold_left(held.stack).map(|old| Held { stack: old, rotated: false, from: Origin::LeftHand })
 }
 
 /// Does this slot take the item? (For the glow and the dimming.)
@@ -595,10 +514,7 @@ fn click(
     mut chests: ResMut<Chests>,
     (mut hands, mut hotbar): (ResMut<Hands>, ResMut<Hotbar>),
     (mut spill, mut sound): (MessageWriter<Spill>, MessageWriter<PlaySound>),
-    (mut gain, prog): (
-        MessageWriter<crate::progress::GainXp>,
-        Option<Res<crate::progress::xp::Progression>>,
-    ),
+    (mut gain, prog): (MessageWriter<crate::progress::GainXp>, Option<Res<crate::progress::xp::Progression>>),
 ) {
     if !ui.open {
         return;
@@ -610,9 +526,7 @@ fn click(
     // Drag and drop: let go somewhere else while holding what you pressed on.
     let dropped = mouse.just_released(MouseButton::Left)
         && ui.held.is_some()
-        && ui
-            .press
-            .is_some_and(|(at, from)| at != ui.hover && from.distance(cursor) > 8.0);
+        && ui.press.is_some_and(|(at, from)| at != ui.hover && from.distance(cursor) > 8.0);
     if mouse.just_released(MouseButton::Left) {
         ui.press = None;
     }
@@ -646,9 +560,7 @@ fn click(
         Hover::Preview => {}
         Hover::Cell(g, x, y) if left => {
             let held = ui.held;
-            let Some(grid) = grid_mut(&mut inv, &mut chests, g) else {
-                return;
-            };
+            let Some(grid) = grid_mut(&mut inv, &mut chests, g) else { return };
             match held {
                 Some(h) => match drop_into(grid, &items, h, (x, y), g) {
                     Ok(rest) => ui.held = rest,
@@ -660,18 +572,10 @@ fn click(
                         if shift && p.stack.count > 1 {
                             let half = p.stack.count / 2;
                             grid.items[i].stack.count -= half;
-                            ui.held = Some(Held {
-                                stack: Stack::new(p.stack.item, half),
-                                rotated: p.rotated,
-                                from: Origin::Grid(g, p.x, p.y, p.rotated),
-                            });
+                            ui.held = Some(Held { stack: Stack::new(p.stack.item, half), rotated: p.rotated, from: Origin::Grid(g, p.x, p.y, p.rotated) });
                         } else {
                             grid.items.remove(i);
-                            ui.held = Some(Held {
-                                stack: p.stack,
-                                rotated: p.rotated,
-                                from: Origin::Grid(g, p.x, p.y, p.rotated),
-                            });
+                            ui.held = Some(Held { stack: p.stack, rotated: p.rotated, from: Origin::Grid(g, p.x, p.y, p.rotated) });
                         }
                     }
                 }
@@ -681,22 +585,11 @@ fn click(
             if ui.held.is_some() {
                 // Putting something down on the strip: back into the pockets.
                 if let Some(h) = ui.held.take() {
-                    put_back(
-                        h,
-                        &mut inv,
-                        &mut chests,
-                        &items,
-                        player.pos + Vec3::Y,
-                        &mut spill,
-                    );
+                    put_back(h, &mut inv, &mut chests, &items, player.pos + Vec3::Y, &mut spill);
                 }
             } else if i < inv.pockets.items.len() {
                 let p = inv.pockets.items.remove(i);
-                ui.held = Some(Held {
-                    stack: p.stack,
-                    rotated: p.rotated,
-                    from: Origin::Grid(GridRef::Pockets, p.x, p.y, p.rotated),
-                });
+                ui.held = Some(Held { stack: p.stack, rotated: p.rotated, from: Origin::Grid(GridRef::Pockets, p.x, p.y, p.rotated) });
             }
         }
         Hover::Cell(g, x, y) => {
@@ -704,35 +597,18 @@ fn click(
             if ui.held.is_some() {
                 return;
             }
-            let chest = ui
-                .chest
-                .filter(|_| ui.tab == Tab::Items && ui.side == Side::Chest);
-            let Some(grid) = grid_mut(&mut inv, &mut chests, g) else {
-                return;
-            };
-            let Some(i) = grid.at(&items, x, y) else {
-                return;
-            };
+            let chest = ui.chest.filter(|_| ui.tab == Tab::Items && ui.side == Side::Chest);
+            let Some(grid) = grid_mut(&mut inv, &mut chests, g) else { return };
+            let Some(i) = grid.at(&items, x, y) else { return };
             let p = grid.items.remove(i);
-            let rest = move_across(
-                &mut inv,
-                &mut chests,
-                &items,
-                p.stack,
-                g,
-                chest,
-                &mut ui.message,
-            );
+            let rest = move_across(&mut inv, &mut chests, &items, p.stack, g, chest, &mut ui.message);
             if let Some(rest) = rest {
                 // Didn't all fit: put it back where it was.
                 let grid = grid_mut(&mut inv, &mut chests, g).expect("grid still there");
                 if !grid.place(&items, rest, p.x, p.y, p.rotated)
                     && let Some(r) = grid.add(&items, rest)
                 {
-                    spill.write(Spill {
-                        stack: r,
-                        at: player.pos + Vec3::Y,
-                    });
+                    spill.write(Spill { stack: r, at: player.pos + Vec3::Y });
                 }
                 if ui.message.is_empty() && rest == p.stack {
                     ui.message = "No room".into();
@@ -745,21 +621,11 @@ fn click(
                 return;
             }
             let p = inv.pockets.items.remove(i);
-            if let Some(rest) = move_across(
-                &mut inv,
-                &mut chests,
-                &items,
-                p.stack,
-                GridRef::Pockets,
-                None,
-                &mut ui.message,
-            ) && !inv.pockets.place(&items, rest, p.x, p.y, p.rotated)
+            if let Some(rest) = move_across(&mut inv, &mut chests, &items, p.stack, GridRef::Pockets, None, &mut ui.message)
+                && !inv.pockets.place(&items, rest, p.x, p.y, p.rotated)
                 && let Some(r) = inv.add(&items, rest)
             {
-                spill.write(Spill {
-                    stack: r,
-                    at: player.pos + Vec3::Y,
-                });
+                spill.write(Spill { stack: r, at: player.pos + Vec3::Y });
             }
         }
         Hover::Slot(slot) => match ui.held {
@@ -775,26 +641,10 @@ fn click(
                 match inv.wear(&items, h.stack.item) {
                     Ok(old) => {
                         // A stack of one goes on; any more stay in hand.
-                        let more = (h.stack.count > 1).then(|| Held {
-                            stack: Stack::new(h.stack.item, h.stack.count - 1),
-                            ..h
-                        });
-                        ui.held = old
-                            .map(|o| Held {
-                                stack: Stack::new(o, 1),
-                                rotated: false,
-                                from: Origin::Worn,
-                            })
-                            .or(more);
+                        let more = (h.stack.count > 1).then(|| Held { stack: Stack::new(h.stack.item, h.stack.count - 1), ..h });
+                        ui.held = old.map(|o| Held { stack: Stack::new(o, 1), rotated: false, from: Origin::Worn }).or(more);
                         if let (Some(_), Some(m)) = (old, more) {
-                            put_back(
-                                m,
-                                &mut inv,
-                                &mut chests,
-                                &items,
-                                player.pos + Vec3::Y,
-                                &mut spill,
-                            );
+                            put_back(m, &mut inv, &mut chests, &items, player.pos + Vec3::Y, &mut spill);
                         }
                     }
                     Err(e) => ui.message = e.into(),
@@ -802,13 +652,7 @@ fn click(
             }
             Some(_) => {}
             None => match inv.take_off(slot) {
-                Ok(item) if left => {
-                    ui.held = Some(Held {
-                        stack: Stack::new(item, 1),
-                        rotated: false,
-                        from: Origin::Worn,
-                    })
-                }
+                Ok(item) if left => ui.held = Some(Held { stack: Stack::new(item, 1), rotated: false, from: Origin::Worn }),
                 Ok(item) => {
                     if let Some(rest) = inv.add(&items, Stack::new(item, 1)) {
                         // No room: keep it on.
@@ -830,28 +674,15 @@ fn click(
                     return;
                 }
                 if let Ok(old) = inv.arm(&items, h.stack.item) {
-                    let more = (h.stack.count > 1).then(|| Held {
-                        stack: Stack::new(h.stack.item, h.stack.count - 1),
-                        ..h
-                    });
-                    ui.held = old
-                        .map(|o| Held {
-                            stack: Stack::new(o, 1),
-                            rotated: false,
-                            from: Origin::Weapon,
-                        })
-                        .or(more);
+                    let more = (h.stack.count > 1).then(|| Held { stack: Stack::new(h.stack.item, h.stack.count - 1), ..h });
+                    ui.held = old.map(|o| Held { stack: Stack::new(o, 1), rotated: false, from: Origin::Weapon }).or(more);
                 }
             }
             Some(_) => {}
             None => {
                 if let Some(w) = inv.weapon.take() {
                     if left {
-                        ui.held = Some(Held {
-                            stack: Stack::new(w, 1),
-                            rotated: false,
-                            from: Origin::Weapon,
-                        });
+                        ui.held = Some(Held { stack: Stack::new(w, 1), rotated: false, from: Origin::Weapon });
                     } else if inv.add(&items, Stack::new(w, 1)).is_some() {
                         inv.weapon = Some(w);
                         ui.message = "No room in your pockets".into();
@@ -873,18 +704,10 @@ fn click(
                     } else if shift && s.count > 1 {
                         let half = s.count / 2;
                         inv.left = Some(Stack::new(s.item, s.count - half));
-                        ui.held = Some(Held {
-                            stack: Stack::new(s.item, half),
-                            rotated: false,
-                            from: Origin::LeftHand,
-                        });
+                        ui.held = Some(Held { stack: Stack::new(s.item, half), rotated: false, from: Origin::LeftHand });
                     } else {
                         inv.left = None;
-                        ui.held = Some(Held {
-                            stack: s,
-                            rotated: false,
-                            from: Origin::LeftHand,
-                        });
+                        ui.held = Some(Held { stack: s, rotated: false, from: Origin::LeftHand });
                     }
                 }
             }
@@ -896,26 +719,12 @@ fn click(
                 let key = hands.right.unwrap_or(0);
                 let id = h.stack.item;
                 ui.held = None;
-                put_back(
-                    h,
-                    &mut inv,
-                    &mut chests,
-                    &items,
-                    player.pos + Vec3::Y,
-                    &mut spill,
-                );
+                put_back(h, &mut inv, &mut chests, &items, player.pos + Vec3::Y, &mut spill);
                 set_hotbar(&mut hotbar, key, id);
-                ui.message = format!(
-                    "{} in your right hand (hotbar key {})",
-                    items.get(id).title,
-                    key + 1
-                );
+                ui.message = format!("{} in your right hand (hotbar key {})", items.get(id).title, key + 1);
             }
             Some(_) => {}
-            None => {
-                ui.message =
-                    "The right hand holds your hotbar pick (1-9); R draws your weapon".into()
-            }
+            None => ui.message = "The right hand holds your hotbar pick (1-9); R draws your weapon".into(),
         },
         Hover::Hotbar(k) => match ui.held {
             Some(h) if left => {
@@ -923,14 +732,7 @@ fn click(
                 // came from and the key points at it.
                 let id = h.stack.item;
                 ui.held = None;
-                put_back(
-                    h,
-                    &mut inv,
-                    &mut chests,
-                    &items,
-                    player.pos + Vec3::Y,
-                    &mut spill,
-                );
+                put_back(h, &mut inv, &mut chests, &items, player.pos + Vec3::Y, &mut spill);
                 set_hotbar(&mut hotbar, k, id);
                 ui.message = format!("{} on hotbar key {}", items.get(id).title, k + 1);
                 motion.settle = Some((hover, motion.now));
@@ -955,9 +757,7 @@ fn click(
             if !left {
                 return;
             }
-            let Some(r) = recipes.as_ref().and_then(|r| r.list.get(i)) else {
-                return;
-            };
+            let Some(r) = recipes.as_ref().and_then(|r| r.list.get(i)) else { return };
             if r.at == Station::Camp && !camp.near(player.pos) {
                 ui.message = "Make this at your camp (by the bedroll)".into();
                 return;
@@ -970,10 +770,7 @@ fn click(
                     Some(left) => {
                         made += 1;
                         if let Some(l) = left {
-                            spill.write(Spill {
-                                stack: l,
-                                at: player.pos + Vec3::Y,
-                            });
+                            spill.write(Spill { stack: l, at: player.pos + Vec3::Y });
                         }
                     }
                 }
@@ -981,19 +778,12 @@ fn click(
             if made > 0
                 && let Some(prog) = &prog
             {
-                gain.write(crate::progress::GainXp {
-                    xp: prog.xp.craft * made as f32,
-                    why: String::new(),
-                });
+                gain.write(crate::progress::GainXp { xp: prog.xp.craft * made as f32, why: String::new() });
             }
             ui.message = if made == 0 {
                 "Missing parts".into()
             } else {
-                format!(
-                    "Made {} {}",
-                    r.makes.count as u32 * made,
-                    items.get(r.makes.item).title
-                )
+                format!("Made {} {}", r.makes.count as u32 * made, items.get(r.makes.item).title)
             };
         }
     }
@@ -1003,13 +793,7 @@ fn click(
         screen.changed_gear += 1;
     }
     let has = ui.held.is_some();
-    if gear_changed
-        && matches!(
-            hover,
-            Hover::Slot(_) | Hover::Weapon | Hover::LeftHand | Hover::Gear(_)
-        )
-        && (!has || had)
-    {
+    if gear_changed && matches!(hover, Hover::Slot(_) | Hover::Weapon | Hover::LeftHand | Hover::Gear(_)) && (!has || had) {
         sound.write(PlaySound::new("ui_equip"));
         motion.settle = Some((hover, motion.now));
     } else if !had && has {
@@ -1018,28 +802,14 @@ fn click(
     } else if had && !has {
         sound.write(PlaySound::new("ui_drop"));
         motion.settle = Some((hover, motion.now));
-    } else if had
-        && has
-        && matches!(
-            hover,
-            Hover::Cell(..) | Hover::Slot(_) | Hover::Weapon | Hover::LeftHand
-        )
-    {
+    } else if had && has && matches!(hover, Hover::Cell(..) | Hover::Slot(_) | Hover::Weapon | Hover::LeftHand) {
         sound.write(PlaySound::new("ui_drop"));
     }
 }
 
 /// Right click on an item: into the open chest, out of a chest, onto your
 /// body, or into the weapon slot. Returns what didn't go.
-fn move_across(
-    inv: &mut Inventory,
-    chests: &mut Chests,
-    items: &Items,
-    stack: Stack,
-    from: GridRef,
-    chest: Option<BlockPos>,
-    message: &mut String,
-) -> Option<Stack> {
+fn move_across(inv: &mut Inventory, chests: &mut Chests, items: &Items, stack: Stack, from: GridRef, chest: Option<BlockPos>, message: &mut String) -> Option<Stack> {
     let def = items.get(stack.item);
     match (from, chest) {
         (GridRef::Chest(_), _) => inv.add(items, stack),
@@ -1092,31 +862,20 @@ fn keys(
     if keys.just_pressed(KeyCode::KeyQ)
         && let Some(h) = ui.held.take()
     {
-        let at = cam
-            .single()
-            .map(|t| t.translation + t.forward().as_vec3() * 1.2)
-            .unwrap_or(player.pos + Vec3::Y);
+        let at = cam.single().map(|t| t.translation + t.forward().as_vec3() * 1.2).unwrap_or(player.pos + Vec3::Y);
         spill.write(Spill { stack: h.stack, at });
         ui.dirty = true;
     }
     const DIGITS: [KeyCode; 9] = [
-        KeyCode::Digit1,
-        KeyCode::Digit2,
-        KeyCode::Digit3,
-        KeyCode::Digit4,
-        KeyCode::Digit5,
-        KeyCode::Digit6,
-        KeyCode::Digit7,
-        KeyCode::Digit8,
-        KeyCode::Digit9,
+        KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4, KeyCode::Digit5,
+        KeyCode::Digit6, KeyCode::Digit7, KeyCode::Digit8, KeyCode::Digit9,
     ];
     for (k, key) in DIGITS.iter().enumerate() {
         if !keys.just_pressed(*key) {
             continue;
         }
         let item = match ui.hover {
-            Some(Hover::Cell(g, x, y)) => grid_mut(&mut inv, &mut chests, g)
-                .and_then(|grid| grid.at(&items, x, y).map(|i| grid.items[i].stack.item)),
+            Some(Hover::Cell(g, x, y)) => grid_mut(&mut inv, &mut chests, g).and_then(|grid| grid.at(&items, x, y).map(|i| grid.items[i].stack.item)),
             Some(Hover::Gear(i)) => inv.pockets.items.get(i).map(|p| p.stack.item),
             _ => None,
         }
@@ -1159,11 +918,7 @@ pub(crate) fn text(s: impl Into<String>, size: f32, color: Color) -> impl Bundle
 
 /// The tint of an item's tile: plain, so the picture stands out.
 fn item_bg(hovered: bool) -> Color {
-    if hovered {
-        Color::srgb(0.62, 0.58, 0.5)
-    } else {
-        Color::srgb(0.42, 0.4, 0.36)
-    }
+    if hovered { Color::srgb(0.62, 0.58, 0.5) } else { Color::srgb(0.42, 0.4, 0.36) }
 }
 
 /// Height of a crafting row, and the gap between rows.
@@ -1174,43 +929,18 @@ const RECIPE_VIEW: f32 = CONTENT_H - 72.0;
 
 /// An item's picture: its block texture, or its name on a tile of its colour,
 /// with the count in the corner.
-pub(crate) fn icon(
-    c: &mut ChildSpawnerCommands,
-    items: &Items,
-    art: &ItemArt,
-    stack: Stack,
-    w: f32,
-    h: f32,
-    rotated: bool,
-) {
+pub(crate) fn icon(c: &mut ChildSpawnerCommands, items: &Items, art: &ItemArt, stack: Stack, w: f32, h: f32, rotated: bool) {
     match (art.image(stack.item), art.size(stack.item)) {
         (Some(img), Some(size)) => {
             // A better quality glows faintly in its colour behind the sprite.
             let q = items.get(stack.item).quality;
             if q != crate::quality::Quality::Plain {
                 let (r, g, b) = items.qualities().tier(q).color;
-                let a = if q >= crate::quality::Quality::Masterwork {
-                    0.3
-                } else {
-                    0.16
-                };
+                let a = if q >= crate::quality::Quality::Masterwork { 0.3 } else { 0.16 };
                 c.spawn((
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(3.0),
-                        top: Val::Px(3.0),
-                        right: Val::Px(3.0),
-                        bottom: Val::Px(3.0),
-                        ..default()
-                    },
+                    Node { position_type: PositionType::Absolute, left: Val::Px(3.0), top: Val::Px(3.0), right: Val::Px(3.0), bottom: Val::Px(3.0), ..default() },
                     BackgroundColor(Color::srgba(r, g, b, a * 0.5)),
-                    BoxShadow::new(
-                        Color::srgba(r, g, b, a),
-                        Val::Px(0.0),
-                        Val::Px(0.0),
-                        Val::Px(0.0),
-                        Val::Px(6.0),
-                    ),
+                    BoxShadow::new(Color::srgba(r, g, b, a), Val::Px(0.0), Val::Px(0.0), Val::Px(0.0), Val::Px(6.0)),
                 ));
             }
             // At 2x, or smaller if that doesn't fit (a tall item on the
@@ -1231,39 +961,23 @@ pub(crate) fn icon(
                 },
             ));
             if rotated {
-                e.insert(UiTransform {
-                    rotation: Rot2::degrees(90.0),
-                    ..default()
-                });
+                e.insert(UiTransform { rotation: Rot2::degrees(90.0), ..default() });
             }
         }
         _ => {
             // No sprite yet: the name.
-            let size = if w.min(h) < 100.0 {
-                sizes::TINY
-            } else {
-                sizes::SMALL
-            };
+            let size = if w.min(h) < 100.0 { sizes::TINY } else { sizes::SMALL };
             c.spawn((
                 text(items.get(stack.item).title.clone(), size, colors::TEXT),
                 TextLayout::justify(Justify::Center),
-                Node {
-                    margin: UiRect::all(Val::Auto),
-                    max_width: Val::Px(w - 8.0),
-                    ..default()
-                },
+                Node { margin: UiRect::all(Val::Auto), max_width: Val::Px(w - 8.0), ..default() },
             ));
         }
     }
     if stack.count > 1 {
         c.spawn((
             text(format!("{}", stack.count), sizes::BODY, colors::TEXT),
-            Node {
-                position_type: PositionType::Absolute,
-                right: Val::Px(5.0),
-                bottom: Val::Px(2.0),
-                ..default()
-            },
+            Node { position_type: PositionType::Absolute, right: Val::Px(5.0), bottom: Val::Px(2.0), ..default() },
         ));
     }
 }
@@ -1306,43 +1020,20 @@ impl SlotView<'_> {
             _ => "slot",
         };
         let dim = fits == Some(false);
-        let tint = if dim {
-            Color::srgba(0.55, 0.55, 0.55, 0.8)
-        } else {
-            Color::WHITE
-        };
+        let tint = if dim { Color::srgba(0.55, 0.55, 0.55, 0.8) } else { Color::WHITE };
         p.spawn((
             Zone::At(at),
             Lift(at),
             UiTransform::default(),
-            Node {
-                width: Val::Px(size),
-                height: Val::Px(size),
-                flex_shrink: 0.0,
-                ..default()
-            },
+            Node { width: Val::Px(size), height: Val::Px(size), flex_shrink: 0.0, ..default() },
             self.theme.skin_tinted(skin, tint),
-            Outline {
-                width: Val::Px(if hovered { 2.0 } else { 0.0 }),
-                offset: Val::Px(0.0),
-                color: colors::GOLD,
-            },
+            Outline { width: Val::Px(if hovered { 2.0 } else { 0.0 }), offset: Val::Px(0.0), color: colors::GOLD },
         ))
         .with_children(|c| match stack {
             Some(s) => {
                 c.spawn((
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(4.0),
-                        top: Val::Px(4.0),
-                        right: Val::Px(4.0),
-                        bottom: Val::Px(4.0),
-                        ..default()
-                    },
-                    self.theme.skin_tinted(
-                        "item",
-                        item_bg(hovered).with_alpha(if dim { 0.5 } else { 1.0 }),
-                    ),
+                    Node { position_type: PositionType::Absolute, left: Val::Px(4.0), top: Val::Px(4.0), right: Val::Px(4.0), bottom: Val::Px(4.0), ..default() },
+                    self.theme.skin_tinted("item", item_bg(hovered).with_alpha(if dim { 0.5 } else { 1.0 })),
                 ))
                 .with_children(|q| icon(q, self.items, self.art, s, size - 8.0, size - 8.0, false));
             }
@@ -1352,14 +1043,7 @@ impl SlotView<'_> {
                 img.color = Color::srgba(0.85, 0.9, 0.82, if dim { 0.12 } else { 0.28 });
                 c.spawn((
                     img,
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Px((size - k) / 2.0),
-                        top: Val::Px((size - k) / 2.0),
-                        width: Val::Px(k),
-                        height: Val::Px(k),
-                        ..default()
-                    },
+                    Node { position_type: PositionType::Absolute, left: Val::Px((size - k) / 2.0), top: Val::Px((size - k) / 2.0), width: Val::Px(k), height: Val::Px(k), ..default() },
                 ));
             }
         });
@@ -1367,16 +1051,7 @@ impl SlotView<'_> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn grid_node(
-    p: &mut ChildSpawnerCommands,
-    theme: &Theme,
-    grid: &Grid,
-    g: GridRef,
-    items: &Items,
-    art: &ItemArt,
-    hover: Option<Hover>,
-    held: Option<Held>,
-) {
+fn grid_node(p: &mut ChildSpawnerCommands, theme: &Theme, grid: &Grid, g: GridRef, items: &Items, art: &ItemArt, hover: Option<Hover>, held: Option<Held>) {
     p.spawn((Node { padding: UiRect::all(Val::Px(4.0)), ..default() }, theme.skin("inset"))).with_children(|frame| {
         frame
             .spawn((Zone::Grid(g, grid.w, grid.h), Node { width: Val::Px(grid.w as f32 * CELL), height: Val::Px(grid.h as f32 * CELL), ..default() }))
@@ -1455,90 +1130,35 @@ fn describe(items: &Items, id: ItemId) -> (String, String, Vec<Line>) {
     let it = items.get(id);
     let mut lines: Vec<Line> = Vec::new();
     let kind = match &it.kind {
-        ItemKind::Wear {
-            slot,
-            insulation,
-            protection,
-            cooling,
-            air,
-        } => {
+        ItemKind::Wear { slot, insulation, protection, cooling, air } => {
             if *insulation > 0.0 {
-                lines.push((
-                    Some("icon_warmth"),
-                    format!(
-                        "Warmth +{}",
-                        crate::settings::temp_diff(*insulation, 0, false)
-                    ),
-                    colors::GOOD,
-                ));
+                lines.push((Some("icon_warmth"), format!("Warmth +{}", crate::settings::temp_diff(*insulation, 0, false)), colors::GOOD));
             }
             if *cooling > 0.0 {
-                lines.push((
-                    None,
-                    format!(
-                        "Cooler in heat -{}",
-                        crate::settings::temp_diff(*cooling, 0, false)
-                    ),
-                    colors::GOOD,
-                ));
+                lines.push((None, format!("Cooler in heat -{}", crate::settings::temp_diff(*cooling, 0, false)), colors::GOOD));
             }
             if *air > 0.0 {
-                lines.push((
-                    None,
-                    format!("Thin air: makes up {:.0}% of what's missing", air * 100.0),
-                    colors::GOOD,
-                ));
+                lines.push((None, format!("Thin air: makes up {:.0}% of what's missing", air * 100.0), colors::GOOD));
             }
             for l in Layer::ALL {
                 if let Some(p) = protection.get(&l) {
-                    lines.push((
-                        Some(layer_icon(l)),
-                        format!("{} -{:.0}%", l.name(), p * 100.0),
-                        colors::GOOD,
-                    ));
+                    lines.push((Some(layer_icon(l)), format!("{} -{:.0}%", l.name(), p * 100.0), colors::GOOD));
                 }
             }
             format!("Worn on: {}", slot.title())
         }
         ItemKind::Bag { grid } => format!("Bag: holds {}x{}", grid.0, grid.1),
         ItemKind::Food { tier, satiety } => {
-            lines.push((
-                Some("icon_food"),
-                format!("+{satiety:.0} food (tier {tier})"),
-                colors::GOOD,
-            ));
+            lines.push((Some("icon_food"), format!("+{satiety:.0} food (tier {tier})"), colors::GOOD));
             lines.push((None, "Hold right click to eat".into(), colors::MUTED));
             "Food".into()
         }
         ItemKind::Tool { .. } if it.shield.is_some() => {
-            let sh = it.shield.unwrap_or(crate::items::Shield {
-                cost: 1.0,
-                arc: 0.0,
-                bash: 0.0,
-            });
-            lines.push((
-                None,
-                format!(
-                    "Blocks take {:.0}% of the Fatigue a blade's would",
-                    sh.cost * 100.0
-                ),
-                colors::GOOD,
-            ));
-            lines.push((
-                None,
-                format!("Covers {:.0} degrees; stops bolts", sh.arc * 2.0),
-                colors::TEXT,
-            ));
-            lines.push((
-                Some("icon_sword"),
-                format!("Bash for {:.0}", sh.bash),
-                colors::TEXT,
-            ));
-            lines.push((
-                None,
-                "Left hand: right click raises it, left click bashes".into(),
-                colors::MUTED,
-            ));
+            let sh = it.shield.unwrap_or(crate::items::Shield { cost: 1.0, arc: 0.0, bash: 0.0 });
+            lines.push((None, format!("Blocks take {:.0}% of the Fatigue a blade's would", sh.cost * 100.0), colors::GOOD));
+            lines.push((None, format!("Covers {:.0} degrees; stops bolts", sh.arc * 2.0), colors::TEXT));
+            lines.push((Some("icon_sword"), format!("Bash for {:.0}", sh.bash), colors::TEXT));
+            lines.push((None, "Left hand: right click raises it, left click bashes".into(), colors::MUTED));
             "Shield".into()
         }
         ItemKind::Tool { speeds } if it.is_weapon() => {
@@ -1549,14 +1169,7 @@ fn describe(items: &Items, id: ItemId) -> (String, String, Vec<Line>) {
         ItemKind::Tool { speeds } => {
             let mut v: Vec<_> = speeds.iter().collect();
             v.sort_by(|a, b| a.0.cmp(b.0));
-            lines.push((
-                None,
-                v.iter()
-                    .map(|(m, x)| format!("{m} x{x}"))
-                    .collect::<Vec<_>>()
-                    .join(", "),
-                colors::TEXT,
-            ));
+            lines.push((None, v.iter().map(|(m, x)| format!("{m} x{x}")).collect::<Vec<_>>().join(", "), colors::TEXT));
             "Tool".into()
         }
         ItemKind::Block(_) => {
@@ -1564,56 +1177,29 @@ fn describe(items: &Items, id: ItemId) -> (String, String, Vec<Line>) {
             "Block".into()
         }
         ItemKind::Torch => {
-            lines.push((
-                Some("icon_light"),
-                "Gives light; right click to place".into(),
-                colors::TEXT,
-            ));
+            lines.push((Some("icon_light"), "Gives light; right click to place".into(), colors::TEXT));
             "Light".into()
         }
         ItemKind::Material => "Crafting material".into(),
         ItemKind::Machine(_) => {
-            lines.push((
-                None,
-                "Right click open ground to set it down".into(),
-                colors::MUTED,
-            ));
+            lines.push((None, "Right click open ground to set it down".into(), colors::MUTED));
             "Machine".into()
         }
     };
     if it.damage > crate::items::FIST_DAMAGE && it.shield.is_none() {
-        lines.push((
-            Some("icon_sword"),
-            format!("Hits for {:.0}", it.damage),
-            colors::TEXT,
-        ));
+        lines.push((Some("icon_sword"), format!("Hits for {:.0}", it.damage), colors::TEXT));
     }
     if let Some(m) = &it.moves {
         let names = |s: &crate::swing::Swing| format!("{s:?}").to_lowercase();
         let light: Vec<String> = m.light.iter().map(names).collect();
-        lines.push((
-            None,
-            format!(
-                "Tap: {}; hold: {}; reach {:.1}",
-                light.join(", "),
-                names(&m.heavy),
-                it.reach()
-            ),
-            colors::TEXT,
-        ));
+        lines.push((None, format!("Tap: {}; hold: {}; reach {:.1}", light.join(", "), names(&m.heavy), it.reach()), colors::TEXT));
         let special = match m.special {
             crate::items::Special::Balanced => None,
             crate::items::Special::Backstab(x) => Some(format!("Backstabs deal {x:.0}x")),
-            crate::items::Special::Cleave(x) => {
-                Some(format!("{:.0}% gets through a guard", x * 100.0))
-            }
+            crate::items::Special::Cleave(x) => Some(format!("{:.0}% gets through a guard", x * 100.0)),
             crate::items::Special::KeepAway(x) => Some(format!("Pushes foes back {x:.1}x as far")),
-            crate::items::Special::Riposte(x) => {
-                Some(format!("Just after a parry, hits deal {x:.0}x"))
-            }
-            crate::items::Special::Wreck => {
-                Some("Every blow breaks a guard; the heavy knocks foes down".into())
-            }
+            crate::items::Special::Riposte(x) => Some(format!("Just after a parry, hits deal {x:.0}x")),
+            crate::items::Special::Wreck => Some("Every blow breaks a guard; the heavy knocks foes down".into()),
         };
         if let Some(sp) = special {
             lines.push((None, sp, colors::GOOD));
@@ -1626,18 +1212,11 @@ fn describe(items: &Items, id: ItemId) -> (String, String, Vec<Line>) {
         let (r, g, b) = tier.color;
         let mut line = format!("{} quality: +{:.0}%", tier.title, tier.power * 100.0);
         if it.stamina < 1.0 {
-            line.push_str(&format!(
-                ", {:.0}% less Fatigue",
-                (1.0 - it.stamina) * 100.0
-            ));
+            line.push_str(&format!(", {:.0}% less Fatigue", (1.0 - it.stamina) * 100.0));
         }
         lines.push((None, line, Color::srgb(r, g, b)));
         for t in it.traits.iter().filter_map(|t| quals.traits.get(*t)) {
-            lines.push((
-                None,
-                format!("{}: {}", t.title, t.text),
-                Color::srgb(r, g, b),
-            ));
+            lines.push((None, format!("{}: {}", t.title, t.text), Color::srgb(r, g, b)));
         }
     }
     let mut weight = format!("{:.1} kg, takes {}x{}", it.mass, it.size.0, it.size.1);
@@ -1649,34 +1228,15 @@ fn describe(items: &Items, id: ItemId) -> (String, String, Vec<Line>) {
 }
 
 /// A line with an icon in front.
-fn icon_line(
-    p: &mut ChildSpawnerCommands,
-    theme: &Theme,
-    icon_name: &str,
-    s: String,
-    color: Color,
-) {
-    p.spawn(Node {
-        column_gap: Val::Px(8.0),
-        align_items: AlignItems::Center,
-        ..default()
-    })
-    .with_children(|r| {
+fn icon_line(p: &mut ChildSpawnerCommands, theme: &Theme, icon_name: &str, s: String, color: Color) {
+    p.spawn(Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, ..default() }).with_children(|r| {
         r.spawn(theme.icon(icon_name));
         r.spawn(text(s, sizes::BODY, color));
     });
 }
 
 /// The item under the cursor, for the card.
-fn hovered_item(
-    hover: Option<Hover>,
-    inv: &Inventory,
-    chests: &Chests,
-    items: &Items,
-    recipes: Option<&Recipes>,
-    wielded: Option<ItemId>,
-    hotbar: &Hotbar,
-) -> Option<ItemId> {
+fn hovered_item(hover: Option<Hover>, inv: &Inventory, chests: &Chests, items: &Items, recipes: Option<&Recipes>, wielded: Option<ItemId>, hotbar: &Hotbar) -> Option<ItemId> {
     match hover? {
         Hover::Cell(g, x, y) => {
             let grid = match g {
@@ -1718,40 +1278,20 @@ struct Data<'w> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn rebuild(
-    mut commands: Commands,
-    mut ui: ResMut<InvUi>,
-    theme: Res<Theme>,
-    d: Data,
-    roots: Query<Entity, With<InvRoot>>,
-) {
-    if !(ui.dirty
-        || (ui.open
-            && (d.inv.is_changed()
-                || d.chests.is_changed()
-                || d.hotbar.is_changed()
-                || d.hands.is_changed())))
-    {
+fn rebuild(mut commands: Commands, mut ui: ResMut<InvUi>, theme: Res<Theme>, d: Data, roots: Query<Entity, With<InvRoot>>) {
+    if !(ui.dirty || (ui.open && (d.inv.is_changed() || d.chests.is_changed() || d.hotbar.is_changed() || d.hands.is_changed()))) {
         return;
     }
     ui.dirty = false;
     for e in &roots {
         commands.entity(e).despawn();
     }
-    let (Some(art), true) = (d.art.as_deref(), ui.open) else {
-        return;
-    };
+    let (Some(art), true) = (d.art.as_deref(), ui.open) else { return };
     let (hover, held) = (ui.hover, ui.held);
     let theme = &*theme;
     let items = &*d.items;
     let inv = &*d.inv;
-    let view = SlotView {
-        theme,
-        items,
-        art,
-        hover,
-        held,
-    };
+    let view = SlotView { theme, items, art, hover, held };
     let tab = ui.tab;
     commands
         .spawn((
@@ -1769,141 +1309,50 @@ fn rebuild(
             GlobalZIndex(20),
         ))
         .with_children(|root| {
-            root.spawn((
-                WinBox,
-                UiTransform::default(),
-                Node {
-                    flex_direction: FlexDirection::Column,
-                    ..default()
-                },
-            ))
-            .with_children(|col| {
+            root.spawn((WinBox, UiTransform::default(), Node { flex_direction: FlexDirection::Column, ..default() })).with_children(|col| {
                 // Folder tabs along the top edge; the open one runs into the window.
-                col.spawn((
-                    ZIndex(2),
-                    Node {
-                        column_gap: Val::Px(4.0),
-                        padding: UiRect::left(Val::Px(18.0)),
-                        margin: UiRect::bottom(Val::Px(-12.0)),
-                        align_items: AlignItems::FlexEnd,
-                        ..default()
-                    },
-                ))
-                .with_children(|tabs| {
-                    for t in Tab::ALL {
-                        let active = tab == t;
-                        let hovered = hover == Some(Hover::Tab(t));
-                        let skin = if active {
-                            "tab_active"
-                        } else if hovered {
-                            "tab_hover"
-                        } else {
-                            "tab"
-                        };
-                        tabs.spawn((
-                            Zone::At(Hover::Tab(t)),
-                            Node {
-                                column_gap: Val::Px(8.0),
-                                align_items: AlignItems::Center,
-                                padding: UiRect::new(
-                                    Val::Px(18.0),
-                                    Val::Px(20.0),
-                                    Val::Px(10.0),
-                                    Val::Px(if active { 18.0 } else { 10.0 }),
-                                ),
-                                margin: UiRect::bottom(Val::Px(if active { 0.0 } else { 12.0 })),
-                                ..default()
-                            },
-                            theme.skin(skin),
-                        ))
-                        .with_children(|b| {
-                            b.spawn(theme.icon(t.icon()));
-                            b.spawn((
-                                theme.bold(sizes::LABEL),
-                                Text::new(t.title()),
-                                TextColor(if active {
-                                    colors::HEADING
-                                } else if hovered {
-                                    colors::TEXT
-                                } else {
-                                    colors::MUTED
-                                }),
-                            ));
+                col.spawn((ZIndex(2), Node { column_gap: Val::Px(4.0), padding: UiRect::left(Val::Px(18.0)), margin: UiRect::bottom(Val::Px(-12.0)), align_items: AlignItems::FlexEnd, ..default() }))
+                    .with_children(|tabs| {
+                        for t in Tab::ALL {
+                            let active = tab == t;
+                            let hovered = hover == Some(Hover::Tab(t));
+                            let skin = if active { "tab_active" } else if hovered { "tab_hover" } else { "tab" };
+                            tabs.spawn((
+                                Zone::At(Hover::Tab(t)),
+                                Node {
+                                    column_gap: Val::Px(8.0),
+                                    align_items: AlignItems::Center,
+                                    padding: UiRect::new(Val::Px(18.0), Val::Px(20.0), Val::Px(10.0), Val::Px(if active { 18.0 } else { 10.0 })),
+                                    margin: UiRect::bottom(Val::Px(if active { 0.0 } else { 12.0 })),
+                                    ..default()
+                                },
+                                theme.skin(skin),
+                            ))
+                            .with_children(|b| {
+                                b.spawn(theme.icon(t.icon()));
+                                b.spawn((theme.bold(sizes::LABEL), Text::new(t.title()), TextColor(if active { colors::HEADING } else if hovered { colors::TEXT } else { colors::MUTED })));
+                            });
+                        }
+                    });
+                col.spawn((Node { flex_direction: FlexDirection::Column, padding: UiRect::new(Val::Px(18.0), Val::Px(18.0), Val::Px(20.0), Val::Px(14.0)), row_gap: Val::Px(10.0), ..default() }, BackgroundColor(Color::srgb(0.08, 0.065, 0.05)), theme.skin("panel")))
+                    .with_children(|win| {
+                        win.spawn((Content, UiTransform::default(), Node { width: Val::Px(CONTENT_W), height: Val::Px(CONTENT_H), ..default() })).with_children(|c| match tab {
+                            Tab::Items => items_tab(c, &view, &d, &mut ui),
+                            Tab::Equipment => equipment::build(c, &view, &d),
+                            Tab::Stats => stats::build(c, theme, &d),
+                            Tab::Abilities => abilities::build(c, theme, &d),
                         });
-                    }
-                });
-                col.spawn((
-                    Node {
-                        flex_direction: FlexDirection::Column,
-                        padding: UiRect::new(
-                            Val::Px(18.0),
-                            Val::Px(18.0),
-                            Val::Px(20.0),
-                            Val::Px(14.0),
-                        ),
-                        row_gap: Val::Px(10.0),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.08, 0.065, 0.05)),
-                    theme.skin("panel"),
-                ))
-                .with_children(|win| {
-                    win.spawn((
-                        Content,
-                        UiTransform::default(),
-                        Node {
-                            width: Val::Px(CONTENT_W),
-                            height: Val::Px(CONTENT_H),
-                            ..default()
-                        },
-                    ))
-                    .with_children(|c| match tab {
-                        Tab::Items => items_tab(c, &view, &d, &mut ui),
-                        Tab::Equipment => equipment::build(c, &view, &d),
-                        Tab::Stats => stats::build(c, theme, &d),
-                        Tab::Abilities => abilities::build(c, theme, &d),
+                        win.spawn((Node { height: Val::Px(8.0), ..default() }, theme.skin("divider")));
+                        win.spawn(Node { justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center, column_gap: Val::Px(20.0), ..default() }).with_children(|bar| {
+                            let (msg, color) = if ui.message.is_empty() { (hint(tab).to_string(), colors::MUTED) } else { (ui.message.clone(), colors::GOLD) };
+                            bar.spawn((text(msg, sizes::SMALL, color), Node { max_width: Val::Px(CONTENT_W - 160.0), ..default() }));
+                            bar.spawn(text("Tab: close", sizes::SMALL, colors::FAINT));
+                        });
                     });
-                    win.spawn((
-                        Node {
-                            height: Val::Px(8.0),
-                            ..default()
-                        },
-                        theme.skin("divider"),
-                    ));
-                    win.spawn(Node {
-                        justify_content: JustifyContent::SpaceBetween,
-                        align_items: AlignItems::Center,
-                        column_gap: Val::Px(20.0),
-                        ..default()
-                    })
-                    .with_children(|bar| {
-                        let (msg, color) = if ui.message.is_empty() {
-                            (hint(tab).to_string(), colors::MUTED)
-                        } else {
-                            (ui.message.clone(), colors::GOLD)
-                        };
-                        bar.spawn((
-                            text(msg, sizes::SMALL, color),
-                            Node {
-                                max_width: Val::Px(CONTENT_W - 160.0),
-                                ..default()
-                            },
-                        ));
-                        bar.spawn(text("Tab: close", sizes::SMALL, colors::FAINT));
-                    });
-                });
             });
             // A card about what's under the cursor.
             if held.is_none()
-                && let Some(id) = hovered_item(
-                    hover,
-                    inv,
-                    &d.chests,
-                    items,
-                    d.recipes.as_deref(),
-                    d.wielded.0,
-                    &d.hotbar,
-                )
+                && let Some(id) = hovered_item(hover, inv, &d.chests, items, d.recipes.as_deref(), d.wielded.0, &d.hotbar)
             {
                 tooltip(root, theme, items, art, id);
             }
@@ -1914,26 +1363,10 @@ fn rebuild(
                 root.spawn((
                     HeldIcon,
                     UiTransform::default(),
-                    Node {
-                        position_type: PositionType::Absolute,
-                        width: Val::Px(pw - 2.0),
-                        height: Val::Px(ph - 2.0),
-                        overflow: Overflow::clip(),
-                        ..default()
-                    },
+                    Node { position_type: PositionType::Absolute, width: Val::Px(pw - 2.0), height: Val::Px(ph - 2.0), overflow: Overflow::clip(), ..default() },
                     theme.skin_tinted("item", item_bg(true)),
-                    Outline {
-                        width: Val::Px(2.0),
-                        offset: Val::Px(0.0),
-                        color: colors::GOLD,
-                    },
-                    BoxShadow::new(
-                        Color::srgba(0.0, 0.0, 0.0, 0.6),
-                        Val::Px(4.0),
-                        Val::Px(6.0),
-                        Val::Px(0.0),
-                        Val::Px(6.0),
-                    ),
+                    Outline { width: Val::Px(2.0), offset: Val::Px(0.0), color: colors::GOLD },
+                    BoxShadow::new(Color::srgba(0.0, 0.0, 0.0, 0.6), Val::Px(4.0), Val::Px(6.0), Val::Px(0.0), Val::Px(6.0)),
                     GlobalZIndex(30),
                 ))
                 .with_children(|c| icon(c, items, art, h.stack, pw - 2.0, ph - 2.0, h.rotated));
@@ -1943,25 +1376,15 @@ fn rebuild(
 
 fn hint(tab: Tab) -> &'static str {
     match tab {
-        Tab::Items => {
-            "Click: pick up / put down   Drag and drop   R: turn   Right click: move across or wear   Shift-click: half   Hotbar: drop on a key, right click clears   Q: throw"
-        }
-        Tab::Equipment => {
-            "Click or drag gear onto a slot   Right click: put on / take off   Drag the picture to turn it   R in play: draw your weapon"
-        }
+        Tab::Items => "Click: pick up / put down   Drag and drop   R: turn   Right click: move across or wear   Shift-click: half   Hotbar: drop on a key, right click clears   Q: throw",
+        Tab::Equipment => "Click or drag gear onto a slot   Right click: put on / take off   Drag the picture to turn it   R in play: draw your weapon",
         Tab::Stats => "Your body, gear and progress right now",
         Tab::Abilities => "Spells use focus. Learn new ones in the tree   K: open this tab",
     }
 }
 
 /// The item card: the sprite large at the top, the name, then its numbers.
-fn tooltip(
-    root: &mut ChildSpawnerCommands,
-    theme: &Theme,
-    items: &Items,
-    art: &ItemArt,
-    id: ItemId,
-) {
+fn tooltip(root: &mut ChildSpawnerCommands, theme: &Theme, items: &Items, art: &ItemArt, id: ItemId) {
     let (title, kind, lines) = describe(items, id);
     root.spawn((
         Tooltip,
@@ -1975,50 +1398,17 @@ fn tooltip(
             ..default()
         },
         theme.skin("tooltip"),
-        BoxShadow::new(
-            Color::srgba(0.0, 0.0, 0.0, 0.55),
-            Val::Px(0.0),
-            Val::Px(6.0),
-            Val::Px(0.0),
-            Val::Px(10.0),
-        ),
+        BoxShadow::new(Color::srgba(0.0, 0.0, 0.0, 0.55), Val::Px(0.0), Val::Px(6.0), Val::Px(0.0), Val::Px(10.0)),
         GlobalZIndex(31),
     ))
     .with_children(|t| {
         // The picture, as big as fits.
         let size = art.size(id).map_or(Vec2::splat(20.0), |s| s.as_vec2());
-        let k = (4.0f32)
-            .min(96.0 / size.y)
-            .min(200.0 / size.x)
-            .max(1.0)
-            .floor();
-        t.spawn((
-            Node {
-                justify_content: JustifyContent::Center,
-                padding: UiRect::all(Val::Px(6.0)),
-                margin: UiRect::bottom(Val::Px(4.0)),
-                ..default()
-            },
-            theme.skin("inset"),
-        ))
-        .with_children(|b| {
-            b.spawn(Node {
-                width: Val::Px(size.x * k),
-                height: Val::Px(size.y * k),
-                ..default()
-            })
-            .with_children(|q| {
-                icon(
-                    q,
-                    items,
-                    art,
-                    Stack::new(id, 1),
-                    size.x * k + 4.0,
-                    size.y * k + 4.0,
-                    false,
-                )
+        let k = (4.0f32).min(96.0 / size.y).min(200.0 / size.x).max(1.0).floor();
+        t.spawn((Node { justify_content: JustifyContent::Center, padding: UiRect::all(Val::Px(6.0)), margin: UiRect::bottom(Val::Px(4.0)), ..default() }, theme.skin("inset")))
+            .with_children(|b| {
+                b.spawn(Node { width: Val::Px(size.x * k), height: Val::Px(size.y * k), ..default() }).with_children(|q| icon(q, items, art, Stack::new(id, 1), size.x * k + 4.0, size.y * k + 4.0, false));
             });
-        });
         let q = items.get(id).quality;
         let heading = if q == crate::quality::Quality::Plain {
             colors::HEADING
@@ -2026,20 +1416,9 @@ fn tooltip(
             let (r, g, b) = items.qualities().tier(q).color;
             Color::srgb(r, g, b)
         };
-        t.spawn((
-            theme.bold(sizes::LABEL),
-            Text::new(title),
-            TextColor(heading),
-        ));
+        t.spawn((theme.bold(sizes::LABEL), Text::new(title), TextColor(heading)));
         t.spawn(text(kind, sizes::SMALL, colors::MUTED));
-        t.spawn((
-            Node {
-                height: Val::Px(4.0),
-                margin: UiRect::vertical(Val::Px(2.0)),
-                ..default()
-            },
-            theme.skin("divider"),
-        ));
+        t.spawn((Node { height: Val::Px(4.0), margin: UiRect::vertical(Val::Px(2.0)), ..default() }, theme.skin("divider")));
         for (ic, s, c) in lines {
             match ic {
                 Some(name) => icon_line(t, theme, name, s, c),
@@ -2054,209 +1433,64 @@ fn tooltip(
 /// The Items tab: the pockets grid with the hand slots over it, and the
 /// crafting / chest panel beside it.
 fn items_tab(c: &mut ChildSpawnerCommands, view: &SlotView, d: &Data, ui: &mut InvUi) {
-    let (theme, items, art, hover, held) =
-        (view.theme, view.items, view.art, view.hover, view.held);
+    let (theme, items, art, hover, held) = (view.theme, view.items, view.art, view.hover, view.held);
     let inv = &*d.inv;
-    c.spawn(Node {
-        column_gap: Val::Px(22.0),
-        align_items: AlignItems::Start,
-        ..default()
-    })
-    .with_children(|row| {
-        row.spawn(Node {
-            flex_direction: FlexDirection::Column,
-            row_gap: Val::Px(4.0),
-            ..default()
-        })
-        .with_children(|col| {
-            col.spawn(Node {
-                justify_content: JustifyContent::SpaceBetween,
-                align_items: AlignItems::End,
-                height: Val::Px(44.0),
-                ..default()
-            })
-            .with_children(|bar| {
-                bar.spawn(Node {
-                    column_gap: Val::Px(14.0),
-                    align_items: AlignItems::Center,
-                    ..default()
-                })
-                .with_children(|l| {
-                    l.spawn((
-                        theme.bold(sizes::HEADING),
-                        Text::new("Carried"),
-                        TextColor(colors::HEADING),
-                    ));
+    c.spawn(Node { column_gap: Val::Px(22.0), align_items: AlignItems::Start, ..default() }).with_children(|row| {
+        row.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(4.0), ..default() }).with_children(|col| {
+            col.spawn(Node { justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::End, height: Val::Px(44.0), ..default() }).with_children(|bar| {
+                bar.spawn(Node { column_gap: Val::Px(14.0), align_items: AlignItems::Center, ..default() }).with_children(|l| {
+                    l.spawn((theme.bold(sizes::HEADING), Text::new("Carried"), TextColor(colors::HEADING)));
                     let heavy = crate::survival::vitals::is_heavy(d.s.env.carried);
                     l.spawn(theme.icon("icon_load"));
-                    l.spawn(text(
-                        format!(
-                            "{:.1} / {:.0} kg",
-                            d.s.env.carried,
-                            crate::survival::vitals::CAPACITY
-                        ),
-                        sizes::BODY,
-                        if heavy { colors::BAD } else { colors::MUTED },
-                    ));
+                    l.spawn(text(format!("{:.1} / {:.0} kg", d.s.env.carried, crate::survival::vitals::CAPACITY), sizes::BODY, if heavy { colors::BAD } else { colors::MUTED }));
                 });
                 // The hands and the weapon, right above the grid.
-                bar.spawn(Node {
-                    column_gap: Val::Px(6.0),
-                    align_items: AlignItems::Center,
-                    ..default()
-                })
-                .with_children(|h| {
-                    h.spawn((
-                        text("Weapon", sizes::SMALL, colors::MUTED),
-                        Node {
-                            margin: UiRect::right(Val::Px(2.0)),
-                            ..default()
-                        },
-                    ));
+                bar.spawn(Node { column_gap: Val::Px(6.0), align_items: AlignItems::Center, ..default() }).with_children(|h| {
+                    h.spawn((text("Weapon", sizes::SMALL, colors::MUTED), Node { margin: UiRect::right(Val::Px(2.0)), ..default() }));
                     view.slot(h, Hover::Weapon, inv.weapon.map(|w| Stack::new(w, 1)), 44.0);
-                    h.spawn((
-                        text("Hands", sizes::SMALL, colors::MUTED),
-                        Node {
-                            margin: UiRect::new(Val::Px(12.0), Val::Px(2.0), Val::ZERO, Val::ZERO),
-                            ..default()
-                        },
-                    ));
-                    view.slot(
-                        h,
-                        Hover::RightHand,
-                        d.wielded.0.map(|w| Stack::new(w, 1)),
-                        44.0,
-                    );
+                    h.spawn((text("Hands", sizes::SMALL, colors::MUTED), Node { margin: UiRect::new(Val::Px(12.0), Val::Px(2.0), Val::ZERO, Val::ZERO), ..default() }));
+                    view.slot(h, Hover::RightHand, d.wielded.0.map(|w| Stack::new(w, 1)), 44.0);
                     view.slot(h, Hover::LeftHand, inv.left, 44.0);
                 });
             });
-            grid_node(
-                col,
-                theme,
-                &inv.pockets,
-                GridRef::Pockets,
-                items,
-                art,
-                hover,
-                held,
-            );
+            grid_node(col, theme, &inv.pockets, GridRef::Pockets, items, art, hover, held);
             // The hotbar keys 1-9, under the pockets.
-            col.spawn(Node {
-                column_gap: Val::Px(6.0),
-                align_items: AlignItems::Center,
-                margin: UiRect::top(Val::Px(6.0)),
-                ..default()
-            })
-            .with_children(|h| {
-                h.spawn((
-                    text("Hotbar", sizes::SMALL, colors::MUTED),
-                    Node {
-                        margin: UiRect::right(Val::Px(6.0)),
-                        ..default()
-                    },
-                ));
+            col.spawn(Node { column_gap: Val::Px(6.0), align_items: AlignItems::Center, margin: UiRect::top(Val::Px(6.0)), ..default() }).with_children(|h| {
+                h.spawn((text("Hotbar", sizes::SMALL, colors::MUTED), Node { margin: UiRect::right(Val::Px(6.0)), ..default() }));
                 for k in 0..d.hotbar.slots.len() {
                     let id = d.hotbar.slots[k];
                     let count = id.map_or(0, |i| inv.count(i));
                     let selected = d.hands.right == Some(k) && !d.hands.drawn;
-                    h.spawn(Node {
-                        flex_direction: FlexDirection::Column,
-                        align_items: AlignItems::Center,
-                        ..default()
-                    })
-                    .with_children(|s| {
-                        view.slot(
-                            s,
-                            Hover::Hotbar(k),
-                            id.map(|i| Stack::new(i, count.clamp(1, u16::MAX as u32) as u16)),
-                            44.0,
-                        );
-                        s.spawn(text(
-                            format!("{}", k + 1),
-                            sizes::SMALL,
-                            if selected {
-                                colors::GOLD
-                            } else if count == 0 && id.is_some() {
-                                colors::BAD
-                            } else {
-                                colors::FAINT
-                            },
-                        ));
+                    h.spawn(Node { flex_direction: FlexDirection::Column, align_items: AlignItems::Center, ..default() }).with_children(|s| {
+                        view.slot(s, Hover::Hotbar(k), id.map(|i| Stack::new(i, count.clamp(1, u16::MAX as u32) as u16)), 44.0);
+                        s.spawn(text(format!("{}", k + 1), sizes::SMALL, if selected { colors::GOLD } else if count == 0 && id.is_some() { colors::BAD } else { colors::FAINT }));
                     });
                 }
             });
         });
         // Side panel: Crafting, and the chest when one is open.
-        row.spawn(Node {
-            flex_direction: FlexDirection::Column,
-            width: Val::Px(SIDE_W),
-            ..default()
-        })
-        .with_children(|side| {
+        row.spawn(Node { flex_direction: FlexDirection::Column, width: Val::Px(SIDE_W), ..default() }).with_children(|side| {
             let chest = ui.chest.and_then(|c| d.chests.map.get(&c).map(|g| (c, g)));
-            side.spawn(Node {
-                column_gap: Val::Px(6.0),
-                margin: UiRect::bottom(Val::Px(8.0)),
-                height: Val::Px(40.0),
-                align_items: AlignItems::End,
-                ..default()
-            })
-            .with_children(|tabs| {
+            side.spawn(Node { column_gap: Val::Px(6.0), margin: UiRect::bottom(Val::Px(8.0)), height: Val::Px(40.0), align_items: AlignItems::End, ..default() }).with_children(|tabs| {
                 let no_recipes = d.recipes.as_deref().is_none_or(|r| r.list.is_empty());
                 for t in [Side::Crafting, Side::Chest] {
-                    if (t == Side::Chest && chest.is_none()) || (t == Side::Crafting && no_recipes)
-                    {
+                    if (t == Side::Chest && chest.is_none()) || (t == Side::Crafting && no_recipes) {
                         continue;
                     }
-                    let skin = if ui.side == t {
-                        "button_down"
-                    } else if hover == Some(Hover::Side(t)) {
-                        "button_hover"
-                    } else {
-                        "button"
-                    };
-                    tabs.spawn((
-                        Zone::At(Hover::Side(t)),
-                        Node {
-                            padding: UiRect::axes(Val::Px(14.0), Val::Px(6.0)),
-                            ..default()
-                        },
-                        theme.skin(skin),
-                    ))
-                    .with_children(|b| {
-                        b.spawn(text(
-                            t.title(),
-                            sizes::BODY,
-                            if ui.side == t {
-                                colors::HEADING
-                            } else {
-                                colors::TEXT
-                            },
-                        ));
+                    let skin = if ui.side == t { "button_down" } else if hover == Some(Hover::Side(t)) { "button_hover" } else { "button" };
+                    tabs.spawn((Zone::At(Hover::Side(t)), Node { padding: UiRect::axes(Val::Px(14.0), Val::Px(6.0)), ..default() }, theme.skin(skin))).with_children(|b| {
+                        b.spawn(text(t.title(), sizes::BODY, if ui.side == t { colors::HEADING } else { colors::TEXT }));
                     });
                 }
             });
-            side.spawn((
-                SideContent,
-                UiTransform::default(),
-                Node {
-                    flex_direction: FlexDirection::Column,
-                    width: Val::Percent(100.0),
-                    ..default()
-                },
-            ))
-            .with_children(|side| match ui.side {
+            side.spawn((SideContent, UiTransform::default(), Node { flex_direction: FlexDirection::Column, width: Val::Percent(100.0), ..default() })).with_children(|side| match ui.side {
                 Side::Chest => {
                     if let Some((c, g)) = chest {
                         grid_node(side, theme, g, GridRef::Chest(c), items, art, hover, held);
                     }
                 }
                 Side::Crafting if d.recipes.as_deref().is_none_or(|r| r.list.is_empty()) => {
-                    side.spawn(text(
-                        "Things are made at the stations by your urns.",
-                        sizes::SMALL,
-                        colors::MUTED,
-                    ));
+                    side.spawn(text("Things are made at the stations by your urns.", sizes::SMALL, colors::MUTED));
                 }
                 Side::Crafting => crafting_list(side, theme, items, art, d, ui),
             });
@@ -2264,49 +1498,16 @@ fn items_tab(c: &mut ChildSpawnerCommands, view: &SlotView, d: &Data, ui: &mut I
     });
 }
 
-fn crafting_list(
-    side: &mut ChildSpawnerCommands,
-    theme: &Theme,
-    items: &Items,
-    art: &ItemArt,
-    d: &Data,
-    ui: &mut InvUi,
-) {
+fn crafting_list(side: &mut ChildSpawnerCommands, theme: &Theme, items: &Items, art: &ItemArt, d: &Data, ui: &mut InvUi) {
     let hover = ui.hover;
     let at_camp = d.camp.near(d.player.pos);
-    side.spawn(Node {
-        flex_direction: FlexDirection::Column,
-        width: Val::Percent(100.0),
-        ..default()
-    })
-    .with_children(|col| {
-        col.spawn(Node {
-            justify_content: JustifyContent::FlexEnd,
-            margin: UiRect::bottom(Val::Px(2.0)),
-            ..default()
-        })
-        .with_children(|h| {
-            h.spawn(text(
-                if at_camp { "at camp" } else { "Shift: make 5" },
-                sizes::SMALL,
-                colors::MUTED,
-            ));
+    side.spawn(Node { flex_direction: FlexDirection::Column, width: Val::Percent(100.0), ..default() }).with_children(|col| {
+        col.spawn(Node { justify_content: JustifyContent::FlexEnd, margin: UiRect::bottom(Val::Px(2.0)), ..default() }).with_children(|h| {
+            h.spawn(text(if at_camp { "at camp" } else { "Shift: make 5" }, sizes::SMALL, colors::MUTED));
         });
-        let Some(r) = d.recipes.as_deref() else {
-            return;
-        };
+        let Some(r) = d.recipes.as_deref() else { return };
         let inv = &*d.inv;
-        let mut order: Vec<(usize, bool)> = r
-            .list
-            .iter()
-            .enumerate()
-            .map(|(i, rec)| {
-                (
-                    i,
-                    rec.have_parts(inv) && (rec.at == Station::Hand || at_camp),
-                )
-            })
-            .collect();
+        let mut order: Vec<(usize, bool)> = r.list.iter().enumerate().map(|(i, rec)| (i, rec.have_parts(inv) && (rec.at == Station::Hand || at_camp))).collect();
         order.sort_by_key(|(i, can)| (!*can, r.list[*i].at == Station::Camp, *i));
         let rows = order.len() as f32;
         let max_scroll = (rows * (RECIPE_ROW + RECIPE_GAP) + 8.0 - RECIPE_VIEW).max(0.0);
@@ -2334,66 +1535,22 @@ fn crafting_list(
                     (false, true) => "slot_hover",
                     (false, false) => "button_off",
                 };
-                let needs: Vec<String> = rec
-                    .needs
-                    .iter()
-                    .map(|n| format!("{} {}", n.count, items.get(n.item).title))
-                    .collect();
+                let needs: Vec<String> = rec.needs.iter().map(|n| format!("{} {}", n.count, items.get(n.item).title)).collect();
                 let mut needs = needs.join(", ");
                 if rec.at == Station::Camp {
                     needs.push_str("  · at camp");
                 }
-                let title = if rec.makes.count > 1 {
-                    format!("{} x{}", items.get(rec.makes.item).title, rec.makes.count)
-                } else {
-                    items.get(rec.makes.item).title.clone()
-                };
+                let title = if rec.makes.count > 1 { format!("{} x{}", items.get(rec.makes.item).title, rec.makes.count) } else { items.get(rec.makes.item).title.clone() };
                 list.spawn((
                     Zone::At(Hover::Recipe(i)),
-                    Node {
-                        min_height: Val::Px(RECIPE_ROW),
-                        flex_shrink: 0.0,
-                        padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)),
-                        column_gap: Val::Px(10.0),
-                        align_items: AlignItems::Center,
-                        ..default()
-                    },
+                    Node { min_height: Val::Px(RECIPE_ROW), flex_shrink: 0.0, padding: UiRect::axes(Val::Px(8.0), Val::Px(4.0)), column_gap: Val::Px(10.0), align_items: AlignItems::Center, ..default() },
                     theme.skin(skin),
                 ))
                 .with_children(|row| {
-                    row.spawn(Node {
-                        width: Val::Px(40.0),
-                        height: Val::Px(40.0),
-                        flex_shrink: 0.0,
-                        ..default()
-                    })
-                    .with_children(|q| {
-                        icon(
-                            q,
-                            items,
-                            art,
-                            Stack::new(rec.makes.item, 1),
-                            40.0,
-                            40.0,
-                            false,
-                        )
-                    });
-                    row.spawn(Node {
-                        flex_direction: FlexDirection::Column,
-                        justify_content: JustifyContent::Center,
-                        ..default()
-                    })
-                    .with_children(|c| {
-                        c.spawn(text(
-                            title,
-                            sizes::BODY,
-                            if can { colors::TEXT } else { colors::MUTED },
-                        ));
-                        c.spawn(text(
-                            needs,
-                            sizes::SMALL,
-                            if can { colors::GOOD } else { colors::FAINT },
-                        ));
+                    row.spawn(Node { width: Val::Px(40.0), height: Val::Px(40.0), flex_shrink: 0.0, ..default() }).with_children(|q| icon(q, items, art, Stack::new(rec.makes.item, 1), 40.0, 40.0, false));
+                    row.spawn(Node { flex_direction: FlexDirection::Column, justify_content: JustifyContent::Center, ..default() }).with_children(|c| {
+                        c.spawn(text(title, sizes::BODY, if can { colors::TEXT } else { colors::MUTED }));
+                        c.spawn(text(needs, sizes::SMALL, if can { colors::GOOD } else { colors::FAINT }));
                     });
                 });
             }
@@ -2402,11 +1559,7 @@ fn crafting_list(
 }
 
 /// The mouse wheel scrolls the crafting list.
-fn scroll(
-    mut wheel: MessageReader<bevy::input::mouse::MouseWheel>,
-    mut ui: ResMut<InvUi>,
-    mut lists: Query<&mut ScrollPosition, With<Zone>>,
-) {
+fn scroll(mut wheel: MessageReader<bevy::input::mouse::MouseWheel>, mut ui: ResMut<InvUi>, mut lists: Query<&mut ScrollPosition, With<Zone>>) {
     let mut dy = 0.0;
     for w in wheel.read() {
         dy -= match w.unit {
@@ -2426,14 +1579,8 @@ fn scroll(
 }
 
 #[allow(clippy::type_complexity)]
-fn follow_cursor(
-    window: Single<&bevy::window::Window, With<PrimaryWindow>>,
-    mut held: Query<&mut Node, (With<HeldIcon>, Without<Tooltip>)>,
-    mut tips: Query<(&mut Node, &ComputedNode), With<Tooltip>>,
-) {
-    let Some(p) = window.cursor_position() else {
-        return;
-    };
+fn follow_cursor(window: Single<&bevy::window::Window, With<PrimaryWindow>>, mut held: Query<&mut Node, (With<HeldIcon>, Without<Tooltip>)>, mut tips: Query<(&mut Node, &ComputedNode), With<Tooltip>>) {
+    let Some(p) = window.cursor_position() else { return };
     for mut n in &mut held {
         // The cursor holds the item by its top-left cell.
         n.left = Val::Px(p.x - CELL * 0.5);
@@ -2443,11 +1590,7 @@ fn follow_cursor(
     for (mut n, c) in &mut tips {
         let size = c.size() * c.inverse_scale_factor();
         // Beside the cursor, kept on screen.
-        let x = if p.x + 22.0 + size.x > ww {
-            p.x - 14.0 - size.x
-        } else {
-            p.x + 22.0
-        };
+        let x = if p.x + 22.0 + size.x > ww { p.x - 14.0 - size.x } else { p.x + 22.0 };
         let y = (p.y + 10.0).min(wh - size.y - 8.0).max(8.0);
         n.left = Val::Px(x);
         n.top = Val::Px(y);
@@ -2462,56 +1605,12 @@ fn follow_cursor(
 fn animate(
     ui: Res<InvUi>,
     motion: Res<Motion>,
-    mut window: Query<
-        &mut UiTransform,
-        (
-            With<WinBox>,
-            Without<Content>,
-            Without<Lift>,
-            Without<SideContent>,
-            Without<HeldIcon>,
-        ),
-    >,
+    mut window: Query<&mut UiTransform, (With<WinBox>, Without<Content>, Without<Lift>, Without<SideContent>, Without<HeldIcon>)>,
     mut veil: Query<&mut BackgroundColor, With<Veil>>,
-    mut content: Query<
-        &mut UiTransform,
-        (
-            With<Content>,
-            Without<WinBox>,
-            Without<Lift>,
-            Without<SideContent>,
-            Without<HeldIcon>,
-        ),
-    >,
-    mut side: Query<
-        &mut UiTransform,
-        (
-            With<SideContent>,
-            Without<WinBox>,
-            Without<Lift>,
-            Without<Content>,
-            Without<HeldIcon>,
-        ),
-    >,
-    mut held: Query<
-        &mut UiTransform,
-        (
-            With<HeldIcon>,
-            Without<WinBox>,
-            Without<Lift>,
-            Without<Content>,
-            Without<SideContent>,
-        ),
-    >,
-    mut lifts: Query<
-        (&Lift, &mut UiTransform),
-        (
-            Without<WinBox>,
-            Without<Content>,
-            Without<SideContent>,
-            Without<HeldIcon>,
-        ),
-    >,
+    mut content: Query<&mut UiTransform, (With<Content>, Without<WinBox>, Without<Lift>, Without<SideContent>, Without<HeldIcon>)>,
+    mut side: Query<&mut UiTransform, (With<SideContent>, Without<WinBox>, Without<Lift>, Without<Content>, Without<HeldIcon>)>,
+    mut held: Query<&mut UiTransform, (With<HeldIcon>, Without<WinBox>, Without<Lift>, Without<Content>, Without<SideContent>)>,
+    mut lifts: Query<(&Lift, &mut UiTransform), (Without<WinBox>, Without<Content>, Without<SideContent>, Without<HeldIcon>)>,
 ) {
     if !ui.open {
         return;
@@ -2519,10 +1618,7 @@ fn animate(
     let now = motion.now;
     let step = |since: f32, secs: f32, steps: u32| theme::stepped((now - since) / secs, steps);
     let set = |t: &mut UiTransform, x: f32, y: f32| {
-        let want = UiTransform {
-            translation: Val2::px(x, y),
-            ..default()
-        };
+        let want = UiTransform { translation: Val2::px(x, y), ..default() };
         if *t != want {
             *t = want;
         }
@@ -2542,11 +1638,7 @@ fn animate(
         set(&mut t, 12.0 * (1.0 - step(motion.tab, theme::SNAP, 3)), 0.0);
     }
     for mut t in &mut side {
-        set(
-            &mut t,
-            12.0 * (1.0 - step(motion.side, theme::SNAP, 3)),
-            0.0,
-        );
+        set(&mut t, 12.0 * (1.0 - step(motion.side, theme::SNAP, 3)), 0.0);
     }
     // Picked up: starts 6 points low (where the slot was) and hops up.
     for mut t in &mut held {
@@ -2576,9 +1668,7 @@ mod tests {
     fn hotbar_key_moves_an_item_off_its_old_key() {
         let (_, items) = load();
         let (dirt, torch) = (items.id("dirt").unwrap(), items.id("torch").unwrap());
-        let mut hb = Hotbar {
-            slots: vec![None; 9],
-        };
+        let mut hb = Hotbar { slots: vec![None; 9] };
         set_hotbar(&mut hb, 2, dirt);
         set_hotbar(&mut hb, 4, torch);
         set_hotbar(&mut hb, 7, dirt);
@@ -2596,55 +1686,17 @@ mod tests {
         let mut g = Grid::new(4, 3);
         g.place(&items, Stack::new(id("dirt"), 30), 0, 0, false);
         g.place(&items, Stack::new(id("stone_axe"), 1), 3, 0, false);
-        let held = |s: Stack| Held {
-            stack: s,
-            rotated: false,
-            from: Origin::Worn,
-        };
+        let held = |s: Stack| Held { stack: s, rotated: false, from: Origin::Worn };
         // Onto a matching stack: tops it up to 32, the rest stays in hand.
-        let rest = drop_into(
-            &mut g,
-            &items,
-            held(Stack::new(id("dirt"), 5)),
-            (0, 0),
-            GridRef::Pockets,
-        )
-        .unwrap();
+        let rest = drop_into(&mut g, &items, held(Stack::new(id("dirt"), 5)), (0, 0), GridRef::Pockets).unwrap();
         assert_eq!(rest.unwrap().stack.count, 3);
         // Into free space.
-        assert!(
-            drop_into(
-                &mut g,
-                &items,
-                held(Stack::new(id("torch"), 4)),
-                (1, 0),
-                GridRef::Pockets
-            )
-            .unwrap()
-            .is_none()
-        );
+        assert!(drop_into(&mut g, &items, held(Stack::new(id("torch"), 4)), (1, 0), GridRef::Pockets).unwrap().is_none());
         // A shovel onto the axe swaps them.
-        let swapped = drop_into(
-            &mut g,
-            &items,
-            held(Stack::new(id("stone_shovel"), 1)),
-            (3, 0),
-            GridRef::Pockets,
-        )
-        .unwrap()
-        .unwrap();
+        let swapped = drop_into(&mut g, &items, held(Stack::new(id("stone_shovel"), 1)), (3, 0), GridRef::Pockets).unwrap().unwrap();
         assert_eq!(swapped.stack.item, id("stone_axe"));
         // No room for a 2x3 pickaxe in the middle.
-        assert!(
-            drop_into(
-                &mut g,
-                &items,
-                held(Stack::new(id("stone_pickaxe"), 1)),
-                (1, 1),
-                GridRef::Pockets
-            )
-            .is_err()
-        );
+        assert!(drop_into(&mut g, &items, held(Stack::new(id("stone_pickaxe"), 1)), (1, 1), GridRef::Pockets).is_err());
     }
 
     #[test]
@@ -2653,16 +1705,8 @@ mod tests {
         let id = |n: &str| items.id(n).unwrap();
         assert!(accepts(&items, Hover::Weapon, id("iron_sword")));
         assert!(!accepts(&items, Hover::Weapon, id("stone_axe")));
-        assert!(accepts(
-            &items,
-            Hover::Slot(WearSlot::Body),
-            id("linen_shirt")
-        ));
-        assert!(!accepts(
-            &items,
-            Hover::Slot(WearSlot::BodyArmor),
-            id("linen_shirt")
-        ));
+        assert!(accepts(&items, Hover::Slot(WearSlot::Body), id("linen_shirt")));
+        assert!(!accepts(&items, Hover::Slot(WearSlot::BodyArmor), id("linen_shirt")));
         // The left hand takes anything.
         assert!(accepts(&items, Hover::LeftHand, id("dirt")));
     }
@@ -2672,11 +1716,7 @@ mod tests {
         let (_, items) = load();
         let id = |n: &str| items.id(n).unwrap();
         let mut inv = Inventory::empty();
-        let held = |s: Stack| Held {
-            stack: s,
-            rotated: false,
-            from: Origin::Worn,
-        };
+        let held = |s: Stack| Held { stack: s, rotated: false, from: Origin::Worn };
         assert!(into_left_hand(&mut inv, &items, held(Stack::new(id("torch"), 3))).is_none());
         assert!(into_left_hand(&mut inv, &items, held(Stack::new(id("torch"), 2))).is_none());
         assert_eq!(inv.left, Some(Stack::new(id("torch"), 5)));
@@ -2692,27 +1732,11 @@ mod tests {
         let mut inv = Inventory::empty();
         let mut chests = Chests::default();
         let mut msg = String::new();
-        let rest = move_across(
-            &mut inv,
-            &mut chests,
-            &items,
-            Stack::new(id("iron_sword"), 1),
-            GridRef::Pockets,
-            None,
-            &mut msg,
-        );
+        let rest = move_across(&mut inv, &mut chests, &items, Stack::new(id("iron_sword"), 1), GridRef::Pockets, None, &mut msg);
         assert!(rest.is_none());
         assert_eq!(inv.weapon, Some(id("iron_sword")));
         // Another weapon swaps the first back into the pockets.
-        move_across(
-            &mut inv,
-            &mut chests,
-            &items,
-            Stack::new(id("rapier"), 1),
-            GridRef::Pockets,
-            None,
-            &mut msg,
-        );
+        move_across(&mut inv, &mut chests, &items, Stack::new(id("rapier"), 1), GridRef::Pockets, None, &mut msg);
         assert_eq!(inv.weapon, Some(id("rapier")));
         assert_eq!(inv.count(id("iron_sword")), 1);
     }

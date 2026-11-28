@@ -9,7 +9,7 @@
 //! noise (scaled down), the same climate and biomes, and the same underside.
 
 use crate::util::{hash2, smoothstep, unit};
-use crate::{SEA_LEVEL, WorldGen};
+use crate::{WorldGen, SEA_LEVEL};
 
 /// Radius of the main island in blocks (before the coastline wobble).
 pub const MAIN_RADIUS: f32 = 2000.0;
@@ -60,15 +60,7 @@ pub(crate) fn main_edge(wg: &WorldGen, x: i32, z: i32) -> f32 {
 /// `top` is the height the island hangs from, `e` the edge share (0 centre,
 /// 1 coast), `depth` its thickness at the centre and `scale` sizes the lobes
 /// and drips (1 for the main island).
-pub(crate) fn underside(
-    wg: &WorldGen,
-    x: i32,
-    z: i32,
-    top: f32,
-    e: f32,
-    depth: f32,
-    scale: f32,
-) -> i32 {
+pub(crate) fn underside(wg: &WorldGen, x: i32, z: i32, top: f32, e: f32, depth: f32, scale: f32) -> i32 {
     // A rounded bowl: steep near the coast, flat in the middle.
     let bowl = (1.0 - e * e).max(0.0).sqrt();
     let rim = (RIM_DEPTH * scale).max(4.0);
@@ -82,50 +74,26 @@ pub(crate) fn underside(
 /// How far rounded lobes and stalactite drips hang below the bowl here.
 fn hanging(wg: &WorldGen, x: i32, z: i32, scale: f32) -> f32 {
     // Big rounded lobes, then thin drips (which can hang from the lobes).
-    let lobe = bumps(
-        wg.seed ^ 0x10BE,
-        x,
-        z,
-        (80.0 * scale).max(24.0),
-        0.75,
-        |h| {
-            let r = (24.0 + unit(h.rotate_left(8)) * 24.0) * scale;
-            let len = (30.0 + unit(h.rotate_left(29)) * 50.0) * scale;
-            (r.max(5.0), len)
-        },
-        |q| (1.0 - q * q).powf(0.6),
-    );
-    let drip = bumps(
-        wg.seed ^ 0xD819,
-        x,
-        z,
-        (20.0 * scale).max(8.0),
-        0.85,
-        |h| {
-            let r = ((3.0 + unit(h.rotate_left(8)) * 6.0) * scale).max(2.0);
-            (r, r * (3.0 + unit(h.rotate_left(29)) * 3.0))
-        },
-        |q| {
-            // Fat and rounded at the tip, thinning towards the base.
-            let t = 1.0 - q.powf(1.5);
-            t * t
-        },
-    );
+    let lobe = bumps(wg.seed ^ 0x10BE, x, z, (80.0 * scale).max(24.0), 0.75, |h| {
+        let r = (24.0 + unit(h.rotate_left(8)) * 24.0) * scale;
+        let len = (30.0 + unit(h.rotate_left(29)) * 50.0) * scale;
+        (r.max(5.0), len)
+    }, |q| (1.0 - q * q).powf(0.6));
+    let drip = bumps(wg.seed ^ 0xD819, x, z, (20.0 * scale).max(8.0), 0.85, |h| {
+        let r = ((3.0 + unit(h.rotate_left(8)) * 6.0) * scale).max(2.0);
+        (r, r * (3.0 + unit(h.rotate_left(29)) * 3.0))
+    }, |q| {
+        // Fat and rounded at the tip, thinning towards the base.
+        let t = 1.0 - q.powf(1.5);
+        t * t
+    });
     lobe + drip
 }
 
 /// The largest bump over (x, z) from a jittered grid of `cell` blocks: each
 /// cell has one (with `chance`) of `size(hash) = (radius, length)`, shaped by
 /// `profile(distance / radius)` (1 at the middle, 0 at the radius).
-fn bumps(
-    seed: u64,
-    x: i32,
-    z: i32,
-    cell: f32,
-    chance: f32,
-    size: impl Fn(u64) -> (f32, f32),
-    profile: impl Fn(f32) -> f32,
-) -> f32 {
+fn bumps(seed: u64, x: i32, z: i32, cell: f32, chance: f32, size: impl Fn(u64) -> (f32, f32), profile: impl Fn(f32) -> f32) -> f32 {
     let c = cell as i32;
     let (cx, cz) = (x.div_euclid(c), z.div_euclid(c));
     let mut best = 0.0f32;
@@ -164,13 +132,7 @@ fn outer_in_cell(wg: &WorldGen, cx: i32, cz: i32) -> Option<Outer> {
     if (dx * dx + dz * dz).sqrt() < MAIN_RADIUS * (1.0 + COAST_WOBBLE) + radius * 1.3 + OUTER_GAP {
         return None;
     }
-    Some(Outer {
-        x,
-        z,
-        y: -140 + (j(37) * 380.0) as i32,
-        radius,
-        salt: j(47) * 9000.0,
-    })
+    Some(Outer { x, z, y: -140 + (j(37) * 380.0) as i32, radius, salt: j(47) * 9000.0 })
 }
 
 /// The outer island over (x, z) and the edge share there (below 1 = on it).
@@ -178,9 +140,7 @@ pub(crate) fn outer_at(wg: &WorldGen, x: i32, z: i32) -> Option<(Outer, f32)> {
     let (cx, cz) = (x.div_euclid(OUTER_CELL), z.div_euclid(OUTER_CELL));
     for gz in cz - 1..=cz + 1 {
         for gx in cx - 1..=cx + 1 {
-            let Some(o) = outer_in_cell(wg, gx, gz) else {
-                continue;
-            };
+            let Some(o) = outer_in_cell(wg, gx, gz) else { continue };
             // The main island's coastline, shrunk to this island's size.
             let k = MAIN_RADIUS / o.radius;
             let (dx, dz) = ((x - o.x) as f32, (z - o.z) as f32);

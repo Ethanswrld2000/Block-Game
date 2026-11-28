@@ -12,15 +12,13 @@ use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 use voxel::BlockPos;
 
-use super::{
-    Frame, Station, StationKind, StationModels, UrnBook, Urns, frame, ground_at, layout, models,
-};
+use super::{frame, ground_at, layout, models, Frame, Station, StationKind, StationModels, UrnBook, Urns};
 use crate::blocks::Blocks;
 use crate::camera::{FlyCamera, Menus};
 use crate::interact::ray_box;
-use crate::survival::Toast;
 use crate::survival::camp::Camp;
-use crate::theme::{Theme, colors, sizes, text};
+use crate::survival::Toast;
+use crate::theme::{colors, sizes, text, Theme};
 use crate::world::World;
 
 /// How far from the urn (blocks, across the ground) a station may stand.
@@ -81,9 +79,7 @@ pub(super) struct GhostLooks {
 pub fn fits(b: (Vec3, Vec3), others: &[(Vec3, Vec3)], solid: impl Fn(BlockPos) -> bool) -> bool {
     const EPS: f32 = 0.03;
     let (min, max) = (b.0 + Vec3::splat(EPS), b.1 - Vec3::splat(EPS));
-    if others.iter().any(|(lo, hi)| {
-        min.x < hi.x && max.x > lo.x && min.y < hi.y && max.y > lo.y && min.z < hi.z && max.z > lo.z
-    }) {
+    if others.iter().any(|(lo, hi)| min.x < hi.x && max.x > lo.x && min.y < hi.y && max.y > lo.y && min.z < hi.z && max.z > lo.z) {
         return false;
     }
     let (lo, hi) = (min.floor().as_ivec3(), max.floor().as_ivec3());
@@ -102,17 +98,10 @@ pub fn fits(b: (Vec3, Vec3), others: &[(Vec3, Vec3)], solid: impl Fn(BlockPos) -
 /// Does this kind get moved round its urn? (The urn stays put, the bedframe
 /// is the bedroll's, the golem walks.)
 fn movable(kind: StationKind) -> bool {
-    !matches!(
-        kind,
-        StationKind::Urn | StationKind::Bedframe | StationKind::Golem
-    )
+    !matches!(kind, StationKind::Urn | StationKind::Bedframe | StationKind::Golem)
 }
 
-pub(super) fn spawn_arrange_ui(
-    mut commands: Commands,
-    theme: Res<Theme>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
+pub(super) fn spawn_arrange_ui(mut commands: Commands, theme: Res<Theme>, mut materials: ResMut<Assets<StandardMaterial>>) {
     let ghost = |materials: &mut Assets<StandardMaterial>, c: Color| {
         materials.add(StandardMaterial {
             base_color: c,
@@ -152,14 +141,10 @@ pub(super) fn arrange_start(
     mut menus: ResMut<Menus>,
     mut toast: MessageWriter<Toast>,
 ) {
-    let Some(i) = arrange.start.take() else {
-        return;
-    };
+    let Some(i) = arrange.start.take() else { return };
     let Some(book) = book else { return };
     let def = &book.0.urns[i];
-    let Some(f) = frame(&camp, &urns, def) else {
-        return;
-    };
+    let Some(f) = frame(&camp, &urns, def) else { return };
     let all = layout(&camp, &world, &blocks, &urns, &book.0);
     let mut pieces = Vec::new();
     let mut fixed = Vec::new();
@@ -170,36 +155,21 @@ pub(super) fn arrange_start(
                 .steps
                 .iter()
                 .find_map(|s| match &s.gives {
-                    super::urns::Gives::Station(n)
-                        if StationKind::from_name(n) == Some(st.kind) =>
-                    {
-                        Some(n.clone())
-                    }
+                    super::urns::Gives::Station(n) if StationKind::from_name(n) == Some(st.kind) => Some(n.clone()),
                     _ => None,
                 })
                 .unwrap_or_default();
-            pieces.push(Piece {
-                name,
-                station: st,
-                fits: true,
-            });
+            pieces.push(Piece { name, station: st, fits: true });
         } else {
             fixed.push(st.bounds());
         }
     }
     if pieces.is_empty() {
-        toast.write(Toast(format!(
-            "The {} has no stations to arrange yet",
-            def.title
-        )));
+        toast.write(Toast(format!("The {} has no stations to arrange yet", def.title)));
         return;
     }
     // Look down at the urn and its stations from the side you stood on.
-    let centre = pieces
-        .iter()
-        .map(|p| p.station.pos)
-        .fold(f.at, |a, b| a + b)
-        / (pieces.len() + 1) as f32;
+    let centre = pieces.iter().map(|p| p.station.pos).fold(f.at, |a, b| a + b) / (pieces.len() + 1) as f32;
     let mut away = cam.translation - centre;
     away.y = 0.0;
     let away = away.try_normalize().unwrap_or(-f.side);
@@ -233,9 +203,7 @@ pub(super) fn arrange_input(
     mut menus: ResMut<Menus>,
     mut toast: MessageWriter<Toast>,
 ) {
-    let (Some(i), Some(f), Some(book)) = (arrange.open, arrange.frame, book) else {
-        return;
-    };
+    let (Some(i), Some(f), Some(book)) = (arrange.open, arrange.frame, book) else { return };
     if !cursor.visible {
         cursor.grab_mode = CursorGrabMode::None;
         cursor.visible = true;
@@ -259,16 +227,10 @@ pub(super) fn arrange_input(
     }
     if keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::NumpadEnter) {
         if arrange.held.is_some() || arrange.pieces.iter().any(|p| !p.fits) {
-            toast.write(Toast(
-                "Set every station down somewhere it fits first".into(),
-            ));
+            toast.write(Toast("Set every station down somewhere it fits first".into()));
         } else {
             let name = book.0.urns[i].name.clone();
-            let spots = arrange
-                .pieces
-                .iter()
-                .map(|p| (p.name.clone(), f.arranged(p.station.pos, p.station.turns)))
-                .collect();
+            let spots = arrange.pieces.iter().map(|p| (p.name.clone(), f.arranged(p.station.pos, p.station.turns))).collect();
             urns.arranged.insert(name, spots);
             close(&mut arrange, &mut menus, &mut cursor);
         }
@@ -276,9 +238,7 @@ pub(super) fn arrange_input(
     }
     // Where the mouse points: a ray from the camera.
     let (camera, gt) = *cam;
-    let ray = window
-        .cursor_position()
-        .and_then(|p| camera.viewport_to_world(gt, p).ok());
+    let ray = window.cursor_position().and_then(|p| camera.viewport_to_world(gt, p).ok());
     let on_ground = |ray: Ray3d| -> Option<Vec3> {
         // Across the plane at the urn's foot.
         let d = ray.direction.as_vec3();
@@ -288,8 +248,7 @@ pub(super) fn arrange_input(
         let t = (f.at.y - ray.origin.y) / d.y;
         (t > 0.0).then(|| ray.origin + d * t)
     };
-    let turn =
-        i32::from(keys.just_pressed(KeyCode::KeyE)) - i32::from(keys.just_pressed(KeyCode::KeyQ));
+    let turn = i32::from(keys.just_pressed(KeyCode::KeyE)) - i32::from(keys.just_pressed(KeyCode::KeyQ));
     match arrange.held {
         Some((k, grab)) => {
             if let Some(g) = ray.and_then(on_ground) {
@@ -315,14 +274,7 @@ pub(super) fn arrange_input(
         None => {
             let hit = ray.and_then(|r| {
                 let (o, d) = (r.origin, r.direction.as_vec3());
-                arrange
-                    .pieces
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(k, p)| {
-                        ray_box(o, d, p.station.bounds().0, p.station.bounds().1).map(|t| (k, t))
-                    })
-                    .min_by(|a, b| a.1.total_cmp(&b.1))
+                arrange.pieces.iter().enumerate().filter_map(|(k, p)| ray_box(o, d, p.station.bounds().0, p.station.bounds().1).map(|t| (k, t))).min_by(|a, b| a.1.total_cmp(&b.1))
             });
             if let Some((k, _)) = hit {
                 if turn != 0 {
@@ -330,9 +282,7 @@ pub(super) fn arrange_input(
                     *t = ((*t as i32 + turn).rem_euclid(4)) as u8;
                 }
                 if mouse.just_pressed(MouseButton::Left) {
-                    let g = ray
-                        .and_then(on_ground)
-                        .unwrap_or(arrange.pieces[k].station.pos);
+                    let g = ray.and_then(on_ground).unwrap_or(arrange.pieces[k].station.pos);
                     let mut grab = arrange.pieces[k].station.pos - g;
                     grab.y = 0.0;
                     arrange.held = Some((k, grab));
@@ -350,21 +300,9 @@ pub(super) fn arrange_input(
         .map(|(k, p)| {
             let mut far = p.station.pos - f.at;
             far.y = 0.0;
-            let others: Vec<(Vec3, Vec3)> = arrange
-                .fixed
-                .iter()
-                .copied()
-                .chain(
-                    boxes
-                        .iter()
-                        .enumerate()
-                        .filter(|(j, _)| *j != k)
-                        .map(|(_, b)| *b),
-                )
-                .collect();
+            let others: Vec<(Vec3, Vec3)> = arrange.fixed.iter().copied().chain(boxes.iter().enumerate().filter(|(j, _)| *j != k).map(|(_, b)| *b)).collect();
             far.length() <= ARRANGE_RADIUS
-                && ground_at(&world, &blocks, p.station.pos)
-                    .is_some_and(|g| (g.y - p.station.pos.y).abs() < 1e-3)
+                && ground_at(&world, &blocks, p.station.pos).is_some_and(|g| (g.y - p.station.pos.y).abs() < 1e-3)
                 && fits(boxes[k], &others, solid)
         })
         .collect();
@@ -374,19 +312,11 @@ pub(super) fn arrange_input(
 }
 
 /// Lift the camera out above the urn, and back down to your eyes after.
-pub(super) fn arrange_camera(
-    time: Res<Time<Real>>,
-    mut arrange: ResMut<Arrange>,
-    mut cam: Single<&mut Transform, With<FlyCamera>>,
-) {
+pub(super) fn arrange_camera(time: Res<Time<Real>>, mut arrange: ResMut<Arrange>, mut cam: Single<&mut Transform, With<FlyCamera>>) {
     let Some(home) = arrange.home else { return };
     let want = if arrange.open.is_some() { 1.0 } else { 0.0 };
     let dt = time.delta_secs().min(0.1);
-    let blend = if (arrange.blend - want).abs() < 1e-3 {
-        want
-    } else {
-        arrange.blend + (want - arrange.blend) * (1.0 - (-dt * 5.0).exp())
-    };
+    let blend = if (arrange.blend - want).abs() < 1e-3 { want } else { arrange.blend + (want - arrange.blend) * (1.0 - (-dt * 5.0).exp()) };
     arrange.blend = blend;
     let k = blend * blend * (3.0 - 2.0 * blend);
     cam.translation = home.translation.lerp(arrange.view.translation, k);
@@ -420,32 +350,19 @@ pub(super) fn arrange_ghosts(
         for (k, p) in arrange.pieces.iter().enumerate() {
             let st = p.station;
             commands
-                .spawn((
-                    Ghost(k),
-                    Transform::from_translation(st.pos).with_rotation(st.rotation()),
-                    Visibility::default(),
-                ))
+                .spawn((Ghost(k), Transform::from_translation(st.pos).with_rotation(st.rotation()), Visibility::default()))
                 .with_children(|c| {
                     // The bench's own boxes, then its tool where it rests.
-                    let mut boxes: Vec<(models::Part, Vec3, Quat)> =
-                        models::parts(st.kind, &has, 0)
-                            .into_iter()
-                            .map(|b| (b, Vec3::ZERO, Quat::IDENTITY))
-                            .collect();
+                    let mut boxes: Vec<(models::Part, Vec3, Quat)> = models::parts(st.kind, &has, 0).into_iter().map(|b| (b, Vec3::ZERO, Quat::IDENTITY)).collect();
                     if let Some(tool) = models::tool(st.kind) {
-                        boxes.extend(
-                            tool.parts
-                                .into_iter()
-                                .map(|b| (b, tool.rest, tool.rest_turn)),
-                        );
+                        boxes.extend(tool.parts.into_iter().map(|b| (b, tool.rest, tool.rest_turn)));
                     }
                     for (b, at, turn) in boxes {
                         c.spawn((
                             GhostPart(k),
                             Mesh3d(meshes.add(Cuboid::new(b.size.x, b.size.y, b.size.z))),
                             MeshMaterial3d(looks.blue.clone()),
-                            Transform::from_translation(at + turn * b.at)
-                                .with_rotation(turn * Quat::from_rotation_z(b.tilt)),
+                            Transform::from_translation(at + turn * b.at).with_rotation(turn * Quat::from_rotation_z(b.tilt)),
                             NotShadowCaster,
                         ));
                     }
@@ -454,38 +371,26 @@ pub(super) fn arrange_ghosts(
     }
     let held = arrange.held.map(|h| h.0);
     for (g, mut tf) in &mut roots {
-        let Some(p) = arrange.pieces.get(g.0) else {
-            continue;
-        };
+        let Some(p) = arrange.pieces.get(g.0) else { continue };
         // The one in hand hangs a little above the ground.
         let lift = if held == Some(g.0) { 0.15 } else { 0.0 };
         tf.translation = p.station.pos + Vec3::Y * lift;
         tf.rotation = p.station.rotation();
     }
     for (g, mut mat) in &mut parts {
-        let Some(p) = arrange.pieces.get(g.0) else {
-            continue;
-        };
+        let Some(p) = arrange.pieces.get(g.0) else { continue };
         let want = if p.fits { &looks.blue } else { &looks.red };
         if mat.0 != *want {
             mat.0 = want.clone();
         }
     }
     for (st, mut vis) in &mut real {
-        let want = if arrange.open == Some(st.urn) && movable(st.kind) {
-            Visibility::Hidden
-        } else {
-            Visibility::Inherited
-        };
+        let want = if arrange.open == Some(st.urn) && movable(st.kind) { Visibility::Hidden } else { Visibility::Inherited };
         if *vis != want {
             *vis = want;
         }
     }
-    let want = if arrange.open.is_some() {
-        Visibility::Inherited
-    } else {
-        Visibility::Hidden
-    };
+    let want = if arrange.open.is_some() { Visibility::Inherited } else { Visibility::Hidden };
     for mut v in &mut hint {
         if *v != want {
             *v = want;
@@ -498,12 +403,7 @@ mod tests {
     use super::*;
 
     fn st(pos: Vec3, turns: u8) -> Station {
-        Station {
-            kind: StationKind::ToolBench,
-            pos,
-            turns,
-            urn: 0,
-        }
+        Station { kind: StationKind::ToolBench, pos, turns, urn: 0 }
     }
 
     #[test]
@@ -538,12 +438,7 @@ mod tests {
 
     #[test]
     fn arranged_spots_round_trip_through_the_urn_frame() {
-        let f = Frame {
-            at: Vec3::new(10.0, 4.0, -3.0),
-            along: Vec3::Z,
-            side: Vec3::NEG_X,
-            turns: 1,
-        };
+        let f = Frame { at: Vec3::new(10.0, 4.0, -3.0), along: Vec3::Z, side: Vec3::NEG_X, turns: 1 };
         let a = f.arranged(Vec3::new(8.0, 4.0, 0.5), 3);
         let (pos, turns) = f.spot(&a);
         assert!((pos - Vec3::new(8.0, 4.0, 0.5)).length() < 1e-5);

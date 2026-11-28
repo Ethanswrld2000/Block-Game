@@ -15,35 +15,20 @@ pub struct FlyCameraPlugin;
 impl Plugin for FlyCameraPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Menus>()
-            .insert_resource(View {
-                third: std::env::var("BLOCKGAME_VIEW").is_ok_and(|v| v == "third"),
-                ..default()
-            })
+            .insert_resource(View { third: std::env::var("BLOCKGAME_VIEW").is_ok_and(|v| v == "third"), ..default() })
             .add_systems(crate::menu::GameStartup, spawn_camera)
             // Gameplay always sees the camera at the eyes: it is pulled back
             // for drawing only, and put back before the next frame's systems.
             .add_systems(PreUpdate, back_to_eyes.run_if(crate::menu::in_game))
-            .add_systems(
-                PostUpdate,
-                pull_back
-                    .run_if(crate::menu::in_game)
-                    .before(bevy::transform::TransformSystems::Propagate),
-            )
+            .add_systems(PostUpdate, pull_back.run_if(crate::menu::in_game).before(bevy::transform::TransformSystems::Propagate))
             .add_systems(crate::menu::GameUpdate, toggle_view)
             .add_systems(
-                crate::menu::GameUpdate,
-                (
-                    look,
-                    fly.run_if(resource_equals(crate::player::MoveMode::Fly)),
-                )
-                    .chain(),
-            )
-            // After clicks are handled, so the click that captures the mouse
-            // doesn't also break a block.
-            .add_systems(
-                crate::menu::GameUpdate,
-                grab_cursor.after(crate::interact::InteractSet),
-            );
+            crate::menu::GameUpdate,
+            (look, fly.run_if(resource_equals(crate::player::MoveMode::Fly))).chain(),
+        )
+        // After clicks are handled, so the click that captures the mouse
+        // doesn't also break a block.
+        .add_systems(crate::menu::GameUpdate, grab_cursor.after(crate::interact::InteractSet));
     }
 }
 
@@ -88,14 +73,7 @@ fn back_to_eyes(mut view: ResMut<View>, mut cam: Query<&mut Transform, With<FlyC
     }
 }
 
-fn pull_back(
-    time: Res<Time<Real>>,
-    menus: Res<Menus>,
-    world: Res<crate::world::World>,
-    blocks: Res<crate::blocks::Blocks>,
-    mut view: ResMut<View>,
-    mut cam: Query<&mut Transform, With<FlyCamera>>,
-) {
+fn pull_back(time: Res<Time<Real>>, menus: Res<Menus>, world: Res<crate::world::World>, blocks: Res<crate::blocks::Blocks>, mut view: ResMut<View>, mut cam: Query<&mut Transform, With<FlyCamera>>) {
     let Ok(mut tf) = cam.single_mut() else { return };
     view.pulled = view.third && !menus.still;
     if !view.pulled {
@@ -105,11 +83,7 @@ fn pull_back(
     let eye = tf.translation;
     let back = tf.back().as_vec3();
     // Stop short of the first solid block behind the head.
-    let solid = |p: Vec3| {
-        world
-            .block(voxel::BlockPos::from_world(p.to_array()))
-            .is_some_and(|b| blocks.registry.get(b).solid)
-    };
+    let solid = |p: Vec3| world.block(voxel::BlockPos::from_world(p.to_array())).is_some_and(|b| blocks.registry.get(b).solid);
     let mut room = THIRD_PERSON_BACK;
     let mut d = 0.1;
     while d <= THIRD_PERSON_BACK {
@@ -121,11 +95,7 @@ fn pull_back(
     }
     // Snap in when a wall comes between, ease back out when it's gone.
     let ease = 1.0 - (-time.delta_secs() * 6.0).exp();
-    view.back = if room < view.back {
-        room
-    } else {
-        view.back + (room - view.back) * ease
-    };
+    view.back = if room < view.back { room } else { view.back + (room - view.back) * ease };
     view.eye = Some(eye);
     tf.translation = eye + back * view.back;
 }
@@ -141,13 +111,7 @@ pub struct FlyCamera {
 
 impl Default for FlyCamera {
     fn default() -> Self {
-        Self {
-            speed: 12.0,
-            fast_multiplier: 5.0,
-            sensitivity: 0.002,
-            yaw: -0.6,
-            pitch: -0.45,
-        }
+        Self { speed: 12.0, fast_multiplier: 5.0, sensitivity: 0.002, yaw: -0.6, pitch: -0.45 }
     }
 }
 
@@ -155,21 +119,10 @@ fn spawn_camera(mut commands: Commands) {
     let cam = FlyCamera::default();
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0.0, 40.0, 0.0).with_rotation(Quat::from_euler(
-            EulerRot::YXZ,
-            cam.yaw,
-            cam.pitch,
-            0.0,
-        )),
-        Projection::Perspective(PerspectiveProjection {
-            near: 0.05,
-            far: crate::sky::SKY_RADIUS * 1.2,
-            ..default()
-        }),
-        DistanceFog {
-            color: Color::srgb(0.46, 0.53, 0.47),
-            ..default()
-        },
+        Transform::from_xyz(0.0, 40.0, 0.0)
+            .with_rotation(Quat::from_euler(EulerRot::YXZ, cam.yaw, cam.pitch, 0.0)),
+        Projection::Perspective(PerspectiveProjection { near: 0.05, far: crate::sky::SKY_RADIUS * 1.2, ..default() }),
+        DistanceFog { color: Color::srgb(0.46, 0.53, 0.47), ..default() },
         // HDR so bright things (sun, torches, fireflies) can bloom; grading
         // and bloom are set by `atmosphere`.
         bevy::camera::Hdr,
@@ -251,24 +204,12 @@ pub fn fly(
         let forward = tf.forward().as_vec3();
         let right = tf.right().as_vec3();
         let mut dir = Vec3::ZERO;
-        if keys.pressed(KeyCode::KeyW) {
-            dir += forward;
-        }
-        if keys.pressed(KeyCode::KeyS) {
-            dir -= forward;
-        }
-        if keys.pressed(KeyCode::KeyD) {
-            dir += right;
-        }
-        if keys.pressed(KeyCode::KeyA) {
-            dir -= right;
-        }
-        if keys.pressed(KeyCode::Space) {
-            dir += Vec3::Y;
-        }
-        if keys.pressed(KeyCode::ShiftLeft) {
-            dir -= Vec3::Y;
-        }
+        if keys.pressed(KeyCode::KeyW) { dir += forward; }
+        if keys.pressed(KeyCode::KeyS) { dir -= forward; }
+        if keys.pressed(KeyCode::KeyD) { dir += right; }
+        if keys.pressed(KeyCode::KeyA) { dir -= right; }
+        if keys.pressed(KeyCode::Space) { dir += Vec3::Y; }
+        if keys.pressed(KeyCode::ShiftLeft) { dir -= Vec3::Y; }
         let mut speed = cam.speed;
         if keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::SuperLeft) {
             speed *= cam.fast_multiplier;

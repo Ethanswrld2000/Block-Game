@@ -48,10 +48,7 @@ pub struct Health {
 
 impl Default for Health {
     fn default() -> Self {
-        Self {
-            bars: [MAX; 4],
-            bleeding: 0.0,
-        }
+        Self { bars: [MAX; 4], bleeding: 0.0 }
     }
 }
 
@@ -66,9 +63,7 @@ impl Health {
 
     /// The deepest layer (below Damage) that is under half, if any.
     pub fn mortal(&self) -> Option<Layer> {
-        [Layer::Injuries, Layer::Blood, Layer::Fatigue]
-            .into_iter()
-            .find(|l| self.get(*l) < MAX * MORTAL_AT)
+        [Layer::Injuries, Layer::Blood, Layer::Fatigue].into_iter().find(|l| self.get(*l) < MAX * MORTAL_AT)
     }
 
     /// Empty every bar above the mortal layer.
@@ -195,10 +190,7 @@ mod tests {
 
     #[test]
     fn bleeding_drains_blood() {
-        let mut h = Health {
-            bleeding: 2.0,
-            ..Default::default()
-        };
+        let mut h = Health { bleeding: 2.0, ..Default::default() };
         for _ in 0..10 {
             h.bleed(1.0);
         }

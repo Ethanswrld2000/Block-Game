@@ -7,7 +7,7 @@
 use bevy::prelude::*;
 
 use crate::clock::WorldClock;
-use crate::npc::{Npc, NpcBook, Order, body::SpawnNpc, ground_near, yaw_of};
+use crate::npc::{body::SpawnNpc, ground_near, yaw_of, Npc, NpcBook, Order};
 use crate::player::Player;
 use crate::station::Urns;
 use crate::world::World;
@@ -16,13 +16,7 @@ pub struct WrenPlugin;
 
 impl Plugin for WrenPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            crate::menu::GameUpdate,
-            (visit, fly)
-                .chain()
-                .before(crate::npc::NpcSet)
-                .after(crate::player::PlayerSet),
-        );
+        app.add_systems(crate::menu::GameUpdate, (visit, fly).chain().before(crate::npc::NpcSet).after(crate::player::PlayerSet));
     }
 }
 
@@ -77,28 +71,13 @@ fn visit(
     (mut meshes, mut mats): (ResMut<Assets<Mesh>>, ResMut<Assets<StandardMaterial>>),
     mut spawn: MessageWriter<SpawnNpc>,
 ) {
-    let Some(kind) = book.kinds.iter().position(|k| k.dialogue == "wren") else {
-        return;
-    };
-    let urn = urns
-        .placed
-        .get("vehicle")
-        .map(|p| (Vec3::new(p.pos.0, p.pos.1, p.pos.2), p));
-    let dist = urn.map_or(f32::MAX, |(u, _)| {
-        Vec2::new(u.x - player.pos.x, u.z - player.pos.z).length()
-    });
-    let visitor: Vec<Entity> = npcs
-        .iter()
-        .filter(|(_, n)| n.post == Some(WREN_POST))
-        .map(|(e, _)| e)
-        .collect();
+    let Some(kind) = book.kinds.iter().position(|k| k.dialogue == "wren") else { return };
+    let urn = urns.placed.get("vehicle").map(|p| (Vec3::new(p.pos.0, p.pos.1, p.pos.2), p));
+    let dist = urn.map_or(f32::MAX, |(u, _)| Vec2::new(u.x - player.pos.x, u.z - player.pos.z).length());
+    let visitor: Vec<Entity> = npcs.iter().filter(|(_, n)| n.post == Some(WREN_POST)).map(|(e, _)| e).collect();
     // Out of sight, or the urn picked up: gone without a show.
     if dist > GONE {
-        for e in visitor
-            .iter()
-            .copied()
-            .chain(machines.iter().map(|(e, _)| e))
-        {
+        for e in visitor.iter().copied().chain(machines.iter().map(|(e, _)| e)) {
             commands.entity(e).despawn();
         }
         return;
@@ -122,10 +101,7 @@ fn visit(
         for (_, mut m) in &mut machines {
             if m.state == Flight::Parked && !m.out && visitor.is_empty() {
                 let side = if placed.along_x { Vec3::X } else { Vec3::Z };
-                let Some(at) = ground_near(&world, &blocks, m.ground + side * 2.2 + Vec3::Y * 2.0)
-                else {
-                    continue;
-                };
+                let Some(at) = ground_near(&world, &blocks, m.ground + side * 2.2 + Vec3::Y * 2.0) else { continue };
                 let mut npc = Npc::new(kind, yaw_of(player.pos - at));
                 npc.order = Order::Stay;
                 npc.post = Some(WREN_POST);
@@ -136,70 +112,22 @@ fn visit(
         return;
     }
     // In front of the urn, where you stood to set it down.
-    let front = if placed.along_x {
-        Vec3::Z * placed.back
-    } else {
-        Vec3::X * placed.back
-    };
-    let Some(ground) = ground_near(&world, &blocks, urn_at - front * 5.0 + Vec3::Y * 2.0) else {
-        return;
-    };
-    let tf = Transform::from_translation(ground + Vec3::Y * HEIGHT)
-        .with_rotation(Quat::from_rotation_y(yaw_of(front)));
-    let ship = build_ship(
-        &mut commands,
-        &mut meshes,
-        &mut mats,
-        tf,
-        1.0,
-        Color::srgb(0.85, 0.78, 0.6),
-    );
-    commands.entity(ship).insert(Machine {
-        ground,
-        state: Flight::Landing(0.0),
-        out: false,
-    });
+    let front = if placed.along_x { Vec3::Z * placed.back } else { Vec3::X * placed.back };
+    let Some(ground) = ground_near(&world, &blocks, urn_at - front * 5.0 + Vec3::Y * 2.0) else { return };
+    let tf = Transform::from_translation(ground + Vec3::Y * HEIGHT).with_rotation(Quat::from_rotation_y(yaw_of(front)));
+    let ship = build_ship(&mut commands, &mut meshes, &mut mats, tf, 1.0, Color::srgb(0.85, 0.78, 0.6));
+    commands.entity(ship).insert(Machine { ground, state: Flight::Landing(0.0), out: false });
 }
 
 /// A small flying machine: hull, gondola, envelope (`cloth` colour), propeller and ropes.
 /// `scale` 1 = Wren's. Returns the root (children are the parts).
-pub fn build_ship(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    mats: &mut Assets<StandardMaterial>,
-    tf: Transform,
-    scale: f32,
-    cloth: Color,
-) -> Entity {
-    let wood = mats.add(StandardMaterial {
-        base_color: Color::srgb(0.45, 0.3, 0.18),
-        perceptual_roughness: 0.9,
-        ..default()
-    });
-    let cloth = mats.add(StandardMaterial {
-        base_color: cloth,
-        perceptual_roughness: 0.95,
-        ..default()
-    });
-    let brass = mats.add(StandardMaterial {
-        base_color: Color::srgb(0.78, 0.6, 0.25),
-        metallic: 0.6,
-        perceptual_roughness: 0.4,
-        ..default()
-    });
-    let mut part = |size: Vec3, at: Vec3| {
-        (
-            Mesh3d(meshes.add(Cuboid::from_size(size * scale))),
-            Transform::from_translation(at * scale),
-        )
-    };
-    let (hull, gondola, envelope, prop, rope) = (
-        part(Vec3::new(1.4, 0.5, 2.2), Vec3::Y * 0.25),
-        part(Vec3::new(1.0, 0.5, 1.2), Vec3::Y * 0.75),
-        part(Vec3::new(1.6, 1.1, 2.8), Vec3::Y * 2.6),
-        part(Vec3::new(1.2, 0.12, 0.08), Vec3::new(0.0, 0.5, 1.2)),
-        part(Vec3::new(0.06, 1.6, 0.06), Vec3::Y * 1.3),
-    );
+pub fn build_ship(commands: &mut Commands, meshes: &mut Assets<Mesh>, mats: &mut Assets<StandardMaterial>, tf: Transform, scale: f32, cloth: Color) -> Entity {
+    let wood = mats.add(StandardMaterial { base_color: Color::srgb(0.45, 0.3, 0.18), perceptual_roughness: 0.9, ..default() });
+    let cloth = mats.add(StandardMaterial { base_color: cloth, perceptual_roughness: 0.95, ..default() });
+    let brass = mats.add(StandardMaterial { base_color: Color::srgb(0.78, 0.6, 0.25), metallic: 0.6, perceptual_roughness: 0.4, ..default() });
+    let mut part = |size: Vec3, at: Vec3| (Mesh3d(meshes.add(Cuboid::from_size(size * scale))), Transform::from_translation(at * scale));
+    let (hull, gondola, envelope, prop, rope) =
+        (part(Vec3::new(1.4, 0.5, 2.2), Vec3::Y * 0.25), part(Vec3::new(1.0, 0.5, 1.2), Vec3::Y * 0.75), part(Vec3::new(1.6, 1.1, 2.8), Vec3::Y * 2.6), part(Vec3::new(1.2, 0.12, 0.08), Vec3::new(0.0, 0.5, 1.2)), part(Vec3::new(0.06, 1.6, 0.06), Vec3::Y * 1.3));
     commands
         .spawn((tf, Visibility::Inherited))
         .with_children(|m| {
@@ -220,22 +148,13 @@ pub fn build_ship(
 struct Propeller;
 
 /// Comes down, sits, climbs away; the propeller turns while it flies.
-fn fly(
-    mut commands: Commands,
-    time: Res<Time>,
-    mut q: Query<(Entity, &mut Machine, &mut Transform, &Children)>,
-    mut props: Query<&mut Transform, (With<Propeller>, Without<Machine>)>,
-) {
+fn fly(mut commands: Commands, time: Res<Time>, mut q: Query<(Entity, &mut Machine, &mut Transform, &Children)>, mut props: Query<&mut Transform, (With<Propeller>, Without<Machine>)>) {
     let dt = time.delta_secs();
     for (e, mut m, mut tf, kids) in &mut q {
         let (y, spin) = match m.state {
             Flight::Landing(t) => {
                 let t = t + dt / LANDING;
-                m.state = if t >= 1.0 {
-                    Flight::Parked
-                } else {
-                    Flight::Landing(t)
-                };
+                m.state = if t >= 1.0 { Flight::Parked } else { Flight::Landing(t) };
                 (landing_height(t), true)
             }
             Flight::Parked => (0.0, false),
