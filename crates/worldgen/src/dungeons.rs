@@ -18,10 +18,10 @@ use std::sync::Arc;
 use voxel::BlockId;
 
 use crate::delve::fill;
-use crate::structures::{cached, BARROW_KIN};
+use crate::structures::{BARROW_KIN, cached};
 use crate::trees::Canvas;
 use crate::util::{hash2, unit};
-use crate::{Land, WorldGen, SEA_LEVEL};
+use crate::{Land, SEA_LEVEL, WorldGen};
 
 /// One dungeon per cell of this size (when the land allows).
 const CELL: i32 = 1024;
@@ -42,15 +42,23 @@ pub struct Aabb {
 
 impl Aabb {
     pub fn contains(&self, x: i32, y: i32, z: i32) -> bool {
-        (self.min[0]..=self.max[0]).contains(&x) && (self.min[1]..=self.max[1]).contains(&y) && (self.min[2]..=self.max[2]).contains(&z)
+        (self.min[0]..=self.max[0]).contains(&x)
+            && (self.min[1]..=self.max[1]).contains(&y)
+            && (self.min[2]..=self.max[2]).contains(&z)
     }
 
     pub fn grow(&self, by: i32) -> Self {
-        Self { min: self.min.map(|v| v - by), max: self.max.map(|v| v + by) }
+        Self {
+            min: self.min.map(|v| v - by),
+            max: self.max.map(|v| v + by),
+        }
     }
 
     pub fn union(&self, o: &Aabb) -> Self {
-        Self { min: [0, 1, 2].map(|i| self.min[i].min(o.min[i])), max: [0, 1, 2].map(|i| self.max[i].max(o.max[i])) }
+        Self {
+            min: [0, 1, 2].map(|i| self.min[i].min(o.min[i])),
+            max: [0, 1, 2].map(|i| self.max[i].max(o.max[i])),
+        }
     }
 
     pub fn intersects(&self, o: &Aabb) -> bool {
@@ -147,25 +155,52 @@ impl Dungeon {
 }
 
 fn frame_world(gate: [i32; 3], dir: (i32, i32), side: (i32, i32), u: i32, v: i32) -> (i32, i32) {
-    (gate[0] + u * dir.0 + v * side.0, gate[2] + u * dir.1 + v * side.1)
+    (
+        gate[0] + u * dir.0 + v * side.0,
+        gate[2] + u * dir.1 + v * side.1,
+    )
 }
 
 /// A box given in the local frame (inclusive u, v and y ranges).
-fn local_box(gate: [i32; 3], dir: (i32, i32), side: (i32, i32), u: (i32, i32), v: (i32, i32), y: (i32, i32)) -> Aabb {
+fn local_box(
+    gate: [i32; 3],
+    dir: (i32, i32),
+    side: (i32, i32),
+    u: (i32, i32),
+    v: (i32, i32),
+    y: (i32, i32),
+) -> Aabb {
     let a = frame_world(gate, dir, side, u.0, v.0);
     let b = frame_world(gate, dir, side, u.1, v.1);
-    Aabb { min: [a.0.min(b.0), y.0.min(y.1), a.1.min(b.1)], max: [a.0.max(b.0), y.0.max(y.1), a.1.max(b.1)] }
+    Aabb {
+        min: [a.0.min(b.0), y.0.min(y.1), a.1.min(b.1)],
+        max: [a.0.max(b.0), y.0.max(y.1), a.1.max(b.1)],
+    }
 }
 
 fn b_box(x: (i32, i32), y: (i32, i32), z: (i32, i32)) -> Aabb {
-    Aabb { min: [x.0.min(x.1), y.0.min(y.1), z.0.min(z.1)], max: [x.0.max(x.1), y.0.max(y.1), z.0.max(z.1)] }
+    Aabb {
+        min: [x.0.min(x.1), y.0.min(y.1), z.0.min(z.1)],
+        max: [x.0.max(x.1), y.0.max(y.1), z.0.max(z.1)],
+    }
 }
 
 impl WorldGen {
     /// Dungeons whose warded area touches the rectangle (inclusive block coordinates).
     pub fn dungeons_in(&self, x0: i32, z0: i32, x1: i32, z1: i32) -> Vec<Arc<Dungeon>> {
-        let touches = |d: &Dungeon| d.bounds.min[0] <= x1 && d.bounds.max[0] >= x0 && d.bounds.min[2] <= z1 && d.bounds.max[2] >= z0;
-        let mut out: Vec<Arc<Dungeon>> = self.chain.iter().flatten().filter(|d| touches(d)).cloned().collect();
+        let touches = |d: &Dungeon| {
+            d.bounds.min[0] <= x1
+                && d.bounds.max[0] >= x0
+                && d.bounds.min[2] <= z1
+                && d.bounds.max[2] >= z0
+        };
+        let mut out: Vec<Arc<Dungeon>> = self
+            .chain
+            .iter()
+            .flatten()
+            .filter(|d| touches(d))
+            .cloned()
+            .collect();
         for cz in (z0 - REACH).div_euclid(CELL)..=(z1 + REACH).div_euclid(CELL) {
             for cx in (x0 - REACH).div_euclid(CELL)..=(x1 + REACH).div_euclid(CELL) {
                 if let Some(d) = self.grid_dungeon(cx, cz)
@@ -195,10 +230,14 @@ impl WorldGen {
         let id = GRID_ID | (((cx + 0x8000) as u64) << 16) | (cz + 0x8000) as u64;
         cached(&self.structures.dungeons, (cx, cz), || {
             let theme = (h >> 33) as usize % self.delves.themes.len();
-            let floors = (1 + (far - CLEAR_OF_SPAWN) / 450).clamp(1, crate::delve::MAX_FLOORS as i32) as u8;
+            let floors =
+                (1 + (far - CLEAR_OF_SPAWN) / 450).clamp(1, crate::delve::MAX_FLOORS as i32) as u8;
             let t = &self.delves.themes[theme].def;
             let place = &t.place[(h >> 13) as usize % t.place.len().max(1)];
-            let name = format!("The {place} of {}", BARROW_KIN[(h >> 29) as usize % BARROW_KIN.len()]);
+            let name = format!(
+                "The {place} of {}",
+                BARROW_KIN[(h >> 29) as usize % BARROW_KIN.len()]
+            );
             self.build_gatehouse(h, x, z, id, name, theme, floors, None)
         })
     }
@@ -226,9 +265,17 @@ impl WorldGen {
     /// Is this block protected by a spirit ward (a dungeon entrance, a barrow,
     /// a village, or anywhere in the pocket)?
     pub fn warded(&self, x: i32, y: i32, z: i32) -> bool {
-        self.dungeons_in(x, z, x, z).iter().any(|d| d.warded(x, y, z))
-            || self.barrows_in(x, z, x, z).iter().any(|b| b.warded(x, y, z))
-            || self.villages_in(x, z, x, z).iter().any(|v| v.warded(x, y, z))
+        self.dungeons_in(x, z, x, z)
+            .iter()
+            .any(|d| d.warded(x, y, z))
+            || self
+                .barrows_in(x, z, x, z)
+                .iter()
+                .any(|b| b.warded(x, y, z))
+            || self
+                .villages_in(x, z, x, z)
+                .iter()
+                .any(|v| v.warded(x, y, z))
             || crate::delve::in_pocket(x, z)
     }
 
@@ -251,40 +298,80 @@ impl WorldGen {
         }
         self.landmarks.castle = self.search_castle();
         let [sx, _, sz] = self.spawn;
-        let from = self.chain.first().cloned().flatten().map_or((sx, sz), |g| (g.gate[0], g.gate[2]));
-        let to = self.landmarks.castle.as_ref().map_or((sx + 1200, sz + 300), |c| (c.center[0], c.center[2]));
+        let from = self
+            .chain
+            .first()
+            .cloned()
+            .flatten()
+            .map_or((sx, sz), |g| (g.gate[0], g.gate[2]));
+        let to = self
+            .landmarks
+            .castle
+            .as_ref()
+            .map_or((sx + 1200, sz + 300), |c| (c.center[0], c.center[2]));
         let middle = chain.len().saturating_sub(1);
         for i in 1..middle {
             let t = i as f32 / middle as f32;
-            let (x, z) = (from.0 + ((to.0 - from.0) as f32 * t) as i32, from.1 + ((to.1 - from.1) as f32 * t) as i32);
+            let (x, z) = (
+                from.0 + ((to.0 - from.0) as f32 * t) as i32,
+                from.1 + ((to.1 - from.1) as f32 * t) as i32,
+            );
             let (th, fl, name) = info(i);
-            let found = self.search_gatehouse_near(x, z, i as u64 + 1, name, th, fl, i as u8 + 1).map(Arc::new);
+            let found = self
+                .search_gatehouse_near(x, z, i as u64 + 1, name, th, fl, i as u8 + 1)
+                .map(Arc::new);
             self.chain.push(found);
         }
         if middle >= 1 {
             let (th, fl, name) = info(middle);
-            let vault = self.landmarks.castle.clone().map(|k| Arc::new(self.build_vault(&k, middle as u64 + 1, name, th, fl, middle as u8 + 1)));
+            let vault = self.landmarks.castle.clone().map(|k| {
+                Arc::new(self.build_vault(&k, middle as u64 + 1, name, th, fl, middle as u8 + 1))
+            });
             self.chain.push(vault);
         }
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn search_gatehouse_near(&self, x: i32, z: i32, id: u64, name: String, theme: usize, floors: u8, chain: u8) -> Option<Dungeon> {
+    fn search_gatehouse_near(
+        &self,
+        x: i32,
+        z: i32,
+        id: u64,
+        name: String,
+        theme: usize,
+        floors: u8,
+        chain: u8,
+    ) -> Option<Dungeon> {
         for ring in 0..12 {
             let r = ring as f32 * 18.0;
             for s in 0..(1 + ring * 6) {
-                let a = s as f32 / (1 + ring * 6) as f32 * std::f32::consts::TAU + ring as f32 * 0.9;
+                let a =
+                    s as f32 / (1 + ring * 6) as f32 * std::f32::consts::TAU + ring as f32 * 0.9;
                 let (px, pz) = (x + (a.cos() * r) as i32, z + (a.sin() * r) as i32);
                 let h = hash2(self.seed ^ 0xC4A1 ^ id, px, pz);
-                let Some(d) = self.build_gatehouse(h, px, pz, id, name.clone(), theme, floors, Some(chain)) else { continue };
+                let Some(d) =
+                    self.build_gatehouse(h, px, pz, id, name.clone(), theme, floors, Some(chain))
+                else {
+                    continue;
+                };
                 let area = d.bounds.grow(60);
-                if self.dungeons_in(area.min[0], area.min[2], area.max[0], area.max[2]).iter().any(|o| o.bounds.intersects(&area)) {
+                if self
+                    .dungeons_in(area.min[0], area.min[2], area.max[0], area.max[2])
+                    .iter()
+                    .any(|o| o.bounds.intersects(&area))
+                {
                     continue;
                 }
-                if self.landmarks.castle.as_ref().is_some_and(|c| c.bounds.intersects(&area)) || self.landmarks.sporrow.as_ref().is_some_and(|v| {
-                    let (dx, dz) = (px - v.center[0], pz - v.center[2]);
-                    dx * dx + dz * dz < (v.radius + 30).pow(2)
-                }) {
+                if self
+                    .landmarks
+                    .castle
+                    .as_ref()
+                    .is_some_and(|c| c.bounds.intersects(&area))
+                    || self.landmarks.sporrow.as_ref().is_some_and(|v| {
+                        let (dx, dz) = (px - v.center[0], pz - v.center[2]);
+                        dx * dx + dz * dz < (v.radius + 30).pow(2)
+                    })
+                {
                     continue;
                 }
                 return Some(d);
@@ -295,7 +382,17 @@ impl WorldGen {
 
     /// A stone gatehouse facing a random way, on fairly level, dry ground.
     #[allow(clippy::too_many_arguments)]
-    fn build_gatehouse(&self, h: u64, gx: i32, gz: i32, id: u64, name: String, theme: usize, floors: u8, chain: Option<u8>) -> Option<Dungeon> {
+    fn build_gatehouse(
+        &self,
+        h: u64,
+        gx: i32,
+        gz: i32,
+        id: u64,
+        name: String,
+        theme: usize,
+        floors: u8,
+        chain: Option<u8>,
+    ) -> Option<Dungeon> {
         let col = self.column(gx, gz);
         if col.land != Land::Main || col.height < SEA_LEVEL + 1 || col.climate.overhang > 0.02 {
             return None;
@@ -321,11 +418,20 @@ impl WorldGen {
         if hi - lo > 4 {
             return None;
         }
-        let lbox = |u: (i32, i32), v: (i32, i32), y: (i32, i32)| local_box(gate, dir, side, u, v, y);
+        let lbox =
+            |u: (i32, i32), v: (i32, i32), y: (i32, i32)| local_box(gate, dir, side, u, v, y);
         let house = lbox((-4, 4), (-4, 4), (lo - 1, g + 6));
         let path = lbox((-8, -3), (-2, 2), (lo - 1, g + 4));
         let bounds = house.union(&path).union(&lbox((0, 2), (-1, 1), (g - 5, g)));
-        if !self.villages_in(bounds.min[0] - 8, bounds.min[2] - 8, bounds.max[0] + 8, bounds.max[2] + 8).is_empty() {
+        if !self
+            .villages_in(
+                bounds.min[0] - 8,
+                bounds.min[2] - 8,
+                bounds.max[0] + 8,
+                bounds.max[2] + 8,
+            )
+            .is_empty()
+        {
             return None;
         }
         let (ox, oz) = at(-6, 0);
@@ -343,7 +449,12 @@ impl WorldGen {
             door: lbox((0, 2), (-1, 1), (g - 4, g + 2)),
             outside: [ox as f32 + 0.5, g as f32, oz as f32 + 0.5],
             guide: [wx as f32 + 0.5, guide_y as f32, wz as f32 + 0.5],
-            veil: Veil { center: [vx as f32 + 0.5, g as f32 + 1.5, vz as f32 + 0.5], out: (-dir.0, -dir.1), width: 3.0, height: 3.0 },
+            veil: Veil {
+                center: [vx as f32 + 0.5, g as f32 + 1.5, vz as f32 + 0.5],
+                out: (-dir.0, -dir.1),
+                width: 3.0,
+                height: 3.0,
+            },
             bounds,
             dir,
             side,
@@ -357,7 +468,9 @@ impl WorldGen {
         for ring in 0..11 {
             let r = 300.0 + ring as f32 * 30.0;
             for s in 0..32 {
-                let a = s as f32 / 32.0 * std::f32::consts::TAU + ring as f32 * 0.7 + unit(self.seed) * 6.0;
+                let a = s as f32 / 32.0 * std::f32::consts::TAU
+                    + ring as f32 * 0.7
+                    + unit(self.seed) * 6.0;
                 let (x, z) = (sx + (a.cos() * r) as i32, sz + (a.sin() * r) as i32);
                 if let Some(g) = self.build_rotting_gate(x, z, theme, floors, name.clone()) {
                     return Some(g);
@@ -367,9 +480,20 @@ impl WorldGen {
         None
     }
 
-    fn build_rotting_gate(&self, x: i32, z: i32, theme: usize, floors: u8, name: String) -> Option<Dungeon> {
+    fn build_rotting_gate(
+        &self,
+        x: i32,
+        z: i32,
+        theme: usize,
+        floors: u8,
+        name: String,
+    ) -> Option<Dungeon> {
         let col = self.column(x, z);
-        if col.land != Land::Main || col.height < SEA_LEVEL + 1 || col.height < col.water || col.climate.overhang > 0.02 {
+        if col.land != Land::Main
+            || col.height < SEA_LEVEL + 1
+            || col.height < col.water
+            || col.climate.overhang > 0.02
+        {
             return None;
         }
         let (mut lo, mut hi) = (i32::MAX, i32::MIN);
@@ -389,36 +513,92 @@ impl WorldGen {
         let g = col.height + 1;
         let bounds = b_box((x - 5, x + 5), (lo - 1, g + 6), (z - 5, z + 5));
         let near = |b: &Aabb| b.intersects(&bounds.grow(6));
-        if self.villages_in(x - 40, z - 40, x + 40, z + 40).iter().any(|v| {
-            let (dx, dz) = (x - v.center[0], z - v.center[2]);
-            dx * dx + dz * dz < (v.radius + 12) * (v.radius + 12)
-        }) || self.dungeons_in(x - 8, z - 8, x + 8, z + 8).iter().any(|d| near(&d.bounds))
+        if self
+            .villages_in(x - 40, z - 40, x + 40, z + 40)
+            .iter()
+            .any(|v| {
+                let (dx, dz) = (x - v.center[0], z - v.center[2]);
+                dx * dx + dz * dz < (v.radius + 12) * (v.radius + 12)
+            })
+            || self
+                .dungeons_in(x - 8, z - 8, x + 8, z + 8)
+                .iter()
+                .any(|d| near(&d.bounds))
         {
             return None;
         }
         // Face back towards spawn.
         let (tx, tz) = (self.spawn[0] - x, self.spawn[2] - z);
-        let out = if tx.abs() > tz.abs() { (tx.signum(), 0) } else { (0, tz.signum()) };
+        let out = if tx.abs() > tz.abs() {
+            (tx.signum(), 0)
+        } else {
+            (0, tz.signum())
+        };
         let out = if out == (0, 0) { (1, 0) } else { out };
         let dir = (-out.0, -out.1);
         let side = (-dir.1, dir.0);
         // The chamber inside the arch: walk to its back half to go down.
         let (bx, bz) = (x - out.0, z - out.1);
-        let door = if out.0 != 0 { b_box((bx, bx - out.0), (g - 1, g + 2), (z - 1, z + 1)) } else { b_box((x - 1, x + 1), (g - 1, g + 2), (bz, bz - out.1)) };
-        let outside = [(x + out.0 * 6) as f32 + 0.5, g as f32, (z + out.1 * 6) as f32 + 0.5];
-        let guide = [outside[0] + side.0 as f32 * 2.5 + out.0 as f32, g as f32, outside[2] + side.1 as f32 * 2.5 + out.1 as f32];
-        let veil = Veil { center: [(x + out.0 * 3) as f32 + 0.5, g as f32 + 1.5, (z + out.1 * 3) as f32 + 0.5], out, width: 3.0, height: 3.0 };
-        Some(Dungeon { id: 1, name, theme, floors, chain: Some(1), look: Look::Arch, gate: [x, g, z], door, outside, guide, veil, bounds, dir, side })
+        let door = if out.0 != 0 {
+            b_box((bx, bx - out.0), (g - 1, g + 2), (z - 1, z + 1))
+        } else {
+            b_box((x - 1, x + 1), (g - 1, g + 2), (bz, bz - out.1))
+        };
+        let outside = [
+            (x + out.0 * 6) as f32 + 0.5,
+            g as f32,
+            (z + out.1 * 6) as f32 + 0.5,
+        ];
+        let guide = [
+            outside[0] + side.0 as f32 * 2.5 + out.0 as f32,
+            g as f32,
+            outside[2] + side.1 as f32 * 2.5 + out.1 as f32,
+        ];
+        let veil = Veil {
+            center: [
+                (x + out.0 * 3) as f32 + 0.5,
+                g as f32 + 1.5,
+                (z + out.1 * 3) as f32 + 0.5,
+            ],
+            out,
+            width: 3.0,
+            height: 3.0,
+        };
+        Some(Dungeon {
+            id: 1,
+            name,
+            theme,
+            floors,
+            chain: Some(1),
+            look: Look::Arch,
+            gate: [x, g, z],
+            door,
+            outside,
+            guide,
+            veil,
+            bounds,
+            dir,
+            side,
+        })
     }
 
     /// The castle's vault: a small stone house in the court's far corner from the tower.
-    fn build_vault(&self, k: &crate::Castle, id: u64, name: String, theme: usize, floors: u8, chain: u8) -> Dungeon {
+    fn build_vault(
+        &self,
+        k: &crate::Castle,
+        id: u64,
+        name: String,
+        theme: usize,
+        floors: u8,
+        chain: u8,
+    ) -> Dungeon {
         let [x, fl, z] = k.center;
         // The tower stands in the court's (-, -) corner; the vault in the (+, +) one.
         let gate = [x + 6, fl, z + 6];
         let dir = (1, 0);
         let side = (0, 1);
-        let lbox = |u: (i32, i32), v: (i32, i32), y: (i32, i32)| local_box(gate, dir, side, u, v, y);
+        let lbox =
+            |u: (i32, i32), v: (i32, i32), y: (i32, i32)| local_box(gate, dir, side, u, v, y);
         let (ox, oz) = frame_world(gate, dir, side, -5, 0);
         let (wx, wz) = frame_world(gate, dir, side, -5, -3);
         Dungeon {
@@ -432,7 +612,16 @@ impl WorldGen {
             door: lbox((0, 1), (-1, 1), (fl - 4, fl + 2)),
             outside: [ox as f32 + 0.5, fl as f32, oz as f32 + 0.5],
             guide: [wx as f32 + 0.5, fl as f32, wz as f32 + 0.5],
-            veil: Veil { center: [(gate[0] - 2) as f32 + 0.5, fl as f32 + 1.5, gate[2] as f32 + 0.5], out: (-1, 0), width: 3.0, height: 3.0 },
+            veil: Veil {
+                center: [
+                    (gate[0] - 2) as f32 + 0.5,
+                    fl as f32 + 1.5,
+                    gate[2] as f32 + 0.5,
+                ],
+                out: (-1, 0),
+                width: 3.0,
+                height: 3.0,
+            },
             bounds: lbox((-2, 2), (-2, 2), (fl - 6, fl + 5)),
             dir,
             side,
@@ -452,7 +641,8 @@ pub(crate) fn draw(wg: &WorldGen, c: &mut Canvas, d: &Dungeon) {
 fn draw_gatehouse(wg: &WorldGen, c: &mut Canvas, d: &Dungeon) {
     let ids = &wg.ids;
     let g = d.gate[1];
-    let lbox = |u: (i32, i32), v: (i32, i32), y: (i32, i32)| local_box(d.gate, d.dir, d.side, u, v, y);
+    let lbox =
+        |u: (i32, i32), v: (i32, i32), y: (i32, i32)| local_box(d.gate, d.dir, d.side, u, v, y);
     // Stone walls on a foundation down to the ground, a roof, and two tall
     // deeprock pillars by the door.
     for u in -3..=3 {
@@ -510,26 +700,61 @@ fn draw_arch(wg: &WorldGen, c: &mut Canvas, d: &Dungeon) {
             }
         }
     }
-    fill(c, &b_box((x - 3, x + 3), (y, y + 4), (z - 3, z + 3)), ids.cobblestone);
-    fill(c, &b_box((x - 1, x + 1), (y, y + 2), (z - 1, z + 1)), BlockId::AIR);
+    fill(
+        c,
+        &b_box((x - 3, x + 3), (y, y + 4), (z - 3, z + 3)),
+        ids.cobblestone,
+    );
+    fill(
+        c,
+        &b_box((x - 1, x + 1), (y, y + 2), (z - 1, z + 1)),
+        BlockId::AIR,
+    );
     let (ox, oz) = d.veil.out;
     for k in 2..=3 {
         let (dx, dz) = (x + ox * k, z + oz * k);
-        let b = if ox != 0 { b_box((dx, dx), (y, y + 2), (z - 1, z + 1)) } else { b_box((x - 1, x + 1), (y, y + 2), (dz, dz)) };
+        let b = if ox != 0 {
+            b_box((dx, dx), (y, y + 2), (z - 1, z + 1))
+        } else {
+            b_box((x - 1, x + 1), (y, y + 2), (dz, dz))
+        };
         fill(c, &b, BlockId::AIR);
     }
     // A dark hole in the floor at the back, rimmed in deeprock.
-    fill(c, &b_box((x - 1, x + 1), (y - 1, y - 1), (z - 1, z + 1)), ids.deeprock);
+    fill(
+        c,
+        &b_box((x - 1, x + 1), (y - 1, y - 1), (z - 1, z + 1)),
+        ids.deeprock,
+    );
     fill(c, &d.door, BlockId::AIR);
-    fill(c, &b_box((x - 2, x + 2), (y - 3, y - 3), (z - 2, z + 2)), ids.deeprock);
+    fill(
+        c,
+        &b_box((x - 2, x + 2), (y - 3, y - 3), (z - 2, z + 2)),
+        ids.deeprock,
+    );
     // Mold over everything: moss on the roof and running down the walls.
-    fill(c, &b_box((x - 4, x + 4), (y + 5, y + 5), (z - 4, z + 4)), ids.moss);
-    fill(c, &b_box((x - 2, x + 2), (y + 6, y + 6), (z - 2, z + 2)), ids.moss);
+    fill(
+        c,
+        &b_box((x - 4, x + 4), (y + 5, y + 5), (z - 4, z + 4)),
+        ids.moss,
+    );
+    fill(
+        c,
+        &b_box((x - 2, x + 2), (y + 6, y + 6), (z - 2, z + 2)),
+        ids.moss,
+    );
     for dz in -3..=3 {
         for dx in -3..=3 {
             for yy in y..=y + 4 {
-                if c.is_air(x + dx, yy, z + dz) == Some(false) && unit(hash2(wg.seed ^ 0x601D ^ yy as u64, x + dx, z + dz)) < 0.4 {
-                    c.put(x + dx, yy, z + dz, if yy % 2 == 0 { ids.moss } else { ids.mud });
+                if c.is_air(x + dx, yy, z + dz) == Some(false)
+                    && unit(hash2(wg.seed ^ 0x601D ^ yy as u64, x + dx, z + dz)) < 0.4
+                {
+                    c.put(
+                        x + dx,
+                        yy,
+                        z + dz,
+                        if yy % 2 == 0 { ids.moss } else { ids.mud },
+                    );
                 }
             }
         }
@@ -545,7 +770,8 @@ fn draw_arch(wg: &WorldGen, c: &mut Canvas, d: &Dungeon) {
 fn draw_vault(wg: &WorldGen, c: &mut Canvas, d: &Dungeon) {
     let ids = &wg.ids;
     let g = d.gate[1];
-    let lbox = |u: (i32, i32), v: (i32, i32), y: (i32, i32)| local_box(d.gate, d.dir, d.side, u, v, y);
+    let lbox =
+        |u: (i32, i32), v: (i32, i32), y: (i32, i32)| local_box(d.gate, d.dir, d.side, u, v, y);
     fill(c, &lbox((-2, 2), (-2, 2), (g, g + 3)), ids.cobblestone);
     fill(c, &lbox((-2, 2), (-2, 2), (g + 4, g + 4)), ids.deeprock);
     fill(c, &lbox((-1, 1), (-1, 1), (g, g + 2)), BlockId::AIR);
@@ -575,15 +801,28 @@ mod tests {
         assert_eq!(gate.look, Look::Arch);
         let castle = g.castle().expect("a castle");
         let vault = g.chain_dungeon(5).expect("the castle's vault");
-        assert!(castle.bounds.contains(vault.gate[0], vault.gate[1], vault.gate[2]));
+        assert!(
+            castle
+                .bounds
+                .contains(vault.gate[0], vault.gate[1], vault.gate[2])
+        );
         for n in 1..=5 {
-            let d = g.chain_dungeon(n).unwrap_or_else(|| panic!("story dungeon {n}"));
+            let d = g
+                .chain_dungeon(n)
+                .unwrap_or_else(|| panic!("story dungeon {n}"));
             assert_eq!(d.chain, Some(n));
             assert_eq!(g.dungeon(d.id).as_deref(), Some(&*d));
             assert!(g.warded(d.gate[0], d.gate[1] + 1, d.gate[2]));
-            assert!(d.inside([d.door.min[0] as f32 + 0.5, d.door.min[1] as f32 + 1.0, d.door.min[2] as f32 + 0.5]));
+            assert!(d.inside([
+                d.door.min[0] as f32 + 0.5,
+                d.door.min[1] as f32 + 1.0,
+                d.door.min[2] as f32 + 0.5
+            ]));
             assert!(!d.inside(d.outside));
-            eprintln!("{} ({}) at {:?}", d.name, g.delves.themes[d.theme].def.title, d.gate);
+            eprintln!(
+                "{} ({}) at {:?}",
+                d.name, g.delves.themes[d.theme].def.title, d.gate
+            );
         }
         // Each one along the way is further from the Gate than the last.
         let far = |n: u8| {
@@ -598,7 +837,11 @@ mod tests {
         let g = wg();
         let (cx, cz) = g.island_center();
         let r = crate::MAIN_RADIUS as i32;
-        let all: Vec<_> = g.dungeons_in(cx - r, cz - r, cx + r, cz + r).into_iter().filter(|d| d.chain.is_none()).collect();
+        let all: Vec<_> = g
+            .dungeons_in(cx - r, cz - r, cx + r, cz + r)
+            .into_iter()
+            .filter(|d| d.chain.is_none())
+            .collect();
         assert!(all.len() >= 3, "{} dungeons", all.len());
         for d in &all {
             assert!((1..=4).contains(&d.floors));
@@ -607,7 +850,12 @@ mod tests {
         }
         for (i, a) in all.iter().enumerate() {
             for b in &all[i + 1..] {
-                assert!(!a.bounds.intersects(&b.bounds), "{} overlaps {}", a.name, b.name);
+                assert!(
+                    !a.bounds.intersects(&b.bounds),
+                    "{} overlaps {}",
+                    a.name,
+                    b.name
+                );
             }
         }
         // Blocks: the gatehouse's doorway is open, its wall beside it is not.

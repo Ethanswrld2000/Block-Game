@@ -49,7 +49,11 @@ pub enum ShipLook {
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 pub enum Trigger {
     /// You are within `within` blocks of an NPC (dialogue key), and see it if `sight`.
-    Near { npc: String, within: f32, sight: bool },
+    Near {
+        npc: String,
+        within: f32,
+        sight: bool,
+    },
     /// You come within `within` blocks of a named place.
     Area { place: String, within: f32 },
     /// An encounter (encounters.ron id) was beaten.
@@ -87,7 +91,12 @@ pub enum Step {
     /// Give you an item: name and count.
     Give(String, u16),
     /// Swap every `from` block for `to` within `radius` of a mark.
-    Swap { at: Mark, radius: i32, from: String, to: String },
+    Swap {
+        at: Mark,
+        radius: i32,
+        from: String,
+        to: String,
+    },
     /// Put a block at a mark.
     Place(Mark, String),
     /// An actor follows you from now on (rescued, recruited).
@@ -101,7 +110,14 @@ pub enum Step {
     /// Circle the camera round a target: distance, height above it, the angle to start
     /// from and how far to turn (degrees; 0 = behind the target as you faced at the start,
     /// positive turns to the right), over seconds. Doesn't wait (follow it with a `Wait`).
-    Orbit { around: Target, radius: f32, height: f32, from: f32, turn: f32, secs: f32 },
+    Orbit {
+        around: Target,
+        radius: f32,
+        height: f32,
+        from: f32,
+        turn: f32,
+        secs: f32,
+    },
     /// Fall: the camera drops to a mark, faster and faster, looking at a target, over seconds. Doesn't wait.
     Dive(Mark, Target, f32),
     /// Field of view to this many degrees over seconds (0 = back to the setting). Doesn't wait.
@@ -120,7 +136,12 @@ pub enum Step {
     // ---- Airships (props that only live in the cutscene) ----
     /// An airship appears: name, mark, which way the bow points (degrees from the way you
     /// faced at the start, positive to the right), and its look.
-    Ship { name: String, at: Mark, yaw: f32, look: ShipLook },
+    Ship {
+        name: String,
+        at: Mark,
+        yaw: f32,
+        look: ShipLook,
+    },
     /// A ship flies to a mark over seconds, nose along its way. Doesn't wait.
     ShipTo(String, Mark, f32),
     /// One ship fires at another: a bolt flies, the target is hit (blast, then it burns). Doesn't wait.
@@ -147,12 +168,17 @@ pub struct Cutscene {
 }
 
 pub fn load(text: &str) -> Result<Vec<Cutscene>, String> {
-    let ron = ron::Options::default().with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME);
+    let ron =
+        ron::Options::default().with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME);
     let list: Vec<Cutscene> = ron.from_str(text).map_err(|e| e.to_string())?;
     for c in &list {
         for s in &c.steps {
             let who = match s {
-                Step::Say(a, _) | Step::Walk(a, _) | Step::Face(a, _) | Step::Follow(a) | Step::Remove(a) => Some(a),
+                Step::Say(a, _)
+                | Step::Walk(a, _)
+                | Step::Face(a, _)
+                | Step::Follow(a)
+                | Step::Remove(a) => Some(a),
                 _ => None,
             };
             if let Some(a) = who
@@ -198,19 +224,34 @@ fn has(set: Option<&BTreeSet<String>>, x: &str) -> bool {
 
 pub fn fires(t: &Trigger, f: &Facts) -> bool {
     match t {
-        Trigger::Near { npc, within, sight } => f.npcs.iter().any(|(k, p, seen)| k == npc && p.distance(f.player) <= *within && (*seen || !sight)),
-        Trigger::Area { place, within } => f.places.get(place).is_some_and(|p| p.distance(f.player) <= *within),
+        Trigger::Near { npc, within, sight } => f
+            .npcs
+            .iter()
+            .any(|(k, p, seen)| k == npc && p.distance(f.player) <= *within && (*seen || !sight)),
+        Trigger::Area { place, within } => f
+            .places
+            .get(place)
+            .is_some_and(|p| p.distance(f.player) <= *within),
         Trigger::Cleared(id) => has(f.cleared, id),
         Trigger::Boss(d) => f.boss >= *d,
         Trigger::Made(item) => has(f.made, item),
         Trigger::Placed(block) => has(f.placed, block),
-        Trigger::TimeAfter { flag, from, to } => has(f.flags, flag) && if from <= to { (*from..*to).contains(&f.hour) } else { f.hour >= *from || f.hour < *to },
+        Trigger::TimeAfter { flag, from, to } => {
+            has(f.flags, flag)
+                && if from <= to {
+                    (*from..*to).contains(&f.hour)
+                } else {
+                    f.hour >= *from || f.hour < *to
+                }
+        }
     }
 }
 
 /// A cutscene that should start now: not played yet, its flags set, its trigger met.
 pub fn ready(c: &Cutscene, played: &BTreeSet<String>, f: &Facts) -> bool {
-    !played.contains(&c.id) && c.needs.iter().all(|n| has(f.flags, n)) && c.trigger.as_ref().is_some_and(|t| fires(t, f))
+    !played.contains(&c.id)
+        && c.needs.iter().all(|n| has(f.flags, n))
+        && c.trigger.as_ref().is_some_and(|t| fires(t, f))
 }
 
 /// Nothing solid between two points (`solid` says which cells block the view).
@@ -228,7 +269,17 @@ pub fn clear_line(from: Vec3, to: Vec3, solid: impl Fn(IVec3) -> bool) -> bool {
 
 /// A step whose effect stays when the cutscene is skipped.
 pub fn lasts(s: &Step) -> bool {
-    matches!(s, Step::Flag(_) | Step::Clue(_) | Step::Give(..) | Step::Swap { .. } | Step::Place(..) | Step::Encounter(_) | Step::Follow(_) | Step::Remove(_))
+    matches!(
+        s,
+        Step::Flag(_)
+            | Step::Clue(_)
+            | Step::Give(..)
+            | Step::Swap { .. }
+            | Step::Place(..)
+            | Step::Encounter(_)
+            | Step::Follow(_)
+            | Step::Remove(_)
+    )
 }
 
 /// How a step ends.
@@ -248,7 +299,9 @@ pub enum Until {
 pub fn until(s: &Step) -> Until {
     match s {
         Step::Say(..) => Until::LineSaid,
-        Step::Camera(_, t) | Step::CameraMove(_, _, t) | Step::Wait(t) | Step::Fade(_, t) => Until::Seconds(*t),
+        Step::Camera(_, t) | Step::CameraMove(_, _, t) | Step::Wait(t) | Step::Fade(_, t) => {
+            Until::Seconds(*t)
+        }
         Step::Walk(..) => Until::Arrived,
         Step::Encounter(_) => Until::Cleared,
         Step::Face(..)
@@ -331,14 +384,18 @@ impl Runner {
     pub fn skip(&mut self, steps: &[Step]) -> Vec<usize> {
         let from = if self.started { self.at + 1 } else { self.at };
         self.at = steps.len();
-        (from..steps.len())
-            .filter(|&i| lasts(&steps[i]))
-            .collect()
+        (from..steps.len()).filter(|&i| lasts(&steps[i])).collect()
     }
 }
 
 /// A mark's point: `facing` is the yaw-free forward of the player at the start.
-pub fn resolve(m: &Mark, player: Vec3, forward: Vec3, actor: impl Fn(&str) -> Option<Vec3>, place: impl Fn(&str) -> Option<Vec3>) -> Option<Vec3> {
+pub fn resolve(
+    m: &Mark,
+    player: Vec3,
+    forward: Vec3,
+    actor: impl Fn(&str) -> Option<Vec3>,
+    place: impl Fn(&str) -> Option<Vec3>,
+) -> Option<Vec3> {
     let (a, b, c) = m.offset;
     match &m.from {
         Anchor::Player => {
@@ -362,7 +419,15 @@ pub fn turned(forward: Vec3, degrees: f32) -> Vec3 {
 
 /// Where an orbiting camera is `k` (0..1) of the way round: `from`/`turn` in degrees,
 /// 0 = behind the centre as seen along `forward`, positive to the right.
-pub fn orbit_point(center: Vec3, forward: Vec3, radius: f32, height: f32, from: f32, turn: f32, k: f32) -> Vec3 {
+pub fn orbit_point(
+    center: Vec3,
+    forward: Vec3,
+    radius: f32,
+    height: f32,
+    from: f32,
+    turn: f32,
+    k: f32,
+) -> Vec3 {
     let behind = -turned(forward, from + turn * k.clamp(0.0, 1.0));
     center + behind * radius + Vec3::Y * height
 }
@@ -394,14 +459,38 @@ mod tests {
         let mut r = Runner::default();
         // The flag is instant: the line starts in the same frame.
         assert_eq!(r.tick(&s, 0.1, Status::default()), vec![0, 1]);
-        assert_eq!(r.tick(&s, 0.1, Status::default()), Vec::<usize>::new(), "waits for the line");
-        assert_eq!(r.tick(&s, 0.1, Status { line_said: true, ..default() }), vec![2]);
+        assert_eq!(
+            r.tick(&s, 0.1, Status::default()),
+            Vec::<usize>::new(),
+            "waits for the line"
+        );
+        assert_eq!(
+            r.tick(
+                &s,
+                0.1,
+                Status {
+                    line_said: true,
+                    ..default()
+                }
+            ),
+            vec![2]
+        );
         assert_eq!(r.tick(&s, 0.6, Status::default()), Vec::<usize>::new());
         // The wait ends; the clue is instant; the encounter waits.
         assert_eq!(r.tick(&s, 0.6, Status::default()), vec![3, 4]);
         // A "cleared" left over from before doesn't end the step that just began...
         assert_eq!(r.tick(&s, 0.1, Status::default()), Vec::<usize>::new());
-        assert_eq!(r.tick(&s, 0.1, Status { cleared: true, ..default() }), vec![5]);
+        assert_eq!(
+            r.tick(
+                &s,
+                0.1,
+                Status {
+                    cleared: true,
+                    ..default()
+                }
+            ),
+            vec![5]
+        );
         assert!(r.over(&s));
     }
 
@@ -411,11 +500,24 @@ mod tests {
 
     #[test]
     fn a_new_step_never_takes_the_last_ones_status() {
-        let s = vec![Step::Say("a".into(), "1".into()), Step::Say("a".into(), "2".into())];
+        let s = vec![
+            Step::Say("a".into(), "1".into()),
+            Step::Say("a".into(), "2".into()),
+        ];
         let mut r = Runner::default();
         r.tick(&s, 0.1, Status::default());
         // The first line said: the second begins, and isn't said in the same breath.
-        assert_eq!(r.tick(&s, 0.1, Status { line_said: true, ..default() }), vec![1]);
+        assert_eq!(
+            r.tick(
+                &s,
+                0.1,
+                Status {
+                    line_said: true,
+                    ..default()
+                }
+            ),
+            vec![1]
+        );
         assert!(!r.over(&s));
     }
 
@@ -434,47 +536,136 @@ mod tests {
         let flags: BTreeSet<String> = ["met_bram".to_string()].into();
         let cleared: BTreeSet<String> = ["raid_camp".to_string()].into();
         let made: BTreeSet<String> = ["airship".to_string()].into();
-        let mut f = Facts { player: Vec3::ZERO, hour: 7.0, boss: 1, flags: Some(&flags), cleared: Some(&cleared), made: Some(&made), ..Default::default() };
-        f.npcs.push(("gilm".into(), Vec3::new(5.0, 0.0, 0.0), false));
+        let mut f = Facts {
+            player: Vec3::ZERO,
+            hour: 7.0,
+            boss: 1,
+            flags: Some(&flags),
+            cleared: Some(&cleared),
+            made: Some(&made),
+            ..Default::default()
+        };
+        f.npcs
+            .push(("gilm".into(), Vec3::new(5.0, 0.0, 0.0), false));
         f.places.insert("sporrow".into(), Vec3::new(20.0, 0.0, 0.0));
-        let near = |sight| Trigger::Near { npc: "gilm".into(), within: 6.0, sight };
+        let near = |sight| Trigger::Near {
+            npc: "gilm".into(),
+            within: 6.0,
+            sight,
+        };
         assert!(fires(&near(false), &f));
         assert!(!fires(&near(true), &f), "can't see him");
         f.npcs[0].2 = true;
         assert!(fires(&near(true), &f));
-        assert!(!fires(&Trigger::Area { place: "sporrow".into(), within: 10.0 }, &f));
-        assert!(fires(&Trigger::Area { place: "sporrow".into(), within: 25.0 }, &f));
+        assert!(!fires(
+            &Trigger::Area {
+                place: "sporrow".into(),
+                within: 10.0
+            },
+            &f
+        ));
+        assert!(fires(
+            &Trigger::Area {
+                place: "sporrow".into(),
+                within: 25.0
+            },
+            &f
+        ));
         assert!(fires(&Trigger::Cleared("raid_camp".into()), &f));
         assert!(fires(&Trigger::Boss(1), &f) && !fires(&Trigger::Boss(2), &f));
-        assert!(fires(&Trigger::Made("airship".into()), &f) && !fires(&Trigger::Placed("planks".into()), &f));
-        assert!(fires(&Trigger::TimeAfter { flag: "met_bram".into(), from: 6.0, to: 10.0 }, &f));
-        assert!(!fires(&Trigger::TimeAfter { flag: "met_bram".into(), from: 20.0, to: 5.0 }, &f));
+        assert!(
+            fires(&Trigger::Made("airship".into()), &f)
+                && !fires(&Trigger::Placed("planks".into()), &f)
+        );
+        assert!(fires(
+            &Trigger::TimeAfter {
+                flag: "met_bram".into(),
+                from: 6.0,
+                to: 10.0
+            },
+            &f
+        ));
+        assert!(!fires(
+            &Trigger::TimeAfter {
+                flag: "met_bram".into(),
+                from: 20.0,
+                to: 5.0
+            },
+            &f
+        ));
         f.hour = 23.0;
-        assert!(fires(&Trigger::TimeAfter { flag: "met_bram".into(), from: 20.0, to: 5.0 }, &f), "past midnight");
-        assert!(!fires(&Trigger::TimeAfter { flag: "other".into(), from: 20.0, to: 5.0 }, &f));
+        assert!(
+            fires(
+                &Trigger::TimeAfter {
+                    flag: "met_bram".into(),
+                    from: 20.0,
+                    to: 5.0
+                },
+                &f
+            ),
+            "past midnight"
+        );
+        assert!(!fires(
+            &Trigger::TimeAfter {
+                flag: "other".into(),
+                from: 20.0,
+                to: 5.0
+            },
+            &f
+        ));
         // Once per world, and only with its flags.
-        let c = Cutscene { id: "C05".into(), title: String::new(), trigger: Some(near(true)), needs: vec![], actors: BTreeMap::new(), steps: vec![] };
+        let c = Cutscene {
+            id: "C05".into(),
+            title: String::new(),
+            trigger: Some(near(true)),
+            needs: vec![],
+            actors: BTreeMap::new(),
+            steps: vec![],
+        };
         assert!(ready(&c, &BTreeSet::new(), &f));
         assert!(!ready(&c, &["C05".to_string()].into(), &f));
-        let c = Cutscene { needs: vec!["nope".into()], ..c };
+        let c = Cutscene {
+            needs: vec!["nope".into()],
+            ..c
+        };
         assert!(!ready(&c, &BTreeSet::new(), &f));
     }
 
     #[test]
     fn sight_lines() {
         let wall = |c: IVec3| c.x == 3;
-        assert!(!clear_line(Vec3::new(0.5, 1.5, 0.5), Vec3::new(6.5, 1.5, 0.5), wall));
-        assert!(clear_line(Vec3::new(0.5, 1.5, 0.5), Vec3::new(2.5, 1.5, 0.5), wall));
+        assert!(!clear_line(
+            Vec3::new(0.5, 1.5, 0.5),
+            Vec3::new(6.5, 1.5, 0.5),
+            wall
+        ));
+        assert!(clear_line(
+            Vec3::new(0.5, 1.5, 0.5),
+            Vec3::new(2.5, 1.5, 0.5),
+            wall
+        ));
     }
 
     #[test]
     fn marks() {
         let p = Vec3::new(10.0, 5.0, 10.0);
-        let m = Mark { from: Anchor::Player, offset: (1.0, 0.0, 3.0) };
+        let m = Mark {
+            from: Anchor::Player,
+            offset: (1.0, 0.0, 3.0),
+        };
         // Facing -z: ahead is -z, right is +x.
-        assert_eq!(resolve(&m, p, Vec3::NEG_Z, |_| None, |_| None), Some(Vec3::new(11.0, 5.0, 7.0)));
-        let m = Mark { from: Anchor::Place("camp".into()), offset: (0.0, 1.0, 0.0) };
-        assert_eq!(resolve(&m, p, Vec3::NEG_Z, |_| None, |_| Some(Vec3::ONE)), Some(Vec3::new(1.0, 2.0, 1.0)));
+        assert_eq!(
+            resolve(&m, p, Vec3::NEG_Z, |_| None, |_| None),
+            Some(Vec3::new(11.0, 5.0, 7.0))
+        );
+        let m = Mark {
+            from: Anchor::Place("camp".into()),
+            offset: (0.0, 1.0, 0.0),
+        };
+        assert_eq!(
+            resolve(&m, p, Vec3::NEG_Z, |_| None, |_| Some(Vec3::ONE)),
+            Some(Vec3::new(1.0, 2.0, 1.0))
+        );
         assert_eq!(resolve(&m, p, Vec3::NEG_Z, |_| None, |_| None), None);
     }
 
@@ -494,9 +685,15 @@ mod tests {
         assert_eq!(fall(0.5), 0.25);
         assert_eq!(fall(1.0), 1.0);
         // Ships are found as places.
-        let m = Mark { from: Anchor::Ship("ours".into()), offset: (0.0, 3.0, 0.0) };
+        let m = Mark {
+            from: Anchor::Ship("ours".into()),
+            offset: (0.0, 3.0, 0.0),
+        };
         let place = |k: &str| (k == "ship:ours").then_some(Vec3::new(5.0, 60.0, 5.0));
-        assert_eq!(resolve(&m, Vec3::ZERO, Vec3::NEG_Z, |_| None, place), Some(Vec3::new(5.0, 63.0, 5.0)));
+        assert_eq!(
+            resolve(&m, Vec3::ZERO, Vec3::NEG_Z, |_| None, place),
+            Some(Vec3::new(5.0, 63.0, 5.0))
+        );
     }
 
     /// The opening: the ships fly, ours is shot down, you fall, black, wake, Bram talks,
@@ -506,27 +703,76 @@ mod tests {
         let list = load(include_str!("../../../../assets/data/cutscenes.ron")).unwrap();
         let c = list.iter().find(|c| c.id == "C01").unwrap();
         let has = |f: &dyn Fn(&Step) -> bool| c.steps.iter().position(f);
-        let ours = has(&|s| matches!(s, Step::Ship { look: ShipLook::Ours, .. })).expect("our ship");
-        let court = has(&|s| matches!(s, Step::Ship { look: ShipLook::Court, .. })).expect("the court ship");
+        let ours = has(&|s| {
+            matches!(
+                s,
+                Step::Ship {
+                    look: ShipLook::Ours,
+                    ..
+                }
+            )
+        })
+        .expect("our ship");
+        let court = has(&|s| {
+            matches!(
+                s,
+                Step::Ship {
+                    look: ShipLook::Court,
+                    ..
+                }
+            )
+        })
+        .expect("the court ship");
         let orbit = has(&|s| matches!(s, Step::Orbit { .. })).expect("the camera circles");
-        let fire = has(&|s| matches!(s, Step::Fire(a, b) if a == "court" && b == "ours")).expect("shot down");
+        let fire = has(&|s| matches!(s, Step::Fire(a, b) if a == "court" && b == "ours"))
+            .expect("shot down");
         let dive = has(&|s| matches!(s, Step::Dive(..))).expect("the fall");
-        let black = dive + c.steps[dive..].iter().position(|s| matches!(s, Step::Fade(x, t) if *x >= 1.0 && *t <= 0.01)).expect("black");
+        let black = dive
+            + c.steps[dive..]
+                .iter()
+                .position(|s| matches!(s, Step::Fade(x, t) if *x >= 1.0 && *t <= 0.01))
+                .expect("black");
         let lids = has(&|s| matches!(s, Step::Lids(x, _) if *x >= 1.0)).expect("eyes open");
         let bram = has(&|s| matches!(s, Step::Say(a, _) if a == "bram")).expect("Bram talks");
-        let guide = has(&|s| matches!(s, Step::Flag(f) if f == "guide_on")).expect("the guide starts");
-        assert!(ours < orbit && court < fire && orbit < fire && fire < dive && dive < black && black < lids && lids < bram && bram < guide);
-        assert!(has(&|s| matches!(s, Step::Zoom(..))).is_some() && has(&|s| matches!(s, Step::Shake(..))).is_some());
+        let guide =
+            has(&|s| matches!(s, Step::Flag(f) if f == "guide_on")).expect("the guide starts");
+        assert!(
+            ours < orbit
+                && court < fire
+                && orbit < fire
+                && fire < dive
+                && dive < black
+                && black < lids
+                && lids < bram
+                && bram < guide
+        );
+        assert!(
+            has(&|s| matches!(s, Step::Zoom(..))).is_some()
+                && has(&|s| matches!(s, Step::Shake(..))).is_some()
+        );
         // The black comes as the fall ends, before the ground: only a wait between.
-        let Step::Dive(_, _, secs) = &c.steps[dive] else { unreachable!() };
-        let waited: f32 = c.steps[dive + 1..black].iter().map(|s| if let Step::Wait(t) = s { *t } else { 0.0 }).sum();
-        assert!(waited < *secs && waited > secs - 0.3, "black just before the ground");
-        assert!(c.steps[dive + 1..black].iter().all(|s| until(s) == Until::Now || matches!(s, Step::Wait(_))));
+        let Step::Dive(_, _, secs) = &c.steps[dive] else {
+            unreachable!()
+        };
+        let waited: f32 = c.steps[dive + 1..black]
+            .iter()
+            .map(|s| if let Step::Wait(t) = s { *t } else { 0.0 })
+            .sum();
+        assert!(
+            waited < *secs && waited > secs - 0.3,
+            "black just before the ground"
+        );
+        assert!(
+            c.steps[dive + 1..black]
+                .iter()
+                .all(|s| until(s) == Until::Now || matches!(s, Step::Wait(_)))
+        );
     }
 
     #[test]
     fn the_data_file_loads_and_names_real_lines() {
-        let list = load(include_str!("../../../../assets/data/cutscenes.ron")).expect("cutscenes.ron");
+        let list =
+            load(include_str!("../../../../assets/data/cutscenes.ron")).expect("cutscenes.ron");
         let lines = crate::lines::load();
         for c in &list {
             for s in &c.steps {

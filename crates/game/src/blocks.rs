@@ -64,7 +64,12 @@ impl MaterialExtension for VoxelExtension {
 
 /// The glow uniform's starting value: the glowcap's texture layer, dark.
 fn glow_layer(tiles: &TileSheet) -> Vec4 {
-    Vec4::new(tiles.index("glowcap").map_or(-1.0, |i| i as f32), 0.0, 0.0, 0.0)
+    Vec4::new(
+        tiles.index("glowcap").map_or(-1.0, |i| i as f32),
+        0.0,
+        0.0,
+        0.0,
+    )
 }
 
 /// Shared block data. `material` is `None` until the spritesheet has loaded.
@@ -89,7 +94,10 @@ impl Plugin for BlocksPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<VoxelMaterial>::default())
             .add_systems(crate::menu::GamePreStartup, load_blocks)
-            .add_systems(crate::menu::GameUpdate, build_material.run_if(|b: Res<Blocks>| b.material.is_none()));
+            .add_systems(
+                crate::menu::GameUpdate,
+                build_material.run_if(|b: Res<Blocks>| b.material.is_none()),
+            );
     }
 }
 
@@ -116,8 +124,14 @@ fn build_material(
     mut images: ResMut<Assets<Image>>,
     mut materials: ResMut<Assets<VoxelMaterial>>,
 ) {
-    let Some(sheet) = images.get(&blocks.sheet) else { return };
-    let rgba = sheet.clone().try_into_dynamic().expect("blocks.png must be an image").to_rgba8();
+    let Some(sheet) = images.get(&blocks.sheet) else {
+        return;
+    };
+    let rgba = sheet
+        .clone()
+        .try_into_dynamic()
+        .expect("blocks.png must be an image")
+        .to_rgba8();
     let t = blocks.tiles.tile_size;
     let cols = rgba.width() / t;
     let rows = rgba.height() / t;
@@ -148,7 +162,11 @@ fn build_material(
     }
     blocks.tile_colors = Some(Arc::new(averages));
     let mut array = Image::new(
-        Extent3d { width: t, height: t, depth_or_array_layers: layers },
+        Extent3d {
+            width: t,
+            height: t,
+            depth_or_array_layers: layers,
+        },
         TextureDimension::D2,
         vec![0; (t * t * 4 * layers) as usize],
         TextureFormat::Rgba8UnormSrgb,
@@ -163,10 +181,18 @@ fn build_material(
     });
     let textures = images.add(array);
 
-    let table = blocks.tiles.variant_table().unwrap_or_else(|e| panic!("assets/textures/blocks.ron: {e}"));
+    let table = blocks
+        .tiles
+        .variant_table()
+        .unwrap_or_else(|e| panic!("assets/textures/blocks.ron: {e}"));
     let mut variants = [UVec4::ZERO; voxel::tiles::VARIANT_SLOTS / 4];
     for (i, v) in variants.iter_mut().enumerate() {
-        *v = UVec4::new(table[i * 4], table[i * 4 + 1], table[i * 4 + 2], table[i * 4 + 3]);
+        *v = UVec4::new(
+            table[i * 4],
+            table[i * 4 + 1],
+            table[i * 4 + 2],
+            table[i * 4 + 3],
+        );
     }
 
     blocks.material = Some(materials.add(VoxelMaterial {
@@ -177,7 +203,15 @@ fn build_material(
             fog_enabled: false,
             ..default()
         },
-        extension: VoxelExtension { textures: textures.clone(), season: Vec4::ZERO, wind: Vec4::ZERO, atmos: default(), shake: Vec4::ZERO, variants, glow: glow_layer(&blocks.tiles) },
+        extension: VoxelExtension {
+            textures: textures.clone(),
+            season: Vec4::ZERO,
+            wind: Vec4::ZERO,
+            atmos: default(),
+            shake: Vec4::ZERO,
+            variants,
+            glow: glow_layer(&blocks.tiles),
+        },
     }));
     blocks.translucent_material = Some(materials.add(VoxelMaterial {
         base: StandardMaterial {
@@ -189,7 +223,15 @@ fn build_material(
             fog_enabled: false,
             ..default()
         },
-        extension: VoxelExtension { textures, season: Vec4::ZERO, wind: Vec4::ZERO, atmos: default(), shake: Vec4::ZERO, variants, glow: glow_layer(&blocks.tiles) },
+        extension: VoxelExtension {
+            textures,
+            season: Vec4::ZERO,
+            wind: Vec4::ZERO,
+            atmos: default(),
+            shake: Vec4::ZERO,
+            variants,
+            glow: glow_layer(&blocks.tiles),
+        },
     }));
 }
 
@@ -204,16 +246,33 @@ pub fn mip_chain(tile: &[u8], size: u32, levels: u32) -> Vec<Vec<u8>> {
     let coverage = |a: &[f32]| a.iter().filter(|&&x| x >= CUTOFF).count() as f32 / a.len() as f32;
     let to_lin = |c: u8| {
         let c = c as f32 / 255.0;
-        if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
+        if c <= 0.04045 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        }
     };
     let to_srgb = |c: f32| {
         let c = c.clamp(0.0, 1.0);
-        let s = if c <= 0.0031308 { c * 12.92 } else { 1.055 * c.powf(1.0 / 2.4) - 0.055 };
+        let s = if c <= 0.0031308 {
+            c * 12.92
+        } else {
+            1.055 * c.powf(1.0 / 2.4) - 0.055
+        };
         (s * 255.0 + 0.5) as u8
     };
     // Linear rgb + alpha, as floats.
-    let mut cur: Vec<[f32; 4]> =
-        tile.chunks(4).map(|p| [to_lin(p[0]), to_lin(p[1]), to_lin(p[2]), p[3] as f32 / 255.0]).collect();
+    let mut cur: Vec<[f32; 4]> = tile
+        .chunks(4)
+        .map(|p| {
+            [
+                to_lin(p[0]),
+                to_lin(p[1]),
+                to_lin(p[2]),
+                p[3] as f32 / 255.0,
+            ]
+        })
+        .collect();
     let base_alpha: Vec<f32> = cur.iter().map(|p| p[3]).collect();
     let target = coverage(&base_alpha);
     let mut out = vec![tile.to_vec()];
@@ -233,7 +292,11 @@ pub fn mip_chain(tile: &[u8], size: u32, levels: u32) -> Vec<Vec<u8>> {
                     wsum += p[3];
                     a += p[3] * 0.25;
                 }
-                let rgb = if wsum > 0.0 { rgb.map(|c| c / wsum) } else { plain };
+                let rgb = if wsum > 0.0 {
+                    rgb.map(|c| c / wsum)
+                } else {
+                    plain
+                };
                 next[y * m + x] = [rgb[0], rgb[1], rgb[2], a];
             }
         }
@@ -246,14 +309,25 @@ pub fn mip_chain(tile: &[u8], size: u32, levels: u32) -> Vec<Vec<u8>> {
             for _ in 0..24 {
                 let mid = (lo + hi) / 2.0;
                 let scaled: Vec<f32> = alpha.iter().map(|a| (a * mid).min(1.0)).collect();
-                if coverage(&scaled) < target { lo = mid } else { hi = mid }
+                if coverage(&scaled) < target {
+                    lo = mid
+                } else {
+                    hi = mid
+                }
             }
             alpha = alpha.iter().map(|a| (a * hi).min(1.0)).collect();
         }
         out.push(
             cur.iter()
                 .zip(&alpha)
-                .flat_map(|(p, &a)| [to_srgb(p[0]), to_srgb(p[1]), to_srgb(p[2]), (a * 255.0 + 0.5) as u8])
+                .flat_map(|(p, &a)| {
+                    [
+                        to_srgb(p[0]),
+                        to_srgb(p[1]),
+                        to_srgb(p[2]),
+                        (a * 255.0 + 0.5) as u8,
+                    ]
+                })
                 .collect(),
         );
     }
@@ -266,25 +340,46 @@ mod tests {
 
     #[test]
     fn mip_chain_sizes_and_colours() {
-        let tile: Vec<u8> = (0..32 * 32).flat_map(|i| if i % 2 == 0 { [255, 0, 0, 255] } else { [0, 0, 255, 255] }).collect();
+        let tile: Vec<u8> = (0..32 * 32)
+            .flat_map(|i| {
+                if i % 2 == 0 {
+                    [255, 0, 0, 255]
+                } else {
+                    [0, 0, 255, 255]
+                }
+            })
+            .collect();
         let chain = mip_chain(&tile, 32, 6);
         let sizes: Vec<usize> = chain.iter().map(|l| l.len() / 4).collect();
         assert_eq!(sizes, vec![1024, 256, 64, 16, 4, 1]);
         let last = &chain[5];
         // Half red, half blue in linear light.
-        assert!((last[0] as i32 - 188).abs() <= 2 && (last[2] as i32 - 188).abs() <= 2 && last[3] == 255);
+        assert!(
+            (last[0] as i32 - 188).abs() <= 2
+                && (last[2] as i32 - 188).abs() <= 2
+                && last[3] == 255
+        );
     }
 
     #[test]
     fn cut_out_tiles_keep_their_coverage() {
         // A quarter of the pixels solid green, the rest cut out (white underneath).
         let tile: Vec<u8> = (0..32 * 32)
-            .flat_map(|i| if (i % 32) % 2 == 0 && (i / 32) % 2 == 0 { [0, 200, 0, 255] } else { [255, 255, 255, 0] })
+            .flat_map(|i| {
+                if (i % 32) % 2 == 0 && (i / 32) % 2 == 0 {
+                    [0, 200, 0, 255]
+                } else {
+                    [255, 255, 255, 0]
+                }
+            })
             .collect();
         let chain = mip_chain(&tile, 32, 6);
         for level in &chain[1..] {
             let px = level.len() / 4;
-            let kept = level.chunks(4).filter(|p| p[3] as f32 / 255.0 >= 0.1).count();
+            let kept = level
+                .chunks(4)
+                .filter(|p| p[3] as f32 / 255.0 >= 0.1)
+                .count();
             assert!(kept as f32 / px as f32 >= 0.25 - 1e-3, "coverage held");
             // No white bleeding in from the cut-out pixels.
             assert!(level.chunks(4).all(|p| p[0] < 10 && p[1] > 150));

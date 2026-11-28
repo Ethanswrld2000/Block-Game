@@ -28,16 +28,33 @@ pub struct Loot {
 impl Loot {
     pub fn from_ron(text: &str, items: &Items) -> Result<Self, String> {
         let spec: LootSpec = ron::from_str(text).map_err(|e| format!("loot.ron: {e}"))?;
-        let quality = spec.quality.into_iter().map(|(k, (a, b, c, d))| (k, [a, b, c, d])).collect();
+        let quality = spec
+            .quality
+            .into_iter()
+            .map(|(k, (a, b, c, d))| (k, [a, b, c, d]))
+            .collect();
         let mut tables = HashMap::new();
         for (name, list) in spec.tables {
             let list = list
                 .into_iter()
-                .map(|(i, a, b, p)| Ok((items.id(&i).ok_or_else(|| format!("loot.ron: no item '{i}'"))?, a.min(b), a.max(b), p)))
+                .map(|(i, a, b, p)| {
+                    Ok((
+                        items
+                            .id(&i)
+                            .ok_or_else(|| format!("loot.ron: no item '{i}'"))?,
+                        a.min(b),
+                        a.max(b),
+                        p,
+                    ))
+                })
                 .collect::<Result<Vec<_>, String>>()?;
             tables.insert(name, list);
         }
-        Ok(Self { tables, quality, items: items.clone() })
+        Ok(Self {
+            tables,
+            quality,
+            items: items.clone(),
+        })
     }
 
     /// Fill a chest from a table. `rand` gives numbers in 0..1.
@@ -58,7 +75,8 @@ impl Loot {
             let n = lo + ((rand() * (hi - lo + 1) as f32) as u16).min(hi - lo);
             let item = match self.quality.get(table) {
                 Some(odds) if self.items.get(*item).takes_quality() => {
-                    let mut rng = crate::creatures::brain::Rng(((rand() * u32::MAX as f32) as u64) << 8 | 1);
+                    let mut rng =
+                        crate::creatures::brain::Rng(((rand() * u32::MAX as f32) as u64) << 8 | 1);
                     self.items.roll(*item, *odds, &mut rng)
                 }
                 _ => *item,
@@ -76,7 +94,8 @@ mod tests {
     #[test]
     fn barrow_chests_hold_coins() {
         let (_, items) = crate::items::tests::load();
-        let loot = Loot::from_ron(include_str!("../../../../assets/data/loot.ron"), &items).unwrap();
+        let loot =
+            Loot::from_ron(include_str!("../../../../assets/data/loot.ron"), &items).unwrap();
         let mut g = Grid::new(super::super::CHEST.0, super::super::CHEST.1);
         let mut x = 0.0f32;
         loot.fill("barrow", &items, &mut g, || {
@@ -89,7 +108,8 @@ mod tests {
     #[test]
     fn warden_loot_comes_out_better_than_plain() {
         let (_, items) = crate::items::tests::load();
-        let loot = Loot::from_ron(include_str!("../../../../assets/data/loot.ron"), &items).unwrap();
+        let loot =
+            Loot::from_ron(include_str!("../../../../assets/data/loot.ron"), &items).unwrap();
         let mut rng = crate::creatures::brain::Rng(3);
         let mut better = 0;
         for _ in 0..200 {

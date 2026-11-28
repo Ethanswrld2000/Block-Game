@@ -125,10 +125,15 @@ fn one_by_one() -> (u8, u8) {
 
 #[derive(Deserialize)]
 enum KindSpec {
-    Tool { speeds: HashMap<String, f32> },
+    Tool {
+        speeds: HashMap<String, f32>,
+    },
     Block(String),
     Torch,
-    Food { tier: u8, satiety: f32 },
+    Food {
+        tier: u8,
+        satiety: f32,
+    },
     Wear {
         slot: WearSlot,
         #[serde(default)]
@@ -140,7 +145,9 @@ enum KindSpec {
         #[serde(default)]
         air: f32,
     },
-    Bag { grid: (u8, u8) },
+    Bag {
+        grid: (u8, u8),
+    },
     Material,
     Machine(String),
 }
@@ -160,8 +167,15 @@ pub enum WearSlot {
 
 impl WearSlot {
     #[allow(dead_code)] // tests walk every slot
-    pub const ALL: [WearSlot; 7] =
-        [WearSlot::Head, WearSlot::HeadArmor, WearSlot::Body, WearSlot::BodyArmor, WearSlot::Legs, WearSlot::Feet, WearSlot::Back];
+    pub const ALL: [WearSlot; 7] = [
+        WearSlot::Head,
+        WearSlot::HeadArmor,
+        WearSlot::Body,
+        WearSlot::BodyArmor,
+        WearSlot::Legs,
+        WearSlot::Feet,
+        WearSlot::Back,
+    ];
 
     pub fn title(self) -> &'static str {
         match self {
@@ -178,16 +192,29 @@ impl WearSlot {
 
 #[derive(Debug, Clone)]
 pub enum ItemKind {
-    Tool { speeds: HashMap<String, f32> },
+    Tool {
+        speeds: HashMap<String, f32>,
+    },
     Block(BlockId),
     Torch,
     /// Eaten by holding right click. `tier` is a tier in food_tiers.ron.
-    Food { tier: u8, satiety: f32 },
+    Food {
+        tier: u8,
+        satiety: f32,
+    },
     /// Clothes and armor: warmth in °C, and the share of a blow kept off each health bar.
     /// `cooling` (°C) takes heat off when it's hot; `air` (0..1) is the share of missing air it makes up.
-    Wear { slot: WearSlot, insulation: f32, protection: HashMap<Layer, f32>, cooling: f32, air: f32 },
+    Wear {
+        slot: WearSlot,
+        insulation: f32,
+        protection: HashMap<Layer, f32>,
+        cooling: f32,
+        air: f32,
+    },
     /// Worn on the back; holds a grid of this size.
-    Bag { grid: (u8, u8) },
+    Bag {
+        grid: (u8, u8),
+    },
     /// Crafting materials.
     Material,
     /// A machine from the machination table, set down in the world (`airship`).
@@ -241,7 +268,9 @@ impl Item {
     /// A weapon for the weapon slot: a tool made only for hitting (swords,
     /// daggers, the spear), not for working blocks.
     pub fn is_weapon(&self) -> bool {
-        matches!(&self.kind, ItemKind::Tool { speeds } if speeds.is_empty()) && self.damage > FIST_DAMAGE && self.shield.is_none()
+        matches!(&self.kind, ItemKind::Tool { speeds } if speeds.is_empty())
+            && self.damage > FIST_DAMAGE
+            && self.shield.is_none()
     }
 
     /// Can it come in better qualities (tools, weapons, shields, armor)?
@@ -251,12 +280,21 @@ impl Item {
 
     /// Does it have a trait with this effect?
     pub fn has(&self, quals: &Qualities, f: impl Fn(crate::quality::Effect) -> bool) -> bool {
-        self.traits.iter().any(|t| quals.traits.get(*t).is_some_and(|d| f(d.effect)))
+        self.traits
+            .iter()
+            .any(|t| quals.traits.get(*t).is_some_and(|d| f(d.effect)))
     }
 
     /// The first trait effect `f` picks out.
-    pub fn effect<T>(&self, quals: &Qualities, f: impl Fn(crate::quality::Effect) -> Option<T>) -> Option<T> {
-        self.traits.iter().filter_map(|t| quals.traits.get(*t)).find_map(|d| f(d.effect))
+    pub fn effect<T>(
+        &self,
+        quals: &Qualities,
+        f: impl Fn(crate::quality::Effect) -> Option<T>,
+    ) -> Option<T> {
+        self.traits
+            .iter()
+            .filter_map(|t| quals.traits.get(*t))
+            .find_map(|d| f(d.effect))
     }
 
     /// Reach of its moves (with traits), or a sword's.
@@ -288,15 +326,32 @@ impl Items {
             let kind = match s.kind {
                 KindSpec::Tool { speeds } => ItemKind::Tool { speeds },
                 KindSpec::Block(b) => ItemKind::Block(
-                    blocks.id(&b).ok_or_else(|| format!("item '{}' places unknown block '{b}'", s.name))?,
+                    blocks
+                        .id(&b)
+                        .ok_or_else(|| format!("item '{}' places unknown block '{b}'", s.name))?,
                 ),
                 KindSpec::Torch => ItemKind::Torch,
                 KindSpec::Food { tier, satiety } => ItemKind::Food { tier, satiety },
-                KindSpec::Wear { slot, insulation, protection, cooling, air } => {
+                KindSpec::Wear {
+                    slot,
+                    insulation,
+                    protection,
+                    cooling,
+                    air,
+                } => {
                     if slot == WearSlot::Back {
-                        return Err(format!("item '{}': things worn on the back are Bag items", s.name));
+                        return Err(format!(
+                            "item '{}': things worn on the back are Bag items",
+                            s.name
+                        ));
                     }
-                    ItemKind::Wear { slot, insulation, protection, cooling, air: air.clamp(0.0, 0.9) }
+                    ItemKind::Wear {
+                        slot,
+                        insulation,
+                        protection,
+                        cooling,
+                        air: air.clamp(0.0, 0.9),
+                    }
                 }
                 KindSpec::Bag { grid } => ItemKind::Bag { grid },
                 KindSpec::Material => ItemKind::Material,
@@ -321,15 +376,30 @@ impl Items {
             });
             let gun = match s.gun {
                 Some(g) => {
-                    let ammo = names.iter().position(|n| *n == g.ammo).ok_or_else(|| format!("item '{}' fires unknown ammo '{}'", s.name, g.ammo))?;
-                    Some(Gun { damage: g.damage, range: g.range, reload: g.reload, ammo: ItemId(ammo as u16) })
+                    let ammo = names.iter().position(|n| *n == g.ammo).ok_or_else(|| {
+                        format!("item '{}' fires unknown ammo '{}'", s.name, g.ammo)
+                    })?;
+                    Some(Gun {
+                        damage: g.damage,
+                        range: g.range,
+                        reload: g.reload,
+                        ammo: ItemId(ammo as u16),
+                    })
                 }
                 None => None,
             };
             if let Some(m) = &s.moves
-                && (m.light.is_empty() || m.light.len() > 3 || m.light.iter().chain([&m.heavy]).any(|s| !s.fights() && *s != Swing::Chop))
+                && (m.light.is_empty()
+                    || m.light.len() > 3
+                    || m.light
+                        .iter()
+                        .chain([&m.heavy])
+                        .any(|s| !s.fights() && *s != Swing::Chop))
             {
-                return Err(format!("item '{}': moves need one to three light fighting moves and a fighting heavy", s.name));
+                return Err(format!(
+                    "item '{}': moves need one to three light fighting moves and a fighting heavy",
+                    s.name
+                ));
             }
             if s.name.contains(['@', '+']) {
                 return Err(format!("item '{}': names can't hold @ or +", s.name));
@@ -355,7 +425,12 @@ impl Items {
             });
         }
         let quals = Qualities::load(include_str!("../../../assets/data/traits.ron"))?;
-        Ok(Self { hand: spec.hand, list, quals: Arc::new(quals), extra: Arc::default() })
+        Ok(Self {
+            hand: spec.hand,
+            list,
+            quals: Arc::new(quals),
+            extra: Arc::default(),
+        })
     }
 
     pub fn get(&self, id: ItemId) -> &Item {
@@ -391,7 +466,11 @@ impl Items {
         if !b.takes_quality() || (q == Quality::Plain && traits.is_empty()) {
             return base;
         }
-        let mut traits: Vec<usize> = traits.iter().copied().filter(|t| *t < self.quals.traits.len()).collect();
+        let mut traits: Vec<usize> = traits
+            .iter()
+            .copied()
+            .filter(|t| *t < self.quals.traits.len())
+            .collect();
         traits.sort();
         traits.dedup();
         let name = self.quals.name(&b.name, q, &traits);
@@ -419,7 +498,9 @@ impl Items {
         }
         match &mut it.kind {
             ItemKind::Tool { speeds } => speeds.values_mut().for_each(|v| *v *= up),
-            ItemKind::Wear { protection, .. } => protection.values_mut().for_each(|v| *v = (*v * up).min(0.9)),
+            ItemKind::Wear { protection, .. } => protection
+                .values_mut()
+                .for_each(|v| *v = (*v * up).min(0.9)),
             _ => {}
         }
         extra.push(Box::leak(Box::new(it)));
@@ -427,7 +508,12 @@ impl Items {
     }
 
     /// Roll a quality from `odds` and traits to go with it, for `base`.
-    pub fn roll(&self, base: ItemId, odds: crate::quality::Odds, rng: &mut crate::creatures::brain::Rng) -> ItemId {
+    pub fn roll(
+        &self,
+        base: ItemId,
+        odds: crate::quality::Odds,
+        rng: &mut crate::creatures::brain::Rng,
+    ) -> ItemId {
         if !self.get(base).takes_quality() {
             return base;
         }
@@ -449,7 +535,10 @@ impl Items {
         let mut traits = it.traits.clone();
         for t in want {
             let rank = self.quals.traits[t].rank;
-            let have = traits.iter().filter(|x| self.quals.traits[**x].rank == rank).count();
+            let have = traits
+                .iter()
+                .filter(|x| self.quals.traits[**x].rank == rank)
+                .count();
             let tier = self.quals.tier(next);
             let room = match rank {
                 crate::quality::Rank::Minor => tier.minor,
@@ -469,7 +558,10 @@ impl Items {
 
     /// The item that places this block, if any.
     pub fn for_block(&self, block: BlockId) -> Option<ItemId> {
-        self.list.iter().position(|i| matches!(i.kind, ItemKind::Block(b) if b == block)).map(|i| ItemId(i as u16))
+        self.list
+            .iter()
+            .position(|i| matches!(i.kind, ItemKind::Block(b) if b == block))
+            .map(|i| ItemId(i as u16))
     }
 
     /// Mining speed of what is in the hand (nothing, a tool, or anything
@@ -477,7 +569,9 @@ impl Items {
     pub fn speed(&self, held: Option<ItemId>, material: &str) -> f32 {
         let hand = self.hand.get(material).copied().unwrap_or(1.0);
         match held.map(|i| &self.get(i).kind) {
-            Some(ItemKind::Tool { speeds }) => speeds.get(material).copied().unwrap_or(hand).max(hand),
+            Some(ItemKind::Tool { speeds }) => {
+                speeds.get(material).copied().unwrap_or(hand).max(hand)
+            }
             _ => hand,
         }
     }
@@ -514,12 +608,19 @@ pub struct ItemsPlugin;
 
 impl Plugin for ItemsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(crate::menu::GamePreStartup, load_items.after(crate::blocks::load_blocks));
+        app.add_systems(
+            crate::menu::GamePreStartup,
+            load_items.after(crate::blocks::load_blocks),
+        );
     }
 }
 
 fn load_items(mut commands: Commands, blocks: Res<crate::blocks::Blocks>) {
-    let items = Items::from_ron(include_str!("../../../assets/data/items.ron"), &blocks.registry).unwrap_or_else(|e| panic!("{e}"));
+    let items = Items::from_ron(
+        include_str!("../../../assets/data/items.ron"),
+        &blocks.registry,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
     commands.insert_resource(items);
 }
 
@@ -529,9 +630,13 @@ pub mod tests {
     use voxel::TileSheet;
 
     pub fn load() -> (BlockRegistry, Items) {
-        let tiles = TileSheet::from_ron(include_str!("../../../assets/textures/blocks.ron")).unwrap();
-        let blocks = BlockRegistry::from_ron(include_str!("../../../assets/data/blocks.ron"), &tiles).unwrap();
-        let items = Items::from_ron(include_str!("../../../assets/data/items.ron"), &blocks).unwrap();
+        let tiles =
+            TileSheet::from_ron(include_str!("../../../assets/textures/blocks.ron")).unwrap();
+        let blocks =
+            BlockRegistry::from_ron(include_str!("../../../assets/data/blocks.ron"), &tiles)
+                .unwrap();
+        let items =
+            Items::from_ron(include_str!("../../../assets/data/items.ron"), &blocks).unwrap();
         (blocks, items)
     }
 
@@ -542,7 +647,10 @@ pub mod tests {
         let open = crate::interact::door_swap(&blocks, shut).expect("opens");
         assert!(!blocks.get(open).solid);
         assert_eq!(crate::interact::door_swap(&blocks, open), Some(shut));
-        assert_eq!(crate::interact::door_swap(&blocks, blocks.id("chair").unwrap()), None);
+        assert_eq!(
+            crate::interact::door_swap(&blocks, blocks.id("chair").unwrap()),
+            None
+        );
     }
 
     #[test]
@@ -557,8 +665,19 @@ pub mod tests {
         assert!(picked < 7.0, "pick {picked}");
         // Bare hands can't break stone, wood or giant mushrooms at all.
         assert_eq!(hand, None);
-        for b in ["stone", "cobblestone", "planks", "mushroom_stem", "mushroom_cap", "coal_ore"] {
-            assert_eq!(items.break_time(None, blocks.get(blocks.expect(b))), None, "{b}");
+        for b in [
+            "stone",
+            "cobblestone",
+            "planks",
+            "mushroom_stem",
+            "mushroom_cap",
+            "coal_ore",
+        ] {
+            assert_eq!(
+                items.break_time(None, blocks.get(blocks.expect(b))),
+                None,
+                "{b}"
+            );
         }
         // Logs need an axe: not bare hands, not a pickaxe.
         assert!(items.break_time(axe, log).is_some_and(|t| t < 1.0));
@@ -567,15 +686,20 @@ pub mod tests {
         // A torch in the hand mines like a bare hand.
         assert_eq!(items.break_time(items.id("torch"), stone), None);
         let dirt = blocks.get(blocks.expect("dirt"));
-        assert_eq!(items.break_time(items.id("torch"), dirt), items.break_time(None, dirt));
+        assert_eq!(
+            items.break_time(items.id("torch"), dirt),
+            items.break_time(None, dirt)
+        );
     }
 
     #[test]
     fn base_tools_take_about_twelve_swings() {
-        use crate::swing::{blow_share, Swing};
+        use crate::swing::{Swing, blow_share};
         let (blocks, items) = load();
         let swings = |tool: &str, block: &str, swing: Swing| {
-            let t = items.break_time(items.id(tool), blocks.get(blocks.expect(block))).unwrap();
+            let t = items
+                .break_time(items.id(tool), blocks.get(blocks.expect(block)))
+                .unwrap();
             (1.0 / blow_share(swing, t) - 1e-4).ceil() as u32
         };
         assert_eq!(swings("rough_axe", "log", Swing::Chop), 12);
@@ -586,9 +710,12 @@ pub mod tests {
 
     #[test]
     fn hands_dig_soil_a_layer_at_a_time_and_shovels_take_it_whole() {
-        use crate::swing::{blow_share, Swing};
+        use crate::swing::{Swing, blow_share};
         let (blocks, items) = load();
-        let punches = |held: Option<ItemId>, b: voxel::BlockId, s: Swing| (1.0 / blow_share(s, items.break_time(held, blocks.get(b)).unwrap()) - 1e-4).ceil() as u32;
+        let punches = |held: Option<ItemId>, b: voxel::BlockId, s: Swing| {
+            (1.0 / blow_share(s, items.break_time(held, blocks.get(b)).unwrap()) - 1e-4).ceil()
+                as u32
+        };
         // By hand: dirt -> 6/8 -> 4/8 -> 2/8 -> gone, a few punches each.
         let mut b = blocks.expect("grass");
         let (mut steps, mut total) = (0, 0);
@@ -603,7 +730,11 @@ pub mod tests {
         assert_eq!(steps, 4);
         assert!((12..=24).contains(&total), "{total} punches");
         // A pickaxe isn't a shovel: it digs dirt like a hand.
-        assert!(items.dug_to(items.id("stone_pickaxe"), blocks.get(blocks.expect("dirt"))).is_some());
+        assert!(
+            items
+                .dug_to(items.id("stone_pickaxe"), blocks.get(blocks.expect("dirt")))
+                .is_some()
+        );
         // A shovel takes the whole block, and snow, in a couple of swings.
         let shovel = items.id("stone_shovel");
         assert_eq!(items.get(shovel.unwrap()).swing, Swing::Dig);
@@ -616,24 +747,50 @@ pub mod tests {
 
     #[test]
     fn foliage_takes_a_few_punches_and_brush_slows_you() {
-        use crate::swing::{blow_share, Swing};
+        use crate::swing::{Swing, blow_share};
         let (blocks, items) = load();
-        let punches = |name: &str| (1.0 / blow_share(Swing::Jab, items.break_time(None, blocks.get(blocks.expect(name))).unwrap()) - 1e-4).ceil() as u32;
-        for name in ["leaves", "swamp_leaves", "redwood_leaves", "shrub", "dry_brush"] {
-            assert!((3..=4).contains(&punches(name)), "{name}: {}", punches(name));
+        let punches = |name: &str| {
+            (1.0 / blow_share(
+                Swing::Jab,
+                items
+                    .break_time(None, blocks.get(blocks.expect(name)))
+                    .unwrap(),
+            ) - 1e-4)
+                .ceil() as u32
+        };
+        for name in [
+            "leaves",
+            "swamp_leaves",
+            "redwood_leaves",
+            "shrub",
+            "dry_brush",
+        ] {
+            assert!(
+                (3..=4).contains(&punches(name)),
+                "{name}: {}",
+                punches(name)
+            );
         }
         assert!(blocks.get(blocks.expect("shrub")).slows < 0.8);
         assert_eq!(blocks.get(blocks.expect("dirt")).slows, 1.0);
         // An axe still cuts through leaves in one swing.
-        let t = items.break_time(items.id("rough_axe"), blocks.get(blocks.expect("leaves"))).unwrap();
+        let t = items
+            .break_time(items.id("rough_axe"), blocks.get(blocks.expect("leaves")))
+            .unwrap();
         assert_eq!((1.0 / blow_share(Swing::Chop, t) - 1e-4).ceil() as u32, 1);
     }
 
     #[test]
     fn water_cannot_be_broken_and_torches_break_instantly() {
         let (blocks, items) = load();
-        assert_eq!(items.break_time(None, blocks.get(blocks.expect("water"))), None);
-        assert_eq!(items.break_time(None, blocks.get(blocks.expect("torch"))), Some(0.0));
+        assert_eq!(
+            items.break_time(None, blocks.get(blocks.expect("water"))),
+            None
+        );
+        assert_eq!(
+            items.break_time(None, blocks.get(blocks.expect("torch"))),
+            Some(0.0)
+        );
     }
 
     #[test]
@@ -642,6 +799,8 @@ pub mod tests {
         let satchel = items.get(items.id("reed_satchel").unwrap());
         assert_eq!(satchel.wear_slot(), Some(WearSlot::Back));
         let coat = items.get(items.id("fur_coat").unwrap());
-        assert!(matches!(coat.kind, ItemKind::Wear { slot: WearSlot::Body, insulation, .. } if insulation > 8.0));
+        assert!(
+            matches!(coat.kind, ItemKind::Wear { slot: WearSlot::Body, insulation, .. } if insulation > 8.0)
+        );
     }
 }

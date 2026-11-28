@@ -10,7 +10,7 @@
 
 use bevy::prelude::*;
 
-use super::{ahead_of, flat, stamina, traits, Foe, FoeBook, Guard};
+use super::{Foe, FoeBook, Guard, ahead_of, flat, stamina, traits};
 use crate::camera::{FlyCamera, Menus};
 use crate::items::Items;
 use crate::player::Player;
@@ -70,7 +70,11 @@ pub(super) fn bash(
         let next = t + dt / BASH_TIME;
         guard.bash = (next < 1.0).then_some(next);
     }
-    let Some(shield) = guard.shield.filter(|_| guard.up).and_then(|i| items.get(i).shield.map(|s| (i, s))) else {
+    let Some(shield) = guard
+        .shield
+        .filter(|_| guard.up)
+        .and_then(|i| items.get(i).shield.map(|s| (i, s)))
+    else {
         guard.bash = None;
         return;
     };
@@ -78,7 +82,10 @@ pub(super) fn bash(
         && *cooldown <= 0.0
         && mouse.just_pressed(MouseButton::Left)
         && !menus.open
-        && stamina::spend(&mut survival.vitals.health, BASH_COST * items.get(shield.0).stamina)
+        && stamina::spend(
+            &mut survival.vitals.health,
+            BASH_COST * items.get(shield.0).stamina,
+        )
     {
         guard.bash = Some(0.0);
         *cooldown = COOLDOWN;
@@ -96,10 +103,18 @@ pub(super) fn bash(
             let to = tf.translation - player.pos;
             flat(to).length() <= REACH + super::HALF && to.y.abs() < 1.5 && ahead_of(ahead, to, ARC)
         })
-        .min_by(|a, b| flat(a.0.translation - player.pos).length().total_cmp(&flat(b.0.translation - player.pos).length()));
+        .min_by(|a, b| {
+            flat(a.0.translation - player.pos)
+                .length()
+                .total_cmp(&flat(b.0.translation - player.pos).length())
+        });
     let Some((tf, mut foe)) = target else { return };
     let k = &book.kinds[foe.kind];
-    let backstab = if foe.brain.aware { 1.0 } else { super::ai::BACKSTAB };
+    let backstab = if foe.brain.aware {
+        1.0
+    } else {
+        super::ai::BACKSTAB
+    };
     foe.health -= shield.1.bash * backstab;
     foe.brain.kicked(&traits(k));
     let dir = flat(tf.translation - player.pos).normalize_or(flat(ahead).normalize_or(Vec3::NEG_Z));

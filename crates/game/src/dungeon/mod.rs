@@ -25,7 +25,10 @@ impl Plugin for DungeonPlugin {
             .add_message::<LeftDungeon>()
             .add_systems(
                 crate::menu::GameUpdate,
-                (refresh_nearby, place_veils, shimmer_veils).chain().after(crate::player::PlayerSet).before(crate::npc::NpcSet),
+                (refresh_nearby, place_veils, shimmer_veils)
+                    .chain()
+                    .after(crate::player::PlayerSet)
+                    .before(crate::npc::NpcSet),
             )
             .add_plugins(spirit::SpiritPlugin);
     }
@@ -55,7 +58,10 @@ pub struct Nearby {
 impl Nearby {
     /// The dungeon whose door is closest to a point.
     pub fn nearest(&self, at: Vec3) -> Option<Arc<Dungeon>> {
-        self.list.iter().min_by(|a, b| gate_dist(a, at).total_cmp(&gate_dist(b, at))).cloned()
+        self.list
+            .iter()
+            .min_by(|a, b| gate_dist(a, at).total_cmp(&gate_dist(b, at)))
+            .cloned()
     }
 }
 
@@ -64,7 +70,12 @@ pub fn gate_dist(d: &Dungeon, at: Vec3) -> f32 {
     Vec2::new(d.outside[0] - at.x, d.outside[2] - at.z).length()
 }
 
-fn refresh_nearby(time: Res<Time>, generator: Option<Res<Generator>>, player: Res<Player>, mut nearby: ResMut<Nearby>) {
+fn refresh_nearby(
+    time: Res<Time>,
+    generator: Option<Res<Generator>>,
+    player: Res<Player>,
+    mut nearby: ResMut<Nearby>,
+) {
     let Some(generator) = generator else { return };
     nearby.tick -= time.delta_secs();
     if nearby.tick > 0.0 {
@@ -76,7 +87,9 @@ fn refresh_nearby(time: Res<Time>, generator: Option<Res<Generator>>, player: Re
         return;
     }
     let p = player.pos.floor().as_ivec3();
-    nearby.list = generator.0.dungeons_in(p.x - LOOK, p.z - LOOK, p.x + LOOK, p.z + LOOK);
+    nearby.list = generator
+        .0
+        .dungeons_in(p.x - LOOK, p.z - LOOK, p.x + LOOK, p.z + LOOK);
 }
 
 /// The veil hanging in a dungeon's doorway.
@@ -115,11 +128,19 @@ fn place_veils(
             })
         };
         let sheets = [sheet(&mut materials), sheet(&mut materials)];
-        commands.insert_resource(VeilLook { mesh: meshes.add(Rectangle::new(1.0, 1.0)), sheets });
+        commands.insert_resource(VeilLook {
+            mesh: meshes.add(Rectangle::new(1.0, 1.0)),
+            sheets,
+        });
         return;
     };
     for (e, v) in &veils {
-        if nearby.list.iter().find(|d| d.id == v.0).is_none_or(|d| gate_dist(d, player.pos) > GONE) {
+        if nearby
+            .list
+            .iter()
+            .find(|d| d.id == v.0)
+            .is_none_or(|d| gate_dist(d, player.pos) > GONE)
+        {
             commands.entity(e).despawn();
         }
     }
@@ -130,20 +151,31 @@ fn place_veils(
         let out = Vec3::new(d.veil.out.0 as f32, 0.0, d.veil.out.1 as f32);
         let turn = Quat::from_rotation_arc(Vec3::Z, out);
         commands
-            .spawn((VeilOf(d.id), Transform::from_translation(Vec3::from_array(d.veil.center)).with_rotation(turn), Visibility::default()))
+            .spawn((
+                VeilOf(d.id),
+                Transform::from_translation(Vec3::from_array(d.veil.center)).with_rotation(turn),
+                Visibility::default(),
+            ))
             .with_children(|c| {
                 // Two sheets a hand apart, shimmering out of step.
                 for (i, sheet) in look.sheets.iter().enumerate() {
                     c.spawn((
                         Mesh3d(look.mesh.clone()),
                         MeshMaterial3d(sheet.clone()),
-                        Transform::from_xyz(0.0, 0.0, -0.1 - 0.25 * i as f32).with_scale(Vec3::new(d.veil.width, d.veil.height, 1.0)),
+                        Transform::from_xyz(0.0, 0.0, -0.1 - 0.25 * i as f32)
+                            .with_scale(Vec3::new(d.veil.width, d.veil.height, 1.0)),
                         NotShadowCaster,
                     ));
                 }
                 // The veil's own blue light on the doorway round it.
                 c.spawn((
-                    PointLight { color: Color::srgb(VEIL_COLOR.0, VEIL_COLOR.1, VEIL_COLOR.2), intensity: 60_000.0, range: 9.0, shadow_maps_enabled: false, ..default() },
+                    PointLight {
+                        color: Color::srgb(VEIL_COLOR.0, VEIL_COLOR.1, VEIL_COLOR.2),
+                        intensity: 60_000.0,
+                        range: 9.0,
+                        shadow_maps_enabled: false,
+                        ..default()
+                    },
                     Transform::from_xyz(0.0, 0.0, 0.6),
                 ));
             });
@@ -167,7 +199,12 @@ fn shimmer_veils(
         let phase = t * (1.7 + i as f32 * 0.6) + i as f32 * 2.1;
         let wave = 0.5 + 0.5 * phase.sin();
         if let Some(mut m) = materials.get_mut(h) {
-            m.base_color = Color::srgba(VEIL_COLOR.0, VEIL_COLOR.1, VEIL_COLOR.2, (0.18 + 0.16 * wave) * thin);
+            m.base_color = Color::srgba(
+                VEIL_COLOR.0,
+                VEIL_COLOR.1,
+                VEIL_COLOR.2,
+                (0.18 + 0.16 * wave) * thin,
+            );
             m.emissive = LinearRgba::rgb(0.2, 0.45, 1.0) * (0.7 + 0.8 * wave) * thin;
         }
     }
@@ -175,7 +212,11 @@ fn shimmer_veils(
         *next_sparkle = t + 0.35;
         for tf in &veils {
             let r = tf.rotation * Vec3::new((t * 12.9).sin() * 1.3, (t * 7.7).cos() * 1.3, 0.0);
-            bursts.write(crate::station::particles::Burst::new(tf.translation + r, crate::station::particles::BurstKind::Sparkle, 2));
+            bursts.write(crate::station::particles::Burst::new(
+                tf.translation + r,
+                crate::station::particles::BurstKind::Sparkle,
+                2,
+            ));
         }
     }
 }

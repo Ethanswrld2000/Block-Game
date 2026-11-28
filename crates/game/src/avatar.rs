@@ -14,7 +14,7 @@ use crate::items::Items;
 use crate::npc::body::{self, Drive, Parts, Rig};
 use crate::npc::data::Looks;
 use crate::npc::dialogue::Mood;
-use crate::npc::motion::{self, wrap, Spring};
+use crate::npc::motion::{self, Spring, wrap};
 use crate::player::{MoveMode, Player};
 use crate::swing::{Limbs, Swing};
 
@@ -22,9 +22,15 @@ pub struct AvatarPlugin;
 
 impl Plugin for AvatarPlugin {
     fn build(&self, app: &mut App) {
-        let file: PlayerFile = ron::from_str(include_str!("../../../assets/data/player.ron")).unwrap_or_else(|e| panic!("player.ron: {e}"));
-        app.insert_resource(PlayerLooks(file.looks))
-            .add_systems(crate::menu::GameUpdate, (spawn_body, animate).chain().after(crate::player::PlayerSet).after(crate::interact::InteractSet));
+        let file: PlayerFile = ron::from_str(include_str!("../../../assets/data/player.ron"))
+            .unwrap_or_else(|e| panic!("player.ron: {e}"));
+        app.insert_resource(PlayerLooks(file.looks)).add_systems(
+            crate::menu::GameUpdate,
+            (spawn_body, animate)
+                .chain()
+                .after(crate::player::PlayerSet)
+                .after(crate::interact::InteractSet),
+        );
     }
 }
 
@@ -66,11 +72,34 @@ fn spawn_body(
     if !existing.is_empty() || !player.ready {
         return;
     }
-    let (root, rig) = body::build(&mut commands, &mut meshes, &mut materials, &looks.0, player.pos, 0.0);
-    commands.spawn((Held::new(Hand::Right), Transform::from_scale(Vec3::splat(HELD_SCALE)), Visibility::default(), ChildOf(rig.hands[1])));
-    commands.spawn((Held::new(Hand::Left), Transform::from_scale(Vec3::splat(HELD_SCALE)), Visibility::default(), ChildOf(rig.hands[0])));
+    let (root, rig) = body::build(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        &looks.0,
+        player.pos,
+        0.0,
+    );
+    commands.spawn((
+        Held::new(Hand::Right),
+        Transform::from_scale(Vec3::splat(HELD_SCALE)),
+        Visibility::default(),
+        ChildOf(rig.hands[1]),
+    ));
+    commands.spawn((
+        Held::new(Hand::Left),
+        Transform::from_scale(Vec3::splat(HELD_SCALE)),
+        Visibility::default(),
+        ChildOf(rig.hands[0]),
+    ));
     let dressed = crate::inventory::preview::Dressed::new(rig.anchors());
-    commands.entity(root).insert((PlayerBody, Name::new("Player body"), rig, dressed, Visibility::Hidden));
+    commands.entity(root).insert((
+        PlayerBody,
+        Name::new("Player body"),
+        rig,
+        dressed,
+        Visibility::Hidden,
+    ));
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -92,8 +121,14 @@ fn animate(
     mut body: Query<(&mut Transform, &mut Rig, &mut Visibility), With<PlayerBody>>,
     mut parts: Parts,
 ) {
-    let Ok((mut tf, mut rig, mut vis)) = body.single_mut() else { return };
-    let want = if view.pulled { Visibility::Inherited } else { Visibility::Hidden };
+    let Ok((mut tf, mut rig, mut vis)) = body.single_mut() else {
+        return;
+    };
+    let want = if view.pulled {
+        Visibility::Inherited
+    } else {
+        Visibility::Hidden
+    };
     if *vis != want {
         *vis = want;
     }
@@ -111,7 +146,9 @@ fn animate(
         (None, Some(t)) => Some(arm.style.limbs(t)),
         (None, None) => match anim.charge_level() {
             Some((heavy, k)) => Some(crate::swing::charge_limbs(heavy, k)),
-            None if guard.shield.is_some() => Some(Limbs::hold().lerp(Limbs::shield(), guard.blend)),
+            None if guard.shield.is_some() => {
+                Some(Limbs::hold().lerp(Limbs::shield(), guard.blend))
+            }
             None => held.map(|_| Limbs::hold().lerp(Limbs::guard(), guard.blend)),
         },
     };
@@ -121,7 +158,11 @@ fn animate(
     // back up; working, it squares up to what you hit; standing, the head
     // turns first and the body follows once it has turned 50°.
     let walking = *mode == MoveMode::Walk;
-    let vel = if walking { Vec2::new(player.vel.x, player.vel.z) } else { Vec2::ZERO };
+    let vel = if walking {
+        Vec2::new(player.vel.x, player.vel.z)
+    } else {
+        Vec2::ZERO
+    };
     let speed = vel.length();
     if arm.t.is_some() || frozen.is_some() {
         *facing = cam.yaw;
@@ -134,7 +175,11 @@ fn animate(
     // Weight: lean into speeding up, rock back when stopping, tip into turns.
     let gdt = game.delta_secs().min(0.05);
     let (prev, springs) = &mut *weight;
-    let accel = if gdt > 0.0 { (vel - *prev) / gdt } else { Vec2::ZERO };
+    let accel = if gdt > 0.0 {
+        (vel - *prev) / gdt
+    } else {
+        Vec2::ZERO
+    };
     *prev = vel;
     let yaw = rig.facing();
     let ahead = Vec2::new(-yaw.sin(), -yaw.cos());
@@ -142,7 +187,10 @@ fn animate(
     let lean = (accel.dot(ahead) * LEAN_PER_ACCEL).clamp(-MAX_LEAN, MAX_LEAN);
     let tip = (accel.dot(left) * LEAN_PER_ACCEL * 0.6).clamp(-MAX_LEAN, MAX_LEAN);
     let dt = real.delta_secs().min(0.05);
-    let sway = [springs[0].step(lean, 0.25, dt), springs[1].step(tip, 0.25, dt)];
+    let sway = [
+        springs[0].step(lean, 0.25, dt),
+        springs[1].step(tip, 0.25, dt),
+    ];
 
     let drive = Drive {
         yaw: *facing,

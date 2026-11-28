@@ -9,16 +9,28 @@ use std::collections::HashMap;
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 
-use super::script::{ship_key, ShipLook};
 use super::Places;
+use super::script::{ShipLook, ship_key};
 use crate::sound::PlaySound;
 
 /// What the cutscene asks of its airships.
 #[derive(Message, Debug, Clone)]
 pub enum PropCmd {
-    Ship { name: String, at: Vec3, dir: Vec3, look: ShipLook },
-    To { name: String, to: Vec3, secs: f32 },
-    Fire { from: String, to: String },
+    Ship {
+        name: String,
+        at: Vec3,
+        dir: Vec3,
+        look: ShipLook,
+    },
+    To {
+        name: String,
+        to: Vec3,
+        secs: f32,
+    },
+    Fire {
+        from: String,
+        to: String,
+    },
     Remove(String),
     /// The cutscene is over: every ship, bolt and puff goes.
     Clear,
@@ -71,13 +83,32 @@ pub struct Kit {
 }
 
 fn kit(meshes: &mut Assets<Mesh>, mats: &mut Assets<StandardMaterial>) -> Kit {
-    let glow = |c: Color, e: LinearRgba| StandardMaterial { base_color: c, emissive: e, unlit: true, ..default() };
+    let glow = |c: Color, e: LinearRgba| StandardMaterial {
+        base_color: c,
+        emissive: e,
+        unlit: true,
+        ..default()
+    };
     Kit {
         cube: meshes.add(Cuboid::from_length(1.0)),
-        fire: mats.add(glow(Color::srgb(1.0, 0.55, 0.15), LinearRgba::rgb(8.0, 3.0, 0.6))),
-        smoke: mats.add(StandardMaterial { base_color: Color::srgb(0.42, 0.42, 0.44), perceptual_roughness: 1.0, ..default() }),
-        dark: mats.add(StandardMaterial { base_color: Color::srgb(0.16, 0.15, 0.15), perceptual_roughness: 1.0, ..default() }),
-        bolt: mats.add(glow(Color::srgb(1.0, 0.85, 0.5), LinearRgba::rgb(20.0, 12.0, 4.0))),
+        fire: mats.add(glow(
+            Color::srgb(1.0, 0.55, 0.15),
+            LinearRgba::rgb(8.0, 3.0, 0.6),
+        )),
+        smoke: mats.add(StandardMaterial {
+            base_color: Color::srgb(0.42, 0.42, 0.44),
+            perceptual_roughness: 1.0,
+            ..default()
+        }),
+        dark: mats.add(StandardMaterial {
+            base_color: Color::srgb(0.16, 0.15, 0.15),
+            perceptual_roughness: 1.0,
+            ..default()
+        }),
+        bolt: mats.add(glow(
+            Color::srgb(1.0, 0.85, 0.5),
+            LinearRgba::rgb(20.0, 12.0, 4.0),
+        )),
     }
 }
 
@@ -125,7 +156,12 @@ pub fn run(
     let mut new_ships: HashMap<String, (Entity, Vec3)> = HashMap::new();
     for c in cmds.read() {
         match c {
-            PropCmd::Ship { name, at, dir, look } => {
+            PropCmd::Ship {
+                name,
+                at,
+                dir,
+                look,
+            } => {
                 for (e, s, _) in &ships {
                     if &s.name == name {
                         commands.entity(e).despawn();
@@ -134,15 +170,39 @@ pub fn run(
                 let tf = Transform::from_translation(*at).with_rotation(heading(*dir, 0.0));
                 let e = match look {
                     ShipLook::Ours => {
-                        let e = crate::airship::build_model(&mut commands, &mut meshes, &mut mats, tf);
+                        let e =
+                            crate::airship::build_model(&mut commands, &mut meshes, &mut mats, tf);
                         // You, at the helm, facing the bow.
-                        let (body, _) = crate::npc::body::build(&mut commands, &mut meshes, &mut mats, &looks.0, crate::airship::HELM, crate::npc::yaw_of(Vec3::NEG_Z));
+                        let (body, _) = crate::npc::body::build(
+                            &mut commands,
+                            &mut meshes,
+                            &mut mats,
+                            &looks.0,
+                            crate::airship::HELM,
+                            crate::npc::yaw_of(Vec3::NEG_Z),
+                        );
                         commands.entity(body).insert(ChildOf(e));
                         e
                     }
-                    ShipLook::Court => crate::cast::wren::build_ship(&mut commands, &mut meshes, &mut mats, tf.with_scale(Vec3::ONE), COURT_SCALE, Color::srgb(0.55, 0.12, 0.12)),
+                    ShipLook::Court => crate::cast::wren::build_ship(
+                        &mut commands,
+                        &mut meshes,
+                        &mut mats,
+                        tf.with_scale(Vec3::ONE),
+                        COURT_SCALE,
+                        Color::srgb(0.55, 0.12, 0.12),
+                    ),
                 };
-                commands.entity(e).insert(PropShip { name: name.clone(), from: *at, to: *at, t: 0.0, secs: 0.0, dir: *dir, burning: None, smoke: 0.0 });
+                commands.entity(e).insert(PropShip {
+                    name: name.clone(),
+                    from: *at,
+                    to: *at,
+                    t: 0.0,
+                    secs: 0.0,
+                    dir: *dir,
+                    burning: None,
+                    smoke: 0.0,
+                });
                 new_ships.insert(name.clone(), (e, *at));
                 places.0.insert(ship_key(name), *at + Vec3::Y * MIDDLE);
             }
@@ -157,9 +217,29 @@ pub fn run(
                 }
             }
             PropCmd::Fire { from, to } => {
-                let at = ships.iter().find(|(_, s, _)| &s.name == from).map(|(_, _, tf)| tf.translation + Vec3::Y * MIDDLE).or_else(|| new_ships.get(from).map(|(_, p)| *p));
+                let at = ships
+                    .iter()
+                    .find(|(_, s, _)| &s.name == from)
+                    .map(|(_, _, tf)| tf.translation + Vec3::Y * MIDDLE)
+                    .or_else(|| new_ships.get(from).map(|(_, p)| *p));
                 if let Some(at) = at {
-                    commands.spawn((Bolt { from: at, target: to.clone(), t: 0.0 }, Mesh3d(kit.cube.clone()), MeshMaterial3d(kit.bolt.clone()), Transform::from_translation(at).with_scale(Vec3::splat(0.5)), NotShadowCaster, PointLight { color: Color::srgb(1.0, 0.7, 0.35), intensity: 400_000.0, range: 30.0, ..default() }));
+                    commands.spawn((
+                        Bolt {
+                            from: at,
+                            target: to.clone(),
+                            t: 0.0,
+                        },
+                        Mesh3d(kit.cube.clone()),
+                        MeshMaterial3d(kit.bolt.clone()),
+                        Transform::from_translation(at).with_scale(Vec3::splat(0.5)),
+                        NotShadowCaster,
+                        PointLight {
+                            color: Color::srgb(1.0, 0.7, 0.35),
+                            intensity: 400_000.0,
+                            range: 30.0,
+                            ..default()
+                        },
+                    ));
                     sounds.write(PlaySound::new("gunshot").speed(0.55));
                 }
             }
@@ -199,10 +279,15 @@ pub fn run(
             tf.translation = s.from.lerp(s.to, smooth(k));
             let d = tf.translation - before;
             if d.length_squared() > 1e-6 {
-                s.dir = s.dir.lerp(d.normalize(), (dt * 3.0).min(1.0)).normalize_or(s.dir);
+                s.dir = s
+                    .dir
+                    .lerp(d.normalize(), (dt * 3.0).min(1.0))
+                    .normalize_or(s.dir);
             }
         }
-        let list = s.burning.map_or(0.0, |b| (b * 0.25).min(0.35) + (b * 2.3).sin() * 0.03);
+        let list = s
+            .burning
+            .map_or(0.0, |b| (b * 0.25).min(0.35) + (b * 2.3).sin() * 0.03);
         tf.rotation = heading(s.dir, list);
         let middle = tf.translation + tf.rotation * Vec3::Y * MIDDLE * tf.scale.y;
         spots.insert(s.name.clone(), middle);
@@ -213,8 +298,25 @@ pub fn run(
                 s.smoke -= SMOKE_EVERY;
                 let at = middle + tf.rotation * Vec3::new(0.0, 2.0, 1.5) + spread(&mut seed) * 0.8;
                 let fire = rnd(&mut seed) < 0.35;
-                let (mat, life, size) = if fire { (kit.fire.clone(), 0.5, 0.9) } else if rnd(&mut seed) < 0.5 { (kit.dark.clone(), 3.0, 1.6) } else { (kit.smoke.clone(), 3.5, 2.0) };
-                commands.spawn((Puff { vel: Vec3::Y * 1.6 + spread(&mut seed) * 0.6, age: 0.0, life, size }, Mesh3d(kit.cube.clone()), MeshMaterial3d(mat), Transform::from_translation(at).with_scale(Vec3::splat(0.2)), NotShadowCaster));
+                let (mat, life, size) = if fire {
+                    (kit.fire.clone(), 0.5, 0.9)
+                } else if rnd(&mut seed) < 0.5 {
+                    (kit.dark.clone(), 3.0, 1.6)
+                } else {
+                    (kit.smoke.clone(), 3.5, 2.0)
+                };
+                commands.spawn((
+                    Puff {
+                        vel: Vec3::Y * 1.6 + spread(&mut seed) * 0.6,
+                        age: 0.0,
+                        life,
+                        size,
+                    },
+                    Mesh3d(kit.cube.clone()),
+                    MeshMaterial3d(mat),
+                    Transform::from_translation(at).with_scale(Vec3::splat(0.2)),
+                    NotShadowCaster,
+                ));
             }
         }
     }
@@ -250,10 +352,39 @@ pub fn run(
         sounds.write(PlaySound::new("break").speed(0.6));
         for i in 0..36 {
             let fire = i % 3 != 0;
-            let (mat, life, size) = if fire { (kit.fire.clone(), 0.6, 1.4) } else { (kit.dark.clone(), 2.2, 2.2) };
-            commands.spawn((Puff { vel: spread(&mut seed) * 9.0, age: 0.0, life, size }, Mesh3d(kit.cube.clone()), MeshMaterial3d(mat), Transform::from_translation(at + spread(&mut seed)).with_scale(Vec3::splat(0.3)), NotShadowCaster));
+            let (mat, life, size) = if fire {
+                (kit.fire.clone(), 0.6, 1.4)
+            } else {
+                (kit.dark.clone(), 2.2, 2.2)
+            };
+            commands.spawn((
+                Puff {
+                    vel: spread(&mut seed) * 9.0,
+                    age: 0.0,
+                    life,
+                    size,
+                },
+                Mesh3d(kit.cube.clone()),
+                MeshMaterial3d(mat),
+                Transform::from_translation(at + spread(&mut seed)).with_scale(Vec3::splat(0.3)),
+                NotShadowCaster,
+            ));
         }
-        commands.spawn((Puff { vel: Vec3::ZERO, age: 0.0, life: 0.5, size: 0.0 }, Transform::from_translation(at), PointLight { color: Color::srgb(1.0, 0.6, 0.25), intensity: 6_000_000.0, range: 60.0, ..default() }));
+        commands.spawn((
+            Puff {
+                vel: Vec3::ZERO,
+                age: 0.0,
+                life: 0.5,
+                size: 0.0,
+            },
+            Transform::from_translation(at),
+            PointLight {
+                color: Color::srgb(1.0, 0.6, 0.25),
+                intensity: 6_000_000.0,
+                range: 60.0,
+                ..default()
+            },
+        ));
     }
 
     // Puffs drift, swell and shrink away.
@@ -266,7 +397,11 @@ pub fn run(
         let k = p.age / p.life;
         tf.translation += p.vel * dt;
         p.vel *= 1.0 - (dt * 2.0).min(1.0);
-        let grow = if k < 0.25 { k / 0.25 } else { 1.0 - (k - 0.25) / 0.75 * 0.85 };
+        let grow = if k < 0.25 {
+            k / 0.25
+        } else {
+            1.0 - (k - 0.25) / 0.75 * 0.85
+        };
         tf.scale = Vec3::splat((p.size * grow).max(0.01));
     }
 }

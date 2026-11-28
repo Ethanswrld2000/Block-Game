@@ -16,7 +16,7 @@ use std::collections::BTreeSet;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::npc::{body::SpawnNpc, ground_near, yaw_of, Npc, NpcBook, Order};
+use crate::npc::{Npc, NpcBook, Order, body::SpawnNpc, ground_near, yaw_of};
 use crate::player::Player;
 use crate::save::SaveDir;
 use crate::world::{Generator, World};
@@ -26,8 +26,16 @@ pub struct CastPlugin;
 impl Plugin for CastPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Cast>()
-            .add_systems(crate::menu::GamePostStartup, load.after(crate::world::setup_generator))
-            .add_systems(crate::menu::GameUpdate, (set_star_urn, place_cast, keep_brindlespheimer).before(crate::npc::NpcSet).after(crate::player::PlayerSet))
+            .add_systems(
+                crate::menu::GamePostStartup,
+                load.after(crate::world::setup_generator),
+            )
+            .add_systems(
+                crate::menu::GameUpdate,
+                (set_star_urn, place_cast, keep_brindlespheimer)
+                    .before(crate::npc::NpcSet)
+                    .after(crate::player::PlayerSet),
+            )
             .add_systems(crate::menu::GameUpdate, save_now_and_then)
             .add_systems(Last, save_on_exit.run_if(crate::menu::in_game))
             .add_plugins((services::ServicesPlugin, wren::WrenPlugin));
@@ -50,14 +58,18 @@ pub struct Cast {
 }
 
 fn screenshot_run() -> bool {
-    std::env::var_os("BLOCKGAME_SCREENSHOT").is_some() || std::env::var_os("BLOCKGAME_BENCH").is_some()
+    std::env::var_os("BLOCKGAME_SCREENSHOT").is_some()
+        || std::env::var_os("BLOCKGAME_BENCH").is_some()
 }
 
 fn load(mut commands: Commands, dir: Res<SaveDir>, generator: Option<Res<Generator>>) {
     let cast = if screenshot_run() {
         Cast::default()
     } else {
-        std::fs::read_to_string(dir.file(FILE)).ok().and_then(|t| ron::from_str(&t).map_err(|e| warn!("{FILE}: {e}")).ok()).unwrap_or_default()
+        std::fs::read_to_string(dir.file(FILE))
+            .ok()
+            .and_then(|t| ron::from_str(&t).map_err(|e| warn!("{FILE}: {e}")).ok())
+            .unwrap_or_default()
     };
     commands.insert_resource(cast);
     let Some(g) = generator else { return };
@@ -68,25 +80,49 @@ fn load(mut commands: Commands, dir: Res<SaveDir>, generator: Option<Res<Generat
         info!("Gilm's hut at {:?}", f.pos);
     }
     if let Some(k) = g.0.castle() {
-        info!("castle at {:?}, tower roof at {:?}", k.center, [k.tower.0, k.roof, k.tower.1]);
+        info!(
+            "castle at {:?}, tower roof at {:?}",
+            k.center,
+            [k.tower.0, k.roof, k.tower.1]
+        );
     }
     if let Some(a) = g.0.aunt_island() {
-        info!("the aunt's island at {:?}, her cottage at {:?}", a.center, a.cottage);
+        info!(
+            "the aunt's island at {:?}, her cottage at {:?}",
+            a.center, a.cottage
+        );
     }
 }
 
 /// The Star Urn stands on the castle tower (until you take it) once the castle
 /// vault is cleared.
-fn set_star_urn(mut cast: ResMut<Cast>, mut urns: ResMut<crate::station::Urns>, generator: Option<Res<Generator>>, below: Res<crate::delve::Below>) {
+fn set_star_urn(
+    mut cast: ResMut<Cast>,
+    mut urns: ResMut<crate::station::Urns>,
+    generator: Option<Res<Generator>>,
+    below: Res<crate::delve::Below>,
+) {
     if below.chain_cleared() < 5 || cast.placed.contains("star_urn") {
         return;
     }
-    let Some(k) = generator.as_ref().and_then(|g| g.0.castle()) else { return };
-    if !cast.placed.insert("star_urn".into()) || urns.placed.contains_key("star") || urns.progress.contains_key("star") {
+    let Some(k) = generator.as_ref().and_then(|g| g.0.castle()) else {
+        return;
+    };
+    if !cast.placed.insert("star_urn".into())
+        || urns.placed.contains_key("star")
+        || urns.progress.contains_key("star")
+    {
         return;
     }
     let [x, y, z] = k.urn;
-    urns.placed.insert("star".into(), crate::station::Placed { pos: (x, y, z), along_x: true, back: 1.0 });
+    urns.placed.insert(
+        "star".into(),
+        crate::station::Placed {
+            pos: (x, y, z),
+            along_x: true,
+            back: 1.0,
+        },
+    );
 }
 
 /// Gilm at his hut, Orrin on the castle tower, the aunt at her cottage: once each,
@@ -112,27 +148,50 @@ fn place_cast(
     let Some(g) = generator else { return };
     let mut spots: Vec<(&str, Vec3, Vec3, bool)> = Vec::new();
     if let Some(f) = g.0.gilm_forge() {
-        let door = Vec3::new(f.pos[0] as f32 + 0.5, f.pos[1] as f32, f.pos[2] as f32 + 0.5);
+        let door = Vec3::new(
+            f.pos[0] as f32 + 0.5,
+            f.pos[1] as f32,
+            f.pos[2] as f32 + 0.5,
+        );
         spots.push(("gilm", Vec3::from_array(f.stand), door, true));
     }
     // Orrin is on the tower once the vault under the castle is cleared.
     if let Some(k) = g.0.castle()
         && below.chain_cleared() >= 5
     {
-        spots.push(("orrin", Vec3::from_array(k.orrin), Vec3::from_array(k.urn), false));
+        spots.push((
+            "orrin",
+            Vec3::from_array(k.orrin),
+            Vec3::from_array(k.urn),
+            false,
+        ));
     }
     if let Some(a) = g.0.aunt_island() {
-        let arch = Vec3::new(a.arch[0] as f32 + 0.5, a.arch[1] as f32, a.arch[2] as f32 + 0.5);
+        let arch = Vec3::new(
+            a.arch[0] as f32 + 0.5,
+            a.arch[1] as f32,
+            a.arch[2] as f32 + 0.5,
+        );
         spots.push(("aunt", Vec3::from_array(a.stand), arch, false));
     }
     for (who, at, look, wander) in spots {
-        if cast.placed.contains(who) || Vec2::new(at.x - player.pos.x, at.z - player.pos.z).length() > NEAR {
+        if cast.placed.contains(who)
+            || Vec2::new(at.x - player.pos.x, at.z - player.pos.z).length() > NEAR
+        {
             continue;
         }
-        let Some(kind) = book.kinds.iter().position(|k| k.dialogue == who) else { continue };
-        let Some(feet) = ground_near(&world, &blocks, at + Vec3::Y * 2.0) else { continue };
+        let Some(kind) = book.kinds.iter().position(|k| k.dialogue == who) else {
+            continue;
+        };
+        let Some(feet) = ground_near(&world, &blocks, at + Vec3::Y * 2.0) else {
+            continue;
+        };
         let mut npc = Npc::new(kind, yaw_of(look - feet));
-        npc.order = if wander { Order::Wander { home: feet } } else { Order::Stay };
+        npc.order = if wander {
+            Order::Wander { home: feet }
+        } else {
+            Order::Stay
+        };
         spawn.write(SpawnNpc { npc, at: feet });
         cast.placed.insert(who.to_string());
         info!("{who} is at {feet}");
@@ -157,7 +216,11 @@ fn keep_brindlespheimer(
     if worldgen::in_pocket(player.pos.x as i32, player.pos.z as i32) {
         return;
     }
-    let here: Vec<Entity> = npcs.iter().filter(|(_, n)| n.post == Some(GATE_POST)).map(|(e, _)| e).collect();
+    let here: Vec<Entity> = npcs
+        .iter()
+        .filter(|(_, n)| n.post == Some(GATE_POST))
+        .map(|(e, _)| e)
+        .collect();
     let Some(g) = nearby.nearest(player.pos) else {
         for e in here {
             commands.entity(e).despawn();
@@ -178,11 +241,19 @@ fn keep_brindlespheimer(
     if !here.is_empty() || dist > NEAR || *asked > 0.0 || !player.ready {
         return;
     }
-    let Some(kind) = book.kinds.iter().position(|k| k.dialogue == "brindlespheimer") else { return };
+    let Some(kind) = book
+        .kinds
+        .iter()
+        .position(|k| k.dialogue == "brindlespheimer")
+    else {
+        return;
+    };
     // Beside the path, a little off to one side of the door.
     let out = Vec3::new(g.veil.out.0 as f32, 0.0, g.veil.out.1 as f32);
     let want = Vec3::from_array(g.guide);
-    let Some(at) = ground_near(&world, &blocks, want + Vec3::Y * 2.0) else { return };
+    let Some(at) = ground_near(&world, &blocks, want + Vec3::Y * 2.0) else {
+        return;
+    };
     let mut npc = Npc::new(kind, yaw_of(out));
     npc.order = Order::Stay;
     npc.post = Some(GATE_POST);
@@ -202,7 +273,12 @@ fn store(dir: &SaveDir, cast: &Cast) {
     }
 }
 
-fn save_now_and_then(time: Res<Time<Real>>, mut since: Local<f32>, dir: Res<SaveDir>, cast: Res<Cast>) {
+fn save_now_and_then(
+    time: Res<Time<Real>>,
+    mut since: Local<f32>,
+    dir: Res<SaveDir>,
+    cast: Res<Cast>,
+) {
     *since += time.delta_secs();
     if *since < 30.0 || screenshot_run() {
         return;

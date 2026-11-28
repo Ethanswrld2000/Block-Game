@@ -25,7 +25,7 @@ use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 use serde::{Deserialize, Serialize};
 use worldgen::Dungeon;
 
-use super::{gate_dist, LeftDungeon, Nearby};
+use super::{LeftDungeon, Nearby, gate_dist};
 use crate::camera::{FlyCamera, Menus};
 use crate::npc::talk::Talk;
 use crate::player::Player;
@@ -42,14 +42,30 @@ impl Plugin for SpiritPlugin {
             .add_systems(crate::menu::GameStartup, spawn_ui)
             .add_systems(
                 crate::menu::GameUpdate,
-                (take_spell, cast, cast_hands, hide_for_cast, ward_gate, spirit_look)
+                (
+                    take_spell,
+                    cast,
+                    cast_hands,
+                    hide_for_cast,
+                    ward_gate,
+                    spirit_look,
+                )
                     .chain()
                     .in_set(SpiritSet)
                     .after(crate::npc::talk::TalkSet)
                     .after(crate::player::PlayerSet),
             )
-            .add_systems(crate::menu::GameUpdate, fall_inside.in_set(SpiritSet).after(crate::survival::SurvivalSet))
-            .add_systems(crate::menu::GamePostStartup, load.after(crate::world::setup_generator).after(crate::survival::load_player))
+            .add_systems(
+                crate::menu::GameUpdate,
+                fall_inside
+                    .in_set(SpiritSet)
+                    .after(crate::survival::SurvivalSet),
+            )
+            .add_systems(
+                crate::menu::GamePostStartup,
+                load.after(crate::world::setup_generator)
+                    .after(crate::survival::load_player),
+            )
             .add_systems(crate::menu::GameUpdate, save_now_and_then)
             .add_systems(Last, save_on_exit.run_if(crate::menu::in_game));
     }
@@ -68,7 +84,10 @@ pub struct SavedSpirit {
 
 impl Spirit {
     fn to_saved(&self) -> Option<SavedSpirit> {
-        self.is_spirit().then(|| SavedSpirit { dungeon: self.dungeon.as_ref().map(|d| d.id), body: self.body })
+        self.is_spirit().then(|| SavedSpirit {
+            dungeon: self.dungeon.as_ref().map(|d| d.id),
+            body: self.body,
+        })
     }
 
     /// Back in spirit form from a save (the spirit's own health is the saved player's).
@@ -79,17 +98,31 @@ impl Spirit {
     }
 }
 
-fn load(dir: Res<crate::save::SaveDir>, generator: Option<Res<crate::world::Generator>>, player: Res<Player>, mut spirit: ResMut<Spirit>) {
+fn load(
+    dir: Res<crate::save::SaveDir>,
+    generator: Option<Res<crate::world::Generator>>,
+    player: Res<Player>,
+    mut spirit: ResMut<Spirit>,
+) {
     if crate::save::screenshot_run() {
         return;
     }
-    let Some(Some(saved)) = crate::save::read_ron::<Option<SavedSpirit>>(&dir, FILE) else { return };
+    let Some(Some(saved)) = crate::save::read_ron::<Option<SavedSpirit>>(&dir, FILE) else {
+        return;
+    };
     let _ = &player;
-    let dungeon = saved.dungeon.and_then(|id| generator.as_ref()?.0.dungeon(id));
+    let dungeon = saved
+        .dungeon
+        .and_then(|id| generator.as_ref()?.0.dungeon(id));
     spirit.restore(saved, dungeon);
 }
 
-fn save_now_and_then(time: Res<Time<Real>>, mut since: Local<f32>, dir: Res<crate::save::SaveDir>, spirit: Res<Spirit>) {
+fn save_now_and_then(
+    time: Res<Time<Real>>,
+    mut since: Local<f32>,
+    dir: Res<crate::save::SaveDir>,
+    spirit: Res<Spirit>,
+) {
     *since += time.delta_secs();
     if *since < 30.0 || crate::save::screenshot_run() {
         return;
@@ -98,7 +131,11 @@ fn save_now_and_then(time: Res<Time<Real>>, mut since: Local<f32>, dir: Res<crat
     crate::save::write_ron(&dir, FILE, &spirit.to_saved());
 }
 
-fn save_on_exit(mut exit: MessageReader<AppExit>, dir: Res<crate::save::SaveDir>, spirit: Res<Spirit>) {
+fn save_on_exit(
+    mut exit: MessageReader<AppExit>,
+    dir: Res<crate::save::SaveDir>,
+    spirit: Res<Spirit>,
+) {
     if exit.read().next().is_some() && !crate::save::screenshot_run() {
         crate::save::write_ron(&dir, FILE, &spirit.to_saved());
     }
@@ -204,11 +241,35 @@ struct Bar(bool);
 
 fn spawn_ui(mut commands: Commands) {
     commands
-        .spawn((CastUi, Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() }, GlobalZIndex(-5), bevy::ui::FocusPolicy::Pass))
+        .spawn((
+            CastUi,
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                ..default()
+            },
+            GlobalZIndex(-5),
+            bevy::ui::FocusPolicy::Pass,
+        ))
         .with_children(|c| {
-            c.spawn((Tint, Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() }, BackgroundColor(Color::NONE)));
+            c.spawn((
+                Tint,
+                Node {
+                    position_type: PositionType::Absolute,
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    ..default()
+                },
+                BackgroundColor(Color::NONE),
+            ));
             for top in [true, false] {
-                let mut node = Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(0.0), ..default() };
+                let mut node = Node {
+                    position_type: PositionType::Absolute,
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(0.0),
+                    ..default()
+                };
                 if top {
                     node.top = Val::Px(0.0);
                 } else {
@@ -236,7 +297,9 @@ fn take_spell(
     }
     if !*auto_done && player.ready {
         *auto_done = true;
-        let d = nearby.nearest(player.pos).or_else(|| generator.and_then(|g| g.0.rotting_gate()));
+        let d = nearby
+            .nearest(player.pos)
+            .or_else(|| generator.and_then(|g| g.0.rotting_gate()));
         match std::env::var("BLOCKGAME_SPIRIT").as_deref() {
             Ok("cast") => {
                 spirit.queued = true;
@@ -263,7 +326,10 @@ fn cast(
     cam: Single<(&mut Transform, &mut FlyCamera)>,
     mut cursor: Single<&mut CursorOptions, With<PrimaryWindow>>,
     mut sounds: MessageWriter<PlaySound>,
-    (mut bars, mut tint): (Query<(&Bar, &mut Node)>, Query<&mut BackgroundColor, With<Tint>>),
+    (mut bars, mut tint): (
+        Query<(&Bar, &mut Node)>,
+        Query<&mut BackgroundColor, With<Tint>>,
+    ),
 ) {
     let (mut tf, mut fly) = cam.into_inner();
     if spirit.queued && !talk.active() && spirit.form == Form::Body {
@@ -302,12 +368,20 @@ fn cast(
     }
     // Bars in and out with the cast.
     let t = spirit.t;
-    let bar = if spirit.form == Form::Casting { smooth(t / 0.5) * (1.0 - smooth((t - (CAST - 0.5)) / 0.5)) } else { 0.0 };
+    let bar = if spirit.form == Form::Casting {
+        smooth(t / 0.5) * (1.0 - smooth((t - (CAST - 0.5)) / 0.5))
+    } else {
+        0.0
+    };
     for (b, mut node) in &mut bars {
         node.height = Val::Percent(if b.0 { 11.0 } else { 14.0 } * bar);
     }
     // A blue wash: a flash as the change finishes, then a faint cast while a spirit.
-    let flash = if spirit.form == Form::Casting { (-(t - CHANGE.1).powi(2) * 6.0).exp() * 0.35 } else { 0.0 };
+    let flash = if spirit.form == Form::Casting {
+        (-(t - CHANGE.1).powi(2) * 6.0).exp() * 0.35
+    } else {
+        0.0
+    };
     let alpha = (0.07 * blue + flash).min(0.5);
     for mut c in &mut tint {
         c.0 = Color::srgba(0.35, 0.6, 1.0, alpha);
@@ -344,7 +418,14 @@ fn cast_hands(
         return;
     }
     let Some(look) = look else {
-        let blend = |m: &mut Assets<StandardMaterial>, c: Color| m.add(StandardMaterial { base_color: c, perceptual_roughness: 0.9, alpha_mode: AlphaMode::Blend, ..default() });
+        let blend = |m: &mut Assets<StandardMaterial>, c: Color| {
+            m.add(StandardMaterial {
+                base_color: c,
+                perceptual_roughness: 0.9,
+                alpha_mode: AlphaMode::Blend,
+                ..default()
+            })
+        };
         let skin = blend(&mut materials, SKIN);
         let sleeve = blend(&mut materials, SLEEVE);
         commands.insert_resource(CastLook { skin, sleeve });
@@ -355,9 +436,24 @@ fn cast_hands(
         let fist = meshes.add(Cuboid::new(0.085, 0.05, 0.1));
         for side in [-1.0f32, 1.0] {
             commands.entity(cam_e).with_children(|c| {
-                c.spawn((CastArm(side), Transform::from_xyz(0.2 * side, -0.6, -0.45), Visibility::default())).with_children(|a| {
-                    a.spawn((Mesh3d(sleeve.clone()), MeshMaterial3d(look.sleeve.clone()), Transform::from_xyz(0.0, -0.015, 0.2), NotShadowCaster));
-                    a.spawn((Mesh3d(fist.clone()), MeshMaterial3d(look.skin.clone()), Transform::default(), NotShadowCaster));
+                c.spawn((
+                    CastArm(side),
+                    Transform::from_xyz(0.2 * side, -0.6, -0.45),
+                    Visibility::default(),
+                ))
+                .with_children(|a| {
+                    a.spawn((
+                        Mesh3d(sleeve.clone()),
+                        MeshMaterial3d(look.sleeve.clone()),
+                        Transform::from_xyz(0.0, -0.015, 0.2),
+                        NotShadowCaster,
+                    ));
+                    a.spawn((
+                        Mesh3d(fist.clone()),
+                        MeshMaterial3d(look.skin.clone()),
+                        Transform::default(),
+                        NotShadowCaster,
+                    ));
                 });
             });
         }
@@ -370,12 +466,19 @@ fn cast_hands(
     for (_, arm, mut tf) in &mut arms {
         let side = arm.0;
         tf.translation = Vec3::new(0.17 * side, -0.6 + 0.42 * rise + breathe, -0.42);
-        tf.rotation = Quat::from_rotation_x(0.75 * rise) * Quat::from_rotation_z(side * (0.25 - turn)) * Quat::from_rotation_y(-side * 0.18);
+        tf.rotation = Quat::from_rotation_x(0.75 * rise)
+            * Quat::from_rotation_z(side * (0.25 - turn))
+            * Quat::from_rotation_y(-side * 0.18);
     }
     let blue = spirit.change();
     let mix = |a: Color, b: Color| -> Color {
         let (a, b) = (a.to_linear(), b.to_linear());
-        Color::LinearRgba(LinearRgba::new(a.red + (b.red - a.red) * blue, a.green + (b.green - a.green) * blue, a.blue + (b.blue - a.blue) * blue, a.alpha + (b.alpha - a.alpha) * blue))
+        Color::LinearRgba(LinearRgba::new(
+            a.red + (b.red - a.red) * blue,
+            a.green + (b.green - a.green) * blue,
+            a.blue + (b.blue - a.blue) * blue,
+            a.alpha + (b.alpha - a.alpha) * blue,
+        ))
     };
     let flicker = 0.75 + 0.25 * (t * 23.0).sin() * (t * 7.0).cos();
     for (h, from) in [(&look.skin, SKIN), (&look.sleeve, SLEEVE)] {
@@ -388,8 +491,16 @@ fn cast_hands(
     if (CHANGE.0..CHANGE.1 + 0.4).contains(&t) && t >= spirit.next_sparkle {
         spirit.next_sparkle = t + 0.1;
         for side in [-1.0f32, 1.0] {
-            let local = Vec3::new(0.17 * side + (t * 9.0 * side).cos() * 0.08, -0.18 + (t * 5.0).sin() * 0.05, -0.42 + (t * 9.0).sin() * 0.06);
-            bursts.write(Burst::new(cam_tf.transform_point(local), BurstKind::Sparkle, 2));
+            let local = Vec3::new(
+                0.17 * side + (t * 9.0 * side).cos() * 0.08,
+                -0.18 + (t * 5.0).sin() * 0.05,
+                -0.42 + (t * 9.0).sin() * 0.06,
+            );
+            bursts.write(Burst::new(
+                cam_tf.transform_point(local),
+                BurstKind::Sparkle,
+                2,
+            ));
         }
     }
 }
@@ -456,10 +567,16 @@ fn ward_gate(
             }
         }
         (Form::Spirit, None) => {
-            let far = spirit.dungeon.as_ref().is_none_or(|d| gate_dist(d, player.pos) > LET_GO);
+            let far = spirit
+                .dungeon
+                .as_ref()
+                .is_none_or(|d| gate_dist(d, player.pos) > LET_GO);
             if far {
                 if let Some(d) = spirit.dungeon.clone() {
-                    left.write(LeftDungeon { dungeon: d, fell: false });
+                    left.write(LeftDungeon {
+                        dungeon: d,
+                        fell: false,
+                    });
                 }
                 spirit.end(&mut s);
                 toast.write(Toast("Your spirit settles back into your body".into()));
@@ -470,7 +587,9 @@ fn ward_gate(
             put_at(&mut player, &mut cam, Vec3::from_array(d.outside));
             if spirit.turned_back <= 0.0 {
                 spirit.turned_back = 3.0;
-                toast.write(Toast("The ward turns you back. Only a spirit may pass".into()));
+                toast.write(Toast(
+                    "The ward turns you back. Only a spirit may pass".into(),
+                ));
             }
         }
         (_, None) => {}
@@ -503,10 +622,18 @@ fn fall_inside(
     spirit.end(&mut s);
     s.dead_for = None;
     sounds.write(PlaySound::new("spell_off").gain(0.9).speed(0.7));
-    let Some(d) = spirit.dungeon.clone() else { return };
+    let Some(d) = spirit.dungeon.clone() else {
+        return;
+    };
     put_at(&mut player, &mut cam, Vec3::from_array(d.outside));
-    cards.write(crate::places::ShowCard { title: "Cast out".into(), subtitle: format!("Your spirit fell in {}", d.name) });
-    left.write(LeftDungeon { dungeon: d, fell: true });
+    cards.write(crate::places::ShowCard {
+        title: "Cast out".into(),
+        subtitle: format!("Your spirit fell in {}", d.name),
+    });
+    left.write(LeftDungeon {
+        dungeon: d,
+        fell: true,
+    });
 }
 
 /// While a spirit: your arm is blue glass (its usual materials, tinted and put back after).
@@ -578,18 +705,32 @@ mod tests {
         let mut spirit = Spirit::default();
         spirit.begin(&mut s);
         assert!(spirit.is_spirit());
-        assert_eq!(s.vitals.health.bars, Health::default().bars, "the spirit starts whole");
+        assert_eq!(
+            s.vitals.health.bars,
+            Health::default().bars,
+            "the spirit starts whole"
+        );
         s.vitals.health.bars[Layer::Injuries as usize] = 0.0;
         assert!(s.vitals.health.is_dead());
         spirit.end(&mut s);
-        assert!(!s.vitals.health.is_dead(), "falling as a spirit doesn't kill the body");
-        assert_eq!(s.vitals.health.bars[Layer::Damage as usize], 20.0, "the body's own hurt comes back");
+        assert!(
+            !s.vitals.health.is_dead(),
+            "falling as a spirit doesn't kill the body"
+        );
+        assert_eq!(
+            s.vitals.health.bars[Layer::Damage as usize],
+            20.0,
+            "the body's own hurt comes back"
+        );
         assert_eq!(spirit.form, Form::Body);
     }
 
     #[test]
     fn the_change_runs_from_body_to_spirit() {
-        let mut spirit = Spirit { form: Form::Casting, ..default() };
+        let mut spirit = Spirit {
+            form: Form::Casting,
+            ..default()
+        };
         spirit.t = 0.0;
         assert_eq!(spirit.change(), 0.0);
         spirit.t = (CHANGE.0 + CHANGE.1) / 2.0;

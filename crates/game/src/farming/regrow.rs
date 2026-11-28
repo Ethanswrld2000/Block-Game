@@ -10,7 +10,7 @@ use voxel::{BlockId, BlockPos};
 use crate::blocks::Blocks;
 use crate::clock::WorldClock;
 use crate::interact::Mined;
-use crate::save::{read_ron, screenshot_run, write_ron, SaveDir};
+use crate::save::{SaveDir, read_ron, screenshot_run, write_ron};
 use crate::world::World;
 
 const FILE: &str = "twigs.ron";
@@ -29,11 +29,21 @@ pub fn due(at: f64, now: f64) -> bool {
 pub(super) fn plugin(app: &mut App) {
     app.init_resource::<Twigs>()
         .add_systems(crate::menu::GamePostStartup, load)
-        .add_systems(crate::menu::GameUpdate, (note, regrow, save_now_and_then).chain().after(crate::interact::InteractSet))
+        .add_systems(
+            crate::menu::GameUpdate,
+            (note, regrow, save_now_and_then)
+                .chain()
+                .after(crate::interact::InteractSet),
+        )
         .add_systems(Last, save_on_exit.run_if(crate::menu::in_game));
 }
 
-fn note(mut mined: MessageReader<Mined>, blocks: Res<Blocks>, clock: Res<WorldClock>, mut twigs: ResMut<Twigs>) {
+fn note(
+    mut mined: MessageReader<Mined>,
+    blocks: Res<Blocks>,
+    clock: Res<WorldClock>,
+    mut twigs: ResMut<Twigs>,
+) {
     for m in mined.read() {
         if blocks.registry.get(m.block).shape == voxel::Shape::Twig {
             twigs.0.insert(m.pos, (m.block, clock.total_days()));
@@ -43,19 +53,32 @@ fn note(mut mined: MessageReader<Mined>, blocks: Res<Blocks>, clock: Res<WorldCl
 
 /// Every few seconds: loaded twigs that are due come back if their cell is
 /// empty and their trunk still stands; ones that can't are forgotten.
-fn regrow(time: Res<Time>, mut wait: Local<f32>, blocks: Res<Blocks>, clock: Res<WorldClock>, mut world: ResMut<World>, mut twigs: ResMut<Twigs>) {
+fn regrow(
+    time: Res<Time>,
+    mut wait: Local<f32>,
+    blocks: Res<Blocks>,
+    clock: Res<WorldClock>,
+    mut world: ResMut<World>,
+    mut twigs: ResMut<Twigs>,
+) {
     *wait -= time.delta_secs();
     if *wait > 0.0 {
         return;
     }
     *wait = 5.0;
     let now = clock.total_days();
-    let ready: Vec<(BlockPos, BlockId)> =
-        twigs.0.iter().filter(|(p, (_, at))| due(*at, now) && world.is_loaded(p.chunk())).map(|(p, (b, _))| (*p, *b)).collect();
+    let ready: Vec<(BlockPos, BlockId)> = twigs
+        .0
+        .iter()
+        .filter(|(p, (_, at))| due(*at, now) && world.is_loaded(p.chunk()))
+        .map(|(p, (b, _))| (*p, *b))
+        .collect();
     for (p, b) in ready {
         twigs.0.remove(&p);
         let held = blocks.registry.get(b).supports().iter().any(|o| {
-            world.block(BlockPos::new(p.x + o[0], p.y + o[1], p.z + o[2])).is_some_and(|s| blocks.registry.get(s).is_wall())
+            world
+                .block(BlockPos::new(p.x + o[0], p.y + o[1], p.z + o[2]))
+                .is_some_and(|s| blocks.registry.get(s).is_wall())
         });
         if world.block(p) == Some(BlockId::AIR) && held && world.set_block(p, b) {
             crate::interact::remesh_around(&mut world, &blocks, p);
@@ -78,11 +101,21 @@ fn load(dir: Res<SaveDir>, blocks: Res<Blocks>, mut twigs: ResMut<Twigs>) {
 }
 
 fn store(dir: &SaveDir, blocks: &Blocks, twigs: &Twigs) {
-    let list: Saved = twigs.0.iter().map(|(p, (b, at))| ([p.x, p.y, p.z], blocks.registry.get(*b).name.clone(), *at)).collect();
+    let list: Saved = twigs
+        .0
+        .iter()
+        .map(|(p, (b, at))| ([p.x, p.y, p.z], blocks.registry.get(*b).name.clone(), *at))
+        .collect();
     write_ron(dir, FILE, &list);
 }
 
-fn save_now_and_then(time: Res<Time<Real>>, mut since: Local<f32>, dir: Res<SaveDir>, blocks: Res<Blocks>, twigs: Res<Twigs>) {
+fn save_now_and_then(
+    time: Res<Time<Real>>,
+    mut since: Local<f32>,
+    dir: Res<SaveDir>,
+    blocks: Res<Blocks>,
+    twigs: Res<Twigs>,
+) {
     *since += time.delta_secs();
     if *since < 30.0 || screenshot_run() {
         return;
@@ -91,7 +124,12 @@ fn save_now_and_then(time: Res<Time<Real>>, mut since: Local<f32>, dir: Res<Save
     store(&dir, &blocks, &twigs);
 }
 
-fn save_on_exit(mut exit: MessageReader<AppExit>, dir: Res<SaveDir>, blocks: Res<Blocks>, twigs: Res<Twigs>) {
+fn save_on_exit(
+    mut exit: MessageReader<AppExit>,
+    dir: Res<SaveDir>,
+    blocks: Res<Blocks>,
+    twigs: Res<Twigs>,
+) {
     if exit.read().next().is_some() && !screenshot_run() {
         store(&dir, &blocks, &twigs);
     }

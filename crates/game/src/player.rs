@@ -50,7 +50,8 @@ impl Plugin for PlayerPlugin {
                 crate::menu::GameUpdate,
                 (
                     toggle_mode,
-                    walk.run_if(resource_equals(MoveMode::Walk)).run_if(crate::airship::not_aboard),
+                    walk.run_if(resource_equals(MoveMode::Walk))
+                        .run_if(crate::airship::not_aboard),
                     ride_camera.run_if(resource_equals(MoveMode::Walk)),
                     follow_fly_camera.run_if(resource_equals(MoveMode::Fly)),
                 )
@@ -119,7 +120,15 @@ pub struct Body {
 
 impl Default for Body {
     fn default() -> Self {
-        Self { speed: 1.0, fall: 1.0, dizzy: 0.0, shiver: 0.0, frozen: false, levitate: false, feather: false }
+        Self {
+            speed: 1.0,
+            fall: 1.0,
+            dizzy: 0.0,
+            shiver: 0.0,
+            frozen: false,
+            levitate: false,
+            feather: false,
+        }
     }
 }
 
@@ -135,9 +144,18 @@ impl Wading {
     pub fn of(def: &voxel::BlockDef, is_water: bool) -> Self {
         let depth = def.level as f32 / 8.0;
         match def.shape {
-            _ if is_water => Self { water: 1.0, snow: 0.0 },
-            voxel::Shape::Layer if def.translucent => Self { water: depth, snow: 0.0 },
-            voxel::Shape::Layer => Self { water: 0.0, snow: depth },
+            _ if is_water => Self {
+                water: 1.0,
+                snow: 0.0,
+            },
+            voxel::Shape::Layer if def.translucent => Self {
+                water: depth,
+                snow: 0.0,
+            },
+            voxel::Shape::Layer => Self {
+                water: 0.0,
+                snow: depth,
+            },
             _ => Self::default(),
         }
     }
@@ -197,18 +215,34 @@ impl Default for Player {
 
 impl Player {
     pub fn height(&self) -> f32 {
-        if self.crouching { CROUCH_HEIGHT } else { HEIGHT }
+        if self.crouching {
+            CROUCH_HEIGHT
+        } else {
+            HEIGHT
+        }
     }
 
     /// Does the player's box overlap this block?
     pub fn overlaps(&self, b: BlockPos) -> bool {
-        let (min, max) = (self.pos - Vec3::new(HALF_WIDTH, 0.0, HALF_WIDTH), self.pos + Vec3::new(HALF_WIDTH, self.height(), HALF_WIDTH));
+        let (min, max) = (
+            self.pos - Vec3::new(HALF_WIDTH, 0.0, HALF_WIDTH),
+            self.pos + Vec3::new(HALF_WIDTH, self.height(), HALF_WIDTH),
+        );
         let (bx, by, bz) = (b.x as f32, b.y as f32, b.z as f32);
-        min.x < bx + 1.0 && max.x > bx && min.y < by + 1.0 && max.y > by && min.z < bz + 1.0 && max.z > bz
+        min.x < bx + 1.0
+            && max.x > bx
+            && min.y < by + 1.0
+            && max.y > by
+            && min.z < bz + 1.0
+            && max.z > bz
     }
 }
 
-fn toggle_mode(keys: Res<ButtonInput<KeyCode>>, mut mode: ResMut<MoveMode>, mut player: ResMut<Player>) {
+fn toggle_mode(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut mode: ResMut<MoveMode>,
+    mut player: ResMut<Player>,
+) {
     if keys.just_pressed(KeyCode::KeyF) {
         *mode = match *mode {
             MoveMode::Walk => MoveMode::Fly,
@@ -240,18 +274,37 @@ fn cell(world: &World, blocks: &Blocks, p: BlockPos, water: Option<voxel::BlockI
 
 /// Blocks overlapped by a box.
 pub(crate) fn blocks_in(min: Vec3, max: Vec3) -> impl Iterator<Item = BlockPos> {
-    let (a, b) = (min.floor().as_ivec3(), (max - Vec3::splat(1e-4)).floor().as_ivec3());
-    (a.y..=b.y).flat_map(move |y| (a.z..=b.z).flat_map(move |z| (a.x..=b.x).map(move |x| BlockPos::new(x, y, z))))
+    let (a, b) = (
+        min.floor().as_ivec3(),
+        (max - Vec3::splat(1e-4)).floor().as_ivec3(),
+    );
+    (a.y..=b.y).flat_map(move |y| {
+        (a.z..=b.z).flat_map(move |z| (a.x..=b.x).map(move |x| BlockPos::new(x, y, z)))
+    })
 }
 
-fn hits(world: &World, blocks: &Blocks, pos: Vec3, height: f32, water: Option<voxel::BlockId>) -> bool {
+fn hits(
+    world: &World,
+    blocks: &Blocks,
+    pos: Vec3,
+    height: f32,
+    water: Option<voxel::BlockId>,
+) -> bool {
     let min = pos - Vec3::new(HALF_WIDTH, 0.0, HALF_WIDTH);
     let max = pos + Vec3::new(HALF_WIDTH, height, HALF_WIDTH);
-    blocks_in(min, max).any(|b| matches!(cell(world, blocks, b, water), Cell::Solid | Cell::Unknown))
+    blocks_in(min, max)
+        .any(|b| matches!(cell(world, blocks, b, water), Cell::Solid | Cell::Unknown))
 }
 
 /// Move along one axis, stopping flush against blocks. Returns true if blocked.
-fn move_axis(world: &World, blocks: &Blocks, p: &mut Player, axis: usize, amount: f32, water: Option<voxel::BlockId>) -> bool {
+fn move_axis(
+    world: &World,
+    blocks: &Blocks,
+    p: &mut Player,
+    axis: usize,
+    amount: f32,
+    water: Option<voxel::BlockId>,
+) -> bool {
     if amount == 0.0 {
         return false;
     }
@@ -270,11 +323,17 @@ fn move_axis(world: &World, blocks: &Blocks, p: &mut Player, axis: usize, amount
         -HALF_WIDTH
     };
     let edge = p.pos[axis] + extent + amount;
-    let face = if amount > 0.0 { edge.floor() } else { edge.floor() + 1.0 };
+    let face = if amount > 0.0 {
+        edge.floor()
+    } else {
+        edge.floor() + 1.0
+    };
     let flush = face - extent - amount.signum() * 1e-3;
     let mut snapped = p.pos;
     snapped[axis] = flush;
-    if (flush - p.pos[axis]).signum() == amount.signum() && !hits(world, blocks, snapped, p.height(), water) {
+    if (flush - p.pos[axis]).signum() == amount.signum()
+        && !hits(world, blocks, snapped, p.height(), water)
+    {
         p.pos = snapped;
     }
     true
@@ -283,7 +342,11 @@ fn move_axis(world: &World, blocks: &Blocks, p: &mut Player, axis: usize, amount
 #[allow(clippy::too_many_arguments)]
 /// How much what you stand in holds you back (brush, `slows` in blocks.ron): the slowest of the cells.
 fn brush(world: &World, blocks: &Blocks, cells: [BlockPos; 2]) -> f32 {
-    cells.iter().filter_map(|c| world.block(*c)).map(|b| blocks.registry.get(b).slows).fold(1.0, f32::min)
+    cells
+        .iter()
+        .filter_map(|c| world.block(*c))
+        .map(|b| blocks.registry.get(b).slows)
+        .fold(1.0, f32::min)
 }
 
 fn walk(
@@ -341,10 +404,18 @@ fn walk(
     let forward = Vec3::new(-sy, 0.0, -cy);
     let right = Vec3::new(cy, 0.0, -sy);
     let mut wish = Vec3::ZERO;
-    if keys.pressed(KeyCode::KeyW) { wish += forward; }
-    if keys.pressed(KeyCode::KeyS) { wish -= forward; }
-    if keys.pressed(KeyCode::KeyD) { wish += right; }
-    if keys.pressed(KeyCode::KeyA) { wish -= right; }
+    if keys.pressed(KeyCode::KeyW) {
+        wish += forward;
+    }
+    if keys.pressed(KeyCode::KeyS) {
+        wish -= forward;
+    }
+    if keys.pressed(KeyCode::KeyD) {
+        wish += right;
+    }
+    if keys.pressed(KeyCode::KeyA) {
+        wish -= right;
+    }
     let wish = wish.normalize_or_zero();
     p.sprinting = keys.pressed(KeyCode::ShiftLeft) && keys.pressed(KeyCode::KeyW) && !p.crouching;
     let speed = if p.in_water {
@@ -359,15 +430,35 @@ fn walk(
         * brush(&world, &blocks, [feet, mid])
         * p.wading.drag();
     // Quick to start and stop on the ground; little control in the air.
-    let accel = if p.on_ground { 45.0 } else if p.in_water { 12.0 } else { 9.0 };
+    let accel = if p.on_ground {
+        45.0
+    } else if p.in_water {
+        12.0
+    } else {
+        9.0
+    };
     let horiz = Vec2::new(p.vel.x, p.vel.z);
     // Strong wind nudges you when nothing overhead shelters you: a little in a
     // steady wind, more while a gust blows (`wind::gust_shape`).
     let gust = (wind.speed - WIND_PUSH_FROM).max(0.0) * WIND_PUSH * (0.25 + 0.75 * wind.gust);
     let sheltered = gust == 0.0
         || p.in_water
-        || (2..26).any(|dy| matches!(cell(&world, &blocks, BlockPos::new(feet.x, feet.y + dy, feet.z), water), Cell::Solid | Cell::Unknown));
-    let push = if sheltered { Vec2::ZERO } else { wind.dir() * gust };
+        || (2..26).any(|dy| {
+            matches!(
+                cell(
+                    &world,
+                    &blocks,
+                    BlockPos::new(feet.x, feet.y + dy, feet.z),
+                    water
+                ),
+                Cell::Solid | Cell::Unknown
+            )
+        });
+    let push = if sheltered {
+        Vec2::ZERO
+    } else {
+        wind.dir() * gust
+    };
     let target = Vec2::new(wish.x, wish.z) * speed + push;
     let new = horiz.move_towards(target, accel * dt);
     p.vel.x = new.x;
@@ -440,11 +531,15 @@ fn walk(
     if p.pos.y < floor {
         p.pos.y = floor;
         p.vel = Vec3::ZERO;
-        damage.write(Damage { amount: 1000.0, cause: DamageCause::HeavyFall });
+        damage.write(Damage {
+            amount: 1000.0,
+            cause: DamageCause::HeavyFall,
+        });
     }
 
     // Still standing on something?
-    if !p.on_ground && p.vel.y <= 0.0 && hits(&world, &blocks, p.pos - Vec3::Y * 0.02, 0.01, water) {
+    if !p.on_ground && p.vel.y <= 0.0 && hits(&world, &blocks, p.pos - Vec3::Y * 0.02, 0.01, water)
+    {
         p.on_ground = true;
     }
 
@@ -454,17 +549,31 @@ fn walk(
         if fall_speed > SAFE_LANDING && !p.in_water {
             // v^2 = 2 g h
             let height = fall_speed * fall_speed / (2.0 * GRAVITY);
-            let cause = if height > HEAVY_FALL { DamageCause::HeavyFall } else { DamageCause::Fall };
-            let d = Damage { amount: (fall_speed - SAFE_LANDING) * 1.6 * body.fall, cause };
+            let cause = if height > HEAVY_FALL {
+                DamageCause::HeavyFall
+            } else {
+                DamageCause::Fall
+            };
+            let d = Damage {
+                amount: (fall_speed - SAFE_LANDING) * 1.6 * body.fall,
+                cause,
+            };
             p.last_damage = Some(d);
             damage.write(d);
-            info!("fall damage {:.1} (landed at {:.1} blocks/s)", d.amount, fall_speed);
+            info!(
+                "fall damage {:.1} (landed at {:.1} blocks/s)",
+                d.amount, fall_speed
+            );
         }
     }
 
     // Head-bob: a footfall every ~1.7 blocks, sharper and heavier when sprinting.
     let ground_speed = Vec2::new(p.vel.x, p.vel.z).length();
-    let target_bob = if p.on_ground { (ground_speed / WALK).min(1.5) } else { 0.0 };
+    let target_bob = if p.on_ground {
+        (ground_speed / WALK).min(1.5)
+    } else {
+        0.0
+    };
     p.bob += (target_bob - p.bob) * (1.0 - (-dt * 8.0).exp());
     p.bob_phase = (p.bob_phase + dt * ground_speed / 1.7 * PI) % (PI * 4.0);
     // Landing dip spring.
@@ -474,8 +583,16 @@ fn walk(
 }
 
 /// Put the camera at the player's eyes, with bob, sway and landing dip.
-fn ride_camera(time: Res<Time>, player: Res<Player>, body: Res<Body>, kick: Option<Res<crate::combat::feel::Kick>>, mut cam: Query<(&mut Transform, &FlyCamera)>) {
-    let Ok((mut tf, look)) = cam.single_mut() else { return };
+fn ride_camera(
+    time: Res<Time>,
+    player: Res<Player>,
+    body: Res<Body>,
+    kick: Option<Res<crate::combat::feel::Kick>>,
+    mut cam: Query<(&mut Transform, &FlyCamera)>,
+) {
+    let Ok((mut tf, look)) = cam.single_mut() else {
+        return;
+    };
     let p = &*player;
     let (s, b) = (p.bob_phase.sin(), p.bob);
     // Down on each footfall (|sin|), side to side once per two steps.
@@ -493,9 +610,15 @@ fn ride_camera(time: Res<Time>, player: Res<Player>, body: Res<Body>, kick: Opti
     let roll = (p.bob_phase * 0.5).sin() * 0.012 * b + dizzy_roll + kick_roll + shiver_roll;
     // Landing nods the view down with the dip, then it springs back.
     let land_nod = p.dip * 0.15;
-    let rotation = Quat::from_euler(EulerRot::YXZ, look.yaw + dizzy_yaw, look.pitch + s.abs() * 0.006 * b + kick_pitch + land_nod, roll);
+    let rotation = Quat::from_euler(
+        EulerRot::YXZ,
+        look.yaw + dizzy_yaw,
+        look.pitch + s.abs() * 0.006 * b + kick_pitch + land_nod,
+        roll,
+    );
     let right = rotation * Vec3::X;
-    tf.translation = p.pos + Vec3::Y * (p.eye + bob_y + p.dip) + Vec3::new(right.x, 0.0, right.z) * sway;
+    tf.translation =
+        p.pos + Vec3::Y * (p.eye + bob_y + p.dip) + Vec3::new(right.x, 0.0, right.z) * sway;
     tf.rotation = rotation;
 }
 
@@ -515,21 +638,36 @@ mod tests {
 
     #[test]
     fn wading_and_snow_slow_you_by_depth() {
-        let tiles = voxel::TileSheet::from_ron(include_str!("../../../assets/textures/blocks.ron")).unwrap();
-        let reg = voxel::BlockRegistry::from_ron(include_str!("../../../assets/data/blocks.ron"), &tiles).unwrap();
+        let tiles = voxel::TileSheet::from_ron(include_str!("../../../assets/textures/blocks.ron"))
+            .unwrap();
+        let reg =
+            voxel::BlockRegistry::from_ron(include_str!("../../../assets/data/blocks.ron"), &tiles)
+                .unwrap();
         let of = |n: &str| Wading::of(reg.get(reg.expect(n)), n == "water");
         assert_eq!(of("air").drag(), 1.0);
         assert_eq!(of("tall_grass").drag(), 1.0);
-        assert!(of("puddle_2").drag() > of("puddle_6").drag(), "deeper water is slower");
+        assert!(
+            of("puddle_2").drag() > of("puddle_6").drag(),
+            "deeper water is slower"
+        );
         assert!(of("puddle_6").drag() > of("water").drag());
-        assert!(of("snow_layer_2").drag() > of("snow_layer_6+fern").drag(), "deeper snow is slower");
-        assert!(of("snow_layer_4").drag() < of("puddle_4").drag(), "snow slows more than water");
+        assert!(
+            of("snow_layer_2").drag() > of("snow_layer_6+fern").drag(),
+            "deeper snow is slower"
+        );
+        assert!(
+            of("snow_layer_4").drag() < of("puddle_4").drag(),
+            "snow slows more than water"
+        );
         assert!(of("snow_layer_7").drag() >= 0.3);
     }
 
     #[test]
     fn box_overlap() {
-        let p = Player { pos: Vec3::new(0.5, 10.0, 0.5), ..default() };
+        let p = Player {
+            pos: Vec3::new(0.5, 10.0, 0.5),
+            ..default()
+        };
         assert!(p.overlaps(BlockPos::new(0, 10, 0)));
         assert!(p.overlaps(BlockPos::new(0, 11, 0)));
         assert!(!p.overlaps(BlockPos::new(0, 12, 0)));

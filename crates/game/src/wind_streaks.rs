@@ -30,7 +30,12 @@ impl Plugin for WindStreaksPlugin {
     fn build(&self, app: &mut App) {
         app.init_gizmo_group::<StreakGizmos>()
             .add_systems(crate::menu::GameStartup, setup)
-            .add_systems(crate::menu::GameUpdate, (blow_streaks, draw_streaks).chain().after(crate::weather::WeatherSet));
+            .add_systems(
+                crate::menu::GameUpdate,
+                (blow_streaks, draw_streaks)
+                    .chain()
+                    .after(crate::weather::WeatherSet),
+            );
     }
 }
 
@@ -59,7 +64,10 @@ struct Streaks {
 fn setup(mut commands: Commands, mut config: ResMut<GizmoConfigStore>) {
     let (c, _) = config.config_mut::<StreakGizmos>();
     c.line.width = 1.5;
-    commands.insert_resource(Streaks { list: vec![Streak::default(); STREAKS], rng: 0x9E37_79B9_7F4A_7C15 });
+    commands.insert_resource(Streaks {
+        list: vec![Streak::default(); STREAKS],
+        rng: 0x9E37_79B9_7F4A_7C15,
+    });
 }
 
 /// xorshift, for scattering streaks.
@@ -86,7 +94,11 @@ pub fn life_fade(age: f32, life: f32) -> f32 {
 
 fn open_air(world: &World, p: Vec3) -> bool {
     let at = BlockPos::from_world(p.to_array());
-    (0..24).all(|dy| world.block(BlockPos::new(at.x, at.y + dy, at.z)).is_some_and(|b| b.is_air()))
+    (0..24).all(|dy| {
+        world
+            .block(BlockPos::new(at.x, at.y + dy, at.z))
+            .is_some_and(|b| b.is_air())
+    })
 }
 
 fn blow_streaks(
@@ -139,7 +151,11 @@ fn blow_streaks(
         }
         // Ride the wind, curling a little sideways and up and down.
         let t = s.age * 3.0 + s.phase;
-        let vel = flow * speed + (side * t.cos() * 1.2 + Vec3::Y * (t * 0.7).sin() * 0.8) * s.curl * speed.sqrt() * 0.5;
+        let vel = flow * speed
+            + (side * t.cos() * 1.2 + Vec3::Y * (t * 0.7).sin() * 0.8)
+                * s.curl
+                * speed.sqrt()
+                * 0.5;
         s.head += vel * dt;
         s.since_point += dt;
         if s.since_point >= TRAIL_STEP {
@@ -152,17 +168,34 @@ fn blow_streaks(
     }
 }
 
-fn draw_streaks(streaks: Res<Streaks>, sun: Query<&Transform, With<Sun>>, mut gizmos: Gizmos<StreakGizmos>) {
+fn draw_streaks(
+    streaks: Res<Streaks>,
+    sun: Query<&Transform, With<Sun>>,
+    mut gizmos: Gizmos<StreakGizmos>,
+) {
     // Dimmer at night: the lines aren't lit, so take the sun's height.
-    let up = sun.single().map(|t| (-t.forward().y).clamp(0.0, 1.0)).unwrap_or(1.0);
+    let up = sun
+        .single()
+        .map(|t| (-t.forward().y).clamp(0.0, 1.0))
+        .unwrap_or(1.0);
     let bright = 0.25 + 0.75 * (up * 4.0).min(1.0);
-    for s in streaks.list.iter().filter(|s| s.alive && !s.trail.is_empty()) {
+    for s in streaks
+        .list
+        .iter()
+        .filter(|s| s.alive && !s.trail.is_empty())
+    {
         let fade = life_fade(s.age, s.life) * 0.55;
         let n = s.trail.len() + 1;
-        let points = s.trail.iter().copied().chain(std::iter::once(s.head)).enumerate().map(|(i, p)| {
-            let a = fade * i as f32 / (n - 1).max(1) as f32;
-            (p, Color::srgba(bright, bright, bright * 1.02, a))
-        });
+        let points = s
+            .trail
+            .iter()
+            .copied()
+            .chain(std::iter::once(s.head))
+            .enumerate()
+            .map(|(i, p)| {
+                let a = fade * i as f32 / (n - 1).max(1) as f32;
+                (p, Color::srgba(bright, bright, bright * 1.02, a))
+            });
         gizmos.linestrip_gradient(points);
     }
 }

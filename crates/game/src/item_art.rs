@@ -66,8 +66,15 @@ struct SheetSpec {
 
 /// Where each item's sprite is: the sheet, and its rectangle in pixels.
 pub fn layout(items: &Items) -> Vec<Option<(Sheet, URect)>> {
-    let specs: Vec<(Sheet, SheetSpec)> =
-        Sheet::ALL.iter().map(|&s| (s, ron::from_str(s.ron()).unwrap_or_else(|e| panic!("{}: {e}", s.path())))).collect();
+    let specs: Vec<(Sheet, SheetSpec)> = Sheet::ALL
+        .iter()
+        .map(|&s| {
+            (
+                s,
+                ron::from_str(s.ron()).unwrap_or_else(|e| panic!("{}: {e}", s.path())),
+            )
+        })
+        .collect();
     items
         .ids()
         .map(|id| {
@@ -84,7 +91,8 @@ pub struct ItemArtPlugin;
 
 impl Plugin for ItemArtPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(crate::menu::GameStartup, setup).add_systems(crate::menu::GameUpdate, build_models);
+        app.add_systems(crate::menu::GameStartup, setup)
+            .add_systems(crate::menu::GameUpdate, build_models);
     }
 }
 
@@ -114,13 +122,21 @@ impl ItemArt {
 
     /// The sprite's size in sheet pixels.
     pub fn size(&self, id: ItemId) -> Option<UVec2> {
-        self.sprites.get(self.slot(id)).copied().flatten().map(|(_, r)| r.size())
+        self.sprites
+            .get(self.slot(id))
+            .copied()
+            .flatten()
+            .map(|(_, r)| r.size())
     }
 
     /// The sprite as a UI image.
     pub fn image(&self, id: ItemId) -> Option<ImageNode> {
         let (sheet, r) = self.sprites.get(self.slot(id)).copied().flatten()?;
-        Some(ImageNode { image: self.sheets[self.sheet(sheet)].clone(), rect: Some(r.as_rect()), ..default() })
+        Some(ImageNode {
+            image: self.sheets[self.sheet(sheet)].clone(),
+            rect: Some(r.as_rect()),
+            ..default()
+        })
     }
 
     /// The sprite's average colour (its opaque pixels), once the sheet has loaded.
@@ -154,32 +170,72 @@ impl ItemArt {
     }
 }
 
-fn setup(mut commands: Commands, assets: Res<AssetServer>, items: Res<Items>, mut materials: ResMut<Assets<StandardMaterial>>) {
+fn setup(
+    mut commands: Commands,
+    assets: Res<AssetServer>,
+    items: Res<Items>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
     let sprites = layout(&items);
     for id in items.ids() {
         let item = items.get(id);
         match sprites[id.0 as usize] {
-            None => warn!("item '{}' has no sprite; run tools/gen_item_art.py", item.name),
-            Some((_, r)) if r.size() != UVec2::new(item.size.0 as u32, item.size.1 as u32) * CELL => {
-                warn!("item '{}' takes {}x{} cells, so its sprite should be {}x{} px", item.name, item.size.0, item.size.1, item.size.0 as u32 * CELL, item.size.1 as u32 * CELL)
+            None => warn!(
+                "item '{}' has no sprite; run tools/gen_item_art.py",
+                item.name
+            ),
+            Some((_, r))
+                if r.size() != UVec2::new(item.size.0 as u32, item.size.1 as u32) * CELL =>
+            {
+                warn!(
+                    "item '{}' takes {}x{} cells, so its sprite should be {}x{} px",
+                    item.name,
+                    item.size.0,
+                    item.size.1,
+                    item.size.0 as u32 * CELL,
+                    item.size.1 as u32 * CELL
+                )
             }
             _ => {}
         }
     }
     let sheets = Sheet::ALL.map(|s| assets.load(s.path()));
     let materials = sheets.clone().map(|image| {
-        materials.add(StandardMaterial { base_color_texture: Some(image), perceptual_roughness: 0.9, reflectance: 0.2, ..default() })
+        materials.add(StandardMaterial {
+            base_color_texture: Some(image),
+            perceptual_roughness: 0.9,
+            reflectance: 0.2,
+            ..default()
+        })
     });
     let models = vec![None; sprites.len()];
-    commands.insert_resource(ItemArt { sheets, sprites, models, materials, ready: false, items: items.clone() });
+    commands.insert_resource(ItemArt {
+        sheets,
+        sprites,
+        models,
+        materials,
+        ready: false,
+        items: items.clone(),
+    });
 }
 
-fn build_models(art: Option<ResMut<ItemArt>>, images: Res<Assets<Image>>, mut meshes: ResMut<Assets<Mesh>>) {
+fn build_models(
+    art: Option<ResMut<ItemArt>>,
+    images: Res<Assets<Image>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+) {
     let Some(mut art) = art else { return };
     if art.ready {
         return;
     }
-    let Some(sheets) = art.sheets.iter().map(|h| images.get(h)).collect::<Option<Vec<_>>>() else { return };
+    let Some(sheets) = art
+        .sheets
+        .iter()
+        .map(|h| images.get(h))
+        .collect::<Option<Vec<_>>>()
+    else {
+        return;
+    };
     let models = art
         .sprites
         .iter()
@@ -192,7 +248,9 @@ fn build_models(art: Option<ResMut<ItemArt>>, images: Res<Assets<Image>>, mut me
                     && y >= 0
                     && (x as u32) < r.width()
                     && (y as u32) < r.height()
-                    && img.get_color_at(r.min.x + x as u32, r.min.y + y as u32).is_ok_and(|c| c.alpha() > 0.5)
+                    && img
+                        .get_color_at(r.min.x + x as u32, r.min.y + y as u32)
+                        .is_ok_and(|c| c.alpha() > 0.5)
             };
             Some(meshes.add(extrude(r, size, solid)))
         })
@@ -210,7 +268,12 @@ const DEPTH: f32 = 1.5;
 pub fn extrude(r: URect, sheet: UVec2, solid: impl Fn(i32, i32) -> bool) -> Mesh {
     let (w, h) = (r.width() as i32, r.height() as i32);
     let (sw, sh) = (sheet.x as f32, sheet.y as f32);
-    let (mut pos, mut nor, mut uv, mut idx) = (Vec::<[f32; 3]>::new(), Vec::<[f32; 3]>::new(), Vec::<[f32; 2]>::new(), Vec::<u32>::new());
+    let (mut pos, mut nor, mut uv, mut idx) = (
+        Vec::<[f32; 3]>::new(),
+        Vec::<[f32; 3]>::new(),
+        Vec::<[f32; 2]>::new(),
+        Vec::<u32>::new(),
+    );
     // Sprite pixel (x, y) (y down) to model space (y up), centred.
     let at = |x: f32, y: f32, z: f32| [x - w as f32 / 2.0, h as f32 / 2.0 - y, z];
     let tex = |x: f32, y: f32| [(r.min.x as f32 + x) / sw, (r.min.y as f32 + y) / sh];
@@ -236,8 +299,26 @@ pub fn extrude(r: URect, sheet: UVec2, solid: impl Fn(i32, i32) -> bool) -> Mesh
             let (a, b, yf) = (x0 as f32, x as f32, y as f32);
             let uvs = [tex(a, yf + 1.0), tex(b, yf + 1.0), tex(b, yf), tex(a, yf)];
             // Front (counter-clockwise seen from +Z) and back.
-            quad([at(a, yf + 1.0, z), at(b, yf + 1.0, z), at(b, yf, z), at(a, yf, z)], uvs, [0.0, 0.0, 1.0]);
-            quad([at(b, yf + 1.0, -z), at(a, yf + 1.0, -z), at(a, yf, -z), at(b, yf, -z)], [uvs[1], uvs[0], uvs[3], uvs[2]], [0.0, 0.0, -1.0]);
+            quad(
+                [
+                    at(a, yf + 1.0, z),
+                    at(b, yf + 1.0, z),
+                    at(b, yf, z),
+                    at(a, yf, z),
+                ],
+                uvs,
+                [0.0, 0.0, 1.0],
+            );
+            quad(
+                [
+                    at(b, yf + 1.0, -z),
+                    at(a, yf + 1.0, -z),
+                    at(a, yf, -z),
+                    at(b, yf, -z),
+                ],
+                [uvs[1], uvs[0], uvs[3], uvs[2]],
+                [0.0, 0.0, -1.0],
+            );
         }
     }
     for y in 0..h {
@@ -249,24 +330,63 @@ pub fn extrude(r: URect, sheet: UVec2, solid: impl Fn(i32, i32) -> bool) -> Mesh
             let c = tex(xf + 0.5, yf + 0.5);
             let uvs = [c; 4];
             if !solid(x - 1, y) {
-                quad([at(xf, yf + 1.0, -z), at(xf, yf + 1.0, z), at(xf, yf, z), at(xf, yf, -z)], uvs, [-1.0, 0.0, 0.0]);
+                quad(
+                    [
+                        at(xf, yf + 1.0, -z),
+                        at(xf, yf + 1.0, z),
+                        at(xf, yf, z),
+                        at(xf, yf, -z),
+                    ],
+                    uvs,
+                    [-1.0, 0.0, 0.0],
+                );
             }
             if !solid(x + 1, y) {
-                quad([at(xf + 1.0, yf + 1.0, z), at(xf + 1.0, yf + 1.0, -z), at(xf + 1.0, yf, -z), at(xf + 1.0, yf, z)], uvs, [1.0, 0.0, 0.0]);
+                quad(
+                    [
+                        at(xf + 1.0, yf + 1.0, z),
+                        at(xf + 1.0, yf + 1.0, -z),
+                        at(xf + 1.0, yf, -z),
+                        at(xf + 1.0, yf, z),
+                    ],
+                    uvs,
+                    [1.0, 0.0, 0.0],
+                );
             }
             if !solid(x, y - 1) {
-                quad([at(xf, yf, z), at(xf + 1.0, yf, z), at(xf + 1.0, yf, -z), at(xf, yf, -z)], uvs, [0.0, 1.0, 0.0]);
+                quad(
+                    [
+                        at(xf, yf, z),
+                        at(xf + 1.0, yf, z),
+                        at(xf + 1.0, yf, -z),
+                        at(xf, yf, -z),
+                    ],
+                    uvs,
+                    [0.0, 1.0, 0.0],
+                );
             }
             if !solid(x, y + 1) {
-                quad([at(xf, yf + 1.0, -z), at(xf + 1.0, yf + 1.0, -z), at(xf + 1.0, yf + 1.0, z), at(xf, yf + 1.0, z)], uvs, [0.0, -1.0, 0.0]);
+                quad(
+                    [
+                        at(xf, yf + 1.0, -z),
+                        at(xf + 1.0, yf + 1.0, -z),
+                        at(xf + 1.0, yf + 1.0, z),
+                        at(xf, yf + 1.0, z),
+                    ],
+                    uvs,
+                    [0.0, -1.0, 0.0],
+                );
             }
         }
     }
-    Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::RENDER_WORLD)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nor)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
-        .with_inserted_indices(Indices::U32(idx))
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nor)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+    .with_inserted_indices(Indices::U32(idx))
 }
 
 #[cfg(test)]
@@ -279,8 +399,15 @@ mod tests {
         let sprites = layout(&items);
         for id in items.ids() {
             let item = items.get(id);
-            let (_, r) = sprites[id.0 as usize].unwrap_or_else(|| panic!("{} has no sprite (run tools/gen_item_art.py)", item.name));
-            assert_eq!(r.size(), UVec2::new(item.size.0 as u32 * CELL, item.size.1 as u32 * CELL), "{}: sprite size", item.name);
+            let (_, r) = sprites[id.0 as usize].unwrap_or_else(|| {
+                panic!("{} has no sprite (run tools/gen_item_art.py)", item.name)
+            });
+            assert_eq!(
+                r.size(),
+                UVec2::new(item.size.0 as u32 * CELL, item.size.1 as u32 * CELL),
+                "{}: sprite size",
+                item.name
+            );
         }
     }
 
@@ -288,18 +415,32 @@ mod tests {
     fn sprites_sit_inside_their_sheets() {
         for sheet in Sheet::ALL {
             let spec: SheetSpec = ron::from_str(sheet.ron()).unwrap();
-            let png = std::fs::read(format!("{}/../../assets/{}", env!("CARGO_MANIFEST_DIR"), sheet.path())).unwrap();
+            let png = std::fs::read(format!(
+                "{}/../../assets/{}",
+                env!("CARGO_MANIFEST_DIR"),
+                sheet.path()
+            ))
+            .unwrap();
             // Width and height from the PNG header.
-            let (w, h) = (u32::from_be_bytes(png[16..20].try_into().unwrap()), u32::from_be_bytes(png[20..24].try_into().unwrap()));
+            let (w, h) = (
+                u32::from_be_bytes(png[16..20].try_into().unwrap()),
+                u32::from_be_bytes(png[20..24].try_into().unwrap()),
+            );
             for (name, (x, y, sw, sh)) in spec.sprites {
-                assert!(x + sw <= w && y + sh <= h, "{name} runs off {}", sheet.path());
+                assert!(
+                    x + sw <= w && y + sh <= h,
+                    "{name} runs off {}",
+                    sheet.path()
+                );
             }
         }
     }
 
     #[test]
     fn a_square_extrudes_to_a_box() {
-        let m = extrude(URect::new(0, 0, 2, 2), UVec2::new(2, 2), |x, y| (0..2).contains(&x) && (0..2).contains(&y));
+        let m = extrude(URect::new(0, 0, 2, 2), UVec2::new(2, 2), |x, y| {
+            (0..2).contains(&x) && (0..2).contains(&y)
+        });
         // Two rows front and back, plus 8 side quads round the edge.
         assert_eq!(m.count_vertices(), (4 + 8) * 4);
     }

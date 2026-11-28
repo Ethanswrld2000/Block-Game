@@ -47,14 +47,18 @@ fn vowel_of(c: char) -> Option<(f32, f32, usize)> {
 
 /// A small hash so the same word always sounds the same.
 fn hash(s: &str) -> u32 {
-    s.bytes().fold(2166136261u32, |h, b| (h ^ b as u32).wrapping_mul(16777619))
+    s.bytes()
+        .fold(2166136261u32, |h, b| (h ^ b as u32).wrapping_mul(16777619))
 }
 
 /// Time a line at `rate` syllables per second.
 pub fn speak(text: &str, rate: f32) -> Speech {
     let rate = rate.max(0.5);
     let chars: Vec<char> = text.chars().collect();
-    let mut out = Speech { chars: chars.len(), ..Speech::default() };
+    let mut out = Speech {
+        chars: chars.len(),
+        ..Speech::default()
+    };
     let mut t = 0.0f32;
     let mut i = 0;
     while i < chars.len() {
@@ -78,7 +82,12 @@ pub fn speak(text: &str, rate: f32) -> Speech {
                 in_vowel = v;
             }
             // A silent final "e" ("stone", "made") isn't a syllable of its own.
-            if groups.len() > 1 && word.to_lowercase().ends_with('e') && groups.last().is_some_and(|g| g.0 == word.chars().count() - 1) {
+            if groups.len() > 1
+                && word.to_lowercase().ends_with('e')
+                && groups
+                    .last()
+                    .is_some_and(|g| g.0 == word.chars().count() - 1)
+            {
                 groups.pop();
             }
             if groups.is_empty() {
@@ -90,8 +99,19 @@ pub fn speak(text: &str, rate: f32) -> Speech {
                 // Vary length and openness a little by word, so it isn't a metronome.
                 let wobble = ((h >> (n * 4)) & 0xF) as f32 / 15.0;
                 let len = (0.8 + 0.45 * wobble) / rate;
-                let shown = if n + 1 == groups.len() { i } else { start + groups[n + 1].0 };
-                out.syllables.push(Syllable { start: t, len, open: open * (0.8 + 0.3 * wobble), wide, vowel, shown });
+                let shown = if n + 1 == groups.len() {
+                    i
+                } else {
+                    start + groups[n + 1].0
+                };
+                out.syllables.push(Syllable {
+                    start: t,
+                    len,
+                    open: open * (0.8 + 0.3 * wobble),
+                    wide,
+                    vowel,
+                    shown,
+                });
                 t += len;
             }
             // A tiny gap between words.
@@ -127,7 +147,11 @@ impl Speech {
             if t >= s.start && t < s.start + s.len {
                 let u = (t - s.start) / s.len;
                 // Opens quickly, closes over the rest of the syllable.
-                let env = if u < 0.3 { (u / 0.3).powf(0.8) } else { 1.0 - ((u - 0.3) / 0.7).powf(1.5) * 0.85 };
+                let env = if u < 0.3 {
+                    (u / 0.3).powf(0.8)
+                } else {
+                    1.0 - ((u - 0.3) / 0.7).powf(1.5) * 0.85
+                };
                 return (s.open * env, s.wide);
             }
         }
@@ -139,12 +163,18 @@ impl Speech {
         if t >= self.length {
             return self.chars;
         }
-        self.syllables.iter().take_while(|s| s.start <= t).last().map_or(0, |s| s.shown)
+        self.syllables
+            .iter()
+            .take_while(|s| s.start <= t)
+            .last()
+            .map_or(0, |s| s.shown)
     }
 
     /// Syllables that start in (from, to]. Begin a line with `from` below 0.
     pub fn starting(&self, from: f32, to: f32) -> impl Iterator<Item = &Syllable> {
-        self.syllables.iter().filter(move |s| s.start > from && s.start <= to)
+        self.syllables
+            .iter()
+            .filter(move |s| s.start > from && s.start <= to)
     }
 }
 

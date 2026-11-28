@@ -2,7 +2,7 @@
 //! chunk from the same seed, so the halves line up.
 
 use voxel::chunk::index;
-use voxel::{BlockId, ChunkPos, CHUNK_SIZE_I32};
+use voxel::{BlockId, CHUNK_SIZE_I32, ChunkPos};
 
 use crate::util::{hash2, hash3, unit};
 use crate::{TreeKind, WorldGen};
@@ -28,7 +28,8 @@ impl Canvas<'_> {
     fn idx(&self, x: i32, y: i32, z: i32) -> Option<usize> {
         let (lx, ly, lz) = (x - self.origin[0], y - self.origin[1], z - self.origin[2]);
         let r = 0..CHUNK_SIZE_I32;
-        (r.contains(&lx) && r.contains(&ly) && r.contains(&lz)).then(|| index(lx as usize, ly as usize, lz as usize))
+        (r.contains(&lx) && r.contains(&ly) && r.contains(&lz))
+            .then(|| index(lx as usize, ly as usize, lz as usize))
     }
 
     /// Set a block, always.
@@ -55,11 +56,28 @@ impl Canvas<'_> {
 
 pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) {
     let o = pos.origin();
-    let mut canvas = Canvas { origin: [o.x, o.y, o.z], dense };
+    let mut canvas = Canvas {
+        origin: [o.x, o.y, o.z],
+        dense,
+    };
     // No trees through the middle of a village.
-    let villages = wg.villages_in(o.x - REACH, o.z - REACH, o.x + CHUNK_SIZE_I32 + REACH, o.z + CHUNK_SIZE_I32 + REACH);
+    let villages = wg.villages_in(
+        o.x - REACH,
+        o.z - REACH,
+        o.x + CHUNK_SIZE_I32 + REACH,
+        o.z + CHUNK_SIZE_I32 + REACH,
+    );
     // Nor through a dungeon's gatehouse or its path.
-    let gates: Vec<_> = wg.dungeons_in(o.x - REACH, o.z - REACH, o.x + CHUNK_SIZE_I32 + REACH, o.z + CHUNK_SIZE_I32 + REACH).iter().map(|d| d.gate).collect();
+    let gates: Vec<_> = wg
+        .dungeons_in(
+            o.x - REACH,
+            o.z - REACH,
+            o.x + CHUNK_SIZE_I32 + REACH,
+            o.z + CHUNK_SIZE_I32 + REACH,
+        )
+        .iter()
+        .map(|d| d.gate)
+        .collect();
     for tz in o.z - REACH..o.z + CHUNK_SIZE_I32 + REACH {
         for tx in o.x - REACH..o.x + CHUNK_SIZE_I32 + REACH {
             let h = hash2(wg.seed ^ 0x7EE5, tx, tz);
@@ -71,11 +89,21 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) {
             }
             let col = wg.column(tx, tz);
             let biome = wg.biomes.get(col.biome);
-            if col.land == crate::Land::Void || col.climate.overhang > 0.02 || crate::structures::in_village(&villages, tx, tz) || gates.iter().any(|g| (g[0] - tx).abs() <= 11 && (g[2] - tz).abs() <= 11) {
+            if col.land == crate::Land::Void
+                || col.climate.overhang > 0.02
+                || crate::structures::in_village(&villages, tx, tz)
+                || gates
+                    .iter()
+                    .any(|g| (g[0] - tx).abs() <= 11 && (g[2] - tz).abs() <= 11)
+            {
                 continue;
             }
             let ground = col.height;
-            let min_ground = if biome.trees == TreeKind::Swamp { col.water } else { col.water.saturating_add(1) };
+            let min_ground = if biome.trees == TreeKind::Swamp {
+                col.water
+            } else {
+                col.water.saturating_add(1)
+            };
             if ground < min_ground || ground + TALLEST < o.y || ground > o.y + CHUNK_SIZE_I32 {
                 continue;
             }
@@ -89,7 +117,15 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) {
 }
 
 /// Draw a tree whose trunk starts on top of the block at (x, ground, z).
-pub(crate) fn draw(wg: &WorldGen, c: &mut Canvas, kind: TreeKind, x: i32, ground: i32, z: i32, h: u64) {
+pub(crate) fn draw(
+    wg: &WorldGen,
+    c: &mut Canvas,
+    kind: TreeKind,
+    x: i32,
+    ground: i32,
+    z: i32,
+    h: u64,
+) {
     let ids = wg.ids;
     let var = (h >> 20) as i32;
     match kind {
@@ -106,7 +142,11 @@ pub(crate) fn draw(wg: &WorldGen, c: &mut Canvas, kind: TreeKind, x: i32, ground
                 }
             }
             for dy in -2..=1 {
-                let r = if dy == 1 || dy == -2 { SWAMP_CANOPY - 1 } else { SWAMP_CANOPY };
+                let r = if dy == 1 || dy == -2 {
+                    SWAMP_CANOPY - 1
+                } else {
+                    SWAMP_CANOPY
+                };
                 disc(c, x, top + dy, z, r, ids.swamp_leaves);
             }
             // Hanging leaves under the canopy edge.
@@ -171,7 +211,19 @@ pub(crate) fn draw(wg: &WorldGen, c: &mut Canvas, kind: TreeKind, x: i32, ground
                 }
             }
             // Buttress roots flaring out at the base.
-            for (i, (dx, dz)) in [(-1, 0), (2, 1), (0, 2), (1, -1), (-1, 1), (2, 0), (1, 2), (0, -1)].into_iter().enumerate() {
+            for (i, (dx, dz)) in [
+                (-1, 0),
+                (2, 1),
+                (0, 2),
+                (1, -1),
+                (-1, 1),
+                (2, 0),
+                (1, 2),
+                (0, -1),
+            ]
+            .into_iter()
+            .enumerate()
+            {
                 let hgt = ((h >> (i * 2 + 8)) & 3) as i32;
                 for y in ground - 1..=ground + hgt {
                     c.put(x + dx, y, z + dz, ids.redwood_log);
@@ -180,7 +232,11 @@ pub(crate) fn draw(wg: &WorldGen, c: &mut Canvas, kind: TreeKind, x: i32, ground
             let start = ground + (top - ground) * 11 / 20;
             for y in start..=top + 2 {
                 let t = (y - start) as f32 / (top + 2 - start) as f32;
-                let tier = if (top - y).rem_euclid(4) == 0 { 1.0 } else { 0.0 };
+                let tier = if (top - y).rem_euclid(4) == 0 {
+                    1.0
+                } else {
+                    0.0
+                };
                 let r = (6.0 * (1.0 - t).powf(0.8) + tier).clamp(1.0, 6.0);
                 disc2(c, x, y, z, r, ids.redwood_leaves);
             }
@@ -235,7 +291,17 @@ fn twigs(wg: &WorldGen, c: &mut Canvas, x: i32, y0: i32, y1: i32, z: i32, h: u64
 /// Vines hanging down the outside of the canopy, from the leaf ring of radius
 /// `r` at height `y`.
 #[allow(clippy::too_many_arguments)]
-fn canopy_vines(wg: &WorldGen, c: &mut Canvas, x: i32, y: i32, z: i32, r: i32, h: u64, chance: f32, longest: i32) {
+fn canopy_vines(
+    wg: &WorldGen,
+    c: &mut Canvas,
+    x: i32,
+    y: i32,
+    z: i32,
+    r: i32,
+    h: u64,
+    chance: f32,
+    longest: i32,
+) {
     for (i, dx, dz) in SIDES {
         for along in -1..=1 {
             let k = hash3(h ^ 0x51_4E, i as i32, along, 0);
@@ -243,7 +309,11 @@ fn canopy_vines(wg: &WorldGen, c: &mut Canvas, x: i32, y: i32, z: i32, r: i32, h
                 continue;
             }
             // The outside cell beside the canopy edge.
-            let (vx, vz) = if dx != 0 { (x + dx * (r + 1), z + along) } else { (x + along, z + dz * (r + 1)) };
+            let (vx, vz) = if dx != 0 {
+                (x + dx * (r + 1), z + along)
+            } else {
+                (x + along, z + dz * (r + 1))
+            };
             hang(c, vx, y, vz, 1 + (k >> 8) as i32 % longest, wg.ids.vine[i]);
         }
     }
@@ -251,7 +321,16 @@ fn canopy_vines(wg: &WorldGen, c: &mut Canvas, x: i32, y: i32, z: i32, r: i32, h
 
 /// Vines climbing down the trunk from `top` to `bottom`.
 #[allow(clippy::too_many_arguments)]
-fn trunk_vines(wg: &WorldGen, c: &mut Canvas, x: i32, top: i32, bottom: i32, z: i32, h: u64, chance: f32) {
+fn trunk_vines(
+    wg: &WorldGen,
+    c: &mut Canvas,
+    x: i32,
+    top: i32,
+    bottom: i32,
+    z: i32,
+    h: u64,
+    chance: f32,
+) {
     for (i, dx, dz) in SIDES {
         let k = hash3(h ^ 0xB1_7E, i as i32, 1, 0);
         if unit(k) < chance {
@@ -277,7 +356,11 @@ fn tufts(c: &mut Canvas, x: i32, y: i32, z: i32, r: i32, h: u64, leaves: BlockId
         let k = hash3(h ^ 0x70_F7, i as i32, 2, 0);
         if unit(k) < 0.6 {
             let along = (k >> 8) as i32 % 3 - 1;
-            let (tx, tz) = if dx != 0 { (x + dx * r, z + along) } else { (x + along, z + dz * r) };
+            let (tx, tz) = if dx != 0 {
+                (x + dx * r, z + along)
+            } else {
+                (x + along, z + dz * r)
+            };
             c.fill(tx, y, tz, leaves);
             if (k >> 12) & 1 == 1 {
                 c.fill(tx, y - 1, tz, leaves);

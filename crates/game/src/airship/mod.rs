@@ -22,15 +22,15 @@ use voxel::BlockPos;
 
 use crate::blocks::Blocks;
 use crate::camera::{FlyCamera, Menus};
-use crate::interact::{ray_box, Target, Wielded, REACH};
+use crate::interact::{REACH, Target, Wielded, ray_box};
 use crate::inventory::Inventory;
 use crate::items::{ItemKind, Items};
 use crate::player::{Body, MoveMode, Player};
 use crate::save::SaveDir;
 use crate::survival::Toast;
 use crate::world::World;
-use flight::{Controls, Machines, Ship, HALF, HEIGHT};
 pub use flight::HELM;
+use flight::{Controls, HALF, HEIGHT, Machines, Ship};
 
 pub struct AirshipPlugin;
 
@@ -41,7 +41,10 @@ impl Plugin for AirshipPlugin {
             .add_systems(crate::menu::GameStartup, load_ships)
             .add_systems(
                 crate::menu::GameUpdate,
-                (steer, walk_deck).chain().after(crate::camera::look).before(crate::player::PlayerSet),
+                (steer, walk_deck)
+                    .chain()
+                    .after(crate::camera::look)
+                    .before(crate::player::PlayerSet),
             )
             .add_systems(
                 crate::menu::GameUpdate,
@@ -88,7 +91,11 @@ const HELM_REACH: f32 = 1.4;
 
 /// A spot on deck, kept inside the rails, at deck height.
 pub fn on_deck(local: Vec3) -> Vec3 {
-    Vec3::new(local.x.clamp(DECK_MIN.x, DECK_MAX.x), HELM.y, local.z.clamp(DECK_MIN.y, DECK_MAX.y))
+    Vec3::new(
+        local.x.clamp(DECK_MIN.x, DECK_MAX.x),
+        HELM.y,
+        local.z.clamp(DECK_MIN.y, DECK_MAX.y),
+    )
 }
 
 /// Just over the rail nearest a spot on deck (ship frame), to step off to.
@@ -125,7 +132,8 @@ struct SavedShip {
 }
 
 fn screenshot_run() -> bool {
-    std::env::var_os("BLOCKGAME_SCREENSHOT").is_some() || std::env::var_os("BLOCKGAME_BENCH").is_some()
+    std::env::var_os("BLOCKGAME_SCREENSHOT").is_some()
+        || std::env::var_os("BLOCKGAME_BENCH").is_some()
 }
 
 fn load_ships(mut commands: Commands, dir: Res<SaveDir>) {
@@ -140,9 +148,16 @@ fn load_ships(mut commands: Commands, dir: Res<SaveDir>) {
     {
         match ron::from_str::<Saved>(&text) {
             Ok(s) => {
-                ships.ships = s.ships.iter().map(|p| Ship::new(Vec3::new(p.pos.0, p.pos.1, p.pos.2), p.yaw)).collect();
+                ships.ships = s
+                    .ships
+                    .iter()
+                    .map(|p| Ship::new(Vec3::new(p.pos.0, p.pos.1, p.pos.2), p.yaw))
+                    .collect();
                 ships.aboard = s.aboard.filter(|i| *i < ships.ships.len());
-                ships.deck = s.deck.filter(|(i, _)| *i < ships.ships.len() && ships.aboard.is_none()).map(|(i, p)| (i, Vec3::new(p.0, p.1, p.2)));
+                ships.deck = s
+                    .deck
+                    .filter(|(i, _)| *i < ships.ships.len() && ships.aboard.is_none())
+                    .map(|(i, p)| (i, Vec3::new(p.0, p.1, p.2)));
             }
             Err(e) => warn!("airships.ron: {e}"),
         }
@@ -152,7 +167,14 @@ fn load_ships(mut commands: Commands, dir: Res<SaveDir>) {
 
 fn store(dir: &SaveDir, ships: &Airships) {
     let saved = Saved {
-        ships: ships.ships.iter().map(|s| SavedShip { pos: (s.pos.x, s.pos.y, s.pos.z), yaw: s.yaw }).collect(),
+        ships: ships
+            .ships
+            .iter()
+            .map(|s| SavedShip {
+                pos: (s.pos.x, s.pos.y, s.pos.z),
+                yaw: s.yaw,
+            })
+            .collect(),
         aboard: ships.aboard,
         deck: ships.deck.map(|(i, p)| (i, (p.x, p.y, p.z))),
     };
@@ -168,7 +190,13 @@ fn store(dir: &SaveDir, ships: &Airships) {
 
 /// Saved when a ship is set down or boarded, and every few seconds while one flies.
 #[allow(clippy::type_complexity)]
-fn save_ships(time: Res<Time>, dir: Res<SaveDir>, ships: Res<Airships>, mut wait: Local<f32>, mut last: Local<(usize, Option<usize>, Option<usize>)>) {
+fn save_ships(
+    time: Res<Time>,
+    dir: Res<SaveDir>,
+    ships: Res<Airships>,
+    mut wait: Local<f32>,
+    mut last: Local<(usize, Option<usize>, Option<usize>)>,
+) {
     if screenshot_run() || ships.is_added() {
         return;
     }
@@ -189,7 +217,11 @@ fn save_ships_on_exit(mut exit: MessageReader<AppExit>, dir: Res<SaveDir>, ships
 
 /// Is this block something a ship bumps into? Unloaded chunks don't stop it.
 fn solid_in(world: &World, blocks: &Blocks) -> impl Fn(IVec3) -> bool {
-    move |p| world.block(BlockPos::new(p.x, p.y, p.z)).is_some_and(|b| blocks.registry.get(b).solid)
+    move |p| {
+        world
+            .block(BlockPos::new(p.x, p.y, p.z))
+            .is_some_and(|b| blocks.registry.get(b).solid)
+    }
 }
 
 /// Fly the ship you're aboard and keep you at its helm.
@@ -208,7 +240,9 @@ fn steer(
     if *mode == MoveMode::Fly {
         ships.deck = None;
     }
-    let (Some(book), Some(i)) = (book, ships.aboard) else { return };
+    let (Some(book), Some(i)) = (book, ships.aboard) else {
+        return;
+    };
     if *mode == MoveMode::Fly {
         ships.aboard = None;
         flight::moor(&mut ships.ships[i]);
@@ -219,7 +253,10 @@ fn steer(
         let axis = |plus: bool, minus: bool| (plus as i32 - minus as i32) as f32;
         c.ahead = axis(keys.pressed(KeyCode::KeyW), keys.pressed(KeyCode::KeyS));
         c.turn = axis(keys.pressed(KeyCode::KeyA), keys.pressed(KeyCode::KeyD));
-        c.lift = axis(keys.pressed(KeyCode::Space), keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::KeyC));
+        c.lift = axis(
+            keys.pressed(KeyCode::Space),
+            keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::KeyC),
+        );
     }
     let dt = time.delta_secs().min(0.1);
     let ship = &mut ships.ships[i];
@@ -250,7 +287,9 @@ fn walk_deck(
     mut player: ResMut<Player>,
     cam: Single<&FlyCamera>,
 ) {
-    let Some((i, mut local)) = ships.deck else { return };
+    let Some((i, mut local)) = ships.deck else {
+        return;
+    };
     let Some(ship) = ships.ships.get(i).copied() else {
         ships.deck = None;
         return;
@@ -261,8 +300,12 @@ fn walk_deck(
         let side = axis(keys.pressed(KeyCode::KeyD), keys.pressed(KeyCode::KeyA));
         // Where you look, in the ship's frame.
         let yaw = cam.yaw - ship.yaw;
-        let (f, r) = (Vec3::new(-yaw.sin(), 0.0, -yaw.cos()), Vec3::new(yaw.cos(), 0.0, -yaw.sin()));
-        let step = (f * fwd + r * side).normalize_or_zero() * DECK_SPEED * time.delta_secs().min(0.1);
+        let (f, r) = (
+            Vec3::new(-yaw.sin(), 0.0, -yaw.cos()),
+            Vec3::new(yaw.cos(), 0.0, -yaw.sin()),
+        );
+        let step =
+            (f * fwd + r * side).normalize_or_zero() * DECK_SPEED * time.delta_secs().min(0.1);
         local = on_deck(local + step);
     }
     ships.deck = Some((i, local));
@@ -292,7 +335,14 @@ fn aim(cam: Single<&Transform, With<FlyCamera>>, ships: Res<Airships>, mut aimed
         .filter_map(|(i, s)| {
             let inv = s.rotation().inverse();
             let (lo, ld) = (inv * (o - s.pos), inv * d);
-            ray_box(lo, ld, Vec3::new(-HALF.x, 0.0, -HALF.z), Vec3::new(HALF.x, HEIGHT, HALF.z)).filter(|t| *t <= REACH).map(|t| (i, t))
+            ray_box(
+                lo,
+                ld,
+                Vec3::new(-HALF.x, 0.0, -HALF.z),
+                Vec3::new(HALF.x, HEIGHT, HALF.z),
+            )
+            .filter(|t| *t <= REACH)
+            .map(|t| (i, t))
         })
         .min_by(|a, b| a.1.total_cmp(&b.1));
 }
@@ -304,7 +354,11 @@ fn board(
     keys: Res<ButtonInput<KeyCode>>,
     cursor: Single<&CursorOptions, With<PrimaryWindow>>,
     (menus, body): (Res<Menus>, Res<Body>),
-    (aimed, target, cam): (Res<ShipAim>, Res<Target>, Single<&Transform, With<FlyCamera>>),
+    (aimed, target, cam): (
+        Res<ShipAim>,
+        Res<Target>,
+        Single<&Transform, With<FlyCamera>>,
+    ),
     wielded: Res<Wielded>,
     mut mode: ResMut<MoveMode>,
     mut ships: ResMut<Airships>,
@@ -320,7 +374,9 @@ fn board(
             ships.aboard = None;
             flight::moor(&mut ships.ships[i]);
             ships.deck = Some((i, on_deck(HELM)));
-            toast.write(Toast("You let go of the helm. E steps off over the rail".into()));
+            toast.write(Toast(
+                "You let go of the helm. E steps off over the rail".into(),
+            ));
         }
         return;
     }
@@ -329,7 +385,10 @@ fn board(
         if mouse.just_pressed(MouseButton::Right) && local.distance(HELM) <= HELM_REACH {
             ships.deck = None;
             ships.aboard = Some(i);
-            toast.write(Toast("At the helm: W / S ahead and astern, A / D turn, Space rise, Ctrl sink. E lets go".into()));
+            toast.write(Toast(
+                "At the helm: W / S ahead and astern, A / D turn, Space rise, Ctrl sink. E lets go"
+                    .into(),
+            ));
         } else if keys.just_pressed(KeyCode::KeyE) {
             ships.deck = None;
             player.pos = ships.ships[i].to_world(over_rail(local));
@@ -343,7 +402,12 @@ fn board(
     // A block nearer than the ship takes the click.
     let block_dist = target.hit.and_then(|h| {
         let min = Vec3::new(h.block.x as f32, h.block.y as f32, h.block.z as f32);
-        ray_box(cam.translation, cam.forward().as_vec3(), min, min + Vec3::ONE)
+        ray_box(
+            cam.translation,
+            cam.forward().as_vec3(),
+            min,
+            min + Vec3::ONE,
+        )
     });
     if block_dist.is_some_and(|b| b < dist) {
         return;
@@ -358,7 +422,9 @@ fn board(
         let ship = ships.ships[i];
         let local = on_deck(ship.rotation().inverse() * (player.pos - ship.pos));
         ships.deck = Some((i, local));
-        toast.write(Toast("Aboard. Walk to the helm and right click to fly. E steps off".into()));
+        toast.write(Toast(
+            "Aboard. Walk to the helm and right click to fly. E steps off".into(),
+        ));
     }
 }
 
@@ -375,11 +441,18 @@ fn set_down(
     mut ships: ResMut<Airships>,
     mut toast: MessageWriter<Toast>,
 ) {
-    if !mouse.just_pressed(MouseButton::Right) || cursor.grab_mode == CursorGrabMode::None || menus.open {
+    if !mouse.just_pressed(MouseButton::Right)
+        || cursor.grab_mode == CursorGrabMode::None
+        || menus.open
+    {
         return;
     }
-    let (Some(item), Some(hit)) = (wielded.0, target.hit) else { return };
-    let ItemKind::Machine(machine) = &items.get(item).kind else { return };
+    let (Some(item), Some(hit)) = (wielded.0, target.hit) else {
+        return;
+    };
+    let ItemKind::Machine(machine) = &items.get(item).kind else {
+        return;
+    };
     if machine != "airship" || ships.aboard.is_some() || aimed.0.is_some() {
         return;
     }
@@ -387,9 +460,21 @@ fn set_down(
         toast.write(Toast("Set the airship down on top of the ground".into()));
         return;
     }
-    let ship = Ship::new(Vec3::new(hit.before.x as f32 + 0.5, hit.before.y as f32, hit.before.z as f32 + 0.5), cam.yaw);
+    let ship = Ship::new(
+        Vec3::new(
+            hit.before.x as f32 + 0.5,
+            hit.before.y as f32,
+            hit.before.z as f32 + 0.5,
+        ),
+        cam.yaw,
+    );
     if flight::hits(ship.pos, ship.yaw, &solid_in(&world, &blocks)) {
-        toast.write(Toast(format!("Not enough room: the airship needs about {} x {} blocks of open ground, {} high", 4, 9, HEIGHT.ceil())));
+        toast.write(Toast(format!(
+            "Not enough room: the airship needs about {} x {} blocks of open ground, {} high",
+            4,
+            9,
+            HEIGHT.ceil()
+        )));
         return;
     }
     if !inv.take(item, 1) {
@@ -412,15 +497,25 @@ fn pick_up(
     mut ships: ResMut<Airships>,
     mut toast: MessageWriter<Toast>,
 ) {
-    if !mouse.just_pressed(MouseButton::Right) || cursor.grab_mode == CursorGrabMode::None || menus.open || !player.crouching || wielded.0.is_some() {
+    if !mouse.just_pressed(MouseButton::Right)
+        || cursor.grab_mode == CursorGrabMode::None
+        || menus.open
+        || !player.crouching
+        || wielded.0.is_some()
+    {
         return;
     }
     let Some((i, _)) = aimed.0 else { return };
     if ships.aboard.is_some() || ships.deck.is_some() {
         return;
     }
-    let Some(item) = items.id("airship") else { return };
-    if inv.add(&items, crate::inventory::grid::Stack::new(item, 1)).is_some() {
+    let Some(item) = items.id("airship") else {
+        return;
+    };
+    if inv
+        .add(&items, crate::inventory::grid::Stack::new(item, 1))
+        .is_some()
+    {
         toast.write(Toast("No room in your pockets for the airship".into()));
         return;
     }
@@ -462,11 +557,17 @@ fn draw_ships(
     spin.resize(ships.ships.len(), 0.0);
     let dt = time.delta_secs();
     for (e, m, mut tf) in &mut models {
-        let Some(s) = ships.ships.get(m.0) else { continue };
+        let Some(s) = ships.ships.get(m.0) else {
+            continue;
+        };
         *tf = Transform::from_translation(s.pos).with_rotation(s.rotation());
         // Idles while someone is at the helm, spins up with speed.
         let flying = ships.aboard == Some(m.0);
-        let rate = if flying { 4.0 + s.vel.length() * 1.6 } else { 0.0 };
+        let rate = if flying {
+            4.0 + s.vel.length() * 1.6
+        } else {
+            0.0
+        };
         spin[m.0] = (spin[m.0] + rate * dt) % std::f32::consts::TAU;
         for (parent, mut ptf) in &mut props {
             if parent.parent() == e {
@@ -478,7 +579,12 @@ fn draw_ships(
 
 /// The ship's boxes, in its own frame (bow toward -z, keel bottom at y 0). Also used
 /// for the cutscene airship (`cutscene::props`).
-pub fn build_model(commands: &mut Commands, meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, tf: Transform) -> Entity {
+pub fn build_model(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    tf: Transform,
+) -> Entity {
     let mut mat = |r: f32, g: f32, b: f32, metal: bool| {
         materials.add(StandardMaterial {
             base_color: Color::srgb(r, g, b),
@@ -532,13 +638,32 @@ pub fn build_model(commands: &mut Commands, meshes: &mut Assets<Mesh>, materials
     commands
         .spawn((tf, Visibility::default()))
         .with_children(|c| {
-        for (size, at, m) in parts {
-            c.spawn((Mesh3d(meshes.add(Cuboid::new(size.x, size.y, size.z))), MeshMaterial3d(m), Transform::from_translation(at)));
-        }
-        c.spawn((Propeller, Transform::from_xyz(0.0, 0.95, 4.08), Visibility::default())).with_children(|p| {
-            p.spawn((Mesh3d(blade), MeshMaterial3d(wood.clone()), Transform::default(), NotShadowCaster));
-            p.spawn((Mesh3d(cross), MeshMaterial3d(wood.clone()), Transform::default(), NotShadowCaster));
-        });
+            for (size, at, m) in parts {
+                c.spawn((
+                    Mesh3d(meshes.add(Cuboid::new(size.x, size.y, size.z))),
+                    MeshMaterial3d(m),
+                    Transform::from_translation(at),
+                ));
+            }
+            c.spawn((
+                Propeller,
+                Transform::from_xyz(0.0, 0.95, 4.08),
+                Visibility::default(),
+            ))
+            .with_children(|p| {
+                p.spawn((
+                    Mesh3d(blade),
+                    MeshMaterial3d(wood.clone()),
+                    Transform::default(),
+                    NotShadowCaster,
+                ));
+                p.spawn((
+                    Mesh3d(cross),
+                    MeshMaterial3d(wood.clone()),
+                    Transform::default(),
+                    NotShadowCaster,
+                ));
+            });
         })
         .id()
 }

@@ -54,7 +54,14 @@ impl Grab {
         let view = lean_view(eye, base + Vec3::Y * MOUTH_Y);
         let to_view = view.to_matrix().inverse();
         let grips = grip_points(&view, base).map(|g| to_view.transform_point3(g));
-        *self = Self { urn: Some((urn, base)), t: 0.0, opened: false, releasing: false, view, grips };
+        *self = Self {
+            urn: Some((urn, base)),
+            t: 0.0,
+            opened: false,
+            releasing: false,
+            view,
+            grips,
+        };
     }
 
     /// How far the hands and face are in (0..1, eased).
@@ -75,8 +82,13 @@ fn smooth(t: f32) -> f32 {
 /// looking down into it.
 pub fn lean_view(eye: Vec3, mouth: Vec3) -> Transform {
     let flat = Vec3::new(eye.x - mouth.x, 0.0, eye.z - mouth.z);
-    let back = if flat.length_squared() < 1e-6 { Vec3::Z } else { flat.normalize() };
-    Transform::from_translation(mouth + back * LEAN_BACK + Vec3::Y * LEAN_UP).looking_at(mouth, Vec3::Y)
+    let back = if flat.length_squared() < 1e-6 {
+        Vec3::Z
+    } else {
+        flat.normalize()
+    };
+    Transform::from_translation(mouth + back * LEAN_BACK + Vec3::Y * LEAN_UP)
+        .looking_at(mouth, Vec3::Y)
 }
 
 /// Where each hand (right, left) takes hold of the urn standing at `base`,
@@ -105,7 +117,11 @@ pub(super) fn grab_update(
     if grab.releasing {
         // Arranging takes the camera at once.
         let arranging = arrange.start.is_some() || arrange.open.is_some();
-        grab.t = if arranging { 0.0 } else { grab.t - dt / RELEASE_SECONDS };
+        grab.t = if arranging {
+            0.0
+        } else {
+            grab.t - dt / RELEASE_SECONDS
+        };
         if grab.t <= 0.0 {
             grab.urn = None;
             if !arranging {
@@ -160,8 +176,16 @@ pub struct Mouth;
 pub fn mouth_material(color: (f32, f32, f32)) -> MouthMaterial {
     let glow = LinearRgba::from(Color::srgb(color.0, color.1, color.2));
     ExtendedMaterial {
-        base: StandardMaterial { unlit: true, ..default() },
-        extension: MouthExtension { mouth: MouthParams { tint: Vec4::new(glow.red, glow.green, glow.blue, 1.0), ..default() } },
+        base: StandardMaterial {
+            unlit: true,
+            ..default()
+        },
+        extension: MouthExtension {
+            mouth: MouthParams {
+                tint: Vec4::new(glow.red, glow.green, glow.blue, 1.0),
+                ..default()
+            },
+        },
     }
 }
 
@@ -184,8 +208,15 @@ pub(super) fn mouth_look(
     let t = void_clock(&time);
     for (gt, mat) in &mouths {
         let at = gt.translation();
-        let (Ok(p), Ok(q)) = (camera.world_to_viewport(ct, at), camera.world_to_viewport(ct, at + ct.right() * MOUTH_HALF)) else { continue };
-        let Some(mut m) = mats.get_mut(&mat.0) else { continue };
+        let (Ok(p), Ok(q)) = (
+            camera.world_to_viewport(ct, at),
+            camera.world_to_viewport(ct, at + ct.right() * MOUTH_HALF),
+        ) else {
+            continue;
+        };
+        let Some(mut m) = mats.get_mut(&mat.0) else {
+            continue;
+        };
         let mouth = &mut m.extension.mouth;
         mouth.look = Vec4::new(t, short, 4.0 * scale, 0.0);
         mouth.centre = Vec4::new(p.x * scale, p.y * scale, (q - p).length() * scale, 0.0);

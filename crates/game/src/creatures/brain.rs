@@ -23,7 +23,11 @@ pub fn flee_light(pos: Vec3, lights: impl IntoIterator<Item = Vec3>) -> Option<V
     }
     best.map(|(_, d)| {
         let flat = Vec3::new(d.x, 0.0, d.z);
-        if flat.length_squared() < 1e-4 { Vec3::X } else { flat.normalize() }
+        if flat.length_squared() < 1e-4 {
+            Vec3::X
+        } else {
+            flat.normalize()
+        }
     })
 }
 

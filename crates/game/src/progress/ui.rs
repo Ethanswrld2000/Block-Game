@@ -11,7 +11,7 @@ use super::skills::{Node as SkillNode, Perks, Tree};
 use super::xp::Progression;
 use super::{Progress, Spells};
 use crate::inventory::ui::{InvScreen, Tab, TreeArea};
-use crate::theme::{self, colors, sizes, Theme};
+use crate::theme::{self, Theme, colors, sizes};
 
 pub struct ProgressUiPlugin;
 
@@ -19,7 +19,10 @@ impl Plugin for ProgressUiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<TreeView>()
             .add_systems(crate::menu::GameStartup, (spawn_hud, spawn_screen))
-            .add_systems(crate::menu::GameUpdate, (update_hud, open_close, pan_zoom, click, layout).chain());
+            .add_systems(
+                crate::menu::GameUpdate,
+                (update_hud, open_close, pan_zoom, click, layout).chain(),
+            );
     }
 }
 
@@ -61,10 +64,34 @@ fn spawn_hud(mut commands: Commands, theme: Res<Theme>) {
         ))
         .with_children(|r| {
             r.spawn(theme.icon("icon_xp"));
-            r.spawn((Node { width: Val::Px(XP_W), height: Val::Px(12.0), padding: UiRect::all(Val::Px(EDGE)), ..default() }, theme.skin("bar"))).with_children(|b| {
-                b.spawn((XpFill, Node { width: Val::Px(0.0), height: Val::Percent(100.0), ..default() }, BackgroundColor(Color::srgb(0.95, 0.8, 0.3))));
+            r.spawn((
+                Node {
+                    width: Val::Px(XP_W),
+                    height: Val::Px(12.0),
+                    padding: UiRect::all(Val::Px(EDGE)),
+                    ..default()
+                },
+                theme.skin("bar"),
+            ))
+            .with_children(|b| {
+                b.spawn((
+                    XpFill,
+                    Node {
+                        width: Val::Px(0.0),
+                        height: Val::Percent(100.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.95, 0.8, 0.3)),
+                ));
             });
-            r.spawn((LevelText, text("1", sizes::SMALL, colors::HEADING), Node { width: Val::Px(150.0), ..default() }));
+            r.spawn((
+                LevelText,
+                text("1", sizes::SMALL, colors::HEADING),
+                Node {
+                    width: Val::Px(150.0),
+                    ..default()
+                },
+            ));
         });
     // Focus: above the health bars, once you know a spell.
     commands
@@ -83,15 +110,45 @@ fn spawn_hud(mut commands: Commands, theme: Res<Theme>) {
             Visibility::Hidden,
         ))
         .with_children(|p| {
-            p.spawn(Node { column_gap: Val::Px(8.0), align_items: AlignItems::Center, ..default() }).with_children(|row| {
+            p.spawn(Node {
+                column_gap: Val::Px(8.0),
+                align_items: AlignItems::Center,
+                ..default()
+            })
+            .with_children(|row| {
                 row.spawn(theme.icon("icon_focus"));
-                row.spawn((text("Focus", sizes::SMALL, colors::TEXT), Node { width: Val::Px(70.0), ..default() }));
-                row.spawn((Node { width: Val::Px(FOCUS_W), height: Val::Px(14.0), padding: UiRect::all(Val::Px(EDGE)), ..default() }, theme.skin("bar")))
-                    .with_children(|b| {
-                        b.spawn((FocusFill, Node { width: Val::Px(FOCUS_W), height: Val::Percent(100.0), ..default() }, BackgroundColor(Color::srgb(0.45, 0.65, 1.0))));
-                    });
+                row.spawn((
+                    text("Focus", sizes::SMALL, colors::TEXT),
+                    Node {
+                        width: Val::Px(70.0),
+                        ..default()
+                    },
+                ));
+                row.spawn((
+                    Node {
+                        width: Val::Px(FOCUS_W),
+                        height: Val::Px(14.0),
+                        padding: UiRect::all(Val::Px(EDGE)),
+                        ..default()
+                    },
+                    theme.skin("bar"),
+                ))
+                .with_children(|b| {
+                    b.spawn((
+                        FocusFill,
+                        Node {
+                            width: Val::Px(FOCUS_W),
+                            height: Val::Percent(100.0),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0.45, 0.65, 1.0)),
+                    ));
+                });
             });
-            p.spawn((SpellText, text("", sizes::SMALL, Color::srgb(0.8, 0.88, 1.0))));
+            p.spawn((
+                SpellText,
+                text("", sizes::SMALL, Color::srgb(0.8, 0.88, 1.0)),
+            ));
         });
 }
 
@@ -112,7 +169,10 @@ fn update_hud(
     }
     for mut t in &mut level {
         let s = if progress.learned.points > 0 {
-            format!("Level {}, {} pts (K)", progress.level.level, progress.learned.points)
+            format!(
+                "Level {}, {} pts (K)",
+                progress.level.level, progress.learned.points
+            )
         } else {
             format!("Level {}", progress.level.level)
         };
@@ -122,16 +182,25 @@ fn update_hud(
     }
     let known = !perks.spells.is_empty();
     for mut v in &mut panel {
-        let want = if known { Visibility::Inherited } else { Visibility::Hidden };
+        let want = if known {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
         if *v != want {
             *v = want;
         }
     }
     for mut n in &mut focus {
-        n.width = Val::Px((FOCUS_W - 2.0 * EDGE) * (progress.focus / perks.max_focus()).clamp(0.0, 1.0));
+        n.width =
+            Val::Px((FOCUS_W - 2.0 * EDGE) * (progress.focus / perks.max_focus()).clamp(0.0, 1.0));
     }
     let mut on = Vec::new();
-    for (active, name, key) in [(spells.levitate, "Levitating", "G"), (spells.light, "Light", "X"), (spells.warmth, "Warmth", "V")] {
+    for (active, name, key) in [
+        (spells.levitate, "Levitating", "G"),
+        (spells.light, "Light", "X"),
+        (spells.warmth, "Warmth", "V"),
+    ] {
         if active {
             on.push(format!("{name} ({key})"));
         }
@@ -140,11 +209,22 @@ fn update_hud(
         on.push("Drifting down".into());
     }
     let s = if on.is_empty() {
-        perks.spells.iter().map(|s| format!("{}: {}", match s {
-            super::Spell::Levitation => "G",
-            super::Spell::Light => "X",
-            super::Spell::Warmth => "V",
-        }, s.title())).collect::<Vec<_>>().join("  ")
+        perks
+            .spells
+            .iter()
+            .map(|s| {
+                format!(
+                    "{}: {}",
+                    match s {
+                        super::Spell::Levitation => "G",
+                        super::Spell::Light => "X",
+                        super::Spell::Warmth => "V",
+                    },
+                    s.title()
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("  ")
     } else {
         on.join("  ")
     };
@@ -173,7 +253,16 @@ struct TreeView {
 
 impl Default for TreeView {
     fn default() -> Self {
-        Self { open: false, area: Rect::default(), dragging: false, pan: Vec2::new(0.0, -170.0), zoom: 0.6, hover: None, dragged: 0.0, message: String::new() }
+        Self {
+            open: false,
+            area: Rect::default(),
+            dragging: false,
+            pan: Vec2::new(0.0, -170.0),
+            zoom: 0.6,
+            hover: None,
+            dragged: 0.0,
+            message: String::new(),
+        }
     }
 }
 
@@ -203,7 +292,13 @@ fn spawn_screen(mut commands: Commands, tree: Res<Tree>, theme: Res<Theme>) {
     commands
         .spawn((
             Screen,
-            Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), overflow: Overflow::clip(), ..default() },
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                overflow: Overflow::clip(),
+                ..default()
+            },
             BackgroundColor(Color::srgb(0.03, 0.04, 0.06)),
             GlobalZIndex(25),
             Visibility::Hidden,
@@ -222,34 +317,81 @@ fn spawn_screen(mut commands: Commands, tree: Res<Tree>, theme: Res<Theme>) {
             for (a, b, major) in &edges {
                 s.spawn((
                     MapEdge { a: *a, b: *b },
-                    Node { position_type: PositionType::Absolute, height: Val::Px(if *major { 4.0 } else { 2.0 }), ..default() },
+                    Node {
+                        position_type: PositionType::Absolute,
+                        height: Val::Px(if *major { 4.0 } else { 2.0 }),
+                        ..default()
+                    },
                     BackgroundColor(Color::srgba(0.5, 0.5, 0.55, 0.5)),
                     UiTransform::default(),
                 ));
             }
             for &(a, b, w) in &tree.links {
                 let (a, b) = (SkillNode::Major(a), SkillNode::Major(b));
-                s.spawn((EdgeLabel { a, b }, Node { position_type: PositionType::Absolute, ..default() }, text(w.to_string(), sizes::BODY, colors::HEADING)));
+                s.spawn((
+                    EdgeLabel { a, b },
+                    Node {
+                        position_type: PositionType::Absolute,
+                        ..default()
+                    },
+                    text(w.to_string(), sizes::BODY, colors::HEADING),
+                ));
             }
             for n in tree.nodes() {
                 s.spawn((
                     MapNode(n),
-                    Node { position_type: PositionType::Absolute, justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() },
-                    theme.image(if matches!(n, SkillNode::Major(_)) { "node_major" } else { "node_minor" }),
+                    Node {
+                        position_type: PositionType::Absolute,
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    theme.image(if matches!(n, SkillNode::Major(_)) {
+                        "node_major"
+                    } else {
+                        "node_minor"
+                    }),
                 ))
                 .with_children(|c| {
                     if let SkillNode::Minor(m, i) = n {
-                        c.spawn(text(tree.majors[m].ring[i].cost.to_string(), sizes::SMALL, colors::TEXT));
+                        c.spawn(text(
+                            tree.majors[m].ring[i].cost.to_string(),
+                            sizes::SMALL,
+                            colors::TEXT,
+                        ));
                     }
                 });
                 if let SkillNode::Major(m) = n {
-                    s.spawn((MapLabel(n), Node { position_type: PositionType::Absolute, ..default() }, theme.bold(sizes::LABEL), Text::new(tree.majors[m].title.clone()), TextColor(colors::TEXT)));
+                    s.spawn((
+                        MapLabel(n),
+                        Node {
+                            position_type: PositionType::Absolute,
+                            ..default()
+                        },
+                        theme.bold(sizes::LABEL),
+                        Text::new(tree.majors[m].title.clone()),
+                        TextColor(colors::TEXT),
+                    ));
                 }
             }
-            s.spawn((Node { position_type: PositionType::Absolute, top: Val::Px(12.0), left: Val::Px(14.0), padding: UiRect::axes(Val::Px(14.0), Val::Px(8.0)), ..default() }, theme.skin("header")))
-                .with_children(|h| {
-                    h.spawn((Header, theme.bold(sizes::LABEL), Text::new(""), TextColor(colors::TEXT)));
-                });
+            s.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    top: Val::Px(12.0),
+                    left: Val::Px(14.0),
+                    padding: UiRect::axes(Val::Px(14.0), Val::Px(8.0)),
+                    ..default()
+                },
+                theme.skin("header"),
+            ))
+            .with_children(|h| {
+                h.spawn((
+                    Header,
+                    theme.bold(sizes::LABEL),
+                    Text::new(""),
+                    TextColor(colors::TEXT),
+                ));
+            });
             s.spawn((
                 Node {
                     position_type: PositionType::Absolute,
@@ -285,7 +427,11 @@ fn open_close(
         view.area = r;
     }
     for (mut n, mut v) in &mut node {
-        let vis = if want { Visibility::Inherited } else { Visibility::Hidden };
+        let vis = if want {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
         if *v != vis {
             *v = vis;
         }
@@ -352,11 +498,24 @@ fn pan_zoom(
 }
 
 fn radius(n: SkillNode, zoom: f32) -> f32 {
-    (if matches!(n, SkillNode::Major(_)) { 22.0 } else { 12.0 }) * zoom.max(0.6)
+    (if matches!(n, SkillNode::Major(_)) {
+        22.0
+    } else {
+        12.0
+    }) * zoom.max(0.6)
 }
 
-fn click(mouse: Res<ButtonInput<MouseButton>>, tree: Res<Tree>, mut view: ResMut<TreeView>, mut progress: ResMut<Progress>) {
-    if !view.open || !mouse.just_released(MouseButton::Left) || view.dragged > 6.0 || view.hover.is_none() {
+fn click(
+    mouse: Res<ButtonInput<MouseButton>>,
+    tree: Res<Tree>,
+    mut view: ResMut<TreeView>,
+    mut progress: ResMut<Progress>,
+) {
+    if !view.open
+        || !mouse.just_released(MouseButton::Left)
+        || view.dragged > 6.0
+        || view.hover.is_none()
+    {
         return;
     }
     let Some(n) = view.hover else { return };
@@ -371,10 +530,22 @@ fn layout(
     tree: Res<Tree>,
     view: Res<TreeView>,
     progress: Res<Progress>,
-    mut nodes: Query<(&MapNode, &mut Node, &mut ImageNode), (Without<MapEdge>, Without<MapLabel>, Without<EdgeLabel>)>,
-    mut labels: Query<(&MapLabel, &mut Node), (Without<MapNode>, Without<MapEdge>, Without<EdgeLabel>)>,
-    mut edges: Query<(&MapEdge, &mut Node, &mut UiTransform, &mut BackgroundColor), (Without<MapNode>, Without<MapLabel>, Without<EdgeLabel>)>,
-    mut edge_labels: Query<(&EdgeLabel, &mut Node), (Without<MapNode>, Without<MapLabel>, Without<MapEdge>)>,
+    mut nodes: Query<
+        (&MapNode, &mut Node, &mut ImageNode),
+        (Without<MapEdge>, Without<MapLabel>, Without<EdgeLabel>),
+    >,
+    mut labels: Query<
+        (&MapLabel, &mut Node),
+        (Without<MapNode>, Without<MapEdge>, Without<EdgeLabel>),
+    >,
+    mut edges: Query<
+        (&MapEdge, &mut Node, &mut UiTransform, &mut BackgroundColor),
+        (Without<MapNode>, Without<MapLabel>, Without<EdgeLabel>),
+    >,
+    mut edge_labels: Query<
+        (&EdgeLabel, &mut Node),
+        (Without<MapNode>, Without<MapLabel>, Without<MapEdge>),
+    >,
     mut texts: ParamSet<(Query<&mut Text, With<Info>>, Query<&mut Text, With<Header>>)>,
 ) {
     if !view.open {
@@ -406,7 +577,11 @@ fn layout(
             Color::srgb(0.32, 0.33, 0.36)
         };
         let hover = view.hover == Some(m.0);
-        img.color = if hover { tint.mix(&Color::WHITE, 0.5) } else { tint };
+        img.color = if hover {
+            tint.mix(&Color::WHITE, 0.5)
+        } else {
+            tint
+        };
     }
     for (l, mut node) in &mut labels {
         let c = at(l.0);
@@ -425,7 +600,11 @@ fn layout(
         node.top = Val::Px(mid.y - 1.0);
         tf.rotation = Rot2::radians(d.y.atan2(d.x));
         let lit = learned.taken.contains(&e.a) && learned.taken.contains(&e.b);
-        bg.0 = if lit { Color::srgba(0.95, 0.75, 0.3, 0.9) } else { Color::srgba(0.5, 0.5, 0.58, 0.45) };
+        bg.0 = if lit {
+            Color::srgba(0.95, 0.75, 0.3, 0.9)
+        } else {
+            Color::srgba(0.5, 0.5, 0.58, 0.45)
+        };
     }
     for (e, mut node) in &mut edge_labels {
         let mid = (at(e.a) + at(e.b)) * 0.5;
@@ -449,7 +628,11 @@ fn layout(
             t.0 = info.clone();
         }
     }
-    let header = format!("Skill tree: {} point{} to spend", learned.points, if learned.points == 1 { "" } else { "s" });
+    let header = format!(
+        "Skill tree: {} point{} to spend",
+        learned.points,
+        if learned.points == 1 { "" } else { "s" }
+    );
     for mut t in &mut texts.p1() {
         if t.0 != header {
             t.0 = header.clone();

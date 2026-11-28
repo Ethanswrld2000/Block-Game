@@ -18,7 +18,7 @@ use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
 use super::urns::State;
-use super::{placed_facing, StepDone, UrnBook, Urns};
+use super::{StepDone, UrnBook, Urns, placed_facing};
 use crate::camera::{FlyCamera, Menus};
 use crate::clock::{Seasons, WorldClock};
 use crate::inventory::grid::Stack;
@@ -27,7 +27,7 @@ use crate::item_art::ItemArt;
 use crate::items::{ItemId, ItemKind, Items};
 use crate::npc::{NpcBook, SpawnKind};
 use crate::survival::Toast;
-use crate::theme::{colors, sizes, text, Theme};
+use crate::theme::{Theme, colors, sizes, text};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 enum Tab {
@@ -38,7 +38,12 @@ enum Tab {
     World,
 }
 
-const TABS: [(Tab, &str); 4] = [(Tab::Urns, "Urns"), (Tab::Items, "Items"), (Tab::Npcs, "NPCs"), (Tab::World, "World")];
+const TABS: [(Tab, &str); 4] = [
+    (Tab::Urns, "Urns"),
+    (Tab::Items, "Items"),
+    (Tab::Npcs, "NPCs"),
+    (Tab::World, "World"),
+];
 
 /// Which items the Items tab shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -53,8 +58,15 @@ enum Cat {
     Other,
 }
 
-const CATS: [(Cat, &str); 7] =
-    [(Cat::All, "All"), (Cat::Tools, "Tools"), (Cat::Blocks, "Blocks"), (Cat::Food, "Food"), (Cat::Materials, "Materials"), (Cat::Clothes, "Clothes"), (Cat::Other, "Other")];
+const CATS: [(Cat, &str); 7] = [
+    (Cat::All, "All"),
+    (Cat::Tools, "Tools"),
+    (Cat::Blocks, "Blocks"),
+    (Cat::Food, "Food"),
+    (Cat::Materials, "Materials"),
+    (Cat::Clothes, "Clothes"),
+    (Cat::Other, "Other"),
+];
 
 fn cat_of(kind: &ItemKind) -> Cat {
     match kind {
@@ -89,7 +101,11 @@ enum Amount {
     Stack,
 }
 
-const AMOUNTS: [(Amount, &str); 3] = [(Amount::One, "1"), (Amount::Eight, "8"), (Amount::Stack, "Stack")];
+const AMOUNTS: [(Amount, &str); 3] = [
+    (Amount::One, "1"),
+    (Amount::Eight, "8"),
+    (Amount::Stack, "Stack"),
+];
 
 /// Item tiles per row and rows per page.
 const COLS: usize = 12;
@@ -127,7 +143,14 @@ enum Act {
     Reset,
 }
 
-const ACTS: [(Act, &str); 6] = [(Act::Give, "Give urn"), (Act::SetDown, "Set down"), (Act::Items, "Items"), (Act::Next, "Next step"), (Act::All, "All steps"), (Act::Reset, "Reset")];
+const ACTS: [(Act, &str); 6] = [
+    (Act::Give, "Give urn"),
+    (Act::SetDown, "Set down"),
+    (Act::Items, "Items"),
+    (Act::Next, "Next step"),
+    (Act::All, "All steps"),
+    (Act::Reset, "Reset"),
+];
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Press {
@@ -176,13 +199,26 @@ pub(super) fn spawn_dev_ui(mut commands: Commands) {
     commands
         .spawn((
             DevRoot,
-            Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() },
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
             BackgroundColor(Color::srgba(0.0, 0.0, 0.02, 0.45)),
             GlobalZIndex(26),
             Visibility::Hidden,
         ))
         .with_children(|c| {
-            c.spawn((DevPanel, Node { flex_direction: FlexDirection::Column, ..default() }));
+            c.spawn((
+                DevPanel,
+                Node {
+                    flex_direction: FlexDirection::Column,
+                    ..default()
+                },
+            ));
         });
 }
 
@@ -238,7 +274,10 @@ pub(super) fn dev_keys(
 
 /// The items the Items tab lists under the current filter.
 fn shown_items(items: &Items, cat: Cat) -> Vec<ItemId> {
-    items.ids().filter(|&id| cat == Cat::All || cat_of(&items.get(id).kind) == cat).collect()
+    items
+        .ids()
+        .filter(|&id| cat == Cat::All || cat_of(&items.get(id).kind) == cat)
+        .collect()
 }
 
 fn pages(n: usize) -> usize {
@@ -251,12 +290,26 @@ pub(super) fn dev_click(
     mut wheel: MessageReader<MouseWheel>,
     window: Single<&Window, With<PrimaryWindow>>,
     theme: Res<Theme>,
-    mut buttons: Query<(&DevButton, &ComputedNode, &UiGlobalTransform, &InheritedVisibility, &mut ImageNode)>,
+    mut buttons: Query<(
+        &DevButton,
+        &ComputedNode,
+        &UiGlobalTransform,
+        &InheritedVisibility,
+        &mut ImageNode,
+    )>,
     mut hint: Query<&mut Text, With<DevHint>>,
     (book, items, mut dev): (Option<Res<UrnBook>>, Res<Items>, ResMut<DevMenu>),
-    (player, cam): (Res<crate::player::Player>, Single<&Transform, With<FlyCamera>>),
+    (player, cam): (
+        Res<crate::player::Player>,
+        Single<&Transform, With<FlyCamera>>,
+    ),
     (mut inv, mut urns): (ResMut<Inventory>, ResMut<Urns>),
-    (mut done, mut spill, mut toast, mut npc): (MessageWriter<StepDone>, MessageWriter<Spill>, MessageWriter<Toast>, MessageWriter<SpawnKind>),
+    (mut done, mut spill, mut toast, mut npc): (
+        MessageWriter<StepDone>,
+        MessageWriter<Spill>,
+        MessageWriter<Toast>,
+        MessageWriter<SpawnKind>,
+    ),
     (npcs, seasons, mut clock): (Res<NpcBook>, Res<Seasons>, ResMut<WorldClock>),
 ) {
     let scrolled: f32 = wheel.read().map(|w| w.y).sum();
@@ -295,7 +348,11 @@ pub(super) fn dev_click(
     if dev.tab == Tab::Items {
         let total = pages(shown_items(&items, dev.cat).len());
         if scrolled != 0.0 {
-            let page = if scrolled < 0.0 { (dev.page + 1).min(total - 1) } else { dev.page.saturating_sub(1) };
+            let page = if scrolled < 0.0 {
+                (dev.page + 1).min(total - 1)
+            } else {
+                dev.page.saturating_sub(1)
+            };
             if page != dev.page {
                 dev.page = page;
                 dev.dirty = true;
@@ -305,9 +362,19 @@ pub(super) fn dev_click(
             let line = match hovered_item {
                 Some(id) => {
                     let it = items.get(id);
-                    format!("{} ({}, stacks to {}) - you have {}", it.title, kind_name(&it.kind), it.stack, inv.count(id))
+                    format!(
+                        "{} ({}, stacks to {}) - you have {}",
+                        it.title,
+                        kind_name(&it.kind),
+                        it.stack,
+                        inv.count(id)
+                    )
                 }
-                None => format!("Page {} of {}. Wheel or the arrows turn pages.", dev.page + 1, total),
+                None => format!(
+                    "Page {} of {}. Wheel or the arrows turn pages.",
+                    dev.page + 1,
+                    total
+                ),
             };
             if t.0 != line {
                 t.0 = line;
@@ -322,7 +389,10 @@ pub(super) fn dev_click(
         while left > 0 {
             let k = left.min(items.get(id).stack as u32).max(1);
             if let Some(rest) = inv.add(&items, Stack::new(id, k as u16)) {
-                spill.write(Spill { stack: rest, at: player.pos + Vec3::Y });
+                spill.write(Spill {
+                    stack: rest,
+                    at: player.pos + Vec3::Y,
+                });
             }
             left -= k;
         }
@@ -358,7 +428,9 @@ pub(super) fn dev_click(
         }
         Press::Empty => {
             inv.empty_carried();
-            toast.write(Toast("Dev: emptied your pockets, bag, hands and weapon slot".to_string()));
+            toast.write(Toast(
+                "Dev: emptied your pockets, bag, hands and weapon slot".to_string(),
+            ));
         }
         Press::Npc(k) => {
             npc.write(SpawnKind(k));
@@ -369,9 +441,15 @@ pub(super) fn dev_click(
         Press::Season(k) => {
             clock.day = seasons.next_start(clock.day, k);
             dev.dirty = true;
-            toast.write(Toast(format!("Dev: it is now {} (day {})", seasons.list[k].title, clock.day + 1)));
+            toast.write(Toast(format!(
+                "Dev: it is now {} (day {})",
+                seasons.list[k].title,
+                clock.day + 1
+            )));
         }
-        Press::Urn(i, act) => urn_act(i, act, &book, &mut urns, &mut inv, &mut give, &player, &cam, &mut done, &mut toast),
+        Press::Urn(i, act) => urn_act(
+            i, act, &book, &mut urns, &mut inv, &mut give, &player, &cam, &mut done, &mut toast,
+        ),
     }
 }
 
@@ -401,8 +479,12 @@ fn urn_act(
                 let mut f = cam.forward().as_vec3();
                 f.y = 0.0;
                 let f = f.normalize_or(Vec3::NEG_Z);
-                urns.placed.insert(def.name.clone(), placed_facing(player.pos + f * 3.0, f));
-                toast.write(Toast(format!("Dev: set the {} down in front of you", def.title)));
+                urns.placed
+                    .insert(def.name.clone(), placed_facing(player.pos + f * 3.0, f));
+                toast.write(Toast(format!(
+                    "Dev: set the {} down in front of you",
+                    def.title
+                )));
             }
         }
         Act::Items => {
@@ -421,7 +503,9 @@ fn urn_act(
         }
         Act::Next | Act::All => loop {
             let p = urns.of_mut(&def.name);
-            let Some(s) = def.steps.iter().find(|s| p.state(s) == State::Open) else { break };
+            let Some(s) = def.steps.iter().find(|s| p.state(s) == State::Open) else {
+                break;
+            };
             p.finish(&s.name);
             done.write(StepDone(s.name.clone()));
             if act == Act::Next {
@@ -440,7 +524,13 @@ fn labelled(c: &mut ChildSpawnerCommands, theme: &Theme, b: DevButton, label: &s
     let skin = theme.skin(b.look.skins()[0]);
     c.spawn((
         b,
-        Node { width: Val::Px(width), height: Val::Px(36.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() },
+        Node {
+            width: Val::Px(width),
+            height: Val::Px(36.0),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            ..default()
+        },
         skin,
         children![text(label, sizes::SMALL, colors::TEXT)],
     ));
@@ -462,7 +552,9 @@ pub(super) fn dev_build(
     }
     let Some(book) = book else { return };
     dev.dirty = false;
-    let (Ok(mut vis), Ok((panel, kids))) = (root.single_mut(), panel.single()) else { return };
+    let (Ok(mut vis), Ok((panel, kids))) = (root.single_mut(), panel.single()) else {
+        return;
+    };
     for k in kids.into_iter().flatten() {
         commands.entity(*k).despawn();
     }
@@ -473,13 +565,40 @@ pub(super) fn dev_build(
     *vis = Visibility::Inherited;
     let theme = &*theme;
     let dev = &*dev;
-    commands.entity(panel).insert((Node { flex_direction: FlexDirection::Column, padding: UiRect::axes(Val::Px(20.0), Val::Px(14.0)), row_gap: Val::Px(8.0), ..default() }, theme.skin("panel")));
+    commands.entity(panel).insert((
+        Node {
+            flex_direction: FlexDirection::Column,
+            padding: UiRect::axes(Val::Px(20.0), Val::Px(14.0)),
+            row_gap: Val::Px(8.0),
+            ..default()
+        },
+        theme.skin("panel"),
+    ));
     commands.entity(panel).with_children(|c| {
-        c.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(16.0), ..default() }).with_children(|r| {
-            r.spawn((theme.bold(sizes::TITLE), Text::new("Dev"), TextColor(colors::HEADING)));
-            r.spawn(Node { column_gap: Val::Px(4.0), ..default() }).with_children(|r| {
+        c.spawn(Node {
+            align_items: AlignItems::Center,
+            column_gap: Val::Px(16.0),
+            ..default()
+        })
+        .with_children(|r| {
+            r.spawn((
+                theme.bold(sizes::TITLE),
+                Text::new("Dev"),
+                TextColor(colors::HEADING),
+            ));
+            r.spawn(Node {
+                column_gap: Val::Px(4.0),
+                ..default()
+            })
+            .with_children(|r| {
                 for (t, label) in TABS {
-                    labelled(r, theme, button(Press::Tab(t), Look::Tab, dev.tab == t), label, 110.0);
+                    labelled(
+                        r,
+                        theme,
+                        button(Press::Tab(t), Look::Tab, dev.tab == t),
+                        label,
+                        110.0,
+                    );
                 }
             });
             r.spawn(text("F9 or Esc closes", sizes::SMALL, colors::MUTED));
@@ -494,7 +613,11 @@ pub(super) fn dev_build(
 }
 
 fn urns_tab(c: &mut ChildSpawnerCommands, theme: &Theme, book: &UrnBook, urns: &Urns) {
-    c.spawn(text("Hand yourself urns and skip steps to test the stations.", sizes::SMALL, colors::MUTED));
+    c.spawn(text(
+        "Hand yourself urns and skip steps to test the stations.",
+        sizes::SMALL,
+        colors::MUTED,
+    ));
     for (i, def) in book.0.urns.iter().enumerate() {
         let p = urns.of(&def.name);
         let n = def.steps.iter().filter(|s| p.is_done(&s.name)).count();
@@ -505,82 +628,238 @@ fn urns_tab(c: &mut ChildSpawnerCommands, theme: &Theme, book: &UrnBook, urns: &
         } else {
             "not set down"
         };
-        c.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(6.0), ..default() }).with_children(|r| {
-            r.spawn(Node { flex_direction: FlexDirection::Column, width: Val::Px(250.0), ..default() }).with_children(|t| {
-                t.spawn((theme.bold(sizes::BODY), Text::new(format!("{} · {}", def.title, def.station)), TextColor(colors::TEXT)));
-                let next = p.next(def).map_or("all done".to_string(), |s| format!("next: {}", s.title));
-                t.spawn(text(format!("{n}/{} steps, {where_}, {next}", def.steps.len()), sizes::TINY, colors::MUTED));
+        c.spawn(Node {
+            align_items: AlignItems::Center,
+            column_gap: Val::Px(6.0),
+            ..default()
+        })
+        .with_children(|r| {
+            r.spawn(Node {
+                flex_direction: FlexDirection::Column,
+                width: Val::Px(250.0),
+                ..default()
+            })
+            .with_children(|t| {
+                t.spawn((
+                    theme.bold(sizes::BODY),
+                    Text::new(format!("{} · {}", def.title, def.station)),
+                    TextColor(colors::TEXT),
+                ));
+                let next = p
+                    .next(def)
+                    .map_or("all done".to_string(), |s| format!("next: {}", s.title));
+                t.spawn(text(
+                    format!("{n}/{} steps, {where_}, {next}", def.steps.len()),
+                    sizes::TINY,
+                    colors::MUTED,
+                ));
             });
             for (act, label) in ACTS {
                 if def.item.is_none() && matches!(act, Act::Give | Act::SetDown) {
-                    r.spawn(Node { width: Val::Px(112.0), height: Val::Px(36.0), ..default() });
+                    r.spawn(Node {
+                        width: Val::Px(112.0),
+                        height: Val::Px(36.0),
+                        ..default()
+                    });
                     continue;
                 }
-                labelled(r, theme, button(Press::Urn(i, act), Look::Button, false), label, 112.0);
+                labelled(
+                    r,
+                    theme,
+                    button(Press::Urn(i, act), Look::Button, false),
+                    label,
+                    112.0,
+                );
             }
         });
     }
 }
 
-fn items_tab(c: &mut ChildSpawnerCommands, theme: &Theme, dev: &DevMenu, items: &Items, art: &ItemArt) {
-    c.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(4.0), ..default() }).with_children(|r| {
+fn items_tab(
+    c: &mut ChildSpawnerCommands,
+    theme: &Theme,
+    dev: &DevMenu,
+    items: &Items,
+    art: &ItemArt,
+) {
+    c.spawn(Node {
+        align_items: AlignItems::Center,
+        column_gap: Val::Px(4.0),
+        ..default()
+    })
+    .with_children(|r| {
         for (cat, label) in CATS {
-            labelled(r, theme, button(Press::Cat(cat), Look::Button, dev.cat == cat), label, 100.0);
+            labelled(
+                r,
+                theme,
+                button(Press::Cat(cat), Look::Button, dev.cat == cat),
+                label,
+                100.0,
+            );
         }
     });
-    c.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(4.0), ..default() }).with_children(|r| {
+    c.spawn(Node {
+        align_items: AlignItems::Center,
+        column_gap: Val::Px(4.0),
+        ..default()
+    })
+    .with_children(|r| {
         r.spawn(text("Each click gives", sizes::SMALL, colors::MUTED));
         for (a, label) in AMOUNTS {
-            labelled(r, theme, button(Press::Amount(a), Look::Button, dev.amount == a), label, 72.0);
+            labelled(
+                r,
+                theme,
+                button(Press::Amount(a), Look::Button, dev.amount == a),
+                label,
+                72.0,
+            );
         }
-        r.spawn(Node { width: Val::Px(24.0), ..default() });
-        labelled(r, theme, button(Press::Empty, Look::Button, false), "Empty pockets", 170.0);
+        r.spawn(Node {
+            width: Val::Px(24.0),
+            ..default()
+        });
+        labelled(
+            r,
+            theme,
+            button(Press::Empty, Look::Button, false),
+            "Empty pockets",
+            170.0,
+        );
     });
     let shown = shown_items(items, dev.cat);
     let page = dev.page.min(pages(shown.len()) - 1);
-    c.spawn(Node { display: Display::Grid, grid_template_columns: RepeatedGridTrack::px(COLS as u16, TILE), grid_auto_rows: vec![GridTrack::px(TILE)], column_gap: Val::Px(4.0), row_gap: Val::Px(4.0), min_height: Val::Px(ROWS as f32 * (TILE + 4.0)), ..default() })
-        .with_children(|g| {
-            for &id in shown.iter().skip(page * PER_PAGE).take(PER_PAGE) {
-                g.spawn((
-                    button(Press::Item(id), Look::Slot, false),
-                    Node { width: Val::Px(TILE), height: Val::Px(TILE), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() },
-                    theme.skin("slot"),
-                ))
-                .with_children(|s| {
-                    let Some(img) = art.image(id) else {
-                        s.spawn(text(items.get(id).title.chars().take(3).collect::<String>(), sizes::TINY, colors::TEXT));
-                        return;
-                    };
-                    // Fit the sprite in the tile, at most 2x.
-                    let px = art.size(id).unwrap_or(UVec2::splat(20)).as_vec2();
-                    let k = (40.0 / px.x).min(40.0 / px.y).min(2.0);
-                    s.spawn((img, Node { width: Val::Px(px.x * k), height: Val::Px(px.y * k), ..default() }));
-                });
-            }
-        });
-    c.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(8.0), ..default() }).with_children(|r| {
-        labelled(r, theme, button(Press::Page(-1), Look::Button, false), "<", 48.0);
-        labelled(r, theme, button(Press::Page(1), Look::Button, false), ">", 48.0);
-        r.spawn((DevHint, text(format!("Page {} of {}. Wheel or the arrows turn pages.", page + 1, pages(shown.len())), sizes::SMALL, colors::TEXT)));
+    c.spawn(Node {
+        display: Display::Grid,
+        grid_template_columns: RepeatedGridTrack::px(COLS as u16, TILE),
+        grid_auto_rows: vec![GridTrack::px(TILE)],
+        column_gap: Val::Px(4.0),
+        row_gap: Val::Px(4.0),
+        min_height: Val::Px(ROWS as f32 * (TILE + 4.0)),
+        ..default()
+    })
+    .with_children(|g| {
+        for &id in shown.iter().skip(page * PER_PAGE).take(PER_PAGE) {
+            g.spawn((
+                button(Press::Item(id), Look::Slot, false),
+                Node {
+                    width: Val::Px(TILE),
+                    height: Val::Px(TILE),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                theme.skin("slot"),
+            ))
+            .with_children(|s| {
+                let Some(img) = art.image(id) else {
+                    s.spawn(text(
+                        items.get(id).title.chars().take(3).collect::<String>(),
+                        sizes::TINY,
+                        colors::TEXT,
+                    ));
+                    return;
+                };
+                // Fit the sprite in the tile, at most 2x.
+                let px = art.size(id).unwrap_or(UVec2::splat(20)).as_vec2();
+                let k = (40.0 / px.x).min(40.0 / px.y).min(2.0);
+                s.spawn((
+                    img,
+                    Node {
+                        width: Val::Px(px.x * k),
+                        height: Val::Px(px.y * k),
+                        ..default()
+                    },
+                ));
+            });
+        }
+    });
+    c.spawn(Node {
+        align_items: AlignItems::Center,
+        column_gap: Val::Px(8.0),
+        ..default()
+    })
+    .with_children(|r| {
+        labelled(
+            r,
+            theme,
+            button(Press::Page(-1), Look::Button, false),
+            "<",
+            48.0,
+        );
+        labelled(
+            r,
+            theme,
+            button(Press::Page(1), Look::Button, false),
+            ">",
+            48.0,
+        );
+        r.spawn((
+            DevHint,
+            text(
+                format!(
+                    "Page {} of {}. Wheel or the arrows turn pages.",
+                    page + 1,
+                    pages(shown.len())
+                ),
+                sizes::SMALL,
+                colors::TEXT,
+            ),
+        ));
     });
 }
 
 fn npcs_tab(c: &mut ChildSpawnerCommands, theme: &Theme, npcs: &NpcBook) {
-    c.spawn(text("Click a person to have them stand in front of you and follow you.", sizes::SMALL, colors::MUTED));
-    c.spawn(Node { display: Display::Grid, grid_template_columns: RepeatedGridTrack::px(3, 345.0), column_gap: Val::Px(6.0), row_gap: Val::Px(6.0), ..default() }).with_children(|g| {
+    c.spawn(text(
+        "Click a person to have them stand in front of you and follow you.",
+        sizes::SMALL,
+        colors::MUTED,
+    ));
+    c.spawn(Node {
+        display: Display::Grid,
+        grid_template_columns: RepeatedGridTrack::px(3, 345.0),
+        column_gap: Val::Px(6.0),
+        row_gap: Val::Px(6.0),
+        ..default()
+    })
+    .with_children(|g| {
         for (k, kind) in npcs.kinds.iter().enumerate() {
-            let label = if kind.title.is_empty() { kind.name.clone() } else { format!("{} · {}", kind.name, kind.title) };
-            labelled(g, theme, button(Press::Npc(k), Look::Button, false), &label, 345.0);
+            let label = if kind.title.is_empty() {
+                kind.name.clone()
+            } else {
+                format!("{} · {}", kind.name, kind.title)
+            };
+            labelled(
+                g,
+                theme,
+                button(Press::Npc(k), Look::Button, false),
+                &label,
+                345.0,
+            );
         }
     });
 }
 
 fn world_tab(c: &mut ChildSpawnerCommands, theme: &Theme, seasons: &Seasons, clock: &WorldClock) {
     let now = seasons.at(clock).current;
-    c.spawn(text("Season: jumps ahead to the first day of the one you pick (time of day stays).", sizes::SMALL, colors::MUTED));
-    c.spawn(Node { align_items: AlignItems::Center, column_gap: Val::Px(4.0), ..default() }).with_children(|r| {
+    c.spawn(text(
+        "Season: jumps ahead to the first day of the one you pick (time of day stays).",
+        sizes::SMALL,
+        colors::MUTED,
+    ));
+    c.spawn(Node {
+        align_items: AlignItems::Center,
+        column_gap: Val::Px(4.0),
+        ..default()
+    })
+    .with_children(|r| {
         for (k, s) in seasons.list.iter().enumerate() {
-            labelled(r, theme, button(Press::Season(k), Look::Button, k == now), &s.title, 130.0);
+            labelled(
+                r,
+                theme,
+                button(Press::Season(k), Look::Button, k == now),
+                &s.title,
+                130.0,
+            );
         }
     });
 }

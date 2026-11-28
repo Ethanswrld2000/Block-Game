@@ -8,11 +8,11 @@ use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 use voxel::BlockPos;
 
-use super::{hit_foe, Foe, FoeBook, FoeDice};
+use super::{Foe, FoeBook, FoeDice, hit_foe};
 use crate::blocks::Blocks;
 use crate::camera::{FlyCamera, Menus};
-use crate::creatures::data::Kinds;
 use crate::creatures::Creature;
+use crate::creatures::data::Kinds;
 use crate::interact::{Hand, HandAnim, Strike, Wielded};
 use crate::inventory::Inventory;
 use crate::items::Items;
@@ -32,7 +32,11 @@ pub fn ray_hits_body(origin: Vec3, dir: Vec3, foot: Vec3, height: f32, radius: f
     let d = dir.dot(w);
     let e = u.dot(w);
     let denom = 1.0 - b * b;
-    let (mut t, mut s): (f32, f32) = if denom.abs() < 1e-6 { (0.0, e) } else { ((b * e - d) / denom, (e - b * d) / denom) };
+    let (mut t, mut s): (f32, f32) = if denom.abs() < 1e-6 {
+        (0.0, e)
+    } else {
+        ((b * e - d) / denom, (e - b * d) / denom)
+    };
     if s < 0.0 || s > height {
         // Past an end of the segment: the nearest ray point to that end.
         s = s.clamp(0.0, height);
@@ -61,12 +65,24 @@ pub(super) fn fire(
     mut foes: Query<(Entity, &Transform, &mut Foe)>,
     creatures: Query<(Entity, &Transform, &Creature), Without<Foe>>,
     mut dice: ResMut<FoeDice>,
-    (mut strikes, mut sound, mut bursts, mut toast, mut impact): (MessageWriter<Strike>, MessageWriter<PlaySound>, MessageWriter<Burst>, MessageWriter<Toast>, MessageWriter<super::feel::Impact>),
+    (mut strikes, mut sound, mut bursts, mut toast, mut impact): (
+        MessageWriter<Strike>,
+        MessageWriter<PlaySound>,
+        MessageWriter<Burst>,
+        MessageWriter<Toast>,
+        MessageWriter<super::feel::Impact>,
+    ),
     mut reload: Local<f32>,
 ) {
     *reload -= time.delta_secs();
-    let Some(gun) = wielded.0.and_then(|i| items.get(i).gun) else { return };
-    if !mouse.just_pressed(MouseButton::Left) || menus.open || cursor.grab_mode == CursorGrabMode::None || *reload > 0.0 {
+    let Some(gun) = wielded.0.and_then(|i| items.get(i).gun) else {
+        return;
+    };
+    if !mouse.just_pressed(MouseButton::Left)
+        || menus.open
+        || cursor.grab_mode == CursorGrabMode::None
+        || *reload > 0.0
+    {
         return;
     }
     if !inv.take(gun.ammo, 1) {
@@ -80,14 +96,23 @@ pub(super) fn fire(
     let origin = cam.translation;
     let dir = cam.forward().as_vec3();
     sound.write(PlaySound::new("gunshot"));
-    bursts.write(Burst::new(origin + dir * 0.9 + cam.right().as_vec3() * 0.25 - Vec3::Y * 0.2, BurstKind::Smoke, 6));
+    bursts.write(Burst::new(
+        origin + dir * 0.9 + cam.right().as_vec3() * 0.25 - Vec3::Y * 0.2,
+        BurstKind::Smoke,
+        6,
+    ));
 
-    let wall = voxel::raycast::raycast(origin.to_array(), dir.to_array(), gun.range, |p: BlockPos| world.block(p).is_some_and(|b| blocks.registry.get(b).solid))
-        .map(|h| {
-            let min = Vec3::new(h.block.x as f32, h.block.y as f32, h.block.z as f32);
-            crate::interact::ray_box(origin, dir, min, min + Vec3::ONE).unwrap_or(gun.range)
-        })
-        .unwrap_or(gun.range);
+    let wall = voxel::raycast::raycast(
+        origin.to_array(),
+        dir.to_array(),
+        gun.range,
+        |p: BlockPos| world.block(p).is_some_and(|b| blocks.registry.get(b).solid),
+    )
+    .map(|h| {
+        let min = Vec3::new(h.block.x as f32, h.block.y as f32, h.block.z as f32);
+        crate::interact::ray_box(origin, dir, min, min + Vec3::ONE).unwrap_or(gun.range)
+    })
+    .unwrap_or(gun.range);
     // The nearest body in the shot's way.
     enum Target {
         Foe(Entity),
@@ -118,15 +143,35 @@ pub(super) fn fire(
         Some((_, Target::Foe(e))) => {
             if let Ok((_, tf, mut foe)) = foes.get_mut(e) {
                 let k = &book.kinds[foe.kind];
-                let (strength, _, _) = hit_foe(tf, &mut foe, k, origin, &super::Blow::plain(gun.damage, false), &mut dice.0, &mut sound, &mut bursts);
-                impact.write(super::feel::Impact { strength: strength * 0.6 });
+                let (strength, _, _) = hit_foe(
+                    tf,
+                    &mut foe,
+                    k,
+                    origin,
+                    &super::Blow::plain(gun.damage, false),
+                    &mut dice.0,
+                    &mut sound,
+                    &mut bursts,
+                );
+                impact.write(super::feel::Impact {
+                    strength: strength * 0.6,
+                });
             }
         }
         Some((_, Target::Creature(e))) => {
-            strikes.write(Strike { entity: e, damage: gun.damage, dir: Vec3::new(dir.x, 0.0, dir.z).normalize_or_zero(), yours: true });
+            strikes.write(Strike {
+                entity: e,
+                damage: gun.damage,
+                dir: Vec3::new(dir.x, 0.0, dir.z).normalize_or_zero(),
+                yours: true,
+            });
         }
         None if wall < gun.range => {
-            bursts.write(Burst::new(origin + dir * (wall - 0.05), BurstKind::Chips, 6));
+            bursts.write(Burst::new(
+                origin + dir * (wall - 0.05),
+                BurstKind::Chips,
+                6,
+            ));
         }
         None => {}
     }
@@ -144,7 +189,16 @@ mod tests {
         assert!((t - 10.0).abs() < 0.5);
         assert!(ray_hits_body(eye, ahead, Vec3::new(2.0, 0.0, -10.0), 1.8, 0.45).is_none());
         // Over its head, and behind you.
-        assert!(ray_hits_body(eye + Vec3::Y * 3.0, ahead, Vec3::new(0.0, 0.0, -10.0), 1.8, 0.45).is_none());
+        assert!(
+            ray_hits_body(
+                eye + Vec3::Y * 3.0,
+                ahead,
+                Vec3::new(0.0, 0.0, -10.0),
+                1.8,
+                0.45
+            )
+            .is_none()
+        );
         assert!(ray_hits_body(eye, ahead, Vec3::new(0.0, 0.0, 10.0), 1.8, 0.45).is_none());
     }
 

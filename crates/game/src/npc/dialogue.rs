@@ -164,7 +164,8 @@ pub const FOLLOWING: &str = "following";
 
 pub fn load(text: &str) -> Result<HashMap<String, Tree>, String> {
     // `goto: "node"` reads as `Some("node")`.
-    let ron = ron::Options::default().with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME);
+    let ron =
+        ron::Options::default().with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME);
     let trees: HashMap<String, Tree> = ron.from_str(text).map_err(|e| e.to_string())?;
     for (name, t) in &trees {
         t.check().map_err(|e| format!("{name}: {e}"))?;
@@ -197,10 +198,16 @@ impl Tree {
                 if let Some(g) = &c.goto
                     && !has(g)
                 {
-                    return Err(format!("reply `{}` in `{id}` goes to missing `{g}`", c.text));
+                    return Err(format!(
+                        "reply `{}` in `{id}` goes to missing `{g}`",
+                        c.text
+                    ));
                 }
                 if c.goto.is_none() && !c.end && c.act.is_none() && c.service.is_none() {
-                    return Err(format!("reply `{}` in `{id}` leads nowhere (give it goto, end, act or service)", c.text));
+                    return Err(format!(
+                        "reply `{}` in `{id}` leads nowhere (give it goto, end, act or service)",
+                        c.text
+                    ));
                 }
             }
         }
@@ -224,23 +231,47 @@ impl Tree {
     }
 
     /// The replies that show at a node.
-    pub fn offers(&self, id: &str, flags: &HashSet<String>, asked: &HashSet<(String, usize)>) -> Vec<Offer> {
-        let Some(n) = self.nodes.get(id) else { return Vec::new() };
+    pub fn offers(
+        &self,
+        id: &str,
+        flags: &HashSet<String>,
+        asked: &HashSet<(String, usize)>,
+    ) -> Vec<Offer> {
+        let Some(n) = self.nodes.get(id) else {
+            return Vec::new();
+        };
         n.choices
             .iter()
             .enumerate()
             .filter(|(i, c)| {
                 let picked = asked.contains(&(id.to_string(), *i));
-                c.needs.iter().all(|f| flags.contains(f)) && !c.without.iter().any(|f| flags.contains(f)) && !(c.once && picked)
+                c.needs.iter().all(|f| flags.contains(f))
+                    && !c.without.iter().any(|f| flags.contains(f))
+                    && !(c.once && picked)
             })
-            .map(|(i, c)| Offer { index: i, text: c.text.clone(), tone: c.tone.clone(), asked: asked.contains(&(id.to_string(), i)) })
+            .map(|(i, c)| Offer {
+                index: i,
+                text: c.text.clone(),
+                tone: c.tone.clone(),
+                asked: asked.contains(&(id.to_string(), i)),
+            })
             .collect()
     }
 
     /// Pick reply `index` at node `id`.
-    pub fn pick(&self, id: &str, index: usize, flags: &mut HashSet<String>, asked: &mut HashSet<(String, usize)>) -> Outcome {
+    pub fn pick(
+        &self,
+        id: &str,
+        index: usize,
+        flags: &mut HashSet<String>,
+        asked: &mut HashSet<(String, usize)>,
+    ) -> Outcome {
         let Some(c) = self.nodes.get(id).and_then(|n| n.choices.get(index)) else {
-            return Outcome { next: None, act: None, service: None };
+            return Outcome {
+                next: None,
+                act: None,
+                service: None,
+            };
         };
         asked.insert((id.to_string(), index));
         flags.extend(c.sets.iter().cloned());
@@ -255,7 +286,11 @@ impl Tree {
             Some(Act::Spirit) | None => {}
         }
         let next = if c.end { None } else { c.goto.clone() };
-        Outcome { next, act: c.act, service: c.service.clone() }
+        Outcome {
+            next,
+            act: c.act,
+            service: c.service.clone(),
+        }
     }
 }
 
@@ -264,7 +299,8 @@ mod tests {
     use super::*;
 
     fn trees() -> HashMap<String, Tree> {
-        load(include_str!("../../../../assets/data/dialogue.ron")).unwrap_or_else(|e| panic!("dialogue.ron: {e}"))
+        load(include_str!("../../../../assets/data/dialogue.ron"))
+            .unwrap_or_else(|e| panic!("dialogue.ron: {e}"))
     }
 
     #[test]
@@ -276,9 +312,15 @@ mod tests {
     #[test]
     fn npcs_ron_names_real_trees() {
         let t = trees();
-        let kinds = super::super::data::load(include_str!("../../../../assets/data/npcs.ron")).expect("npcs.ron");
+        let kinds = super::super::data::load(include_str!("../../../../assets/data/npcs.ron"))
+            .expect("npcs.ron");
         for k in &kinds {
-            assert!(t.contains_key(&k.dialogue), "{} has no tree `{}`", k.name, k.dialogue);
+            assert!(
+                t.contains_key(&k.dialogue),
+                "{} has no tree `{}`",
+                k.name,
+                k.dialogue
+            );
         }
     }
 
@@ -303,13 +345,21 @@ mod tests {
         let t = &load(text).unwrap()["t"];
         let mut flags = HashSet::new();
         let mut asked = HashSet::new();
-        let names = |f: &HashSet<String>, a: &HashSet<(String, usize)>| t.offers("a", f, a).into_iter().map(|o| o.text).collect::<Vec<_>>();
+        let names = |f: &HashSet<String>, a: &HashSet<(String, usize)>| {
+            t.offers("a", f, a)
+                .into_iter()
+                .map(|o| o.text)
+                .collect::<Vec<_>>()
+        };
         assert_eq!(names(&flags, &asked), ["one", "three"]);
         let out = t.pick("a", 0, &mut flags, &mut asked);
         assert_eq!(out.next.as_deref(), Some("a"));
         assert_eq!(names(&flags, &asked), ["two"]);
         let out = t.pick("a", 1, &mut flags, &mut asked);
-        assert!(t.offers("a", &flags, &asked)[0].asked, "picked before shows dimmed");
+        assert!(
+            t.offers("a", &flags, &asked)[0].asked,
+            "picked before shows dimmed"
+        );
         assert_eq!(out.next.as_deref(), Some("a"));
     }
 

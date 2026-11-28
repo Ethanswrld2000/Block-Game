@@ -188,21 +188,42 @@ mod tests {
         let kinds = super::load(include_str!("../../../../assets/data/foes.ron")).unwrap();
         assert!(kinds.iter().any(|k| k.ghost) && kinds.iter().any(|k| !k.ghost));
         for k in &kinds {
-            assert!(k.health > 0.0 && k.damage > 0.0 && k.swing > 0.3, "{}", k.name);
+            assert!(
+                k.health > 0.0 && k.damage > 0.0 && k.swing > 0.3,
+                "{}",
+                k.name
+            );
             assert!(k.sight < k.forget && k.leash > k.sight, "{}", k.name);
-            assert!((0.0..=1.0).contains(&k.style.aggression) && (0.0..=1.0).contains(&k.style.caution), "{}", k.name);
+            assert!(
+                (0.0..=1.0).contains(&k.style.aggression) && (0.0..=1.0).contains(&k.style.caution),
+                "{}",
+                k.name
+            );
         }
         // Every role has a kind, and shield bearers carry a shield.
-        for r in [super::Role::Grunt, super::Role::Shield, super::Role::Archer, super::Role::Brute, super::Role::Skirmisher, super::Role::Support] {
+        for r in [
+            super::Role::Grunt,
+            super::Role::Shield,
+            super::Role::Archer,
+            super::Role::Brute,
+            super::Role::Skirmisher,
+            super::Role::Support,
+        ] {
             assert!(kinds.iter().any(|k| k.role == r), "{r:?}");
         }
-        assert!(kinds.iter().filter(|k| k.role == super::Role::Shield).all(|k| k.offhand.is_some()));
+        assert!(
+            kinds
+                .iter()
+                .filter(|k| k.role == super::Role::Shield)
+                .all(|k| k.offhand.is_some())
+        );
     }
 
     #[test]
     fn elites_pick_every_kind() {
         use super::Elite;
-        let seen: std::collections::HashSet<_> = (0..30).map(|i| Elite::pick(i as f32 / 30.0)).collect();
+        let seen: std::collections::HashSet<_> =
+            (0..30).map(|i| Elite::pick(i as f32 / 30.0)).collect();
         assert_eq!(seen.len(), 3);
         assert_eq!(Elite::pick(1.0), Elite::Frenzied);
         assert!(Elite::Fierce.damage() > Elite::Warded.damage() && Elite::Frenzied.haste() < 1.0);

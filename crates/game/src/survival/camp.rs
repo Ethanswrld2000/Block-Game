@@ -24,10 +24,10 @@ use super::{Survival, SurvivalSet, Toast};
 use crate::blocks::Blocks;
 use crate::camera::FlyCamera;
 use crate::clock::WorldClock;
-use crate::inventory::{grid::Stack, Inventory};
+use crate::inventory::{Inventory, grid::Stack};
 use crate::items::Items;
-use crate::torches::{Fire, Torches};
 use crate::player::{MoveMode, Player};
+use crate::torches::{Fire, Torches};
 use crate::world::World;
 
 /// How close to the bedroll you must be to sleep or roll it up.
@@ -52,7 +52,13 @@ pub struct CampPlugin;
 impl Plugin for CampPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Sleep>()
-            .add_systems(crate::menu::GameUpdate, (bedroll_key, lay_out, sleep_key, sleep).chain().before(SurvivalSet).after(crate::player::PlayerSet))
+            .add_systems(
+                crate::menu::GameUpdate,
+                (bedroll_key, lay_out, sleep_key, sleep)
+                    .chain()
+                    .before(SurvivalSet)
+                    .after(crate::player::PlayerSet),
+            )
             .add_systems(crate::menu::GameUpdate, (show_bedroll, show_away));
     }
 }
@@ -98,7 +104,11 @@ impl Away {
 
     /// The item it packs back into.
     pub fn item(&self) -> &'static str {
-        if self.tent { "portable_tent" } else { "portable_bedroll" }
+        if self.tent {
+            "portable_tent"
+        } else {
+            "portable_bedroll"
+        }
     }
 }
 
@@ -107,7 +117,8 @@ const TENT_WARMTH: f32 = 16.0;
 
 impl Camp {
     pub fn near_away(&self, p: Vec3) -> bool {
-        self.away.is_some_and(|a| a.bed.center().distance(p) <= CAMP_REACH)
+        self.away
+            .is_some_and(|a| a.bed.center().distance(p) <= CAMP_REACH)
     }
 
     /// Where to wake after dying: beside the bedroll.
@@ -119,7 +130,8 @@ impl Camp {
     }
 
     pub fn near(&self, p: Vec3) -> bool {
-        self.bedroll.is_some_and(|b| b.center().distance(p) <= CAMP_REACH)
+        self.bedroll
+            .is_some_and(|b| b.center().distance(p) <= CAMP_REACH)
     }
 }
 
@@ -176,8 +188,16 @@ fn clear_patch(world: &World, blocks: &Blocks, c: BlockPos) -> bool {
     (0..2).all(|dx| {
         (0..2).all(|dz| {
             let p = BlockPos::new(c.x + dx, c.y, c.z + dz);
-            let open = |q: BlockPos| world.block(q).is_some_and(|b| Some(b) != water && !blocks.registry.get(b).solid && blocks.registry.get(b).shape != voxel::Shape::Torch);
-            open(p) && open(BlockPos::new(p.x, p.y + 1, p.z)) && solid(BlockPos::new(p.x, p.y - 1, p.z)) == Some(true)
+            let open = |q: BlockPos| {
+                world.block(q).is_some_and(|b| {
+                    Some(b) != water
+                        && !blocks.registry.get(b).solid
+                        && blocks.registry.get(b).shape != voxel::Shape::Torch
+                })
+            };
+            open(p)
+                && open(BlockPos::new(p.x, p.y + 1, p.z))
+                && solid(BlockPos::new(p.x, p.y - 1, p.z)) == Some(true)
         })
     })
 }
@@ -196,10 +216,16 @@ fn bedroll_key(
     mut camp: ResMut<Camp>,
     mut toast: MessageWriter<Toast>,
 ) {
-    if !keys.just_pressed(KeyCode::KeyB) || *mode != MoveMode::Walk || sleep.active() || s.vitals.health.is_dead() {
+    if !keys.just_pressed(KeyCode::KeyB)
+        || *mode != MoveMode::Walk
+        || sleep.active()
+        || s.vitals.health.is_dead()
+    {
         return;
     }
-    let Some(bedroll) = items.id(BEDROLL) else { return };
+    let Some(bedroll) = items.id(BEDROLL) else {
+        return;
+    };
     if let Some(b) = camp.bedroll {
         if camp.near(player.pos) {
             if inv.add(&items, Stack::new(bedroll, 1)).is_some() {
@@ -210,12 +236,17 @@ fn bedroll_key(
             toast.write(Toast("Rolled up the bedroll".into()));
         } else {
             let c = b.center();
-            toast.write(Toast(format!("Your bedroll is at {:.0}, {:.0}: go back to roll it up", c.x, c.z)));
+            toast.write(Toast(format!(
+                "Your bedroll is at {:.0}, {:.0}: go back to roll it up",
+                c.x, c.z
+            )));
         }
         return;
     }
     if inv.count(bedroll) == 0 {
-        toast.write(Toast("You have no bedroll: weave one from plant fiber and sticks (Tab)".into()));
+        toast.write(Toast(
+            "You have no bedroll: weave one from plant fiber and sticks (Tab)".into(),
+        ));
         return;
     }
     if !player.on_ground {
@@ -235,12 +266,17 @@ fn bedroll_key(
         let corner = BlockPos::new(cx - 1, y + dy, cz - 1);
         if clear_patch(&world, &blocks, corner) {
             inv.take(bedroll, 1);
-            camp.bedroll = Some(Bedroll { pos: (cx as f32, (y + dy) as f32, cz as f32), along_x });
+            camp.bedroll = Some(Bedroll {
+                pos: (cx as f32, (y + dy) as f32, cz as f32),
+                along_x,
+            });
             toast.write(Toast("Camp made: you'll wake here".into()));
             return;
         }
     }
-    toast.write(Toast("Needs a clear, flat 2x2 patch in front of you".into()));
+    toast.write(Toast(
+        "Needs a clear, flat 2x2 patch in front of you".into(),
+    ));
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -256,7 +292,11 @@ fn sleep_key(
     mut sleep: ResMut<Sleep>,
     mut toast: MessageWriter<Toast>,
 ) {
-    if !keys.just_pressed(KeyCode::KeyZ) || *mode != MoveMode::Walk || sleep.active() || s.vitals.health.is_dead() {
+    if !keys.just_pressed(KeyCode::KeyZ)
+        || *mode != MoveMode::Walk
+        || sleep.active()
+        || s.vitals.health.is_dead()
+    {
         return;
     }
     let away = camp.near_away(player.pos) && !camp.near(player.pos);
@@ -265,20 +305,42 @@ fn sleep_key(
     } else if !camp.near(player.pos) && !away {
         toast.write(Toast("Too far from your bedroll".into()));
     } else if crate::guide::rules::bed_missing(&story.flags) {
-        toast.write(Toast("Make your camp mat first: put 4 sticks and 4 plant fiber in the urn".into()));
+        toast.write(Toast(
+            "Make your camp mat first: put 4 sticks and 4 plant fiber in the urn".into(),
+        ));
     } else if !(is_night(clock.hour()) || s.vitals.health.get(Layer::Fatigue) < EXHAUSTED) {
-        toast.write(Toast("You can only sleep at night, or when worn out".into()));
-    } else if !warm_enough(player.pos, torches.fires(), s.cover == super::shelter::Cover::Room) {
-        toast.write(Toast("Too cold to sleep: light a campfire by your bed".into()));
+        toast.write(Toast(
+            "You can only sleep at night, or when worn out".into(),
+        ));
+    } else if !warm_enough(
+        player.pos,
+        torches.fires(),
+        s.cover == super::shelter::Cover::Room,
+    ) {
+        toast.write(Toast(
+            "Too cold to sleep: light a campfire by your bed".into(),
+        ));
     } else {
-        *sleep = Sleep { t: Some(0.0), slept: false, away };
+        *sleep = Sleep {
+            t: Some(0.0),
+            slept: false,
+            away,
+        };
     }
 }
 
 /// Can you sleep here: a campfire within `FIRE_REACH`, or walls and a roof round you.
-pub fn warm_enough(at: Vec3, fires: impl IntoIterator<Item = (BlockPos, Fire)>, in_room: bool) -> bool {
+pub fn warm_enough(
+    at: Vec3,
+    fires: impl IntoIterator<Item = (BlockPos, Fire)>,
+    in_room: bool,
+) -> bool {
     in_room
-        || fires.into_iter().any(|(p, f)| f == Fire::Campfire && Vec3::new(p.x as f32 + 0.5, p.y as f32, p.z as f32 + 0.5).distance(at) <= FIRE_REACH)
+        || fires.into_iter().any(|(p, f)| {
+            f == Fire::Campfire
+                && Vec3::new(p.x as f32 + 0.5, p.y as f32, p.z as f32 + 0.5).distance(at)
+                    <= FIRE_REACH
+        })
 }
 
 pub fn is_night(hour: f32) -> bool {
@@ -323,19 +385,31 @@ fn sleep(
         story.flags.insert(SLEPT.to_string());
         // The home bed's extras stay at home; a tent wakes you warm.
         let tent = sleep.away && camp.away.is_some_and(|a| a.tent);
-        let (mend, fed, warm) = if sleep.away { (0.0, 0.0, tent.then_some(TENT_WARMTH)) } else { camp.bed.rest() };
+        let (mend, fed, warm) = if sleep.away {
+            (0.0, 0.0, tent.then_some(TENT_WARMTH))
+        } else {
+            camp.bed.rest()
+        };
         s.vitals.health.heal(Layer::Injuries, mend);
         s.vitals.health.heal(Layer::Blood, mend);
         s.vitals.satiety = (s.vitals.satiety + fed).min(100.0);
         if let Some(w) = warm {
             s.vitals.feels = s.vitals.feels.max(w);
         }
-        let wake = if sleep.away { camp.away.map(|a| a.bed.center() + Vec3::Y * 0.01) } else { camp.respawn() };
+        let wake = if sleep.away {
+            camp.away.map(|a| a.bed.center() + Vec3::Y * 0.01)
+        } else {
+            camp.respawn()
+        };
         if let Some(p) = wake {
             player.pos = p;
             player.vel = Vec3::ZERO;
         }
-        let note = if s.vitals.health.mortal().is_some() { " Your wounds still need treating." } else { "" };
+        let note = if s.vitals.health.mortal().is_some() {
+            " Your wounds still need treating."
+        } else {
+            ""
+        };
         let bed = match (camp.bed.frame, camp.bed.double) {
             _ if tent => " The tent kept the weather off.",
             _ if sleep.away => "",
@@ -357,7 +431,12 @@ fn lay_out(
     mouse: Res<ButtonInput<MouseButton>>,
     mode: Res<MoveMode>,
     menus: Res<crate::camera::Menus>,
-    (player, target, wielded, items): (Res<Player>, Res<crate::interact::Target>, Res<crate::interact::Wielded>, Res<crate::items::Items>),
+    (player, target, wielded, items): (
+        Res<Player>,
+        Res<crate::interact::Target>,
+        Res<crate::interact::Wielded>,
+        Res<crate::items::Items>,
+    ),
     (world, blocks): (Res<World>, Res<Blocks>),
     cam: Query<&FlyCamera>,
     mut inv: ResMut<crate::inventory::Inventory>,
@@ -373,11 +452,17 @@ fn lay_out(
             && camp.near_away(player.pos)
             && let Some(id) = items.id(a.item())
         {
-            if inv.add(&items, crate::inventory::grid::Stack::new(id, 1)).is_some() {
+            if inv
+                .add(&items, crate::inventory::grid::Stack::new(id, 1))
+                .is_some()
+            {
                 toast.write(Toast("No room in your pockets to pack it up".into()));
             } else {
                 camp.away = None;
-                toast.write(Toast(format!("Packed up the {}", if a.tent { "tent" } else { "spare bedroll" })));
+                toast.write(Toast(format!(
+                    "Packed up the {}",
+                    if a.tent { "tent" } else { "spare bedroll" }
+                )));
             }
         }
         return;
@@ -389,7 +474,9 @@ fn lay_out(
         _ => return,
     };
     if camp.away.is_some() {
-        toast.write(Toast("Pack up the one you laid out first (crouch and right click by it)".into()));
+        toast.write(Toast(
+            "Pack up the one you laid out first (crouch and right click by it)".into(),
+        ));
         return;
     }
     let Some(hit) = target.hit.filter(|h| h.before.y == h.block.y + 1) else {
@@ -402,19 +489,40 @@ fn lay_out(
     let (cx, y, cz) = (hit.before.x, hit.before.y, hit.before.z);
     // The 2x2 patch whose corner is nearest where you clicked.
     let corners = [(cx, cz), (cx + 1, cz), (cx, cz + 1), (cx + 1, cz + 1)];
-    let Some((x, z)) = corners.into_iter().find(|(x, z)| clear_patch(&world, &blocks, BlockPos::new(x - 1, y, z - 1))) else {
+    let Some((x, z)) = corners
+        .into_iter()
+        .find(|(x, z)| clear_patch(&world, &blocks, BlockPos::new(x - 1, y, z - 1)))
+    else {
         toast.write(Toast("Needs a clear, flat 2x2 patch".into()));
         return;
     };
     if !inv.take(item, 1) {
         return;
     }
-    camp.away = Some(Away { bed: Bedroll { pos: (x as f32, y as f32, z as f32), along_x }, tent });
-    toast.write(Toast(if tent { "Tent pitched: Z sleeps in it, and it keeps the weather off" } else { "Spare bedroll laid out: Z sleeps on it" }.into()));
+    camp.away = Some(Away {
+        bed: Bedroll {
+            pos: (x as f32, y as f32, z as f32),
+            along_x,
+        },
+        tent,
+    });
+    toast.write(Toast(
+        if tent {
+            "Tent pitched: Z sleeps in it, and it keeps the weather off"
+        } else {
+            "Spare bedroll laid out: Z sleeps on it"
+        }
+        .into(),
+    ));
 }
 
 /// Keep a model of the spare bedroll or tent where it lies.
-fn show_away(mut commands: Commands, mut camp: ResMut<Camp>, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<StandardMaterial>>) {
+fn show_away(
+    mut commands: Commands,
+    mut camp: ResMut<Camp>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
     if camp.away_entity.map(|(_, a)| a) == camp.away {
         return;
     }
@@ -422,26 +530,62 @@ fn show_away(mut commands: Commands, mut camp: ResMut<Camp>, mut meshes: ResMut<
         commands.entity(e).despawn();
     }
     let Some(a) = camp.away else { return };
-    let mat = |m: &mut Assets<StandardMaterial>, r: f32, g: f32, b: f32| m.add(StandardMaterial { base_color: Color::srgb(r, g, b), perceptual_roughness: 1.0, ..default() });
+    let mat = |m: &mut Assets<StandardMaterial>, r: f32, g: f32, b: f32| {
+        m.add(StandardMaterial {
+            base_color: Color::srgb(r, g, b),
+            perceptual_roughness: 1.0,
+            ..default()
+        })
+    };
     let cloth = mat(&mut materials, 0.45, 0.38, 0.26);
     let linen = mat(&mut materials, 0.78, 0.72, 0.58);
     let hide = mat(&mut materials, 0.62, 0.48, 0.32);
     let pole = mat(&mut materials, 0.4, 0.28, 0.16);
-    let rot = if a.bed.along_x { Quat::from_rotation_y(std::f32::consts::FRAC_PI_2) } else { Quat::IDENTITY };
+    let rot = if a.bed.along_x {
+        Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)
+    } else {
+        Quat::IDENTITY
+    };
     let e = commands
-        .spawn((Transform::from_translation(a.bed.center()).with_rotation(rot), Visibility::default()))
+        .spawn((
+            Transform::from_translation(a.bed.center()).with_rotation(rot),
+            Visibility::default(),
+        ))
         .with_children(|c| {
-            c.spawn((Mesh3d(meshes.add(Cuboid::new(0.9, 0.12, 1.9))), MeshMaterial3d(cloth), Transform::from_xyz(0.0, 0.06, 0.0), NotShadowCaster));
-            c.spawn((Mesh3d(meshes.add(Cuboid::new(0.72, 0.14, 0.36))), MeshMaterial3d(linen), Transform::from_xyz(0.0, 0.14, -0.72), NotShadowCaster));
+            c.spawn((
+                Mesh3d(meshes.add(Cuboid::new(0.9, 0.12, 1.9))),
+                MeshMaterial3d(cloth),
+                Transform::from_xyz(0.0, 0.06, 0.0),
+                NotShadowCaster,
+            ));
+            c.spawn((
+                Mesh3d(meshes.add(Cuboid::new(0.72, 0.14, 0.36))),
+                MeshMaterial3d(linen),
+                Transform::from_xyz(0.0, 0.14, -0.72),
+                NotShadowCaster,
+            ));
             if a.tent {
                 // Two hide sides leaning together over a ridge pole, open at the ends.
                 let side = meshes.add(Cuboid::new(0.06, 1.75, 2.2));
                 for s in [-1.0f32, 1.0] {
-                    c.spawn((Mesh3d(side.clone()), MeshMaterial3d(hide.clone()), Transform::from_xyz(s * 0.55, 0.78, 0.0).with_rotation(Quat::from_rotation_z(s * 0.62))));
+                    c.spawn((
+                        Mesh3d(side.clone()),
+                        MeshMaterial3d(hide.clone()),
+                        Transform::from_xyz(s * 0.55, 0.78, 0.0)
+                            .with_rotation(Quat::from_rotation_z(s * 0.62)),
+                    ));
                 }
-                c.spawn((Mesh3d(meshes.add(Cuboid::new(0.08, 0.08, 2.4))), MeshMaterial3d(pole.clone()), Transform::from_xyz(0.0, 1.5, 0.0)));
+                c.spawn((
+                    Mesh3d(meshes.add(Cuboid::new(0.08, 0.08, 2.4))),
+                    MeshMaterial3d(pole.clone()),
+                    Transform::from_xyz(0.0, 1.5, 0.0),
+                ));
                 for z in [-1.1f32, 1.1] {
-                    c.spawn((Mesh3d(meshes.add(Cuboid::new(0.08, 1.5, 0.08))), MeshMaterial3d(pole.clone()), Transform::from_xyz(0.0, 0.75, z)));
+                    c.spawn((
+                        Mesh3d(meshes.add(Cuboid::new(0.08, 1.5, 0.08))),
+                        MeshMaterial3d(pole.clone()),
+                        Transform::from_xyz(0.0, 0.75, z),
+                    ));
                 }
             }
         })
@@ -449,7 +593,12 @@ fn show_away(mut commands: Commands, mut camp: ResMut<Camp>, mut meshes: ResMut<
     camp.away_entity = Some((e, a));
 }
 
-type BedrollAssets = (Handle<Mesh>, Handle<Mesh>, Handle<StandardMaterial>, Handle<StandardMaterial>);
+type BedrollAssets = (
+    Handle<Mesh>,
+    Handle<Mesh>,
+    Handle<StandardMaterial>,
+    Handle<StandardMaterial>,
+);
 
 /// Keep a bedroll model where the camp is.
 fn show_bedroll(
@@ -471,17 +620,42 @@ fn show_bedroll(
             (
                 meshes.add(Cuboid::new(0.9, 0.12, 1.9)),
                 meshes.add(Cuboid::new(0.72, 0.14, 0.36)),
-                materials.add(StandardMaterial { base_color: Color::srgb(0.33, 0.4, 0.22), perceptual_roughness: 1.0, ..default() }),
-                materials.add(StandardMaterial { base_color: Color::srgb(0.78, 0.72, 0.58), perceptual_roughness: 1.0, ..default() }),
+                materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.33, 0.4, 0.22),
+                    perceptual_roughness: 1.0,
+                    ..default()
+                }),
+                materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.78, 0.72, 0.58),
+                    perceptual_roughness: 1.0,
+                    ..default()
+                }),
             )
         })
         .clone();
-    let rot = if b.along_x { Quat::from_rotation_y(std::f32::consts::FRAC_PI_2) } else { Quat::IDENTITY };
+    let rot = if b.along_x {
+        Quat::from_rotation_y(std::f32::consts::FRAC_PI_2)
+    } else {
+        Quat::IDENTITY
+    };
     let e = commands
-        .spawn((Transform::from_translation(b.center()).with_rotation(rot), Visibility::default()))
+        .spawn((
+            Transform::from_translation(b.center()).with_rotation(rot),
+            Visibility::default(),
+        ))
         .with_children(|c| {
-            c.spawn((Mesh3d(roll), MeshMaterial3d(cloth), Transform::from_xyz(0.0, 0.06, 0.0), NotShadowCaster));
-            c.spawn((Mesh3d(pillow), MeshMaterial3d(linen), Transform::from_xyz(0.0, 0.14, -0.72), NotShadowCaster));
+            c.spawn((
+                Mesh3d(roll),
+                MeshMaterial3d(cloth),
+                Transform::from_xyz(0.0, 0.06, 0.0),
+                NotShadowCaster,
+            ));
+            c.spawn((
+                Mesh3d(pillow),
+                MeshMaterial3d(linen),
+                Transform::from_xyz(0.0, 0.14, -0.72),
+                NotShadowCaster,
+            ));
         })
         .id();
     camp.entity = Some((e, b));
@@ -494,15 +668,29 @@ mod tests {
     #[test]
     fn better_beds_rest_you_more() {
         let none = Bed::default().rest();
-        let frame = Bed { frame: true, double: false }.rest();
-        let double = Bed { frame: true, double: true }.rest();
+        let frame = Bed {
+            frame: true,
+            double: false,
+        }
+        .rest();
+        let double = Bed {
+            frame: true,
+            double: true,
+        }
+        .rest();
         assert!(none.0 < frame.0 && frame.0 < double.0);
         assert!(none.2.is_none() && frame.2 < double.2);
     }
 
     #[test]
     fn a_tent_covers_its_patch() {
-        let a = Away { bed: Bedroll { pos: (10.0, 5.0, -3.0), along_x: false }, tent: true };
+        let a = Away {
+            bed: Bedroll {
+                pos: (10.0, 5.0, -3.0),
+                along_x: false,
+            },
+            tent: true,
+        };
         assert!(a.inside(Vec3::new(10.4, 5.0, -2.2)));
         assert!(!a.inside(Vec3::new(12.0, 5.0, -3.0)));
         assert!(!a.inside(Vec3::new(10.0, 8.0, -3.0)));
@@ -515,8 +703,14 @@ mod tests {
         let fire = |x: i32, f: Fire| (BlockPos::new(x, 10, 0), f);
         assert!(!warm_enough(at, [], false), "nothing to keep you warm");
         assert!(warm_enough(at, [fire(4, Fire::Campfire)], false));
-        assert!(!warm_enough(at, [fire(9, Fire::Campfire)], false), "too far");
-        assert!(!warm_enough(at, [fire(1, Fire::Torch)], false), "a torch isn't enough");
+        assert!(
+            !warm_enough(at, [fire(9, Fire::Campfire)], false),
+            "too far"
+        );
+        assert!(
+            !warm_enough(at, [fire(1, Fire::Torch)], false),
+            "a torch isn't enough"
+        );
         assert!(warm_enough(at, [], true), "a closed room will do");
     }
 

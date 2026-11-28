@@ -40,7 +40,8 @@ pub struct Then {
 }
 
 pub fn load(text: &str) -> Result<Vec<Def>, String> {
-    let ron = ron::Options::default().with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME);
+    let ron =
+        ron::Options::default().with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME);
     let defs: Vec<Def> = ron.from_str(text).map_err(|e| e.to_string())?;
     for d in &defs {
         if d.foes.is_empty() || d.foes.iter().all(|(_, n)| *n == 0) {
@@ -87,7 +88,15 @@ impl Running {
     pub fn start(def: &Def, at: [f32; 3]) -> Self {
         let total = def.foes.iter().map(|(_, n)| n).sum();
         let ship = matches!(def.from, From::Airship(_));
-        Self { id: def.id.clone(), at, total, left: total, phase: Phase::Coming(0.0), ship, ship_sent: false }
+        Self {
+            id: def.id.clone(),
+            at,
+            total,
+            left: total,
+            phase: Phase::Coming(0.0),
+            ship,
+            ship_sent: false,
+        }
     }
 
     /// Time passes; `ready` = you are alive and near enough. Says when to send the ship or spawn.
@@ -164,7 +173,12 @@ mod tests {
     use super::*;
 
     fn def(from: From) -> Def {
-        Def { id: "test".into(), foes: vec![("rot_brute".into(), 2), ("mire_skitter".into(), 1)], from, then: Then::default() }
+        Def {
+            id: "test".into(),
+            foes: vec![("rot_brute".into(), 2), ("mire_skitter".into(), 1)],
+            from,
+            then: Then::default(),
+        }
     }
 
     #[test]
@@ -220,11 +234,16 @@ mod tests {
 
     #[test]
     fn the_data_file_loads_with_real_foes() {
-        let defs = load(include_str!("../../../../assets/data/encounters.ron")).expect("encounters.ron");
+        let defs =
+            load(include_str!("../../../../assets/data/encounters.ron")).expect("encounters.ron");
         let foes = include_str!("../../../../assets/data/foes.ron");
         for d in &defs {
             for (k, _) in &d.foes {
-                assert!(foes.contains(&format!("name: \"{k}\"")), "{}: no foe {k}", d.id);
+                assert!(
+                    foes.contains(&format!("name: \"{k}\"")),
+                    "{}: no foe {k}",
+                    d.id
+                );
             }
         }
     }

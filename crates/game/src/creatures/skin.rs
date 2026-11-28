@@ -60,7 +60,14 @@ pub enum Face {
 }
 
 impl Face {
-    pub const ALL: [Face; 6] = [Face::Right, Face::Left, Face::Top, Face::Bottom, Face::Back, Face::Front];
+    pub const ALL: [Face; 6] = [
+        Face::Right,
+        Face::Left,
+        Face::Top,
+        Face::Bottom,
+        Face::Back,
+        Face::Front,
+    ];
 
     /// Outward normal in creature space.
     pub fn normal(self) -> [f32; 3] {
@@ -136,9 +143,23 @@ pub struct Layout {
 impl Layout {
     pub fn new(model: &[CreatureBox]) -> Layout {
         let dims: Vec<_> = model.iter().map(|b| pixels(b.size)).collect();
-        let widest = dims.iter().map(|(w, _, d)| 2 * (w + d)).chain(model.iter().zip(&dims).filter_map(|(b, (w, _, d))| b.uv.map(|(x, _)| x + 2 * (w + d)))).max().unwrap_or(1);
+        let widest = dims
+            .iter()
+            .map(|(w, _, d)| 2 * (w + d))
+            .chain(
+                model
+                    .iter()
+                    .zip(&dims)
+                    .filter_map(|(b, (w, _, d))| b.uv.map(|(x, _)| x + 2 * (w + d))),
+            )
+            .max()
+            .unwrap_or(1);
         let width = widest.next_power_of_two().max(64);
-        let pinned: Vec<Rect> = model.iter().zip(&dims).filter_map(|(b, &dim)| b.uv.map(|(x, y)| Net::at(x, y, dim).bounds)).collect();
+        let pinned: Vec<Rect> = model
+            .iter()
+            .zip(&dims)
+            .filter_map(|(b, &dim)| b.uv.map(|(x, y)| Net::at(x, y, dim).bounds))
+            .collect();
         let (mut x, mut y, mut row) = (0, 0, 0);
         let mut nets = Vec::with_capacity(model.len());
         for (b, &dim) in model.iter().zip(&dims) {
@@ -164,8 +185,16 @@ impl Layout {
                 break;
             }
         }
-        let bottom = nets.iter().map(|n| n.bounds.y + n.bounds.h).max().unwrap_or(1);
-        Layout { width, height: bottom.next_power_of_two().max(16), nets }
+        let bottom = nets
+            .iter()
+            .map(|n| n.bounds.y + n.bounds.h)
+            .max()
+            .unwrap_or(1);
+        Layout {
+            width,
+            height: bottom.next_power_of_two().max(16),
+            nets,
+        }
     }
 
     /// Texture coordinates (0..1) of a face's four corners, in the order
@@ -173,7 +202,12 @@ impl Layout {
     pub fn uvs(&self, part: usize, face: Face) -> [[f32; 2]; 4] {
         let r = self.nets[part].face(face);
         let (w, h) = (self.width as f32, self.height as f32);
-        let (u0, v0, u1, v1) = (r.x as f32 / w, r.y as f32 / h, (r.x + r.w) as f32 / w, (r.y + r.h) as f32 / h);
+        let (u0, v0, u1, v1) = (
+            r.x as f32 / w,
+            r.y as f32 / h,
+            (r.x + r.w) as f32 / w,
+            (r.y + r.h) as f32 / h,
+        );
         [[u0, v0], [u1, v0], [u1, v1], [u0, v1]]
     }
 }
@@ -203,7 +237,14 @@ mod tests {
     use super::*;
 
     fn b(size: (f32, f32, f32)) -> CreatureBox {
-        CreatureBox { size, offset: (0.0, 0.0, 0.0), color: (1.0, 1.0, 1.0), name: String::new(), uv: None, glow: false }
+        CreatureBox {
+            size,
+            offset: (0.0, 0.0, 0.0),
+            color: (1.0, 1.0, 1.0),
+            name: String::new(),
+            uv: None,
+            glow: false,
+        }
     }
 
     fn sub(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
@@ -211,19 +252,79 @@ mod tests {
     }
 
     fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
-        [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+        [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ]
     }
 
     #[test]
     fn net_matches_the_diagram() {
         let n = Net::at(0, 0, (8, 12, 4));
-        assert_eq!(n.bounds, Rect { x: 0, y: 0, w: 24, h: 16 });
-        assert_eq!(n.face(Face::Top), Rect { x: 4, y: 0, w: 8, h: 4 });
-        assert_eq!(n.face(Face::Bottom), Rect { x: 12, y: 0, w: 8, h: 4 });
-        assert_eq!(n.face(Face::Right), Rect { x: 0, y: 4, w: 4, h: 12 });
-        assert_eq!(n.face(Face::Front), Rect { x: 4, y: 4, w: 8, h: 12 });
-        assert_eq!(n.face(Face::Left), Rect { x: 12, y: 4, w: 4, h: 12 });
-        assert_eq!(n.face(Face::Back), Rect { x: 16, y: 4, w: 8, h: 12 });
+        assert_eq!(
+            n.bounds,
+            Rect {
+                x: 0,
+                y: 0,
+                w: 24,
+                h: 16
+            }
+        );
+        assert_eq!(
+            n.face(Face::Top),
+            Rect {
+                x: 4,
+                y: 0,
+                w: 8,
+                h: 4
+            }
+        );
+        assert_eq!(
+            n.face(Face::Bottom),
+            Rect {
+                x: 12,
+                y: 0,
+                w: 8,
+                h: 4
+            }
+        );
+        assert_eq!(
+            n.face(Face::Right),
+            Rect {
+                x: 0,
+                y: 4,
+                w: 4,
+                h: 12
+            }
+        );
+        assert_eq!(
+            n.face(Face::Front),
+            Rect {
+                x: 4,
+                y: 4,
+                w: 8,
+                h: 12
+            }
+        );
+        assert_eq!(
+            n.face(Face::Left),
+            Rect {
+                x: 12,
+                y: 4,
+                w: 4,
+                h: 12
+            }
+        );
+        assert_eq!(
+            n.face(Face::Back),
+            Rect {
+                x: 16,
+                y: 4,
+                w: 8,
+                h: 12
+            }
+        );
     }
 
     #[test]
@@ -261,7 +362,16 @@ mod tests {
 
     #[test]
     fn packing_never_overlaps_and_is_stable() {
-        let model: Vec<_> = [(0.8, 0.6, 1.2), (0.5, 0.45, 0.45), (0.08, 0.08, 0.2), (0.18, 0.3, 0.18), (0.18, 0.3, 0.18)].into_iter().map(b).collect();
+        let model: Vec<_> = [
+            (0.8, 0.6, 1.2),
+            (0.5, 0.45, 0.45),
+            (0.08, 0.08, 0.2),
+            (0.18, 0.3, 0.18),
+            (0.18, 0.3, 0.18),
+        ]
+        .into_iter()
+        .map(b)
+        .collect();
         let l = Layout::new(&model);
         for (i, a) in l.nets.iter().enumerate() {
             assert!(a.bounds.x + a.bounds.w <= l.width && a.bounds.y + a.bounds.h <= l.height);

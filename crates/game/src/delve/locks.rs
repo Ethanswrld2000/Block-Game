@@ -10,7 +10,7 @@ use voxel::BlockId;
 use worldgen::delve::Doorway;
 
 use super::rules::{self, Lock, LockStep};
-use super::{spawn_wave, tag_room, Below, DelveSet};
+use super::{Below, DelveSet, spawn_wave, tag_room};
 use crate::combat::{Foe, FoeBook, SpawnFoe};
 use crate::player::Player;
 use crate::sound::PlaySound;
@@ -24,7 +24,13 @@ impl Plugin for LocksPlugin {
         app.init_resource::<LockIn>()
             .add_message::<RoomCleared>()
             .add_systems(crate::menu::GameStartup, spawn_counter)
-            .add_systems(crate::menu::GameUpdate, (lock_in, hold, glow, counter).chain().in_set(LocksSet).after(DelveSet));
+            .add_systems(
+                crate::menu::GameUpdate,
+                (lock_in, hold, glow, counter)
+                    .chain()
+                    .in_set(LocksSet)
+                    .after(DelveSet),
+            );
     }
 }
 
@@ -56,7 +62,8 @@ pub struct RoomCleared(pub usize);
 
 /// Foes of `rooms` (any wave) still standing.
 fn standing<'a>(foes: impl Iterator<Item = &'a Foe>, rooms: &[usize]) -> usize {
-    foes.filter(|f| tag_room(f.tag).is_some_and(|(r, _)| rooms.contains(&r))).count()
+    foes.filter(|f| tag_room(f.tag).is_some_and(|(r, _)| rooms.contains(&r)))
+        .count()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -75,9 +82,14 @@ fn lock_in(
 ) {
     let here = below.run.map(|r| (r.number, r.floor));
     if lock.on != here {
-        *lock = LockIn { on: here, ..default() };
+        *lock = LockIn {
+            on: here,
+            ..default()
+        };
     }
-    let Some(floor) = below.floor.clone() else { return };
+    let Some(floor) = below.floor.clone() else {
+        return;
+    };
     // Rooms that never lock count as cleared once their foes are down.
     let open: Vec<usize> = below
         .spawned
@@ -106,19 +118,40 @@ fn lock_in(
         return;
     }
     let has_foes = floor.spawns.iter().any(|s| s.room == room);
-    if !rules::locks(floor.rooms[room].kind, has_foes, below.cleared.contains(&room)) {
+    if !rules::locks(
+        floor.rooms[room].kind,
+        has_foes,
+        below.cleared.contains(&room),
+    ) {
         return;
     }
-    let group: Vec<usize> = floor.sealed_with(room).into_iter().filter(|r| !below.cleared.contains(r)).collect();
-    let waves = group.iter().map(|&r| floor.rooms[r].waves).max().unwrap_or(1);
+    let group: Vec<usize> = floor
+        .sealed_with(room)
+        .into_iter()
+        .filter(|r| !below.cleared.contains(r))
+        .collect();
+    let waves = group
+        .iter()
+        .map(|&r| floor.rooms[r].waves)
+        .max()
+        .unwrap_or(1);
     for &r in &group {
         spawn_wave(&mut below, &book, &generator, r, 0, &mut spawn);
     }
     // The boss already fell (a cleared dungeon's last floor): nothing to lock in with.
-    if group.iter().all(|&r| floor.spawns.iter().filter(|s| s.room == r).all(|s| s.kind == worldgen::SpawnKind::Boss)) && below.run.is_some_and(|r| r.boss_down) {
+    if group.iter().all(|&r| {
+        floor
+            .spawns
+            .iter()
+            .filter(|s| s.room == r)
+            .all(|s| s.kind == worldgen::SpawnKind::Boss)
+    }) && below.run.is_some_and(|r| r.boss_down)
+    {
         return;
     }
-    let Some(slab) = blocks.registry.id("dungeon_slab") else { return };
+    let Some(slab) = blocks.registry.id("dungeon_slab") else {
+        return;
+    };
     let doors = floor.lock_doors(room);
     for d in &doors {
         below.edit_box(&d.at, slab);
@@ -127,7 +160,11 @@ fn lock_in(
     lock.doors = doors;
     lock.since = 0.0;
     sound.write(PlaySound::new("hit").speed(0.4).gain(1.3));
-    toast.write(Toast(if waves > 1 { format!("The doors slam shut. {waves} waves") } else { "The doors slam shut".into() }));
+    toast.write(Toast(if waves > 1 {
+        format!("The doors slam shut. {waves} waves")
+    } else {
+        "The doors slam shut".into()
+    }));
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -144,7 +181,9 @@ fn hold(
     mut cleared: MessageWriter<RoomCleared>,
 ) {
     lock.since += time.delta_secs();
-    let Some(mut l) = lock.lock.clone() else { return };
+    let Some(mut l) = lock.lock.clone() else {
+        return;
+    };
     let left = standing(foes.iter(), &l.rooms);
     lock.left = left;
     if lock.since < GRACE {
@@ -194,12 +233,22 @@ fn glow(mut commands: Commands, lock: Res<LockIn>, glows: Query<Entity, With<Doo
     }
     for d in &lock.doors {
         let a = &d.at;
-        let mid = Vec3::new((a.min[0] + a.max[0] + 1) as f32 / 2.0, a.min[1] as f32 + 1.5, (a.min[2] + a.max[2] + 1) as f32 / 2.0);
+        let mid = Vec3::new(
+            (a.min[0] + a.max[0] + 1) as f32 / 2.0,
+            a.min[1] as f32 + 1.5,
+            (a.min[2] + a.max[2] + 1) as f32 / 2.0,
+        );
         // On the room's side of the slab.
         let inward = -Vec3::new(d.out.0 as f32, 0.0, d.out.1 as f32) * 0.9;
         commands.spawn((
             DoorGlow,
-            PointLight { color: Color::srgb(1.0, 0.45, 0.25), intensity: 18_000.0, range: 4.0, shadow_maps_enabled: false, ..default() },
+            PointLight {
+                color: Color::srgb(1.0, 0.45, 0.25),
+                intensity: 18_000.0,
+                range: 4.0,
+                shadow_maps_enabled: false,
+                ..default()
+            },
             Transform::from_translation(mid + inward),
         ));
     }
@@ -212,19 +261,49 @@ struct Counter;
 fn spawn_counter(mut commands: Commands) {
     commands
         .spawn((
-            Node { position_type: PositionType::Absolute, top: Val::Px(118.0), width: Val::Percent(100.0), justify_content: JustifyContent::Center, ..default() },
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(118.0),
+                width: Val::Percent(100.0),
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
             Visibility::Hidden,
             Counter,
         ))
-        .with_child((Text::new(""), TextFont { font_size: FontSize::Px(crate::theme::sizes::HEADING), ..default() }, TextColor(Color::srgb(1.0, 0.75, 0.6))));
+        .with_child((
+            Text::new(""),
+            TextFont {
+                font_size: FontSize::Px(crate::theme::sizes::HEADING),
+                ..default()
+            },
+            TextColor(Color::srgb(1.0, 0.75, 0.6)),
+        ));
 }
 
-fn counter(lock: Res<LockIn>, mut ui: Query<(&mut Visibility, &Children), With<Counter>>, mut texts: Query<&mut Text>) {
+fn counter(
+    lock: Res<LockIn>,
+    mut ui: Query<(&mut Visibility, &Children), With<Counter>>,
+    mut texts: Query<&mut Text>,
+) {
     for (mut vis, kids) in &mut ui {
-        let want = if lock.lock.is_some() { Visibility::Inherited } else { Visibility::Hidden };
+        let want = if lock.lock.is_some() {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
         vis.set_if_neq(want);
         let Some(l) = &lock.lock else { continue };
-        let line = if l.waves > 1 { format!("Foes left: {}   Wave {} of {}", lock.left, l.wave + 1, l.waves) } else { format!("Foes left: {}", lock.left) };
+        let line = if l.waves > 1 {
+            format!(
+                "Foes left: {}   Wave {} of {}",
+                lock.left,
+                l.wave + 1,
+                l.waves
+            )
+        } else {
+            format!("Foes left: {}", lock.left)
+        };
         for k in kids.iter() {
             if let Ok(mut t) = texts.get_mut(k)
                 && t.0 != line

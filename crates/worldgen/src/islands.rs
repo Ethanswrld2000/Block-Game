@@ -1,11 +1,11 @@
 //! Sky islands: flat-topped, rocky-bottomed islands floating high above the
 //! world. Placed on a jittered grid so they spread out evenly.
 
-use voxel::{BlockId, ChunkPos, CHUNK_SIZE_I32};
+use voxel::{BlockId, CHUNK_SIZE_I32, ChunkPos};
 
-use crate::trees::{draw, Canvas};
+use crate::trees::{Canvas, draw};
 use crate::util::{hash2, unit};
-use crate::{WorldGen, SKY_MIN};
+use crate::{SKY_MIN, WorldGen};
 
 const CELL: i32 = 192;
 pub(crate) const MAX_RADIUS: i32 = 58;
@@ -76,17 +76,28 @@ pub(crate) fn span(wg: &WorldGen, isl: &Island, x: i32, z: i32) -> Option<(i32, 
 
 /// The island that covers this column (the highest, if two do).
 pub(crate) fn island_at(wg: &WorldGen, x: i32, z: i32) -> Option<Island> {
-    islands_near(wg, x, z, x, z).into_iter().filter_map(|i| span(wg, &i, x, z).map(|s| (i, s.1))).max_by_key(|s| s.1).map(|s| s.0)
+    islands_near(wg, x, z, x, z)
+        .into_iter()
+        .filter_map(|i| span(wg, &i, x, z).map(|s| (i, s.1)))
+        .max_by_key(|s| s.1)
+        .map(|s| s.0)
 }
 
 /// (bottom, top) of whichever island covers this column.
 pub(crate) fn span_at(wg: &WorldGen, x: i32, z: i32) -> Option<(i32, i32)> {
-    islands_near(wg, x, z, x, z).iter().filter_map(|i| span(wg, i, x, z)).max_by_key(|s| s.1)
+    islands_near(wg, x, z, x, z)
+        .iter()
+        .filter_map(|i| span(wg, i, x, z))
+        .max_by_key(|s| s.1)
 }
 
 /// Top surface of whichever island covers this column.
 pub(crate) fn top_at(wg: &WorldGen, x: i32, z: i32) -> Option<i32> {
-    islands_near(wg, x, z, x, z).iter().filter_map(|i| span(wg, i, x, z)).map(|(_, t)| t).max()
+    islands_near(wg, x, z, x, z)
+        .iter()
+        .filter_map(|i| span(wg, i, x, z))
+        .map(|(_, t)| t)
+        .max()
 }
 
 /// Draw the islands that touch this chunk. Returns true if any block was set.
@@ -98,7 +109,10 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) -> bool
         return false;
     }
     let ids = wg.ids;
-    let mut c = Canvas { origin: [o.x, o.y, o.z], dense };
+    let mut c = Canvas {
+        origin: [o.x, o.y, o.z],
+        dense,
+    };
     let mut any = false;
     let reach = 3;
     for isl in &islands {
@@ -110,11 +124,19 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) -> bool
         let sky = wg.biome_of_island(isl);
         for z in (o.z - reach).max(isl.z - r)..=(z1 + reach).min(isl.z + r) {
             for x in (o.x - reach).max(isl.x - r)..=(x1 + reach).min(isl.x + r) {
-                let Some((bottom, top)) = span(wg, isl, x, z) else { continue };
+                let Some((bottom, top)) = span(wg, isl, x, z) else {
+                    continue;
+                };
                 let inside = x >= o.x && x <= x1 && z >= o.z && z <= z1;
                 if inside {
                     for y in bottom.max(o.y)..=top.min(o.y + CHUNK_SIZE_I32 - 1) {
-                        let b = if y == top { sky.surface } else if y >= top - 2 { ids.dirt } else { ids.skystone };
+                        let b = if y == top {
+                            sky.surface
+                        } else if y >= top - 2 {
+                            ids.dirt
+                        } else {
+                            ids.skystone
+                        };
                         c.put(x, y, z, b);
                         any = true;
                     }
@@ -130,20 +152,44 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) -> bool
         }
     }
     // A chest at the middle of the bigger islands, over any tree there.
-    for isl in islands.iter().filter(|i| !i.aunt && i.radius >= CHEST_RADIUS) {
+    for isl in islands
+        .iter()
+        .filter(|i| !i.aunt && i.radius >= CHEST_RADIUS)
+    {
         if let Some((_, top)) = span(wg, isl, isl.x, isl.z) {
             for y in top + 1..=top + 3 {
-                c.put(isl.x, y, isl.z, if y == top + 1 { ids.chest } else { BlockId::AIR });
+                c.put(
+                    isl.x,
+                    y,
+                    isl.z,
+                    if y == top + 1 {
+                        ids.chest
+                    } else {
+                        BlockId::AIR
+                    },
+                );
             }
             any = true;
         }
     }
     // A sky shrine on the biggest islands, east of the chest.
-    for isl in islands.iter().filter(|i| !i.aunt && i.radius >= SHRINE_RADIUS) {
+    for isl in islands
+        .iter()
+        .filter(|i| !i.aunt && i.radius >= SHRINE_RADIUS)
+    {
         let sx = isl.x + SHRINE_OFFSET;
         if let Some((_, top)) = span(wg, isl, sx, isl.z) {
             for y in top + 1..=top + 3 {
-                c.put(sx, y, isl.z, if y == top + 1 { ids.sky_shrine } else { BlockId::AIR });
+                c.put(
+                    sx,
+                    y,
+                    isl.z,
+                    if y == top + 1 {
+                        ids.sky_shrine
+                    } else {
+                        BlockId::AIR
+                    },
+                );
             }
             any = true;
         }
@@ -167,20 +213,26 @@ pub(crate) fn place(wg: &WorldGen, pos: ChunkPos, dense: &mut [BlockId]) -> bool
 
 /// Where the chest on a grid island stands, if this island has one near (x, z).
 pub(crate) fn chest_near(wg: &WorldGen, x: i32, z: i32) -> Option<[i32; 3]> {
-    islands_near(wg, x, z, x, z).into_iter().filter(|i| !i.aunt && i.radius >= CHEST_RADIUS).find_map(|i| {
-        let (_, top) = span(wg, &i, i.x, i.z)?;
-        ((i.x - x).abs() <= 1 && (i.z - z).abs() <= 1).then_some([i.x, top + 1, i.z])
-    })
+    islands_near(wg, x, z, x, z)
+        .into_iter()
+        .filter(|i| !i.aunt && i.radius >= CHEST_RADIUS)
+        .find_map(|i| {
+            let (_, top) = span(wg, &i, i.x, i.z)?;
+            ((i.x - x).abs() <= 1 && (i.z - z).abs() <= 1).then_some([i.x, top + 1, i.z])
+        })
 }
 
 /// Where the shrine on a grid island stands, if this island has one near (x, z).
 #[cfg(test)]
 pub(crate) fn shrine_near(wg: &WorldGen, x: i32, z: i32) -> Option<[i32; 3]> {
-    islands_near(wg, x, z, x, z).into_iter().filter(|i| !i.aunt && i.radius >= SHRINE_RADIUS).find_map(|i| {
-        let sx = i.x + SHRINE_OFFSET;
-        let (_, top) = span(wg, &i, sx, i.z)?;
-        ((sx - x).abs() <= 1 && (i.z - z).abs() <= 1).then_some([sx, top + 1, i.z])
-    })
+    islands_near(wg, x, z, x, z)
+        .into_iter()
+        .filter(|i| !i.aunt && i.radius >= SHRINE_RADIUS)
+        .find_map(|i| {
+            let sx = i.x + SHRINE_OFFSET;
+            let (_, top) = span(wg, &i, sx, i.z)?;
+            ((sx - x).abs() <= 1 && (i.z - z).abs() <= 1).then_some([sx, top + 1, i.z])
+        })
 }
 
 #[cfg(test)]
@@ -200,7 +252,10 @@ mod tests {
         let p = BlockPos::new(x, y, z);
         let chunk = wg.generate(p.chunk());
         let o = p.chunk().origin();
-        assert_eq!(chunk.get((x - o.x) as usize, (y - o.y) as usize, (z - o.z) as usize), wg.ids.sky_shrine);
+        assert_eq!(
+            chunk.get((x - o.x) as usize, (y - o.y) as usize, (z - o.z) as usize),
+            wg.ids.sky_shrine
+        );
     }
 
     #[test]
@@ -216,6 +271,9 @@ mod tests {
         let p = BlockPos::new(x, y, z);
         let chunk = wg.generate(p.chunk());
         let o = p.chunk().origin();
-        assert_eq!(chunk.get((x - o.x) as usize, (y - o.y) as usize, (z - o.z) as usize), wg.ids.chest);
+        assert_eq!(
+            chunk.get((x - o.x) as usize, (y - o.y) as usize, (z - o.z) as usize),
+            wg.ids.chest
+        );
     }
 }

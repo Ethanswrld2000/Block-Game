@@ -9,13 +9,13 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use voxel::BlockPos;
 
-use super::grid::Stack;
 use super::Inventory;
+use super::grid::Stack;
 use crate::blocks::Blocks;
 use crate::item_art::ItemArt;
 use crate::items::{ItemKind, Items};
 use crate::player::{MoveMode, Player};
-use crate::save::{read_ron, screenshot_run, write_ron, SaveDir};
+use crate::save::{SaveDir, read_ron, screenshot_run, write_ron};
 use crate::world::World;
 
 const PICKUP_RANGE: f32 = 1.6;
@@ -28,7 +28,10 @@ impl Plugin for WorldItemsPlugin {
         app.add_message::<Spill>()
             .add_message::<PickedUp>()
             .add_systems(crate::menu::GamePostStartup, load)
-            .add_systems(crate::menu::GameUpdate, (spawn_spills, fall_and_spin, pick_up, save_now_and_then).chain())
+            .add_systems(
+                crate::menu::GameUpdate,
+                (spawn_spills, fall_and_spin, pick_up, save_now_and_then).chain(),
+            )
             .add_systems(Last, save_on_exit.run_if(crate::menu::in_game));
     }
 }
@@ -83,12 +86,25 @@ fn load(mut commands: Commands, dir: Res<SaveDir>, items: Res<Items>) {
 }
 
 fn store(dir: &SaveDir, items: &Items, q: &Query<(&WorldItem, &Transform)>) {
-    let list: Vec<SavedItem> =
-        q.iter().map(|(wi, tf)| SavedItem { item: items.get(wi.stack.item).name.clone(), count: wi.stack.count, at: tf.translation.to_array(), age: wi.age }).collect();
+    let list: Vec<SavedItem> = q
+        .iter()
+        .map(|(wi, tf)| SavedItem {
+            item: items.get(wi.stack.item).name.clone(),
+            count: wi.stack.count,
+            at: tf.translation.to_array(),
+            age: wi.age,
+        })
+        .collect();
     write_ron(dir, FILE, &list);
 }
 
-fn save_now_and_then(time: Res<Time<Real>>, mut since: Local<f32>, dir: Res<SaveDir>, items: Res<Items>, q: Query<(&WorldItem, &Transform)>) {
+fn save_now_and_then(
+    time: Res<Time<Real>>,
+    mut since: Local<f32>,
+    dir: Res<SaveDir>,
+    items: Res<Items>,
+    q: Query<(&WorldItem, &Transform)>,
+) {
     *since += time.delta_secs();
     if *since < 30.0 || screenshot_run() {
         return;
@@ -97,7 +113,12 @@ fn save_now_and_then(time: Res<Time<Real>>, mut since: Local<f32>, dir: Res<Save
     store(&dir, &items, &q);
 }
 
-fn save_on_exit(mut exit: MessageReader<AppExit>, dir: Res<SaveDir>, items: Res<Items>, q: Query<(&WorldItem, &Transform)>) {
+fn save_on_exit(
+    mut exit: MessageReader<AppExit>,
+    dir: Res<SaveDir>,
+    items: Res<Items>,
+    q: Query<(&WorldItem, &Transform)>,
+) {
     if exit.read().next().is_some() && !screenshot_run() {
         store(&dir, &items, &q);
     }
@@ -124,28 +145,57 @@ fn spawn_spills(
     mut grey: Local<Option<Handle<StandardMaterial>>>,
     mut block_cubes: Local<std::collections::HashMap<voxel::BlockId, Handle<Mesh>>>,
 ) {
-    let back = restored.map(|mut r| std::mem::take(&mut r.0)).unwrap_or_default();
+    let back = restored
+        .map(|mut r| std::mem::take(&mut r.0))
+        .unwrap_or_default();
     let fresh = spills.read().map(|s| (s.stack, s.at, 0.0));
     for (stack, at, age) in back.into_iter().chain(fresh) {
         let s = Spill { stack, at };
         let item = items.get(s.stack.item);
-        let mut e = commands.spawn((WorldItem { stack: s.stack, vel: 0.0, age }, Transform::from_translation(s.at), NotShadowCaster));
+        let mut e = commands.spawn((
+            WorldItem {
+                stack: s.stack,
+                vel: 0.0,
+                age,
+            },
+            Transform::from_translation(s.at),
+            NotShadowCaster,
+        ));
         match (&item.kind, &blocks.material) {
             // A block looks like a small copy of itself, every face textured.
             (ItemKind::Block(b), Some(voxel_mat)) => {
-                let mesh = block_cubes.entry(*b).or_insert_with(|| meshes.add(crate::hands::block_mesh(blocks.registry.get(*b), DROP_SIZE))).clone();
+                let mesh = block_cubes
+                    .entry(*b)
+                    .or_insert_with(|| {
+                        meshes.add(crate::hands::block_mesh(blocks.registry.get(*b), DROP_SIZE))
+                    })
+                    .clone();
                 e.insert((Mesh3d(mesh), MeshMaterial3d(voxel_mat.clone())));
             }
             // Anything else is its sprite, made solid, standing up.
-            _ => match (art.as_ref().and_then(|a| a.model(s.stack.item)), art.as_ref().and_then(|a| a.size(s.stack.item))) {
+            _ => match (
+                art.as_ref().and_then(|a| a.model(s.stack.item)),
+                art.as_ref().and_then(|a| a.size(s.stack.item)),
+            ) {
                 (Some((mesh, mat)), Some(size)) => {
                     let k = (DROP_SIZE * 1.6 / size.max_element() as f32).min(0.016);
-                    e.with_child((Mesh3d(mesh), MeshMaterial3d(mat), Transform::from_scale(Vec3::splat(k)), NotShadowCaster));
+                    e.with_child((
+                        Mesh3d(mesh),
+                        MeshMaterial3d(mat),
+                        Transform::from_scale(Vec3::splat(k)),
+                        NotShadowCaster,
+                    ));
                     e.insert(Visibility::default());
                 }
                 _ => {
-                    let mesh = cube.get_or_insert_with(|| meshes.add(Cuboid::new(DROP_SIZE, DROP_SIZE, DROP_SIZE))).clone();
-                    let mat = grey.get_or_insert_with(|| materials.add(Color::srgb(0.5, 0.45, 0.38))).clone();
+                    let mesh = cube
+                        .get_or_insert_with(|| {
+                            meshes.add(Cuboid::new(DROP_SIZE, DROP_SIZE, DROP_SIZE))
+                        })
+                        .clone();
+                    let mat = grey
+                        .get_or_insert_with(|| materials.add(Color::srgb(0.5, 0.45, 0.38)))
+                        .clone();
                     e.insert((Mesh3d(mesh), MeshMaterial3d(mat)));
                 }
             },
@@ -153,8 +203,17 @@ fn spawn_spills(
         // A torch on the ground still burns: a dimmer light than one in hand.
         if matches!(item.kind, ItemKind::Torch) {
             e.insert(Visibility::default()).with_child((
-                PointLight { intensity: crate::torches::TORCH_LUMENS * 0.35, range: crate::torches::TORCH_RANGE * 0.6, color: crate::torches::TORCH_COLOR, shadow_maps_enabled: false, ..default() },
-                crate::torches::Flicker { base: crate::torches::TORCH_LUMENS * 0.35, seed: at.x + at.z },
+                PointLight {
+                    intensity: crate::torches::TORCH_LUMENS * 0.35,
+                    range: crate::torches::TORCH_RANGE * 0.6,
+                    color: crate::torches::TORCH_COLOR,
+                    shadow_maps_enabled: false,
+                    ..default()
+                },
+                crate::torches::Flicker {
+                    base: crate::torches::TORCH_LUMENS * 0.35,
+                    seed: at.x + at.z,
+                },
                 Transform::from_xyz(0.0, 0.3, 0.0),
             ));
         }
@@ -183,7 +242,9 @@ fn fall_and_spin(
         // deeper than the resting height (1.15 over the block), so a resting
         // item doesn't find air, drop a frame and get pushed back up (jitter).
         let below = BlockPos::from_world((tf.translation - Vec3::Y * 0.25).to_array());
-        let solid = world.block(below).is_none_or(|b| blocks.registry.get(b).solid);
+        let solid = world
+            .block(below)
+            .is_none_or(|b| blocks.registry.get(b).solid);
         if solid {
             wi.vel = 0.0;
             tf.translation.y = tf.translation.y.max(below.y as f32 + 1.15);
@@ -217,7 +278,10 @@ fn pick_up(
         if left != Some(wi.stack) {
             inv.set_changed();
             let went = wi.stack.count - left.map_or(0, |l| l.count);
-            picked.write(PickedUp { item: wi.stack.item, count: went });
+            picked.write(PickedUp {
+                item: wi.stack.item,
+                count: went,
+            });
         }
         match left {
             None => commands.entity(e).despawn(),

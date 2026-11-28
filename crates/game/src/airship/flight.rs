@@ -54,7 +54,12 @@ pub struct Ship {
 
 impl Ship {
     pub fn new(pos: Vec3, yaw: f32) -> Self {
-        Self { pos, yaw, vel: Vec3::ZERO, spin: 0.0 }
+        Self {
+            pos,
+            yaw,
+            vel: Vec3::ZERO,
+            spin: 0.0,
+        }
     }
 
     pub fn rotation(self) -> Quat {
@@ -83,7 +88,9 @@ pub fn hits(pos: Vec3, yaw: f32, solid: &dyn Fn(IVec3) -> bool) -> bool {
     let rot = Quat::from_rotation_y(yaw);
     let inv = rot.inverse();
     // The turned footprint's square around the middle.
-    let ext = (rot * HALF).abs().max((rot * Vec3::new(HALF.x, 0.0, -HALF.z)).abs());
+    let ext = (rot * HALF)
+        .abs()
+        .max((rot * Vec3::new(HALF.x, 0.0, -HALF.z)).abs());
     let lo = (pos - ext).floor().as_ivec3();
     let hi = (pos + ext).floor().as_ivec3();
     let (y0, y1) = (pos.y.floor() as i32, (pos.y + HEIGHT).ceil() as i32 - 1);
@@ -110,7 +117,10 @@ pub fn hits(pos: Vec3, yaw: f32, solid: &dyn Fn(IVec3) -> bool) -> bool {
 
 /// How low and how high the keel may go.
 pub fn height_limits() -> (f32, f32) {
-    (worldgen::WORLD_FLOOR as f32 + 8.0, worldgen::WORLD_CEILING as f32 - HEIGHT - 1.0)
+    (
+        worldgen::WORLD_FLOOR as f32 + 8.0,
+        worldgen::WORLD_CEILING as f32 - HEIGHT - 1.0,
+    )
 }
 
 /// One step of flight. Speed and turning ease towards what the helm asks;
@@ -120,7 +130,8 @@ pub fn height_limits() -> (f32, f32) {
 pub fn step(ship: &mut Ship, c: Controls, spec: &Spec, dt: f32, solid: &dyn Fn(IVec3) -> bool) {
     let k = (dt / spec.ease.max(0.05)).min(1.0);
     let forward = ship.rotation() * Vec3::NEG_Z;
-    let want = forward * (c.ahead.clamp(-1.0, 1.0) * spec.speed) + Vec3::Y * (c.lift.clamp(-1.0, 1.0) * spec.climb);
+    let want = forward * (c.ahead.clamp(-1.0, 1.0) * spec.speed)
+        + Vec3::Y * (c.lift.clamp(-1.0, 1.0) * spec.climb);
     ship.vel += (want - ship.vel) * k;
     ship.spin += (c.turn.clamp(-1.0, 1.0) * spec.turn.to_radians() - ship.spin) * k;
 
@@ -155,7 +166,9 @@ mod tests {
     use super::*;
 
     fn spec() -> Spec {
-        Machines::from_ron(include_str!("../../../../assets/data/machines.ron")).unwrap().airship
+        Machines::from_ron(include_str!("../../../../assets/data/machines.ron"))
+            .unwrap()
+            .airship
     }
 
     fn fly(ship: &mut Ship, c: Controls, seconds: f32, solid: &dyn Fn(IVec3) -> bool) {
@@ -167,16 +180,37 @@ mod tests {
     #[test]
     fn full_ahead_flies_the_way_the_bow_points() {
         let mut s = Ship::new(Vec3::new(0.5, 100.0, 0.5), 0.0);
-        fly(&mut s, Controls { ahead: 1.0, ..default() }, 5.0, &|_| false);
+        fly(
+            &mut s,
+            Controls {
+                ahead: 1.0,
+                ..default()
+            },
+            5.0,
+            &|_| false,
+        );
         assert!(s.pos.z < -50.0, "{}", s.pos);
-        assert!((s.pos.x - 0.5).abs() < 1e-3 && (s.pos.y - 100.0).abs() < 1e-3, "{}", s.pos);
+        assert!(
+            (s.pos.x - 0.5).abs() < 1e-3 && (s.pos.y - 100.0).abs() < 1e-3,
+            "{}",
+            s.pos
+        );
         assert!((s.vel.length() - spec().speed).abs() < 0.5);
     }
 
     #[test]
     fn turning_left_swings_the_bow_left_and_climbing_rises() {
         let mut s = Ship::new(Vec3::new(0.5, 100.0, 0.5), 0.0);
-        fly(&mut s, Controls { turn: 1.0, lift: 1.0, ..default() }, 1.5, &|_| false);
+        fly(
+            &mut s,
+            Controls {
+                turn: 1.0,
+                lift: 1.0,
+                ..default()
+            },
+            1.5,
+            &|_| false,
+        );
         let bow = s.rotation() * Vec3::NEG_Z;
         assert!(bow.x < -0.5, "bow {bow}");
         assert!(s.pos.y > 103.0, "{}", s.pos);
@@ -186,13 +220,33 @@ mod tests {
     fn it_settles_on_the_ground_and_stops_at_walls() {
         let ground = |p: IVec3| p.y < 10;
         let mut s = Ship::new(Vec3::new(0.5, 14.0, 0.5), 0.0);
-        fly(&mut s, Controls { lift: -1.0, ..default() }, 3.0, &ground);
-        assert!((s.pos.y - 10.0).abs() < 0.2, "rests on the ground: {}", s.pos);
+        fly(
+            &mut s,
+            Controls {
+                lift: -1.0,
+                ..default()
+            },
+            3.0,
+            &ground,
+        );
+        assert!(
+            (s.pos.y - 10.0).abs() < 0.2,
+            "rests on the ground: {}",
+            s.pos
+        );
         assert!(!hits(s.pos, s.yaw, &ground));
 
         let wall = |p: IVec3| p.z <= -20;
         let mut s = Ship::new(Vec3::new(0.5, 50.0, 0.5), 0.0);
-        fly(&mut s, Controls { ahead: 1.0, ..default() }, 5.0, &wall);
+        fly(
+            &mut s,
+            Controls {
+                ahead: 1.0,
+                ..default()
+            },
+            5.0,
+            &wall,
+        );
         assert!(!hits(s.pos, s.yaw, &wall));
         assert!(s.pos.z - HALF.z < -18.0, "flew up to the wall: {}", s.pos);
     }

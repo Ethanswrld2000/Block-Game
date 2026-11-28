@@ -16,7 +16,9 @@ use bevy::ui_render::prelude::{MaterialNode, UiMaterial};
 
 use crate::clock::{Seasons, WorldClock};
 use crate::theme::{self, colors, sizes};
-use crate::weather::{pick_weather, weather_days, Conditions, WeatherKind, WeatherKinds, WeatherState};
+use crate::weather::{
+    Conditions, WeatherKind, WeatherKinds, WeatherState, pick_weather, weather_days,
+};
 
 pub struct WeatherDialPlugin;
 
@@ -24,7 +26,10 @@ impl Plugin for WeatherDialPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(bevy::ui_render::UiMaterialPlugin::<DialMaterial>::default())
             .add_systems(crate::menu::GameStartup, spawn)
-            .add_systems(crate::menu::GameUpdate, (update_dial, warn).after(crate::weather::WeatherSet));
+            .add_systems(
+                crate::menu::GameUpdate,
+                (update_dial, warn).after(crate::weather::WeatherSet),
+            );
     }
 }
 
@@ -48,7 +53,14 @@ pub fn severe(k: &WeatherKind) -> bool {
 /// The weather from now on: `(end, kind)` pairs, `end` in total days, until
 /// `now + days`. Worked out the same way `weather::change_weather` picks them,
 /// so it is what will come (unless F4 changes it). A held weather is one span.
-pub fn forecast(kinds: &WeatherKinds, seasons: &Seasons, seed: u64, state: &WeatherState, now: f64, days: f64) -> Vec<(f64, usize)> {
+pub fn forecast(
+    kinds: &WeatherKinds,
+    seasons: &Seasons,
+    seed: u64,
+    state: &WeatherState,
+    now: f64,
+    days: f64,
+) -> Vec<(f64, usize)> {
     let horizon = now + days;
     let (Some(mut until), Some(mut next)) = (state.until, state.next) else {
         return vec![(horizon, state.current)];
@@ -58,8 +70,18 @@ pub fn forecast(kinds: &WeatherKinds, seasons: &Seasons, seed: u64, state: &Weat
         let kind = next;
         let start = until;
         until = start + weather_days(&kinds.list[kind], seed, start);
-        let later = WorldClock { day: until as u32, time: until.fract() as f32, speed: 1.0 };
-        next = pick_weather(kinds, &seasons.list[seasons.at(&later).current], seed, until, kind);
+        let later = WorldClock {
+            day: until as u32,
+            time: until.fract() as f32,
+            speed: 1.0,
+        };
+        next = pick_weather(
+            kinds,
+            &seasons.list[seasons.at(&later).current],
+            seed,
+            until,
+            kind,
+        );
         out.push((until, kind));
     }
     out
@@ -69,7 +91,8 @@ pub fn forecast(kinds: &WeatherKinds, seasons: &Seasons, seed: u64, state: &Weat
 pub fn warning(kinds: &WeatherKinds, state: &WeatherState, now: f64) -> Option<(usize, f32)> {
     let next = state.next?;
     let left = state.seconds_left(now)?;
-    (left <= WARN_SECONDS && severe(&kinds.list[next]) && !severe(&kinds.list[state.current])).then_some((next, left))
+    (left <= WARN_SECONDS && severe(&kinds.list[next]) && !severe(&kinds.list[state.current]))
+        .then_some((next, left))
 }
 
 /// Picture on the ring (matches `icon_bits` in the shader).
@@ -113,7 +136,15 @@ pub fn look(k: &WeatherKind, snowing: bool) -> ([f32; 3], Pattern, Icon) {
         return ([0.30, 0.24, 0.42], Pattern::Storm, Icon::Bolt);
     }
     if k.precipitation > 0.0 && k.wind < 15.0 {
-        return if snowing { ([0.78, 0.84, 0.92], Pattern::Snow, Icon::Snow) } else { (shade([0.32, 0.46, 0.68], dark.max(0.7)), Pattern::Rain, Icon::Rain) };
+        return if snowing {
+            ([0.78, 0.84, 0.92], Pattern::Snow, Icon::Snow)
+        } else {
+            (
+                shade([0.32, 0.46, 0.68], dark.max(0.7)),
+                Pattern::Rain,
+                Icon::Rain,
+            )
+        };
     }
     if k.wind >= 15.0 {
         return ([0.36, 0.56, 0.58], Pattern::Wind, Icon::Wind);
@@ -178,10 +209,20 @@ fn spawn(mut commands: Commands, mut mats: ResMut<Assets<DialMaterial>>) {
         .with_children(|c| {
             c.spawn((
                 Dial,
-                Node { width: Val::Px(DIAL), height: Val::Px(DIAL), ..default() },
-                MaterialNode(mats.add(DialMaterial { params: DialParams::default() })),
+                Node {
+                    width: Val::Px(DIAL),
+                    height: Val::Px(DIAL),
+                    ..default()
+                },
+                MaterialNode(mats.add(DialMaterial {
+                    params: DialParams::default(),
+                })),
             ));
-            c.spawn((WarnLine, theme::text("", sizes::SMALL, colors::BAD), Visibility::Hidden));
+            c.spawn((
+                WarnLine,
+                theme::text("", sizes::SMALL, colors::BAD),
+                Visibility::Hidden,
+            ));
         });
 }
 
@@ -198,7 +239,9 @@ fn update_dial(
     mut mats: ResMut<Assets<DialMaterial>>,
 ) {
     let Ok(node) = dial.single() else { return };
-    let Some(mut mat) = mats.get_mut(&node.0) else { return };
+    let Some(mut mat) = mats.get_mut(&node.0) else {
+        return;
+    };
     let now = clock.total_days();
     let seed = generator.map(|g| g.0.seed()).unwrap_or(1);
     let season = seasons.at(&clock);
@@ -206,16 +249,32 @@ fn update_dial(
     let t = time.elapsed_secs();
     let p = &mut mat.params;
     p.look = Vec4::new(clock.time, t, daylight, crate::sky::moon_phase(&clock));
-    let pulse = if warning(&kinds, &state, now).is_some() { 0.5 + 0.5 * (t * 6.0).sin() } else { 0.0 };
+    let pulse = if warning(&kinds, &state, now).is_some() {
+        0.5 + 0.5 * (t * 6.0).sin()
+    } else {
+        0.0
+    };
     p.state = Vec4::new(pulse, c.flash, 0.0, 0.0);
     p.seg = [Vec4::new(2.0, 0.0, 0.0, -1.0); SEGMENTS];
     let mut start = 0.0;
-    for (i, (end, kind)) in forecast(&kinds, &seasons, seed, &state, now, AHEAD_DAYS).into_iter().enumerate() {
+    for (i, (end, kind)) in forecast(&kinds, &seasons, seed, &state, now, AHEAD_DAYS)
+        .into_iter()
+        .enumerate()
+    {
         let end = ((end - now) / AHEAD_DAYS).clamp(0.0, 1.0) as f32;
         let (rgb, pattern, icon) = look(&kinds.list[kind], c.snowing);
         // A picture in the middle of the part that shows, if there is room for it.
-        let mid = if end - start >= 0.07 { (start + end) * 0.5 } else { -1.0 };
-        p.seg[i] = Vec4::new(if i + 1 == SEGMENTS { 2.0 } else { end }, pattern as u32 as f32, icon as u32 as f32, mid);
+        let mid = if end - start >= 0.07 {
+            (start + end) * 0.5
+        } else {
+            -1.0
+        };
+        p.seg[i] = Vec4::new(
+            if i + 1 == SEGMENTS { 2.0 } else { end },
+            pattern as u32 as f32,
+            icon as u32 as f32,
+            mid,
+        );
         p.col[i] = Color::srgb(rgb[0], rgb[1], rgb[2]).to_linear().to_vec4();
         start = end;
         if end >= 1.0 {
@@ -240,7 +299,9 @@ fn warn(
     mut bark: MessageWriter<crate::lines::Bark>,
     mut was: Local<Option<usize>>,
 ) {
-    let Ok((mut text, mut color, mut vis)) = line.single_mut() else { return };
+    let Ok((mut text, mut color, mut vis)) = line.single_mut() else {
+        return;
+    };
     let now = clock.total_days();
     let Some((next, left)) = warning(&kinds, &state, now) else {
         *was = None;
@@ -251,7 +312,10 @@ fn warn(
     };
     let k = &kinds.list[next];
     let name = crate::weather_hud::title(&k.name, &k.title, c.snowing, k.precipitation);
-    let s = format!("Storm warning: {name} in {}", crate::weather_hud::clock_text(left));
+    let s = format!(
+        "Storm warning: {name} in {}",
+        crate::weather_hud::clock_text(left)
+    );
     if text.0 != s {
         text.0 = s;
     }
@@ -262,9 +326,16 @@ fn warn(
     }
     if *was != Some(next) {
         *was = Some(next);
-        let bram = npcs.iter().find(|(n, tf)| book.kinds.get(n.kind).is_some_and(|k| k.dialogue == "bram") && tf.translation.distance(player.pos) <= 40.0);
+        let bram = npcs.iter().find(|(n, tf)| {
+            book.kinds.get(n.kind).is_some_and(|k| k.dialogue == "bram")
+                && tf.translation.distance(player.pos) <= 40.0
+        });
         if let Some((_, tf)) = bram {
-            bark.write(crate::lines::Bark { speaker: "bram".into(), trigger: "storm_coming".into(), at: Some(tf.translation + Vec3::Y) });
+            bark.write(crate::lines::Bark {
+                speaker: "bram".into(),
+                trigger: "storm_coming".into(),
+                at: Some(tf.translation + Vec3::Y),
+            });
         }
     }
 }
@@ -318,6 +389,9 @@ mod tests {
         // A held weather is one span.
         state.until = None;
         state.next = None;
-        assert_eq!(forecast(&k, &seasons, 7, &state, 2.05, 1.0), vec![(3.05, 0)]);
+        assert_eq!(
+            forecast(&k, &seasons, 7, &state, 2.05, 1.0),
+            vec![(3.05, 0)]
+        );
     }
 }

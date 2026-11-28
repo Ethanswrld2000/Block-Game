@@ -32,7 +32,10 @@ pub struct LightningPlugin;
 impl Plugin for LightningPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(crate::menu::GameStartup, setup)
-            .add_systems(crate::menu::GameUpdate, (strike, glow).chain().after(WeatherSet));
+            .add_systems(
+                crate::menu::GameUpdate,
+                (strike, glow).chain().after(WeatherSet),
+            );
     }
 }
 
@@ -99,20 +102,27 @@ pub fn bolt_shape(seed: u64, top: Vec3, bottom: Vec3, width: f32) -> Vec<Stroke>
             wander *= 0.85;
         }
         // Pinned at both ends; free to wander in between.
-        let p = straight + wander * (1.0 - (2.0 * t - 1.0).powi(8)) + Vec3::new(0.0, rng.signed() * 1.5, 0.0) * f32::from(i > 0 && i < steps);
+        let p = straight
+            + wander * (1.0 - (2.0 * t - 1.0).powi(8))
+            + Vec3::new(0.0, rng.signed() * 1.5, 0.0) * f32::from(i > 0 && i < steps);
         main.push(p);
         if i > 1 && t < 0.75 && rng.next() < 0.22 {
             forks.push((p, length * (0.15 + 0.25 * rng.next()), 0.5, 0.55));
         }
     }
-    let mut strokes = vec![Stroke { points: main, width, bright: 1.0 }];
+    let mut strokes = vec![Stroke {
+        points: main,
+        width,
+        bright: 1.0,
+    }];
     while let Some((start, len, w, bright)) = forks.pop() {
         let mut dir = Vec3::new(rng.signed(), -(0.8 + rng.next()), rng.signed()).normalize();
         let n = ((len / 5.0) as usize).clamp(3, 30);
         let mut p = start;
         let mut points = vec![p];
         for _ in 0..n {
-            dir = (dir + Vec3::new(rng.signed(), rng.signed() * 0.3, rng.signed()) * 0.45).normalize();
+            dir = (dir + Vec3::new(rng.signed(), rng.signed() * 0.3, rng.signed()) * 0.45)
+                .normalize();
             dir.y = dir.y.min(-0.3);
             p += dir.normalize() * (len / n as f32);
             if p.y < bottom.y {
@@ -124,7 +134,11 @@ pub fn bolt_shape(seed: u64, top: Vec3, bottom: Vec3, width: f32) -> Vec<Stroke>
             }
         }
         if points.len() > 1 {
-            strokes.push(Stroke { points, width: width * w, bright });
+            strokes.push(Stroke {
+                points,
+                width: width * w,
+                bright,
+            });
         }
     }
     strokes
@@ -142,12 +156,21 @@ fn bolt_mesh(strokes: &[Stroke], eye: Vec3) -> Mesh {
             let n = s.points.len();
             for i in 0..n {
                 let p = s.points[i];
-                let along = (s.points[(i + 1).min(n - 1)] - s.points[i.saturating_sub(1)]).normalize_or(Vec3::Y);
+                let along = (s.points[(i + 1).min(n - 1)] - s.points[i.saturating_sub(1)])
+                    .normalize_or(Vec3::Y);
                 let side = along.cross(eye - p).normalize_or(Vec3::X) * half;
                 // The forks thin out towards their tips.
-                let tip = if s.bright < 1.0 { 1.0 - 0.6 * i as f32 / n as f32 } else { 1.0 };
+                let tip = if s.bright < 1.0 {
+                    1.0 - 0.6 * i as f32 / n as f32
+                } else {
+                    1.0
+                };
                 let c = bright * s.bright * tip;
-                positions.extend([(p - side * tip).to_array(), p.to_array(), (p + side * tip).to_array()]);
+                positions.extend([
+                    (p - side * tip).to_array(),
+                    p.to_array(),
+                    (p + side * tip).to_array(),
+                ]);
                 colors.extend([[0.0; 4], [c, c, c, 1.0], [0.0; 4]]);
             }
             for i in 0..n as u32 - 1 {
@@ -158,7 +181,10 @@ fn bolt_mesh(strokes: &[Stroke], eye: Vec3) -> Mesh {
             }
         }
     }
-    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::RENDER_WORLD);
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    );
     let normals = vec![[0.0, 1.0, 0.0]; positions.len()];
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
@@ -182,31 +208,47 @@ fn strike(
     if conditions.strikes == *seen {
         return;
     }
-    let (Ok(tf), Some(material)) = (cam.single(), material) else { return };
+    let (Ok(tf), Some(material)) = (cam.single(), material) else {
+        return;
+    };
     *seen = conditions.strikes;
     for e in &bolts {
         commands.entity(e).despawn();
     }
     let eye = tf.translation;
-    let seed = (conditions.strikes as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ eye.x.to_bits() as u64 ^ ((eye.z.to_bits() as u64) << 32);
+    let seed = (conditions.strikes as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        ^ eye.x.to_bits() as u64
+        ^ ((eye.z.to_bits() as u64) << 32);
     let mut rng = Rng(seed | 1);
     // Where it lands: mostly somewhere ahead of you.
     let forward = (tf.forward().as_vec3() * Vec3::new(1.0, 0.0, 1.0)).normalize_or(Vec3::NEG_Z);
     let base = forward.z.atan2(forward.x);
     let angle = if crate::weather::held_bolt().is_some() {
         base
-    } else if rng.next() < AHEAD { base + rng.signed() * 0.9 } else { rng.next() * std::f32::consts::TAU };
+    } else if rng.next() < AHEAD {
+        base + rng.signed() * 0.9
+    } else {
+        rng.next() * std::f32::consts::TAU
+    };
     let dist = NEAR + (FAR - NEAR) * conditions.strike_far.clamp(0.0, 1.0);
     let at = eye + Vec3::new(angle.cos(), 0.0, angle.sin()) * dist;
     let ground = generator
         .map(|g| {
             let col = g.0.column(at.x.floor() as i32, at.z.floor() as i32);
-            if col.land == worldgen::Land::Void { eye.y - 300.0 } else { col.height as f32 + 1.0 }
+            if col.land == worldgen::Land::Void {
+                eye.y - 300.0
+            } else {
+                col.height as f32 + 1.0
+            }
         })
         .unwrap_or(eye.y - 40.0);
     // From the low cloud deck, or well above high ground.
     let top_y = LAYERS[0].y.max(ground + 90.0);
-    let top = Vec3::new(at.x + rng.signed() * 25.0, top_y, at.z + rng.signed() * 25.0);
+    let top = Vec3::new(
+        at.x + rng.signed() * 25.0,
+        top_y,
+        at.z + rng.signed() * 25.0,
+    );
     let bottom = Vec3::new(at.x, ground, at.z);
     // Wider far away, so it stays a few pixels across.
     let width = 0.5 + dist * 0.0025;
@@ -259,7 +301,11 @@ mod tests {
             let main = &s[0].points;
             assert_eq!(main.first(), Some(&top));
             assert!(main.last().unwrap().distance(bottom) < 0.01);
-            assert!(s.iter().all(|k| k.points.iter().all(|p| p.y >= bottom.y - 0.01 && p.y <= top.y + 2.0)));
+            assert!(s.iter().all(|k| {
+                k.points
+                    .iter()
+                    .all(|p| p.y >= bottom.y - 0.01 && p.y <= top.y + 2.0)
+            }));
         }
         assert!((1..20).any(|seed| bolt_shape(seed, top, bottom, 1.0).len() > 1));
     }

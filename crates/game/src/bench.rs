@@ -15,10 +15,24 @@ pub struct BenchPlugin;
 
 impl Plugin for BenchPlugin {
     fn build(&self, app: &mut App) {
-        if let Some(secs) = std::env::var("BLOCKGAME_BENCH").ok().and_then(|v| v.parse::<f32>().ok()) {
-            app.insert_resource(Bench { secs, state: State::Loading, frames: Vec::new(), start: Vec3::ZERO, t: 0.0, idle: 0, report_at: 10.0 })
-                .add_systems(crate::menu::GameStartup, no_vsync)
-                .add_systems(crate::menu::GameUpdate, run.after(crate::settings::SettingsPlugin::APPLY));
+        if let Some(secs) = std::env::var("BLOCKGAME_BENCH")
+            .ok()
+            .and_then(|v| v.parse::<f32>().ok())
+        {
+            app.insert_resource(Bench {
+                secs,
+                state: State::Loading,
+                frames: Vec::new(),
+                start: Vec3::ZERO,
+                t: 0.0,
+                idle: 0,
+                report_at: 10.0,
+            })
+            .add_systems(crate::menu::GameStartup, no_vsync)
+            .add_systems(
+                crate::menu::GameUpdate,
+                run.after(crate::settings::SettingsPlugin::APPLY),
+            );
         }
     }
 }
@@ -85,12 +99,18 @@ fn run(
     *mode = crate::player::MoveMode::Fly;
     match b.state {
         State::Loading => {
-            let idle = stats_res.loaded > 0 && stats_res.queued == 0 && stats_res.gen_in_flight == 0 && stats_res.mesh_in_flight == 0;
+            let idle = stats_res.loaded > 0
+                && stats_res.queued == 0
+                && stats_res.gen_in_flight == 0
+                && stats_res.mesh_in_flight == 0;
             b.idle = if idle { b.idle + 1 } else { 0 };
             if b.idle > 60 || time.elapsed_secs() > 120.0 {
                 b.state = State::Flying;
                 b.start = cam.0.translation;
-                info!("bench: loaded {} chunks, flying for {} s", stats_res.loaded, b.secs);
+                info!(
+                    "bench: loaded {} chunks, flying for {} s",
+                    stats_res.loaded, b.secs
+                );
             }
         }
         State::Flying => {
@@ -117,7 +137,13 @@ fn run(
             if b.t >= b.report_at {
                 b.report_at += 10.0;
                 let mut frames = std::mem::take(&mut b.frames);
-                info!("bench at {:.0} s (y {:.0}, {} chunks drawn): {}", b.t, tf.translation.y, stats_res.meshed, stats(&mut frames));
+                info!(
+                    "bench at {:.0} s (y {:.0}, {} chunks drawn): {}",
+                    b.t,
+                    tf.translation.y,
+                    stats_res.meshed,
+                    stats(&mut frames)
+                );
             }
             if b.t >= b.secs {
                 info!("bench done: {}", stats(&mut all));

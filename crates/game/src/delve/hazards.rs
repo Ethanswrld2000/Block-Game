@@ -21,8 +21,8 @@ use worldgen::delve::Hazard;
 
 use super::{Below, DelveSet};
 use crate::camera::FlyCamera;
-use crate::combat::kick::Kicking;
 use crate::combat::Foe;
+use crate::combat::kick::Kicking;
 use crate::interact::Swung;
 use crate::player::{Damage, DamageCause, Player};
 use crate::sound::PlaySound;
@@ -35,7 +35,10 @@ pub struct HazardsPlugin;
 
 impl Plugin for HazardsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Traps>().add_systems(crate::menu::GameUpdate, (build, run, darts, barrels, poison).chain().after(DelveSet));
+        app.init_resource::<Traps>().add_systems(
+            crate::menu::GameUpdate,
+            (build, run, darts, barrels, poison).chain().after(DelveSet),
+        );
     }
 }
 
@@ -166,12 +169,34 @@ fn build(
     for d in &traps.darts {
         commands.entity(d.part).despawn();
     }
-    *traps = Traps { on: here, poison: traps.poison, ..default() };
-    let Some(floor) = below.floor.clone() else { return };
-    let iron = materials.add(StandardMaterial { base_color: Color::srgb(0.52, 0.52, 0.55), metallic: 0.8, perceptual_roughness: 0.4, ..default() });
-    let dark = materials.add(StandardMaterial { base_color: Color::srgb(0.2, 0.2, 0.22), metallic: 0.6, ..default() });
-    let wood = materials.add(StandardMaterial { base_color: Color::srgb(0.45, 0.28, 0.14), ..default() });
-    let band = materials.add(StandardMaterial { base_color: Color::srgb(0.7, 0.12, 0.08), emissive: LinearRgba::rgb(0.3, 0.02, 0.0), ..default() });
+    *traps = Traps {
+        on: here,
+        poison: traps.poison,
+        ..default()
+    };
+    let Some(floor) = below.floor.clone() else {
+        return;
+    };
+    let iron = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.52, 0.52, 0.55),
+        metallic: 0.8,
+        perceptual_roughness: 0.4,
+        ..default()
+    });
+    let dark = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.2, 0.2, 0.22),
+        metallic: 0.6,
+        ..default()
+    });
+    let wood = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.45, 0.28, 0.14),
+        ..default()
+    });
+    let band = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.7, 0.12, 0.08),
+        emissive: LinearRgba::rgb(0.3, 0.02, 0.0),
+        ..default()
+    });
     let spike = meshes.add(Cone::new(0.08, 0.6));
     for h in &floor.hazards {
         let pos = cell_mid(h.pos);
@@ -181,8 +206,18 @@ fn build(
                 commands
                     .spawn((Transform::from_translation(pos), Visibility::default()))
                     .with_children(|c| {
-                        for (x, z) in [(-0.22, -0.22), (0.22, -0.22), (-0.22, 0.22), (0.22, 0.22), (0.0, 0.0)] {
-                            c.spawn((Mesh3d(spike.clone()), MeshMaterial3d(iron.clone()), Transform::from_xyz(x, 0.3, z)));
+                        for (x, z) in [
+                            (-0.22, -0.22),
+                            (0.22, -0.22),
+                            (-0.22, 0.22),
+                            (0.22, 0.22),
+                            (0.0, 0.0),
+                        ] {
+                            c.spawn((
+                                Mesh3d(spike.clone()),
+                                MeshMaterial3d(iron.clone()),
+                                Transform::from_xyz(x, 0.3, z),
+                            ));
                         }
                     })
                     .id(),
@@ -194,10 +229,21 @@ fn build(
                         .spawn((Transform::from_translation(pivot), Visibility::default()))
                         .with_children(|c| {
                             let len = h.len as f32;
-                            c.spawn((Mesh3d(meshes.add(Cuboid::new(0.06, len, 0.06))), MeshMaterial3d(dark.clone()), Transform::from_xyz(0.0, -len / 2.0, 0.0)));
+                            c.spawn((
+                                Mesh3d(meshes.add(Cuboid::new(0.06, len, 0.06))),
+                                MeshMaterial3d(dark.clone()),
+                                Transform::from_xyz(0.0, -len / 2.0, 0.0),
+                            ));
                             // The blade lies across the way it swings.
-                            let across = Quat::from_rotation_arc(Vec3::X, Vec3::new(-dir.z, 0.0, dir.x).normalize_or(Vec3::X));
-                            c.spawn((Mesh3d(meshes.add(Cuboid::new(0.08, 0.5, 1.3))), MeshMaterial3d(iron.clone()), Transform::from_xyz(0.0, -len, 0.0).with_rotation(across)));
+                            let across = Quat::from_rotation_arc(
+                                Vec3::X,
+                                Vec3::new(-dir.z, 0.0, dir.x).normalize_or(Vec3::X),
+                            );
+                            c.spawn((
+                                Mesh3d(meshes.add(Cuboid::new(0.08, 0.5, 1.3))),
+                                MeshMaterial3d(iron.clone()),
+                                Transform::from_xyz(0.0, -len, 0.0).with_rotation(across),
+                            ));
                         })
                         .id(),
                 )
@@ -206,9 +252,17 @@ fn build(
                 commands
                     .spawn((Transform::from_translation(pos), Visibility::default()))
                     .with_children(|c| {
-                        c.spawn((Mesh3d(meshes.add(Cylinder::new(0.36, 0.9))), MeshMaterial3d(wood.clone()), Transform::from_xyz(0.0, 0.45, 0.0)));
+                        c.spawn((
+                            Mesh3d(meshes.add(Cylinder::new(0.36, 0.9))),
+                            MeshMaterial3d(wood.clone()),
+                            Transform::from_xyz(0.0, 0.45, 0.0),
+                        ));
                         for y in [0.2, 0.7] {
-                            c.spawn((Mesh3d(meshes.add(Cylinder::new(0.38, 0.07))), MeshMaterial3d(band.clone()), Transform::from_xyz(0.0, y, 0.0)));
+                            c.spawn((
+                                Mesh3d(meshes.add(Cylinder::new(0.38, 0.07))),
+                                MeshMaterial3d(band.clone()),
+                                Transform::from_xyz(0.0, y, 0.0),
+                            ));
                         }
                     })
                     .id(),
@@ -217,7 +271,13 @@ fn build(
                 commands
                     .spawn((
                         Transform::from_translation(pos + Vec3::Y * 0.8),
-                        PointLight { color: Color::srgb(1.0, 0.55, 0.2), intensity: 0.0, range: 7.0, shadow_maps_enabled: false, ..default() },
+                        PointLight {
+                            color: Color::srgb(1.0, 0.55, 0.2),
+                            intensity: 0.0,
+                            range: 7.0,
+                            shadow_maps_enabled: false,
+                            ..default()
+                        },
                     ))
                     .id(),
             ),
@@ -243,7 +303,11 @@ fn build(
 }
 
 /// Spikes, blades, jets, oil and cracked floor.
-#[allow(clippy::too_many_arguments, clippy::type_complexity, clippy::needless_range_loop)]
+#[allow(
+    clippy::too_many_arguments,
+    clippy::type_complexity,
+    clippy::needless_range_loop
+)]
 fn run(
     time: Res<Time>,
     mut below: ResMut<Below>,
@@ -251,8 +315,17 @@ fn run(
     player: Res<Player>,
     mut foes: Query<(&Transform, &mut Foe), Without<FlyCamera>>,
     mut parts: Query<(&mut Transform, Option<&mut PointLight>), (Without<Foe>, Without<FlyCamera>)>,
-    (items, wielded, off): (Res<crate::items::Items>, Res<crate::interact::Wielded>, Res<crate::interact::OffHand>),
-    (mut hurt, mut sound, mut bursts, mut toast): (MessageWriter<Damage>, MessageWriter<PlaySound>, MessageWriter<Burst>, MessageWriter<Toast>),
+    (items, wielded, off): (
+        Res<crate::items::Items>,
+        Res<crate::interact::Wielded>,
+        Res<crate::interact::OffHand>,
+    ),
+    (mut hurt, mut sound, mut bursts, mut toast): (
+        MessageWriter<Damage>,
+        MessageWriter<PlaySound>,
+        MessageWriter<Burst>,
+        MessageWriter<Toast>,
+    ),
     mut sparks: Local<f32>,
 ) {
     if below.floor.is_none() {
@@ -285,7 +358,10 @@ fn run(
                 }
                 if on_cell(feet, tr.pos) && tr.cool <= 0.0 {
                     tr.cool = 0.8;
-                    hurt.write(Damage { amount: 5.0, cause: DamageCause::Piercing });
+                    hurt.write(Damage {
+                        amount: 5.0,
+                        cause: DamageCause::Piercing,
+                    });
                     sound.write(PlaySound::new("hit").at(tr.pos).speed(1.4));
                 }
                 for (ftf, mut f) in &mut foes {
@@ -304,7 +380,10 @@ fn run(
                 let head = pivot + tr.dir * a.sin() * tr.len - Vec3::Y * a.cos() * tr.len;
                 if in_body(head, feet, 0.8) && tr.cool <= 0.0 {
                     tr.cool = 0.7;
-                    hurt.write(Damage { amount: 9.0, cause: DamageCause::Piercing });
+                    hurt.write(Damage {
+                        amount: 9.0,
+                        cause: DamageCause::Piercing,
+                    });
                     sound.write(PlaySound::new("clash").at(head).speed(0.8));
                     bursts.write(Burst::new(head, BurstKind::Sparks, 8));
                 }
@@ -329,17 +408,28 @@ fn run(
                 let h = tr.len.max(2.0);
                 if show {
                     for i in 0..(h as i32) {
-                        bursts.write(Burst::new(tr.pos + Vec3::Y * (i as f32 + 0.4), BurstKind::Sparks, 3));
+                        bursts.write(Burst::new(
+                            tr.pos + Vec3::Y * (i as f32 + 0.4),
+                            BurstKind::Sparks,
+                            3,
+                        ));
                     }
                     bursts.write(Burst::new(tr.pos + Vec3::Y * h, BurstKind::Smoke, 1));
                 }
                 for i in 0..(h as i32) {
                     fires.push(tr.pos + Vec3::Y * i as f32);
                 }
-                let in_column = |f: Vec3| Vec2::new(f.x - tr.pos.x, f.z - tr.pos.z).length() < 0.7 && f.y > tr.pos.y - 1.5 && f.y < tr.pos.y + h;
+                let in_column = |f: Vec3| {
+                    Vec2::new(f.x - tr.pos.x, f.z - tr.pos.z).length() < 0.7
+                        && f.y > tr.pos.y - 1.5
+                        && f.y < tr.pos.y + h
+                };
                 if in_column(feet) && tr.cool <= 0.0 {
                     tr.cool = 0.5;
-                    hurt.write(Damage { amount: 4.0, cause: DamageCause::Blunt });
+                    hurt.write(Damage {
+                        amount: 4.0,
+                        cause: DamageCause::Blunt,
+                    });
                 }
                 for (ftf, mut f) in &mut foes {
                     if in_column(ftf.translation) {
@@ -349,7 +439,12 @@ fn run(
                 }
             }
             Hazard::Collapse => {
-                if tr.cells.iter().any(|(c, s)| *s >= 0.0 && on_cell(feet, cell_mid(*c))) && tr.stepped.is_none() {
+                if tr
+                    .cells
+                    .iter()
+                    .any(|(c, s)| *s >= 0.0 && on_cell(feet, cell_mid(*c)))
+                    && tr.stepped.is_none()
+                {
                     tr.stepped = Some(0.0);
                     sound.write(PlaySound::new("dig_hard").at(feet).speed(0.6));
                     toast.write(Toast("The floor cracks under you".into()));
@@ -377,7 +472,9 @@ fn run(
     }
     // Oil: lit by fire, a blast or a torch in hand; spreads; burns away.
     for tr in list.iter_mut().filter(|t| t.kind == Hazard::Oil) {
-        let lit_by = |c: Vec3| fires.iter().any(|f| f.distance(c + Vec3::Y * 0.3) < 1.6) || (torch && on_cell(feet, c));
+        let lit_by = |c: Vec3| {
+            fires.iter().any(|f| f.distance(c + Vec3::Y * 0.3) < 1.6) || (torch && on_cell(feet, c))
+        };
         let n = tr.cells.len();
         for i in 0..n {
             let (c, s) = tr.cells[i];
@@ -408,7 +505,10 @@ fn run(
             }
             if on_cell(feet, mid) && tr.cool <= 0.0 {
                 tr.cool = 0.5;
-                hurt.write(Damage { amount: 3.0, cause: DamageCause::Blunt });
+                hurt.write(Damage {
+                    amount: 3.0,
+                    cause: DamageCause::Blunt,
+                });
             }
             for (ftf, mut f) in &mut foes {
                 if on_cell(ftf.translation, mid) {
@@ -426,8 +526,14 @@ fn run(
         }
     }
     // Barrels catch from fire too.
-    for tr in list.iter_mut().filter(|t| t.kind == Hazard::Barrel && !t.gone && t.fuse.is_none()) {
-        if fires.iter().any(|f| f.distance(tr.pos + Vec3::Y * 0.4) < 1.3) {
+    for tr in list
+        .iter_mut()
+        .filter(|t| t.kind == Hazard::Barrel && !t.gone && t.fuse.is_none())
+    {
+        if fires
+            .iter()
+            .any(|f| f.distance(tr.pos + Vec3::Y * 0.4) < 1.3)
+        {
             tr.fuse = Some(FUSE);
         }
     }
@@ -445,7 +551,11 @@ fn darts(
     mut foes: Query<(&Transform, &mut Foe)>,
     mut tfs: Query<&mut Transform, Without<Foe>>,
     (mut meshes, mut materials): (ResMut<Assets<Mesh>>, ResMut<Assets<StandardMaterial>>),
-    (mut hurt, mut sound, mut toast): (MessageWriter<Damage>, MessageWriter<PlaySound>, MessageWriter<Toast>),
+    (mut hurt, mut sound, mut toast): (
+        MessageWriter<Damage>,
+        MessageWriter<PlaySound>,
+        MessageWriter<Toast>,
+    ),
     mut look: Local<Option<(Handle<Mesh>, Handle<StandardMaterial>)>>,
 ) {
     if traps.on.is_none() {
@@ -453,7 +563,15 @@ fn darts(
     }
     let dt = time.delta_secs();
     let (mesh, mat) = look
-        .get_or_insert_with(|| (meshes.add(Cuboid::new(0.04, 0.04, 0.4)), materials.add(StandardMaterial { base_color: Color::srgb(0.3, 0.5, 0.25), ..default() })))
+        .get_or_insert_with(|| {
+            (
+                meshes.add(Cuboid::new(0.04, 0.04, 0.4)),
+                materials.add(StandardMaterial {
+                    base_color: Color::srgb(0.3, 0.5, 0.25),
+                    ..default()
+                }),
+            )
+        })
         .clone();
     let mut shots = Vec::new();
     for tr in traps.list.iter_mut().filter(|t| t.kind == Hazard::Darts) {
@@ -462,16 +580,39 @@ fn darts(
             tr.next = DART_EVERY;
             // Only near you (no darts flying in empty halls).
             if tr.pos.distance(player.pos) < 24.0 {
-                shots.push((tr.pos + Vec3::Y * 0.5 + tr.dir * 0.6, tr.dir, tr.len.max(4.0)));
+                shots.push((
+                    tr.pos + Vec3::Y * 0.5 + tr.dir * 0.6,
+                    tr.dir,
+                    tr.len.max(4.0),
+                ));
             }
         }
     }
     for (at, dir, len) in shots {
-        let part = commands.spawn((Mesh3d(mesh.clone()), MeshMaterial3d(mat.clone()), Transform::from_translation(at).looking_to(dir, Vec3::Y))).id();
+        let part = commands
+            .spawn((
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(mat.clone()),
+                Transform::from_translation(at).looking_to(dir, Vec3::Y),
+            ))
+            .id();
         sound.write(PlaySound::new("clash").at(at).speed(2.2).gain(0.4));
-        traps.darts.push(Dart { at, dir, left: len, part });
+        traps.darts.push(Dart {
+            at,
+            dir,
+            left: len,
+            part,
+        });
     }
-    let solid = |p: Vec3| world.block(BlockPos::new(p.x.floor() as i32, p.y.floor() as i32, p.z.floor() as i32)).is_some_and(|b| blocks.registry.get(b).solid);
+    let solid = |p: Vec3| {
+        world
+            .block(BlockPos::new(
+                p.x.floor() as i32,
+                p.y.floor() as i32,
+                p.z.floor() as i32,
+            ))
+            .is_some_and(|b| blocks.registry.get(b).solid)
+    };
     let mut poisoned = false;
     traps.darts.retain_mut(|d| {
         let step = DART_SPEED * dt;
@@ -482,7 +623,10 @@ fn darts(
         }
         let mut done = d.left <= 0.0 || solid(d.at);
         if !done && in_body(d.at, player.pos, 0.45) {
-            hurt.write(Damage { amount: 2.0, cause: DamageCause::Piercing });
+            hurt.write(Damage {
+                amount: 2.0,
+                cause: DamageCause::Piercing,
+            });
             poisoned = true;
             done = true;
         }
@@ -523,7 +667,11 @@ fn barrels(
     mut swung: MessageReader<Swung>,
     mut foes: Query<(&Transform, &mut Foe), Without<FlyCamera>>,
     mut parts: Query<(&mut Transform, &mut Visibility), (Without<Foe>, Without<FlyCamera>)>,
-    (mut hurt, mut sound, mut bursts): (MessageWriter<Damage>, MessageWriter<PlaySound>, MessageWriter<Burst>),
+    (mut hurt, mut sound, mut bursts): (
+        MessageWriter<Damage>,
+        MessageWriter<PlaySound>,
+        MessageWriter<Burst>,
+    ),
     mut kick_before: Local<Option<f32>>,
 ) {
     let dt = time.delta_secs();
@@ -539,9 +687,21 @@ fn barrels(
         let f = cam.forward().as_vec3();
         Vec3::new(f.x, 0.0, f.z).normalize_or_zero()
     };
-    let solid = |p: Vec3| world.block(BlockPos::new(p.x.floor() as i32, p.y.floor() as i32, p.z.floor() as i32)).is_some_and(|b| blocks.registry.get(b).solid);
+    let solid = |p: Vec3| {
+        world
+            .block(BlockPos::new(
+                p.x.floor() as i32,
+                p.y.floor() as i32,
+                p.z.floor() as i32,
+            ))
+            .is_some_and(|b| blocks.registry.get(b).solid)
+    };
     let mut blasts = Vec::new();
-    for tr in traps.list.iter_mut().filter(|t| t.kind == Hazard::Barrel && !t.gone) {
+    for tr in traps
+        .list
+        .iter_mut()
+        .filter(|t| t.kind == Hazard::Barrel && !t.gone)
+    {
         let mid = tr.pos + Vec3::Y * 0.45;
         if kicked && mid.distance(player.pos + Vec3::Y * 0.45 + fwd * 0.8) < 1.3 {
             tr.vel = fwd * 6.0;
@@ -549,7 +709,10 @@ fn barrels(
         }
         for c in &cuts {
             let to = mid - c.origin;
-            if to.length() < c.reach + 0.5 && to.normalize_or_zero().dot(c.dir) > (c.arc.to_radians()).cos() && tr.fuse.is_none() {
+            if to.length() < c.reach + 0.5
+                && to.normalize_or_zero().dot(c.dir) > (c.arc.to_radians()).cos()
+                && tr.fuse.is_none()
+            {
                 tr.fuse = Some(FUSE);
             }
         }
@@ -584,7 +747,11 @@ fn barrels(
     }
     // Chains: a blast sets off barrels near it.
     for b in &blasts {
-        for tr in traps.list.iter_mut().filter(|t| t.kind == Hazard::Barrel && !t.gone && t.fuse.is_none()) {
+        for tr in traps
+            .list
+            .iter_mut()
+            .filter(|t| t.kind == Hazard::Barrel && !t.gone && t.fuse.is_none())
+        {
             if tr.pos.distance(*b) < BLAST {
                 tr.fuse = Some(0.25);
             }
@@ -597,7 +764,10 @@ fn barrels(
         bursts.write(Burst::new(*b, BurstKind::Sparks, 30));
         let k = blast_falloff(b.distance(player.pos + Vec3::Y));
         if k > 0.0 {
-            hurt.write(Damage { amount: 14.0 * k, cause: DamageCause::Blunt });
+            hurt.write(Damage {
+                amount: 14.0 * k,
+                cause: DamageCause::Blunt,
+            });
         }
         for (ftf, mut f) in &mut foes {
             let k = blast_falloff(b.distance(ftf.translation + Vec3::Y));
@@ -617,7 +787,11 @@ fn poison(time: Res<Time>, mut traps: ResMut<Traps>, mut s: ResMut<Survival>, be
         return;
     }
     let dt = time.delta_secs();
-    traps.poison = if below.run.is_some() { traps.poison - dt } else { 0.0 };
+    traps.poison = if below.run.is_some() {
+        traps.poison - dt
+    } else {
+        0.0
+    };
     s.vitals.health.hit(Layer::Blood, POISON_DRAIN * dt);
 }
 
@@ -627,11 +801,15 @@ mod tests {
 
     #[test]
     fn spikes_rise_in_turn_and_pit_spikes_stay_up() {
-        let ups: Vec<bool> = (0..30).map(|i| spikes_up(i as f32 * 0.1, 0.0, false)).collect();
+        let ups: Vec<bool> = (0..30)
+            .map(|i| spikes_up(i as f32 * 0.1, 0.0, false))
+            .collect();
         assert!(ups.iter().any(|u| *u) && ups.iter().any(|u| !*u));
         assert!((0..30).all(|i| spikes_up(i as f32 * 0.1, 0.3, true)));
         // A row offset by phase isn't up all at once.
-        assert!((0..30).any(|i| spikes_up(i as f32 * 0.1, 0.0, false) != spikes_up(i as f32 * 0.1, 0.5, false)));
+        assert!((0..30).any(
+            |i| spikes_up(i as f32 * 0.1, 0.0, false) != spikes_up(i as f32 * 0.1, 0.5, false)
+        ));
     }
 
     #[test]

@@ -37,7 +37,9 @@ pub fn lerp(a: f32, b: f32, t: f32) -> f32 {
 
 /// Deterministic hash of a 2D position, for scattering features.
 pub fn hash2(seed: u64, x: i32, z: i32) -> u64 {
-    mix(seed ^ (x as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (z as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F))
+    mix(seed
+        ^ (x as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        ^ (z as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F))
 }
 
 /// Deterministic hash of a 3D position.

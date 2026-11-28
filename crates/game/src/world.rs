@@ -9,8 +9,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use bevy::prelude::*;
-use bevy::tasks::{futures::check_ready, AsyncComputeTaskPool, Task};
-use voxel::{BlockId, BlockPos, BlockRegistry, Chunk, ChunkPos, Face, PaddedChunk, CHUNK_SIZE};
+use bevy::tasks::{AsyncComputeTaskPool, Task, futures::check_ready};
+use voxel::{BlockId, BlockPos, BlockRegistry, CHUNK_SIZE, Chunk, ChunkPos, Face, PaddedChunk};
 use worldgen::WorldGen;
 
 use crate::blocks::{Blocks, VoxelMaterial};
@@ -22,24 +22,27 @@ pub struct WorldPlugin;
 
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(ViewDistance { chunks: 12, vertical: 5 })
-            .init_resource::<World>()
-            .init_resource::<WorldStats>()
-            .init_resource::<PocketFloor>()
-            .add_systems(crate::menu::GamePostStartup, setup_generator)
-            .add_systems(
-                crate::menu::GameUpdate,
-                (
-                    change_view_distance,
-                    schedule_generation,
-                    collect_generated,
-                    schedule_meshing,
-                    collect_meshes,
-                    unload_far,
-                )
-                    .chain()
-                    .run_if(|b: Res<Blocks>| b.material.is_some()),
-            );
+        app.insert_resource(ViewDistance {
+            chunks: 12,
+            vertical: 5,
+        })
+        .init_resource::<World>()
+        .init_resource::<WorldStats>()
+        .init_resource::<PocketFloor>()
+        .add_systems(crate::menu::GamePostStartup, setup_generator)
+        .add_systems(
+            crate::menu::GameUpdate,
+            (
+                change_view_distance,
+                schedule_generation,
+                collect_generated,
+                schedule_meshing,
+                collect_meshes,
+                unload_far,
+            )
+                .chain()
+                .run_if(|b: Res<Blocks>| b.material.is_some()),
+        );
     }
 }
 
@@ -67,10 +70,11 @@ pub struct ViewDistance {
 #[derive(Resource, Clone)]
 pub struct Generator(pub Arc<WorldGen>);
 
-/// The Rotting Gate floor being played, if any: chunks in the pocket
-/// (`worldgen::in_pocket`) are built from it instead of the terrain, and never saved.
+/// The floors of the dungeon run being played (from the one it started on down
+/// to the last, stacked, joined by stairwells): chunks in the pocket
+/// (`worldgen::in_pocket`) are built from them instead of the terrain, and never saved.
 #[derive(Resource, Default, Clone)]
-pub struct PocketFloor(pub Option<Arc<worldgen::Floor>>);
+pub struct PocketFloor(pub Arc<Vec<Arc<worldgen::Floor>>>);
 
 fn in_pocket(p: ChunkPos) -> bool {
     let o = p.origin();
@@ -144,7 +148,9 @@ impl World {
     pub fn light_at(&self, p: BlockPos) -> Option<(u8, u8)> {
         let c = self.chunks.get(&p.chunk())?;
         let [x, y, z] = p.local();
-        Some(c.light.as_deref().map_or((voxel::light::MAX, 0), |l| voxel::light::coarse_at(l, x, y, z)))
+        Some(c.light.as_deref().map_or((voxel::light::MAX, 0), |l| {
+            voxel::light::coarse_at(l, x, y, z)
+        }))
     }
 
     /// Every `block` in loaded chunks within the box `min..=max`. Chunks that
@@ -155,8 +161,14 @@ impl World {
         for cx in cmin.x..=cmax.x {
             for cy in cmin.y..=cmax.y {
                 for cz in cmin.z..=cmax.z {
-                    let cp = ChunkPos { x: cx, y: cy, z: cz };
-                    let Some(c) = self.chunks.get(&cp) else { continue };
+                    let cp = ChunkPos {
+                        x: cx,
+                        y: cy,
+                        z: cz,
+                    };
+                    let Some(c) = self.chunks.get(&cp) else {
+                        continue;
+                    };
                     if !c.data.may_contain(block) {
                         continue;
                     }
@@ -166,7 +178,11 @@ impl World {
                         for z in lo(min.z, o.z)..=lo(max.z, o.z) {
                             for x in lo(min.x, o.x)..=lo(max.x, o.x) {
                                 if c.data.get(x, y, z) == block {
-                                    found.push(BlockPos::new(o.x + x as i32, o.y + y as i32, o.z + z as i32));
+                                    found.push(BlockPos::new(
+                                        o.x + x as i32,
+                                        o.y + y as i32,
+                                        o.z + z as i32,
+                                    ));
                                 }
                             }
                         }
@@ -186,7 +202,9 @@ impl World {
     pub fn set_block(&mut self, p: BlockPos, block: BlockId) -> bool {
         let cp = p.chunk();
         let [x, y, z] = p.local();
-        let Some(c) = self.chunks.get_mut(&cp) else { return false };
+        let Some(c) = self.chunks.get_mut(&cp) else {
+            return false;
+        };
         let old = c.data.get(x, y, z);
         if old == block {
             return false;
@@ -197,7 +215,9 @@ impl World {
         if self.shaped.get(block.0 as usize).copied().unwrap_or(false) {
             self.shape_events.push(ShapeEvent::Added(p, block));
         }
-        let Some(c) = self.chunks.get_mut(&cp) else { return false };
+        let Some(c) = self.chunks.get_mut(&cp) else {
+            return false;
+        };
         Arc::make_mut(&mut c.data).set(x, y, z, block);
         if self.changed.len() < 65_536 {
             self.changed.push(p);
@@ -222,7 +242,11 @@ impl World {
         let stops = |b: BlockId| self.stops_light.get(b.0 as usize).copied().unwrap_or(false);
         let sky = stops(old) != stops(block);
         let near = |l: usize| -> (i32, i32) {
-            if l < voxel::light::MARGIN { (-1, 0) } else { (0, 1) }
+            if l < voxel::light::MARGIN {
+                (-1, 0)
+            } else {
+                (0, 1)
+            }
         };
         let ((x0, x1), (z0, z1)) = (near(x), near(z));
         let (y0, y1) = near(y);
@@ -250,19 +274,33 @@ impl World {
         if let Some(input) = self.mesh_input(pos) {
             let version = self.chunks[&pos].version;
             self.mesh_tasks.remove(&pos);
-            self.finished_meshes.insert(0, (pos, version, input.build(&blocks.registry, &blocks.opaque, &blocks.light)));
+            self.finished_meshes.insert(
+                0,
+                (
+                    pos,
+                    version,
+                    input.build(&blocks.registry, &blocks.opaque, &blocks.light),
+                ),
+            );
         }
     }
 
     /// True if a loaded chunk's mesh is out of date.
     pub fn needs_mesh(&self, pos: ChunkPos) -> bool {
-        self.chunks.get(&pos).is_some_and(|c| c.meshed_version != Some(c.version))
+        self.chunks
+            .get(&pos)
+            .is_some_and(|c| c.meshed_version != Some(c.version))
     }
 
     /// Drop every loaded or loading chunk in the pocket, so they are built
     /// again from the new floor. Returns the entities to despawn.
     pub fn forget_pocket(&mut self) -> Vec<Entity> {
-        let gone: Vec<ChunkPos> = self.chunks.keys().filter(|p| in_pocket(**p)).copied().collect();
+        let gone: Vec<ChunkPos> = self
+            .chunks
+            .keys()
+            .filter(|p| in_pocket(**p))
+            .copied()
+            .collect();
         let mut out = Vec::new();
         for p in gone {
             if let Some(c) = self.chunks.remove(&p) {
@@ -301,7 +339,8 @@ impl World {
                     if (dx, dy, dz) != (0, 0, 0) && !in_band(np.y) {
                         continue; // outside the loaded band: treat as air
                     }
-                    chunks[voxel::light::neighbour_index(dx, dy, dz)] = Some(self.chunks.get(&np)?.data.clone());
+                    chunks[voxel::light::neighbour_index(dx, dy, dz)] =
+                        Some(self.chunks.get(&np)?.data.clone());
                 }
             }
         }
@@ -313,7 +352,8 @@ impl World {
                     if !in_band(np.y) {
                         break; // open sky assumed above the band
                     }
-                    above[voxel::light::column_index(dx, dz)].push(self.chunks.get(&np)?.data.clone());
+                    above[voxel::light::column_index(dx, dz)]
+                        .push(self.chunks.get(&np)?.data.clone());
                 }
             }
         }
@@ -330,7 +370,9 @@ impl World {
                     if (dx, dy, dz) == (0, 0, 0) {
                         continue;
                     }
-                    if let Some(n) = self.chunks.get_mut(&ChunkPos::new(c.x + dx, c.y + dy, c.z + dz))
+                    if let Some(n) =
+                        self.chunks
+                            .get_mut(&ChunkPos::new(c.x + dx, c.y + dy, c.z + dz))
                         && n.meshed_version.is_some()
                     {
                         n.version += 1;
@@ -354,11 +396,18 @@ struct MeshInput {
 
 impl MeshInput {
     fn center(&self) -> &Chunk {
-        self.chunks[voxel::light::neighbour_index(0, 0, 0)].as_deref().expect("mesh input has its chunk")
+        self.chunks[voxel::light::neighbour_index(0, 0, 0)]
+            .as_deref()
+            .expect("mesh input has its chunk")
     }
 
     /// Light the chunk and mesh it.
-    fn build(&self, registry: &BlockRegistry, opaque: &[bool], tables: &voxel::light::Tables) -> ChunkMeshes {
+    fn build(
+        &self,
+        registry: &BlockRegistry,
+        opaque: &[bool],
+        tables: &voxel::light::Tables,
+    ) -> ChunkMeshes {
         let hood = voxel::light::Neighbourhood {
             chunks: std::array::from_fn(|i| self.chunks[i].as_deref()),
             above: std::array::from_fn(|i| self.above[i].iter().map(|c| &**c).collect()),
@@ -381,10 +430,16 @@ impl MeshInput {
         }
         for face in Face::ALL {
             let d = face.normal();
-            let Some(nb) = &self.chunks[voxel::light::neighbour_index(d[0], d[1], d[2])] else { continue };
+            let Some(nb) = &self.chunks[voxel::light::neighbour_index(d[0], d[1], d[2])] else {
+                continue;
+            };
             let axis = face.axis();
             // Padded slice to fill, and the neighbour's layer that touches us.
-            let (pad_d, src_d) = if face.is_positive() { (n + 1, 0) } else { (0, n - 1) };
+            let (pad_d, src_d) = if face.is_positive() {
+                (n + 1, 0)
+            } else {
+                (0, n - 1)
+            };
             let (ua, va) = face.plane_axes();
             for u in 0..n {
                 for v in 0..n {
@@ -427,14 +482,30 @@ pub fn setup_generator(
     mut player: ResMut<crate::player::Player>,
     mut cam: Query<&mut Transform, With<FlyCamera>>,
 ) {
-    let wg = WorldGen::new(seed.0, &blocks.registry, include_str!("../../../assets/data/biomes.ron"))
-        .unwrap_or_else(|e| panic!("{e}"));
+    let wg = WorldGen::new(
+        seed.0,
+        &blocks.registry,
+        include_str!("../../../assets/data/biomes.ron"),
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
     let [x, y, z] = wg.find_spawn();
     info!("spawn at {x} {y} {z} in {}", wg.biome_at(x, y, z).title);
     for z in wg.zones() {
-        info!("{} at {} {} (radius {})", wg.biomes.get(z.biome).title, z.x, z.z, z.radius);
+        info!(
+            "{} at {} {} (radius {})",
+            wg.biomes.get(z.biome).title,
+            z.x,
+            z.z,
+            z.radius
+        );
     }
-    world.shaped = Arc::new(blocks.registry.iter().map(|(_, d)| d.shape == voxel::Shape::Torch).collect());
+    world.shaped = Arc::new(
+        blocks
+            .registry
+            .iter()
+            .map(|(_, d)| d.shape == voxel::Shape::Torch)
+            .collect(),
+    );
     world.stops_light = Arc::new(blocks.light.blocks.clone());
     player.pos = Vec3::new(x as f32 + 0.5, y as f32, z as f32 + 0.5);
     for mut tf in &mut cam {
@@ -518,18 +589,28 @@ fn schedule_generation(
 
     let pool = AsyncComputeTaskPool::get();
     while world.gen_tasks.len() < MAX_GEN_TASKS {
-        let Some(p) = world.gen_queue.pop() else { break };
+        let Some(p) = world.gen_queue.pop() else {
+            break;
+        };
         if world.chunks.contains_key(&p) || world.gen_tasks.contains_key(&p) {
             continue;
         }
         let (g, reg, dir) = (generator.0.clone(), blocks.registry.clone(), save.clone());
         if in_pocket(p) {
-            let floor = pocket.0.clone();
-            world.gen_tasks.insert(p, pool.spawn(async move { floor.map_or_else(|| Chunk::filled(voxel::BlockId::AIR), |f| g.generate_pocket(p, &f)) }));
+            let floors = pocket.0.clone();
+            world.gen_tasks.insert(
+                p,
+                pool.spawn(async move {
+                    g.generate_pocket(p, &floors.iter().map(|f| &**f).collect::<Vec<_>>())
+                }),
+            );
             continue;
         }
         // A saved chunk (one the player changed) wins over a freshly generated one.
-        world.gen_tasks.insert(p, pool.spawn(async move { dir.load(p, &reg).unwrap_or_else(|| g.generate(p)) }));
+        world.gen_tasks.insert(
+            p,
+            pool.spawn(async move { dir.load(p, &reg).unwrap_or_else(|| g.generate(p)) }),
+        );
     }
 }
 
@@ -544,13 +625,20 @@ fn collect_generated(mut world: ResMut<World>) {
     for (p, chunk) in done {
         world.gen_tasks.remove(&p);
         // Find any torches (or other shaped blocks) so they get drawn.
-        let shaped: Vec<BlockId> = (0..world.shaped.len()).filter(|&i| world.shaped[i]).map(|i| BlockId(i as u16)).collect();
+        let shaped: Vec<BlockId> = (0..world.shaped.len())
+            .filter(|&i| world.shaped[i])
+            .map(|i| BlockId(i as u16))
+            .collect();
         if shaped.iter().any(|b| chunk.may_contain(*b)) {
             let o = p.origin();
             let dense = chunk.to_dense();
             for (i, b) in dense.iter().enumerate() {
                 if shaped.contains(b) {
-                    let (x, z, y) = (i % CHUNK_SIZE, (i / CHUNK_SIZE) % CHUNK_SIZE, i / (CHUNK_SIZE * CHUNK_SIZE));
+                    let (x, z, y) = (
+                        i % CHUNK_SIZE,
+                        (i / CHUNK_SIZE) % CHUNK_SIZE,
+                        i / (CHUNK_SIZE * CHUNK_SIZE),
+                    );
                     let bp = BlockPos::new(o.x + x as i32, o.y + y as i32, o.z + z as i32);
                     world.shape_events.push(ShapeEvent::Added(bp, *b));
                 }
@@ -558,7 +646,15 @@ fn collect_generated(mut world: ResMut<World>) {
         }
         world.chunks.insert(
             p,
-            LoadedChunk { data: Arc::new(chunk), entities: Vec::new(), version: 0, meshed_version: None, drawn: false, modified: false, light: None },
+            LoadedChunk {
+                data: Arc::new(chunk),
+                entities: Vec::new(),
+                version: 0,
+                meshed_version: None,
+                drawn: false,
+                modified: false,
+                light: None,
+            },
         );
         // Neighbours meshed while this chunk was outside the vertical band
         // treated it as air (and open sky); remesh them now that the real blocks are here.
@@ -566,7 +662,11 @@ fn collect_generated(mut world: ResMut<World>) {
     }
 }
 
-fn schedule_meshing(mut world: ResMut<World>, blocks: Res<Blocks>, cam: Single<&Transform, With<FlyCamera>>) {
+fn schedule_meshing(
+    mut world: ResMut<World>,
+    blocks: Res<Blocks>,
+    cam: Single<&Transform, With<FlyCamera>>,
+) {
     if world.mesh_tasks.len() >= MAX_MESH_TASKS {
         return;
     }
@@ -575,7 +675,11 @@ fn schedule_meshing(mut world: ResMut<World>, blocks: Res<Blocks>, cam: Single<&
     let mut wanted: Vec<ChunkPos> = world
         .chunks
         .iter()
-        .filter(|(p, c)| c.meshed_version != Some(c.version) && !world.mesh_tasks.contains_key(p) && !waiting.contains(p))
+        .filter(|(p, c)| {
+            c.meshed_version != Some(c.version)
+                && !world.mesh_tasks.contains_key(p)
+                && !waiting.contains(p)
+        })
         .map(|(p, _)| *p)
         .collect();
     let dist = |p: &ChunkPos| {
@@ -589,13 +693,21 @@ fn schedule_meshing(mut world: ResMut<World>, blocks: Res<Blocks>, cam: Single<&
         if world.mesh_tasks.len() >= MAX_MESH_TASKS {
             break;
         }
-        let Some(input) = world.mesh_input(p) else { continue };
+        let Some(input) = world.mesh_input(p) else {
+            continue;
+        };
         let version = world.chunks[&p].version;
         if input.trivially_empty(&blocks.opaque) {
-            world.finished_meshes.push((p, version, ChunkMeshes::default()));
+            world
+                .finished_meshes
+                .push((p, version, ChunkMeshes::default()));
             continue;
         }
-        let (registry, opaque, tables) = (blocks.registry.clone(), blocks.opaque.clone(), blocks.light.clone());
+        let (registry, opaque, tables) = (
+            blocks.registry.clone(),
+            blocks.opaque.clone(),
+            blocks.light.clone(),
+        );
         let task = pool.spawn(async move { input.build(&registry, &opaque, &tables) });
         world.mesh_tasks.insert(p, (version, task));
     }
@@ -620,7 +732,9 @@ fn collect_meshes(
     }
     world.finished_meshes.extend(ready);
 
-    let (Some(opaque_mat), Some(water_mat)) = (blocks.material.clone(), blocks.translucent_material.clone()) else {
+    let (Some(opaque_mat), Some(water_mat)) =
+        (blocks.material.clone(), blocks.translucent_material.clone())
+    else {
         return;
     };
     // Edits (put at the front by mesh_now) go first. Empty results cost nothing;
@@ -632,7 +746,9 @@ fn collect_meshes(
             later.push((p, version, m));
             continue;
         }
-        let Some(chunk) = world.chunks.get_mut(&p) else { continue };
+        let Some(chunk) = world.chunks.get_mut(&p) else {
+            continue;
+        };
         if version != chunk.version {
             continue; // changed while meshing; a newer mesh is coming
         }
@@ -648,7 +764,13 @@ fn collect_meshes(
             if let Some(mesh) = mesh {
                 uploads += 1;
                 chunk.entities.push(
-                    commands.spawn((Mesh3d(meshes.add(mesh)), MeshMaterial3d::<VoxelMaterial>(mat.clone()), tf)).id(),
+                    commands
+                        .spawn((
+                            Mesh3d(meshes.add(mesh)),
+                            MeshMaterial3d::<VoxelMaterial>(mat.clone()),
+                            tf,
+                        ))
+                        .id(),
                 );
             }
         }
@@ -656,18 +778,34 @@ fn collect_meshes(
         if let Some(mesh) = m.plants {
             uploads += 1;
             chunk.entities.push(
-                commands.spawn((Mesh3d(meshes.add(mesh)), MeshMaterial3d::<VoxelMaterial>(opaque_mat.clone()), tf, bevy::light::NotShadowCaster)).id(),
+                commands
+                    .spawn((
+                        Mesh3d(meshes.add(mesh)),
+                        MeshMaterial3d::<VoxelMaterial>(opaque_mat.clone()),
+                        tf,
+                        bevy::light::NotShadowCaster,
+                    ))
+                    .id(),
             );
         }
     }
     world.finished_meshes = later;
 
     stats.loaded = world.chunks.len();
-    stats.meshed = world.chunks.values().filter(|c| !c.entities.is_empty()).count();
+    stats.meshed = world
+        .chunks
+        .values()
+        .filter(|c| !c.entities.is_empty())
+        .count();
     stats.gen_in_flight = world.gen_tasks.len();
     stats.mesh_in_flight = world.mesh_tasks.len();
     stats.queued = world.gen_queue.len();
-    stats.chunk_kib = world.chunks.values().map(|c| c.data.heap_bytes()).sum::<usize>() / 1024;
+    stats.chunk_kib = world
+        .chunks
+        .values()
+        .map(|c| c.data.heap_bytes())
+        .sum::<usize>()
+        / 1024;
     stats.unsaved = world.chunks.values().filter(|c| c.modified).count();
 }
 

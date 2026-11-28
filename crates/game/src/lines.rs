@@ -27,7 +27,8 @@ impl Plugin for LinesPlugin {
 }
 
 pub fn load() -> Lines {
-    Lines::from_ron(include_str!("../../../assets/data/lines.ron")).unwrap_or_else(|e| panic!("lines.ron: {e}"))
+    Lines::from_ron(include_str!("../../../assets/data/lines.ron"))
+        .unwrap_or_else(|e| panic!("lines.ron: {e}"))
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
@@ -52,7 +53,8 @@ pub struct Lines {
 
 impl Lines {
     pub fn from_ron(text: &str) -> Result<Self, String> {
-        let ron = ron::Options::default().with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME);
+        let ron = ron::Options::default()
+            .with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME);
         let list: Vec<Line> = ron.from_str(text).map_err(|e| e.to_string())?;
         let mut by_id = HashMap::new();
         for (i, l) in list.iter().enumerate() {
@@ -74,7 +76,10 @@ impl Lines {
 
     /// Every bark of a speaker for a trigger.
     pub fn barks(&self, speaker: &str, trigger: &str) -> Vec<&Line> {
-        self.list.iter().filter(|l| l.speaker == speaker && l.trigger.as_deref() == Some(trigger)).collect()
+        self.list
+            .iter()
+            .filter(|l| l.speaker == speaker && l.trigger.as_deref() == Some(trigger))
+            .collect()
     }
 
     /// One bark at random (`roll` is any random number).
@@ -96,12 +101,18 @@ pub enum Voice {
 /// The recording for a line if `exists` says its file is there (pure).
 pub fn voice_for(id: &str, exists: impl Fn(&str) -> bool) -> Voice {
     let path = format!("voice/{id}.ogg");
-    if exists(&path) { Voice::Recorded(path) } else { Voice::Babble }
+    if exists(&path) {
+        Voice::Recorded(path)
+    } else {
+        Voice::Babble
+    }
 }
 
 /// Is this asset file on disk (under `BEVY_ASSET_ROOT`/assets)?
 pub fn asset_exists(path: &str) -> bool {
-    let root = std::env::var_os("BEVY_ASSET_ROOT").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."));
+    let root = std::env::var_os("BEVY_ASSET_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."));
     root.join("assets").join(path).is_file()
 }
 
@@ -134,11 +145,23 @@ impl Babble {
 }
 
 /// Play a line's recording now, if it has one. True when it did.
-pub fn play_recording(commands: &mut Commands, server: &AssetServer, id: &str, volume: f32, at: Option<Vec3>) -> bool {
-    let Voice::Recorded(path) = voice(id) else { return false };
+pub fn play_recording(
+    commands: &mut Commands,
+    server: &AssetServer,
+    id: &str,
+    volume: f32,
+    at: Option<Vec3>,
+) -> bool {
+    let Voice::Recorded(path) = voice(id) else {
+        return false;
+    };
     let playback = PlaybackSettings::DESPAWN.with_volume(bevy::audio::Volume::Linear(volume));
     match at {
-        Some(at) => commands.spawn((AudioPlayer::<AudioSource>(server.load(path)), playback.with_spatial(true), Transform::from_translation(at))),
+        Some(at) => commands.spawn((
+            AudioPlayer::<AudioSource>(server.load(path)),
+            playback.with_spatial(true),
+            Transform::from_translation(at),
+        )),
         None => commands.spawn((AudioPlayer::<AudioSource>(server.load(path)), playback)),
     };
     true
@@ -158,7 +181,9 @@ fn say_barks(
 ) {
     for b in barks.read() {
         let roll = (time.elapsed_secs_f64() * 1000.0) as u64 ^ 0x9E37_79B9;
-        let Some(line) = lines.bark(&b.speaker, &b.trigger, roll) else { continue };
+        let Some(line) = lines.bark(&b.speaker, &b.trigger, roll) else {
+            continue;
+        };
         let kind = book.kinds.iter().find(|k| k.dialogue == b.speaker);
         let name = kind.map_or(b.speaker.clone(), |k| k.name.clone());
         toast.write(Toast(format!("{name}: \"{}\"", line.text)));
@@ -178,7 +203,10 @@ fn babble(time: Res<Time<Real>>, mut q: ResMut<Babble>, mut sounds: MessageWrite
         if *t > 0.0 {
             return true;
         }
-        sounds.write(PlaySound { at: *at, ..PlaySound::new(format!("voice_{vowel}")).speed(*pitch) });
+        sounds.write(PlaySound {
+            at: *at,
+            ..PlaySound::new(format!("voice_{vowel}")).speed(*pitch)
+        });
         false
     });
 }
@@ -190,7 +218,10 @@ mod tests {
     #[test]
     fn lines_load_and_look_up() {
         let lines = load();
-        assert_eq!(lines.get("C02_03").map(|l| l.speaker.as_str()), Some("bram"));
+        assert_eq!(
+            lines.get("C02_03").map(|l| l.speaker.as_str()),
+            Some("bram")
+        );
         assert!(lines.text("C03_07").starts_with("If you"));
         // Not an id: shown as it is.
         assert_eq!(lines.text("Just words."), "Just words.");
@@ -205,16 +236,29 @@ mod tests {
             let b = lines.bark("messler", "talk", roll).unwrap();
             assert!(all.contains(&b));
         }
-        assert_ne!(lines.bark("messler", "talk", 0), lines.bark("messler", "talk", 1), "a different pick");
-        assert_eq!(lines.bark("messler", "food_burnt", 9).unwrap().id, "BARK_MESSLER_01");
+        assert_ne!(
+            lines.bark("messler", "talk", 0),
+            lines.bark("messler", "talk", 1),
+            "a different pick"
+        );
+        assert_eq!(
+            lines.bark("messler", "food_burnt", 9).unwrap().id,
+            "BARK_MESSLER_01"
+        );
         assert!(lines.bark("messler", "no_such_trigger", 0).is_none());
         assert!(lines.bark("nobody", "talk", 0).is_none());
     }
 
     #[test]
     fn a_recording_plays_else_the_babble() {
-        assert_eq!(voice_for("C02_03", |p| p == "voice/C02_03.ogg"), Voice::Recorded("voice/C02_03.ogg".into()));
-        assert_eq!(voice_for("C02_04", |p| p == "voice/C02_03.ogg"), Voice::Babble);
+        assert_eq!(
+            voice_for("C02_03", |p| p == "voice/C02_03.ogg"),
+            Voice::Recorded("voice/C02_03.ogg".into())
+        );
+        assert_eq!(
+            voice_for("C02_04", |p| p == "voice/C02_03.ogg"),
+            Voice::Babble
+        );
         // Nothing is recorded yet.
         assert_eq!(voice("C02_03"), Voice::Babble);
     }
@@ -222,11 +266,14 @@ mod tests {
     #[test]
     fn every_dialogue_line_is_in_lines_ron() {
         let lines = load();
-        let trees = crate::npc::dialogue::load(include_str!("../../../assets/data/dialogue.ron")).unwrap();
+        let trees =
+            crate::npc::dialogue::load(include_str!("../../../assets/data/dialogue.ron")).unwrap();
         for (key, t) in &trees {
             for (id, n) in &t.nodes {
                 for s in &n.say {
-                    let l = lines.get(s).unwrap_or_else(|| panic!("{key}/{id}: `{s}` is not in lines.ron"));
+                    let l = lines
+                        .get(s)
+                        .unwrap_or_else(|| panic!("{key}/{id}: `{s}` is not in lines.ron"));
                     assert_eq!(&l.speaker, key, "{s}");
                 }
             }

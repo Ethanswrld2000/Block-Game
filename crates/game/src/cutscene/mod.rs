@@ -29,24 +29,25 @@ use voxel::BlockPos;
 use crate::blocks::Blocks;
 use crate::camera::{FlyCamera, Menus};
 use crate::encounter::{EncounterBook, EncounterCleared, Encounters, StartEncounter};
-use crate::inventory::{grid::Stack, Inventory, Spill};
+use crate::inventory::{Inventory, Spill, grid::Stack};
 use crate::items::Items;
 use crate::npc::motion::Spring;
 use crate::npc::talk::{KeepShown, SceneView, Talk};
 use crate::npc::voice::{self, Speech};
-use crate::npc::{body::SpawnNpc, ground_near, yaw_of, Npc, NpcBook, Order, CUE_NEAR, EYES};
+use crate::npc::{CUE_NEAR, EYES, Npc, NpcBook, Order, body::SpawnNpc, ground_near, yaw_of};
 use crate::player::Player;
 use crate::save::SaveDir;
 use crate::sound::PlaySound;
 use crate::world::{Generator, World};
 use props::PropCmd;
-use script::{Cutscene, Facts, Mark, Runner, Status, Step, Target, PLAYER};
+use script::{Cutscene, Facts, Mark, PLAYER, Runner, Status, Step, Target};
 
 pub struct CutscenePlugin;
 
 impl Plugin for CutscenePlugin {
     fn build(&self, app: &mut App) {
-        let list = script::load(include_str!("../../../../assets/data/cutscenes.ron")).unwrap_or_else(|e| panic!("cutscenes.ron: {e}"));
+        let list = script::load(include_str!("../../../../assets/data/cutscenes.ron"))
+            .unwrap_or_else(|e| panic!("cutscenes.ron: {e}"));
         app.insert_resource(CutsceneBook(list))
             .init_resource::<Story>()
             .init_resource::<Playing>()
@@ -55,7 +56,21 @@ impl Plugin for CutscenePlugin {
             .add_message::<PropCmd>()
             .add_systems(crate::menu::GameStartup, spawn_fade)
             .add_systems(crate::menu::GamePostStartup, load)
-            .add_systems(crate::menu::GameUpdate, (refresh_places, record, begin, direct, props::run, camera, show, apply_edits).chain().after(crate::npc::talk::TalkSet))
+            .add_systems(
+                crate::menu::GameUpdate,
+                (
+                    refresh_places,
+                    record,
+                    begin,
+                    direct,
+                    props::run,
+                    camera,
+                    show,
+                    apply_edits,
+                )
+                    .chain()
+                    .after(crate::npc::talk::TalkSet),
+            )
             .add_systems(crate::menu::GameUpdate, save_now_and_then)
             .add_systems(Last, save_on_exit.run_if(crate::menu::in_game));
     }
@@ -110,8 +125,16 @@ pub struct Story {
 /// A cutscene's change to the world's blocks, kept until it can be made.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Edit {
-    Swap { at: [i32; 3], radius: i32, from: String, to: String },
-    Place { at: [i32; 3], block: String },
+    Swap {
+        at: [i32; 3],
+        radius: i32,
+        from: String,
+        to: String,
+    },
+    Place {
+        at: [i32; 3],
+        block: String,
+    },
 }
 
 /// Named places for marks and `Area` triggers: camp (the bedroll, else the ancestral urn),
@@ -185,13 +208,30 @@ struct Scene {
 
 #[derive(Clone, Debug)]
 enum Free {
-    Orbit { around: Target, radius: f32, height: f32, from: f32, turn: f32, t: f32, secs: f32 },
-    Dive { from: Vec3, to: Vec3, t: f32, secs: f32 },
+    Orbit {
+        around: Target,
+        radius: f32,
+        height: f32,
+        from: f32,
+        turn: f32,
+        t: f32,
+        secs: f32,
+    },
+    Dive {
+        from: Vec3,
+        to: Vec3,
+        t: f32,
+        secs: f32,
+    },
 }
 
 /// An eased value: (from, to, seconds in, seconds) at its current point.
 fn eased((a, b, t, s): (f32, f32, f32, f32)) -> f32 {
-    if s <= 0.0 { b } else { a + (b - a) * smooth(t / s) }
+    if s <= 0.0 {
+        b
+    } else {
+        a + (b - a) * smooth(t / s)
+    }
 }
 
 struct Said {
@@ -243,23 +283,34 @@ impl Scene {
 
     fn fade_now(&self) -> f32 {
         let (a, b, t, s) = self.fade;
-        if s <= 0.0 { b } else { a + (b - a) * (t / s).clamp(0.0, 1.0) }
+        if s <= 0.0 {
+            b
+        } else {
+            a + (b - a) * (t / s).clamp(0.0, 1.0)
+        }
     }
 
     fn fighting(&self, steps: &[Step]) -> bool {
-        !self.ending && self.gathering.is_none() && matches!(steps.get(self.runner.at), Some(Step::Encounter(_)))
+        !self.ending
+            && self.gathering.is_none()
+            && matches!(steps.get(self.runner.at), Some(Step::Encounter(_)))
     }
 }
 
 fn screenshot_run() -> bool {
-    std::env::var_os("BLOCKGAME_SCREENSHOT").is_some() || std::env::var_os("BLOCKGAME_BENCH").is_some()
+    std::env::var_os("BLOCKGAME_SCREENSHOT").is_some()
+        || std::env::var_os("BLOCKGAME_BENCH").is_some()
 }
 
 fn load(mut story: ResMut<Story>, dir: Res<SaveDir>) {
     if screenshot_run() {
         return;
     }
-    if let Some(s) = std::fs::read_to_string(dir.file(FILE)).ok().and_then(|t| ron::from_str::<Story>(&t).map_err(|e| warn!("{FILE}: {e}")).ok()) {
+    if let Some(s) = std::fs::read_to_string(dir.file(FILE)).ok().and_then(|t| {
+        ron::from_str::<Story>(&t)
+            .map_err(|e| warn!("{FILE}: {e}"))
+            .ok()
+    }) {
         *story = s;
     }
 }
@@ -276,7 +327,12 @@ struct LidUi;
 
 fn spawn_fade(mut commands: Commands) {
     commands.spawn((
-        Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
+        Node {
+            position_type: PositionType::Absolute,
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            ..default()
+        },
         BackgroundColor(Color::BLACK.with_alpha(0.0)),
         GlobalZIndex(60),
         Pickable::IGNORE,
@@ -284,7 +340,12 @@ fn spawn_fade(mut commands: Commands) {
         FadeUi,
     ));
     commands.spawn((
-        Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() },
+        Node {
+            position_type: PositionType::Absolute,
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            ..default()
+        },
         BackgroundColor(Color::WHITE.with_alpha(0.0)),
         GlobalZIndex(61),
         Pickable::IGNORE,
@@ -292,13 +353,27 @@ fn spawn_fade(mut commands: Commands) {
         FlashUi,
     ));
     for top in [true, false] {
-        let mut node = Node { position_type: PositionType::Absolute, left: Val::Px(0.0), width: Val::Percent(100.0), height: Val::Percent(0.0), ..default() };
+        let mut node = Node {
+            position_type: PositionType::Absolute,
+            left: Val::Px(0.0),
+            width: Val::Percent(100.0),
+            height: Val::Percent(0.0),
+            ..default()
+        };
         if top {
             node.top = Val::Px(0.0);
         } else {
             node.bottom = Val::Px(0.0);
         }
-        commands.spawn((node, BackgroundColor(Color::BLACK), Visibility::Hidden, GlobalZIndex(59), Pickable::IGNORE, KeepShown, LidUi));
+        commands.spawn((
+            node,
+            BackgroundColor(Color::BLACK),
+            Visibility::Hidden,
+            GlobalZIndex(59),
+            Pickable::IGNORE,
+            KeepShown,
+            LidUi,
+        ));
     }
 }
 
@@ -310,7 +385,12 @@ pub fn lid_cover(open: f32) -> f32 {
 }
 
 /// Remembers what was made and placed, for the `Made` and `Placed` triggers.
-fn record(mut story: ResMut<Story>, mut made: MessageReader<crate::station::board::Crafted>, mut placed: MessageReader<crate::interact::Placed>, blocks: Res<Blocks>) {
+fn record(
+    mut story: ResMut<Story>,
+    mut made: MessageReader<crate::station::board::Crafted>,
+    mut placed: MessageReader<crate::interact::Placed>,
+    blocks: Res<Blocks>,
+) {
     for m in made.read() {
         if !story.made.contains(&m.0) {
             story.made.insert(m.0.clone());
@@ -324,7 +404,12 @@ fn record(mut story: ResMut<Story>, mut made: MessageReader<crate::station::boar
     }
 }
 
-fn refresh_places(mut out: ResMut<Places>, generator: Option<Res<Generator>>, camp: Res<crate::survival::camp::Camp>, urns: Res<crate::station::Urns>) {
+fn refresh_places(
+    mut out: ResMut<Places>,
+    generator: Option<Res<Generator>>,
+    camp: Res<crate::survival::camp::Camp>,
+    urns: Res<crate::station::Urns>,
+) {
     let m = &mut out.0;
     let v = |p: [i32; 3]| Vec3::new(p[0] as f32 + 0.5, p[1] as f32, p[2] as f32 + 0.5);
     match (&camp.bedroll, urns.placed.get("ancestral")) {
@@ -391,7 +476,13 @@ fn begin(
 ) {
     let mut want: Vec<String> = asked.read().map(|m| m.0.clone()).collect();
     for c in cleared.read() {
-        if let Some(next) = t.enc_book.0.iter().find(|d| d.id == c.0).and_then(|d| d.then.cutscene.clone()) {
+        if let Some(next) = t
+            .enc_book
+            .0
+            .iter()
+            .find(|d| d.id == c.0)
+            .and_then(|d| d.then.cutscene.clone())
+        {
             want.push(next);
         }
     }
@@ -433,7 +524,10 @@ fn begin(
             hour: t.clock.hour(),
             flags: Some(&story.flags),
         };
-        pick = book.0.iter().position(|c| script::ready(c, &story.played, &facts));
+        pick = book
+            .0
+            .iter()
+            .position(|c| script::ready(c, &story.played, &facts));
     }
     let Some(def) = pick else { return };
     info!("cutscene {} starts", book.0[def].id);
@@ -446,14 +540,28 @@ fn begin(
 }
 
 /// NPCs near you by dialogue key: where they stand, and whether you can see them.
-pub(crate) fn sight<'a>(player: &Player, book: &NpcBook, npcs: impl Iterator<Item = (&'a Transform, &'a Npc)>, world: &World, blocks: &Blocks) -> Vec<(String, Vec3, bool)> {
+pub(crate) fn sight<'a>(
+    player: &Player,
+    book: &NpcBook,
+    npcs: impl Iterator<Item = (&'a Transform, &'a Npc)>,
+    world: &World,
+    blocks: &Blocks,
+) -> Vec<(String, Vec3, bool)> {
     let eye = player.pos + Vec3::Y * player.eye;
-    let solid = |c: IVec3| world.block(BlockPos::new(c.x, c.y, c.z)).is_some_and(|id| blocks.registry.get(id).solid);
+    let solid = |c: IVec3| {
+        world
+            .block(BlockPos::new(c.x, c.y, c.z))
+            .is_some_and(|id| blocks.registry.get(id).solid)
+    };
     npcs.filter(|(tf, _)| tf.translation.distance(player.pos) < 48.0)
         .filter_map(|(tf, n)| {
             let k = key_of(book, n)?;
             let head = tf.translation + Vec3::Y * (EYES - 0.1);
-            Some((k.to_string(), tf.translation, script::clear_line(eye, head, solid)))
+            Some((
+                k.to_string(),
+                tf.translation,
+                script::clear_line(eye, head, solid),
+            ))
         })
         .collect()
 }
@@ -485,22 +593,41 @@ impl Effects<'_> {
             Step::Give(name, n) => match self.items.id(name) {
                 Some(id) => {
                     if let Some(left) = self.inv.add(&self.items, Stack::new(id, *n)) {
-                        self.spill.write(Spill { stack: left, at: player + Vec3::Y });
+                        self.spill.write(Spill {
+                            stack: left,
+                            at: player + Vec3::Y,
+                        });
                     }
                 }
                 None => warn!("cutscene gives unknown item `{name}`"),
             },
             // Block changes wait (saved) until their area is loaded: `apply_edits`.
-            Step::Swap { at: m, radius, from, to } => match at(m) {
-                Some(c) => self.story.edits.push(Edit::Swap { at: c.floor().as_ivec3().to_array(), radius: *radius, from: from.clone(), to: to.clone() }),
+            Step::Swap {
+                at: m,
+                radius,
+                from,
+                to,
+            } => match at(m) {
+                Some(c) => self.story.edits.push(Edit::Swap {
+                    at: c.floor().as_ivec3().to_array(),
+                    radius: *radius,
+                    from: from.clone(),
+                    to: to.clone(),
+                }),
                 None => warn!("cutscene swap: no spot"),
             },
             Step::Place(m, block) => match at(m) {
-                Some(c) => self.story.edits.push(Edit::Place { at: c.floor().as_ivec3().to_array(), block: block.clone() }),
+                Some(c) => self.story.edits.push(Edit::Place {
+                    at: c.floor().as_ivec3().to_array(),
+                    block: block.clone(),
+                }),
                 None => warn!("cutscene place: no spot"),
             },
             Step::Encounter(id) => {
-                self.encounter.write(StartEncounter { id: id.clone(), at: player });
+                self.encounter.write(StartEncounter {
+                    id: id.clone(),
+                    at: player,
+                });
             }
             _ => {}
         }
@@ -514,16 +641,33 @@ fn direct(
     book: Res<CutsceneBook>,
     npc_book: Res<NpcBook>,
     mut playing: ResMut<Playing>,
-    (player, mut menus, keys, mouse): (Res<Player>, ResMut<Menus>, Res<ButtonInput<KeyCode>>, Res<ButtonInput<MouseButton>>),
+    (player, mut menus, keys, mouse): (
+        Res<Player>,
+        ResMut<Menus>,
+        Res<ButtonInput<KeyCode>>,
+        Res<ButtonInput<MouseButton>>,
+    ),
     mut npcs: Query<(Entity, &mut Transform, &mut Npc), Without<FlyCamera>>,
     mut cursor: Single<&mut CursorOptions, With<PrimaryWindow>>,
-    (mut spawn, mut sounds, mut cleared, mut ships): (MessageWriter<SpawnNpc>, MessageWriter<PlaySound>, MessageReader<EncounterCleared>, MessageWriter<PropCmd>),
-    (mut commands, server, settings, places): (Commands, Res<AssetServer>, Option<Res<crate::settings::Settings>>, Res<Places>),
+    (mut spawn, mut sounds, mut cleared, mut ships): (
+        MessageWriter<SpawnNpc>,
+        MessageWriter<PlaySound>,
+        MessageReader<EncounterCleared>,
+        MessageWriter<PropCmd>,
+    ),
+    (mut commands, server, settings, places): (
+        Commands,
+        Res<AssetServer>,
+        Option<Res<crate::settings::Settings>>,
+        Res<Places>,
+    ),
     mut fx: Effects,
 ) {
     let dt = time.delta_secs().min(0.05);
     let won: Vec<String> = cleared.read().map(|c| c.0.clone()).collect();
-    let Some(scene) = playing.0.as_mut() else { return };
+    let Some(scene) = playing.0.as_mut() else {
+        return;
+    };
     let def = &book.0[scene.def];
     let steps = &def.steps;
     let place_at = &places.0;
@@ -534,7 +678,15 @@ fn direct(
         }
     }
     let (origin, forward) = (scene.origin, scene.forward);
-    let resolve = |m: &Mark, where_is: &HashMap<String, Vec3>| script::resolve(m, origin, forward, |a| where_is.get(a).copied(), |p| place_at.get(p).copied());
+    let resolve = |m: &Mark, where_is: &HashMap<String, Vec3>| {
+        script::resolve(
+            m,
+            origin,
+            forward,
+            |a| where_is.get(a).copied(),
+            |p| place_at.get(p).copied(),
+        )
+    };
 
     // Lock input (not while you fight an encounter).
     let lock = !scene.fighting(steps);
@@ -560,9 +712,14 @@ fn direct(
             let found = npcs
                 .iter()
                 .filter(|(_, _, n)| key_of(&npc_book, n) == Some(key.as_str()))
-                .min_by(|a, b| a.1.translation.distance(player.pos).total_cmp(&b.1.translation.distance(player.pos)))
+                .min_by(|a, b| {
+                    a.1.translation
+                        .distance(player.pos)
+                        .total_cmp(&b.1.translation.distance(player.pos))
+                })
                 .map(|(e, _, _)| e);
-            let spot = resolve(mark, &where_is).and_then(|p| ground_near(&fx.world, &fx.blocks, p + Vec3::Y * 2.0).or(Some(p)));
+            let spot = resolve(mark, &where_is)
+                .and_then(|p| ground_near(&fx.world, &fx.blocks, p + Vec3::Y * 2.0).or(Some(p)));
             let Some(e) = found else {
                 ready = false;
                 if scene.spawned.insert(key.clone()) {
@@ -581,7 +738,9 @@ fn direct(
                 continue;
             };
             scene.actors.insert(key.clone(), e);
-            let Ok((_, mut tf, mut npc)) = npcs.get_mut(e) else { continue };
+            let Ok((_, mut tf, mut npc)) = npcs.get_mut(e) else {
+                continue;
+            };
             let d = tf.translation.distance(player.pos);
             let Some(spot) = spot else { continue };
             if d > PLACE_BEYOND || (late && d > NEARBY) {
@@ -599,7 +758,8 @@ fn direct(
         for e in scene.actors.values() {
             if let Ok((_, tf, npc)) = npcs.get(*e)
                 && let Some(c) = npc.cue
-                && Vec2::new(c.x - tf.translation.x, c.z - tf.translation.z).length() > CUE_NEAR * 2.0
+                && Vec2::new(c.x - tf.translation.x, c.z - tf.translation.z).length()
+                    > CUE_NEAR * 2.0
             {
                 ready = false;
             }
@@ -618,18 +778,33 @@ fn direct(
             scene.cleared = true;
         }
     }
-    let arrived = scene.walker.as_ref().and_then(|a| scene.actors.get(a)).and_then(|e| npcs.get(*e).ok()).is_none_or(|(_, tf, npc)| {
-        npc.cue.is_none_or(|c| Vec2::new(c.x - tf.translation.x, c.z - tf.translation.z).length() <= CUE_NEAR * 1.6)
-    });
+    let arrived = scene
+        .walker
+        .as_ref()
+        .and_then(|a| scene.actors.get(a))
+        .and_then(|e| npcs.get(*e).ok())
+        .is_none_or(|(_, tf, npc)| {
+            npc.cue.is_none_or(|c| {
+                Vec2::new(c.x - tf.translation.x, c.z - tf.translation.z).length() <= CUE_NEAR * 1.6
+            })
+        });
     if mouse.just_pressed(MouseButton::Left)
         && let Some(l) = scene.line.as_mut()
     {
         l.done = true;
     }
-    let status = Status { line_said: scene.line.as_ref().is_none_or(|l| l.done), arrived, cleared: scene.cleared };
+    let status = Status {
+        line_said: scene.line.as_ref().is_none_or(|l| l.done),
+        arrived,
+        cleared: scene.cleared,
+    };
 
     // Hold Esc to skip.
-    scene.esc = if keys.pressed(KeyCode::Escape) && !scene.ending { scene.esc + dt } else { 0.0 };
+    scene.esc = if keys.pressed(KeyCode::Escape) && !scene.ending {
+        scene.esc + dt
+    } else {
+        0.0
+    };
     let player_pos = player.pos;
     let mut begun = Vec::new();
     if !scene.ending {
@@ -661,7 +836,18 @@ fn direct(
                     scene.look = Some(Target::Actor(actor.clone()));
                     scene.look_time = 0.6;
                 }
-                scene.line = Some(Said { actor: actor.clone(), id: id.clone(), speech: voice::speak(&text, rate), text, name, title, t: -0.25, recorded, pitch, done: false });
+                scene.line = Some(Said {
+                    actor: actor.clone(),
+                    id: id.clone(),
+                    speech: voice::speak(&text, rate),
+                    text,
+                    name,
+                    title,
+                    t: -0.25,
+                    recorded,
+                    pitch,
+                    done: false,
+                });
             }
             Step::Camera(target, secs) => {
                 scene.look = Some(target.clone());
@@ -685,15 +871,35 @@ fn direct(
                 scene.look = Some(target.clone());
                 scene.snap = true;
             }
-            Step::Orbit { around, radius, height, from, turn, secs } => {
-                scene.free = Some(Free::Orbit { around: around.clone(), radius: *radius, height: *height, from: *from, turn: *turn, t: 0.0, secs: secs.max(0.01) });
+            Step::Orbit {
+                around,
+                radius,
+                height,
+                from,
+                turn,
+                secs,
+            } => {
+                scene.free = Some(Free::Orbit {
+                    around: around.clone(),
+                    radius: *radius,
+                    height: *height,
+                    from: *from,
+                    turn: *turn,
+                    t: 0.0,
+                    secs: secs.max(0.01),
+                });
                 scene.look = Some(around.clone());
                 scene.snap = true;
             }
             Step::Dive(mark, target, secs) => {
                 if let Some(to) = resolve(mark, &where_is) {
                     let from = scene.cam_at.unwrap_or(player.pos + Vec3::Y * player.eye);
-                    scene.free = Some(Free::Dive { from, to, t: 0.0, secs: secs.max(0.01) });
+                    scene.free = Some(Free::Dive {
+                        from,
+                        to,
+                        t: 0.0,
+                        secs: secs.max(0.01),
+                    });
                 }
                 scene.look = Some(target.clone());
                 scene.snap = true;
@@ -716,24 +922,42 @@ fn direct(
             Step::Sound(name) => {
                 sounds.write(PlaySound::new(name.clone()));
             }
-            Step::Ship { name, at, yaw, look } => {
+            Step::Ship {
+                name,
+                at,
+                yaw,
+                look,
+            } => {
                 if let Some(at) = resolve(at, &where_is) {
-                    ships.write(PropCmd::Ship { name: name.clone(), at, dir: script::turned(forward, *yaw), look: *look });
+                    ships.write(PropCmd::Ship {
+                        name: name.clone(),
+                        at,
+                        dir: script::turned(forward, *yaw),
+                        look: *look,
+                    });
                 }
             }
             Step::ShipTo(name, mark, secs) => {
                 if let Some(to) = resolve(mark, &where_is) {
-                    ships.write(PropCmd::To { name: name.clone(), to, secs: *secs });
+                    ships.write(PropCmd::To {
+                        name: name.clone(),
+                        to,
+                        secs: *secs,
+                    });
                 }
             }
             Step::Fire(from, to) => {
-                ships.write(PropCmd::Fire { from: from.clone(), to: to.clone() });
+                ships.write(PropCmd::Fire {
+                    from: from.clone(),
+                    to: to.clone(),
+                });
             }
             Step::Unship(name) => {
                 ships.write(PropCmd::Remove(name.clone()));
             }
             Step::Walk(actor, mark) => {
-                let to = resolve(mark, &where_is).map(|p| ground_near(&fx.world, &fx.blocks, p + Vec3::Y * 2.0).unwrap_or(p));
+                let to = resolve(mark, &where_is)
+                    .map(|p| ground_near(&fx.world, &fx.blocks, p + Vec3::Y * 2.0).unwrap_or(p));
                 if let (Some(e), Some(to)) = (scene.actors.get(actor), to)
                     && let Ok((_, _, mut npc)) = npcs.get_mut(*e)
                 {
@@ -777,7 +1001,8 @@ fn direct(
                     .filter(|(_, d)| *d < GIVE_REACH)
                     .min_by(|a, b| a.1.total_cmp(&b.1));
                 if let (Some((npc, _)), Some(item)) = (giver, fx.items.id(name)) {
-                    fx.hand_over.write(crate::npc::handover::HandOver { npc, item });
+                    fx.hand_over
+                        .write(crate::npc::handover::HandOver { npc, item });
                 }
                 fx.apply(step, player_pos, &|m| resolve(m, &where_is));
             }
@@ -790,7 +1015,9 @@ fn direct(
         let before = l.t;
         l.t += dt;
         let speaker = scene.actors.get(&l.actor).copied();
-        let at = speaker.and_then(|e| npcs.get(e).ok()).map(|(_, tf, _)| tf.translation + Vec3::Y * EYES);
+        let at = speaker
+            .and_then(|e| npcs.get(e).ok())
+            .map(|(_, tf, _)| tf.translation + Vec3::Y * EYES);
         if l.recorded && before < 0.0 && l.t >= 0.0 {
             let volume = settings.as_ref().map_or(1.0, |s| s.volume);
             crate::lines::play_recording(&mut commands, &server, &l.id, volume, at);
@@ -798,14 +1025,21 @@ fn direct(
         if !l.recorded {
             for s in l.speech.starting(before, l.t) {
                 let lilt = 1.0 + 0.07 * ((s.start * 7.3).sin() + 0.5 * (s.start * 2.1).cos());
-                sounds.write(PlaySound { at, ..PlaySound::new(format!("voice_{}", s.vowel)).speed(l.pitch * lilt) });
+                sounds.write(PlaySound {
+                    at,
+                    ..PlaySound::new(format!("voice_{}", s.vowel)).speed(l.pitch * lilt)
+                });
             }
         }
         let speaking = !l.done && l.t >= 0.0 && l.t < l.speech.length;
         if let Some(e) = speaker
             && let Ok((_, _, mut npc)) = npcs.get_mut(e)
         {
-            npc.mouth = if speaking { l.speech.mouth(l.t) } else { (0.0, 0.8) };
+            npc.mouth = if speaking {
+                l.speech.mouth(l.t)
+            } else {
+                (0.0, 0.8)
+            };
             npc.speaking = if speaking { 1.0 } else { 0.0 };
         }
         if l.t >= l.speech.length + LINE_HOLD {
@@ -862,7 +1096,12 @@ fn direct(
 }
 
 /// Steps that change an actor for good: follow you, or leave the world. False for other steps.
-fn cast(step: &Step, actors: &HashMap<String, Entity>, npcs: &mut Query<(Entity, &mut Transform, &mut Npc), Without<FlyCamera>>, commands: &mut Commands) -> bool {
+fn cast(
+    step: &Step,
+    actors: &HashMap<String, Entity>,
+    npcs: &mut Query<(Entity, &mut Transform, &mut Npc), Without<FlyCamera>>,
+    commands: &mut Commands,
+) -> bool {
     match step {
         Step::Follow(a) => {
             if let Some(e) = actors.get(a)
@@ -870,7 +1109,8 @@ fn cast(step: &Step, actors: &HashMap<String, Entity>, npcs: &mut Query<(Entity,
             {
                 npc.order = Order::Follow;
                 npc.post = None;
-                npc.flags.insert(crate::npc::dialogue::FOLLOWING.to_string());
+                npc.flags
+                    .insert(crate::npc::dialogue::FOLLOWING.to_string());
             }
             true
         }
@@ -886,7 +1126,8 @@ fn cast(step: &Step, actors: &HashMap<String, Entity>, npcs: &mut Query<(Entity,
 
 fn capitalised(s: &str) -> String {
     let mut c = s.chars();
-    c.next().map_or(String::new(), |f| f.to_uppercase().chain(c).collect())
+    c.next()
+        .map_or(String::new(), |f| f.to_uppercase().chain(c).collect())
 }
 
 fn smooth(t: f32) -> f32 {
@@ -929,22 +1170,45 @@ fn camera(
         set_fov(&mut proj, fov(z0) + (fov(z1) - fov(z0)) * k);
         *zoomed = true;
     }
-    if scene.gathering.is_some() && scene.look.is_none() || scene.fighting(&book.0[scene.def].steps) {
+    if scene.gathering.is_some() && scene.look.is_none() || scene.fighting(&book.0[scene.def].steps)
+    {
         scene.cam = None;
         return;
     }
     let dt = time.delta_secs().min(0.05);
-    let at = |key: &str| scene.actors.get(key).and_then(|e| npcs.get(*e).ok()).map(|t| t.translation);
+    let at = |key: &str| {
+        scene
+            .actors
+            .get(key)
+            .and_then(|e| npcs.get(*e).ok())
+            .map(|t| t.translation)
+    };
     let place_at = &places.0;
     let aim = |t: &Target| match t {
         Target::Player => Some(player.pos + Vec3::Y * 1.4),
         Target::Actor(a) => at(a).map(|p| p + Vec3::Y * (EYES - 0.08)),
-        Target::Mark(m) => script::resolve(m, scene.origin, scene.forward, |a| at(a), |p| place_at.get(p).copied()),
+        Target::Mark(m) => script::resolve(
+            m,
+            scene.origin,
+            scene.forward,
+            |a| at(a),
+            |p| place_at.get(p).copied(),
+        ),
         Target::Ship(n) => place_at.get(&script::ship_key(n)).copied(),
     };
     // Where the camera is: circling, falling, moving, or left where it was.
     let pos = match &scene.free {
-        Some(Free::Orbit { around, radius, height, from, turn, t, secs }) => aim(around).map(|c| script::orbit_point(c, scene.forward, *radius, *height, *from, *turn, t / secs)),
+        Some(Free::Orbit {
+            around,
+            radius,
+            height,
+            from,
+            turn,
+            t,
+            secs,
+        }) => aim(around).map(|c| {
+            script::orbit_point(c, scene.forward, *radius, *height, *from, *turn, t / secs)
+        }),
         Some(Free::Dive { from, to, t, secs }) => Some(from.lerp(*to, script::fall(t / secs))),
         None => scene.cam_move.map(|(a, b, t, s)| a.lerp(b, smooth(t / s))),
     };
@@ -965,7 +1229,15 @@ fn camera(
                 fly.yaw += crate::npc::motion::wrap(yaw - fly.yaw);
                 fly.pitch = pitch.clamp(-1.54, 1.54);
             } else {
-                let springs = scene.cam.get_or_insert_with(|| [Spring { x: fly.yaw, v: 0.0 }, Spring { x: fly.pitch, v: 0.0 }]);
+                let springs = scene.cam.get_or_insert_with(|| {
+                    [
+                        Spring { x: fly.yaw, v: 0.0 },
+                        Spring {
+                            x: fly.pitch,
+                            v: 0.0,
+                        },
+                    ]
+                });
                 let ease = (scene.look_time * 0.35).max(0.15);
                 let y = springs[0].step_angle(yaw, ease, dt);
                 let p = springs[1].step(pitch, ease, dt);
@@ -977,10 +1249,23 @@ fn camera(
     // Tip and shake on top.
     let roll = eased(scene.roll).to_radians();
     let (strength, st, ss) = scene.shake;
-    let k = if st < ss { strength * (1.0 - st / ss) } else { 0.0 };
+    let k = if st < ss {
+        strength * (1.0 - st / ss)
+    } else {
+        0.0
+    };
     let w = time.elapsed_secs() * 31.0;
-    let jolt = Vec3::new((w * 1.3).sin() + (w * 0.7).cos() * 0.5, (w * 1.7).cos() + (w * 0.9).sin() * 0.5, (w * 1.1).sin()) * k;
-    tf.rotation = Quat::from_euler(EulerRot::YXZ, fly.yaw + jolt.x * 0.03, fly.pitch + jolt.y * 0.03, roll + jolt.z * 0.04);
+    let jolt = Vec3::new(
+        (w * 1.3).sin() + (w * 0.7).cos() * 0.5,
+        (w * 1.7).cos() + (w * 0.9).sin() * 0.5,
+        (w * 1.1).sin(),
+    ) * k;
+    tf.rotation = Quat::from_euler(
+        EulerRot::YXZ,
+        fly.yaw + jolt.x * 0.03,
+        fly.pitch + jolt.y * 0.03,
+        roll + jolt.z * 0.04,
+    );
     if k > 0.0 {
         tf.translation += jolt * 0.12;
     }
@@ -1000,7 +1285,11 @@ fn show(
     let dt = time.delta_secs().min(0.05);
     let cover = playing.0.as_ref().map_or(0.0, |s| lid_cover(eased(s.lids)));
     for (mut node, mut vis) in &mut lids {
-        let want = if cover > 0.01 { Visibility::Inherited } else { Visibility::Hidden };
+        let want = if cover > 0.01 {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
         if *vis != want {
             *vis = want;
         }
@@ -1008,7 +1297,13 @@ fn show(
             node.height = Val::Percent(cover);
         }
     }
-    let white = playing.0.as_ref().map_or(0.0, |s| if s.flash.1 > 0.0 { (1.0 - s.flash.0 / s.flash.1).clamp(0.0, 1.0) } else { 0.0 });
+    let white = playing.0.as_ref().map_or(0.0, |s| {
+        if s.flash.1 > 0.0 {
+            (1.0 - s.flash.0 / s.flash.1).clamp(0.0, 1.0)
+        } else {
+            0.0
+        }
+    });
     let white = white * 0.9;
     if flash.0.alpha() != white {
         flash.0 = Color::WHITE.with_alpha(white);
@@ -1032,16 +1327,37 @@ fn show(
     }
     let (name, title, text) = match &scene.line {
         Some(l) => {
-            let n = if l.done { l.text.chars().count() } else if l.t < 0.0 { 0 } else { l.speech.shown(l.t) };
-            (l.name.clone(), l.title.clone(), l.text.chars().take(n).collect())
+            let n = if l.done {
+                l.text.chars().count()
+            } else if l.t < 0.0 {
+                0
+            } else {
+                l.speech.shown(l.t)
+            };
+            (
+                l.name.clone(),
+                l.title.clone(),
+                l.text.chars().take(n).collect(),
+            )
         }
         None => Default::default(),
     };
-    talk.scene = Some(SceneView { bars, name, title, text });
+    talk.scene = Some(SceneView {
+        bars,
+        name,
+        title,
+        text,
+    });
 }
 
 /// Makes the cutscenes' block changes once their area is loaded (they wait in `Story.edits`, saved).
-fn apply_edits(time: Res<Time<Real>>, mut timer: Local<f32>, mut story: ResMut<Story>, mut world: ResMut<World>, blocks: Res<Blocks>) {
+fn apply_edits(
+    time: Res<Time<Real>>,
+    mut timer: Local<f32>,
+    mut story: ResMut<Story>,
+    mut world: ResMut<World>,
+    blocks: Res<Blocks>,
+) {
     *timer -= time.delta_secs();
     if *timer > 0.0 || story.edits.is_empty() {
         return;
@@ -1049,7 +1365,12 @@ fn apply_edits(time: Res<Time<Real>>, mut timer: Local<f32>, mut story: ResMut<S
     *timer = 0.5;
     let reg = &blocks.registry;
     story.edits.retain(|e| match e {
-        Edit::Swap { at, radius, from, to } => {
+        Edit::Swap {
+            at,
+            radius,
+            from,
+            to,
+        } => {
             let (Some(a), Some(b)) = (reg.id(from), reg.id(to)) else {
                 warn!("cutscene swap: no block `{from}` or `{to}`");
                 return false;
@@ -1058,7 +1379,8 @@ fn apply_edits(time: Res<Time<Real>>, mut timer: Local<f32>, mut story: ResMut<S
             let c = IVec3::from_array(*at);
             // Every chunk in the box must be there.
             let step = voxel::CHUNK_SIZE as i32;
-            let span = |lo: i32, hi: i32| (lo..=hi).step_by(step as usize).chain(std::iter::once(hi));
+            let span =
+                |lo: i32, hi: i32| (lo..=hi).step_by(step as usize).chain(std::iter::once(hi));
             for x in span(c.x - r, c.x + r) {
                 for y in span(c.y - r, c.y + r) {
                     for z in span(c.z - r, c.z + r) {
@@ -1106,7 +1428,12 @@ fn store(dir: &SaveDir, story: &Story) {
     }
 }
 
-fn save_now_and_then(time: Res<Time<Real>>, mut since: Local<f32>, dir: Res<SaveDir>, story: Res<Story>) {
+fn save_now_and_then(
+    time: Res<Time<Real>>,
+    mut since: Local<f32>,
+    dir: Res<SaveDir>,
+    story: Res<Story>,
+) {
     *since += time.delta_secs();
     if *since < 30.0 || screenshot_run() {
         return;
@@ -1130,7 +1457,11 @@ mod tests {
         assert_eq!(lid_cover(1.0), 0.0);
         assert!(lid_cover(0.0) > 50.0, "shut lids overlap");
         assert!(lid_cover(0.5) > 0.0 && lid_cover(0.5) < 50.0);
-        assert_eq!(eased((0.0, 10.0, 0.0, 0.0)), 10.0, "no time: straight there");
+        assert_eq!(
+            eased((0.0, 10.0, 0.0, 0.0)),
+            10.0,
+            "no time: straight there"
+        );
         assert_eq!(eased((0.0, 10.0, 1.0, 2.0)), 5.0);
         assert_eq!(eased((0.0, 10.0, 3.0, 2.0)), 10.0);
     }
@@ -1165,7 +1496,11 @@ mod tests {
                 }
             }
             // Each walk arrives and each line is said a tick later.
-            status = Status { line_said: true, arrived: true, cleared: false };
+            status = Status {
+                line_said: true,
+                arrived: true,
+                cleared: false,
+            };
             if r.over(&c.steps) {
                 break;
             }

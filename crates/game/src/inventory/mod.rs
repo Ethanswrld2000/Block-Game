@@ -77,10 +77,15 @@ impl Plugin for InventoryPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Inventory::empty())
             .init_resource::<Chests>()
-            .add_systems(crate::menu::GamePostStartup, (setup_data, load_inventory).chain())
+            .add_systems(
+                crate::menu::GamePostStartup,
+                (setup_data, load_inventory).chain(),
+            )
             .add_systems(
                 crate::menu::GameUpdate,
-                (collect_mined, auto_bind).chain().after(crate::interact::InteractSet),
+                (collect_mined, auto_bind)
+                    .chain()
+                    .after(crate::interact::InteractSet),
             )
             .add_systems(crate::menu::GameUpdate, save_inventory)
             .add_systems(Last, save_inventory_on_exit.run_if(crate::menu::in_game))
@@ -102,7 +107,13 @@ pub struct Inventory {
 
 impl Inventory {
     pub fn empty() -> Self {
-        Self { pockets: Grid::new(POCKETS.0, POCKETS.1), worn: BTreeMap::new(), bag: None, left: None, weapon: None }
+        Self {
+            pockets: Grid::new(POCKETS.0, POCKETS.1),
+            worn: BTreeMap::new(),
+            bag: None,
+            left: None,
+            weapon: None,
+        }
     }
 
     /// The item in the left hand.
@@ -179,7 +190,9 @@ impl Inventory {
         self.pockets.mass(items)
             + self.bag.as_ref().map_or(0.0, |b| b.mass(items))
             + self.worn.values().map(|i| items.get(*i).mass).sum::<f32>()
-            + self.left.map_or(0.0, |s| items.get(s.item).mass * s.count as f32)
+            + self
+                .left
+                .map_or(0.0, |s| items.get(s.item).mass * s.count as f32)
             + self.weapon.map_or(0.0, |i| items.get(i).mass)
     }
 
@@ -232,8 +245,14 @@ impl Inventory {
     /// Put something on. Returns what was in that slot before.
     pub fn wear(&mut self, items: &Items, item: ItemId) -> Result<Option<ItemId>, &'static str> {
         let def = items.get(item);
-        let Some(slot) = def.wear_slot() else { return Err("You can't wear that") };
-        let old = if self.worn.contains_key(&slot) { Some(self.take_off(slot)?) } else { None };
+        let Some(slot) = def.wear_slot() else {
+            return Err("You can't wear that");
+        };
+        let old = if self.worn.contains_key(&slot) {
+            Some(self.take_off(slot)?)
+        } else {
+            None
+        };
         if let ItemKind::Bag { grid } = def.kind {
             self.bag = Some(Grid::new(grid.0, grid.1));
         }
@@ -262,7 +281,9 @@ pub struct Chests {
 
 impl Chests {
     pub fn grid(&mut self, p: BlockPos) -> &mut Grid {
-        self.map.entry(p).or_insert_with(|| Grid::new(CHEST.0, CHEST.1))
+        self.map
+            .entry(p)
+            .or_insert_with(|| Grid::new(CHEST.0, CHEST.1))
     }
 }
 
@@ -277,11 +298,16 @@ pub fn start_kit(items: &Items, text: &str) -> Result<Inventory, String> {
     let spec: KitSpec = ron::from_str(text).map_err(|e| format!("start_kit.ron: {e}"))?;
     let mut inv = Inventory::empty();
     for name in &spec.wear {
-        let id = items.id(name).ok_or_else(|| format!("start_kit.ron: no item '{name}'"))?;
-        inv.wear(items, id).map_err(|e| format!("start_kit.ron: {name}: {e}"))?;
+        let id = items
+            .id(name)
+            .ok_or_else(|| format!("start_kit.ron: no item '{name}'"))?;
+        inv.wear(items, id)
+            .map_err(|e| format!("start_kit.ron: {name}: {e}"))?;
     }
     for (name, n) in &spec.carry {
-        let id = items.id(name).ok_or_else(|| format!("start_kit.ron: no item '{name}'"))?;
+        let id = items
+            .id(name)
+            .ok_or_else(|| format!("start_kit.ron: no item '{name}'"))?;
         if inv.add(items, Stack::new(id, *n)).is_some() {
             return Err(format!("start_kit.ron: no room for {n} {name}"));
         }
@@ -290,11 +316,19 @@ pub fn start_kit(items: &Items, text: &str) -> Result<Inventory, String> {
 }
 
 fn setup_data(mut commands: Commands, items: Res<Items>, blocks: Res<crate::blocks::Blocks>) {
-    let recipes = crafting::Recipes::from_ron(include_str!("../../../../assets/data/recipes.ron"), &items).unwrap_or_else(|e| panic!("{e}"));
-    let drops = Drops::from_ron(include_str!("../../../../assets/data/drops.ron"), &blocks.registry, &items).unwrap_or_else(|e| panic!("{e}"));
+    let recipes =
+        crafting::Recipes::from_ron(include_str!("../../../../assets/data/recipes.ron"), &items)
+            .unwrap_or_else(|e| panic!("{e}"));
+    let drops = Drops::from_ron(
+        include_str!("../../../../assets/data/drops.ron"),
+        &blocks.registry,
+        &items,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
     commands.insert_resource(recipes);
     commands.insert_resource(drops);
-    let loot = loot::Loot::from_ron(include_str!("../../../../assets/data/loot.ron"), &items).unwrap_or_else(|e| panic!("{e}"));
+    let loot = loot::Loot::from_ron(include_str!("../../../../assets/data/loot.ron"), &items)
+        .unwrap_or_else(|e| panic!("{e}"));
     commands.insert_resource(loot);
 }
 
@@ -312,7 +346,10 @@ fn collect_mined(
 ) {
     // Chests you place start empty (found ones fill with loot when first opened).
     for p in placed.read() {
-        if items.for_block(p.block).is_some_and(|i| items.get(i).name == "chest") {
+        if items
+            .for_block(p.block)
+            .is_some_and(|i| items.get(i).name == "chest")
+        {
             chests.grid(p.pos);
         }
     }
@@ -325,7 +362,11 @@ fn collect_mined(
         }
         *roll += 1;
         got.extend(drops.roll(&items, m.block, m.pos, *roll));
-        let at = Vec3::new(m.pos.x as f32 + 0.5, m.pos.y as f32 + 0.5, m.pos.z as f32 + 0.5);
+        let at = Vec3::new(
+            m.pos.x as f32 + 0.5,
+            m.pos.y as f32 + 0.5,
+            m.pos.z as f32 + 0.5,
+        );
         for stack in got {
             spill.write(world_items::Spill { stack, at });
         }
@@ -337,10 +378,19 @@ fn auto_bind(inv: Res<Inventory>, items: Res<Items>, mut hotbar: ResMut<Hotbar>)
     if !inv.is_changed() {
         return;
     }
-    let mut kinds: Vec<ItemId> = inv.pockets.items.iter().chain(inv.bag.iter().flat_map(|b| b.items.iter())).map(|p| p.stack.item).collect();
+    let mut kinds: Vec<ItemId> = inv
+        .pockets
+        .items
+        .iter()
+        .chain(inv.bag.iter().flat_map(|b| b.items.iter()))
+        .map(|p| p.stack.item)
+        .collect();
     kinds.dedup();
     for id in kinds {
-        let holdable = matches!(items.get(id).kind, ItemKind::Tool { .. } | ItemKind::Block(_) | ItemKind::Torch | ItemKind::Food { .. });
+        let holdable = matches!(
+            items.get(id).kind,
+            ItemKind::Tool { .. } | ItemKind::Block(_) | ItemKind::Torch | ItemKind::Food { .. }
+        );
         if !holdable || hotbar.slots.contains(&Some(id)) {
             continue;
         }
@@ -383,17 +433,25 @@ fn load_inventory(
     mut hotbar: ResMut<Hotbar>,
     mut hands: ResMut<crate::interact::Hands>,
 ) {
-    let kit = || start_kit(&items, include_str!("../../../../assets/data/start_kit.ron")).unwrap_or_else(|e| panic!("{e}"));
+    let kit = || {
+        start_kit(
+            &items,
+            include_str!("../../../../assets/data/start_kit.ron"),
+        )
+        .unwrap_or_else(|e| panic!("{e}"))
+    };
     let saved = if screenshot_run() {
         None
     } else {
-        std::fs::read_to_string(dir.file("inventory.ron")).ok().and_then(|t| match ron::from_str::<InventorySave>(&t) {
-            Ok(s) => Some(s),
-            Err(e) => {
-                warn!("inventory.ron: {e}");
-                None
-            }
-        })
+        std::fs::read_to_string(dir.file("inventory.ron"))
+            .ok()
+            .and_then(|t| match ron::from_str::<InventorySave>(&t) {
+                Ok(s) => Some(s),
+                Err(e) => {
+                    warn!("inventory.ron: {e}");
+                    None
+                }
+            })
     };
     let Some(save) = saved else {
         *inv = kit();
@@ -416,11 +474,23 @@ fn load_inventory(
     }
     for s in spill {
         if new.add(&items, s).is_some() {
-            warn!("inventory.ron: no room for {} {}", s.count, items.get(s.item).name);
+            warn!(
+                "inventory.ron: no room for {} {}",
+                s.count,
+                items.get(s.item).name
+            );
         }
     }
-    new.left = save.left.as_ref().and_then(|(n, c)| items.id(n).map(|id| Stack::new(id, (*c).clamp(1, items.get(id).stack))));
-    new.weapon = save.weapon.as_deref().and_then(|n| items.id(n)).filter(|id| items.get(*id).is_weapon());
+    new.left = save.left.as_ref().and_then(|(n, c)| {
+        items
+            .id(n)
+            .map(|id| Stack::new(id, (*c).clamp(1, items.get(id).stack)))
+    });
+    new.weapon = save
+        .weapon
+        .as_deref()
+        .and_then(|n| items.id(n))
+        .filter(|id| items.get(*id).is_weapon());
     *inv = new;
     for (i, name) in save.hotbar.iter().take(SLOTS).enumerate() {
         hotbar.slots[i] = name.as_deref().and_then(|n| items.id(n));
@@ -442,19 +512,46 @@ fn load_inventory(
     }
 }
 
-fn store(dir: &SaveDir, items: &Items, inv: &Inventory, chests: &Chests, hotbar: &Hotbar, hands: &crate::interact::Hands) {
+fn store(
+    dir: &SaveDir,
+    items: &Items,
+    inv: &Inventory,
+    chests: &Chests,
+    hotbar: &Hotbar,
+    hands: &crate::interact::Hands,
+) {
     let save = InventorySave {
         pockets: inv.pockets.to_save(items),
-        worn: inv.worn.iter().map(|(s, i)| (*s, items.get(*i).name.clone())).collect(),
+        worn: inv
+            .worn
+            .iter()
+            .map(|(s, i)| (*s, items.get(*i).name.clone()))
+            .collect(),
         bag: inv.bag.as_ref().map(|b| b.to_save(items)),
-        hotbar: hotbar.slots.iter().map(|s| s.map(|i| items.get(i).name.clone())).collect(),
+        hotbar: hotbar
+            .slots
+            .iter()
+            .map(|s| s.map(|i| items.get(i).name.clone()))
+            .collect(),
         selected: hands.right,
         left: inv.left.map(|s| (items.get(s.item).name.clone(), s.count)),
         weapon: inv.weapon.map(|i| items.get(i).name.clone()),
     };
-    let cs = ChestsSave { chests: chests.map.iter().map(|(p, g)| ((p.x, p.y, p.z), g.to_save(items))).collect() };
+    let cs = ChestsSave {
+        chests: chests
+            .map
+            .iter()
+            .map(|(p, g)| ((p.x, p.y, p.z), g.to_save(items)))
+            .collect(),
+    };
     let pretty = ron::ser::PrettyConfig::default();
-    for (name, text) in [("inventory.ron", ron::ser::to_string_pretty(&save, pretty.clone())), ("chests.ron", ron::ser::to_string_pretty(&cs, pretty))] {
+    for (name, text) in [
+        (
+            "inventory.ron",
+            ron::ser::to_string_pretty(&save, pretty.clone()),
+        ),
+        ("chests.ron", ron::ser::to_string_pretty(&cs, pretty)),
+    ] {
         match text {
             Ok(t) => {
                 if let Err(e) = std::fs::write(dir.file(name), t) {
@@ -526,11 +623,17 @@ mod tests {
         let (_, items) = load();
         let mut inv = kit(&items);
         inv.wear(&items, items.id("reed_satchel").unwrap()).unwrap();
-        inv.bag.as_mut().unwrap().add(&items, Stack::new(items.id("dirt").unwrap(), 3));
+        inv.bag
+            .as_mut()
+            .unwrap()
+            .add(&items, Stack::new(items.id("dirt").unwrap(), 3));
         assert!(inv.take_off(WearSlot::Back).is_err());
         let bag = inv.bag.take().unwrap();
         inv.bag = Some(Grid::new(bag.w, bag.h));
-        assert_eq!(inv.take_off(WearSlot::Back), Ok(items.id("reed_satchel").unwrap()));
+        assert_eq!(
+            inv.take_off(WearSlot::Back),
+            Ok(items.id("reed_satchel").unwrap())
+        );
         assert!(inv.bag.is_none());
     }
 
@@ -572,7 +675,10 @@ mod tests {
         assert!(inv.arm(&items, id("stone_axe")).is_err());
         assert!(inv.arm(&items, id("torch")).is_err());
         assert_eq!(inv.arm(&items, id("iron_sword")), Ok(None));
-        assert_eq!(inv.arm(&items, id("flint_spear")), Ok(Some(id("iron_sword"))));
+        assert_eq!(
+            inv.arm(&items, id("flint_spear")),
+            Ok(Some(id("iron_sword")))
+        );
         assert_eq!(inv.weapon, Some(id("flint_spear")));
     }
 

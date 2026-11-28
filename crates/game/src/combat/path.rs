@@ -37,7 +37,10 @@ fn step_into(solid: &impl Fn(i32, i32, i32) -> bool, from: IVec3, x: i32, z: i32
     if solid(x, from.y, z) || solid(x, from.y + 1, z) {
         return None;
     }
-    (1..=MAX_DROP).map(|d| level - IVec3::Y * d).find(|c| solid(c.x, c.y - 1, c.z) && !solid(c.x, c.y, c.z)).filter(|c| standable(solid, *c))
+    (1..=MAX_DROP)
+        .map(|d| level - IVec3::Y * d)
+        .find(|c| solid(c.x, c.y - 1, c.z) && !solid(c.x, c.y, c.z))
+        .filter(|c| standable(solid, *c))
 }
 
 fn open_column(solid: &impl Fn(i32, i32, i32) -> bool, x: i32, y: i32, z: i32) -> bool {
@@ -45,11 +48,25 @@ fn open_column(solid: &impl Fn(i32, i32, i32) -> bool, x: i32, y: i32, z: i32) -
 }
 
 /// The cells reachable in one step from `c`, and what each step costs.
-fn neighbours(solid: &impl Fn(i32, i32, i32) -> bool, c: IVec3) -> impl Iterator<Item = (IVec3, u32)> + '_ {
-    const DIRS: [(i32, i32); 8] = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)];
+fn neighbours(
+    solid: &impl Fn(i32, i32, i32) -> bool,
+    c: IVec3,
+) -> impl Iterator<Item = (IVec3, u32)> + '_ {
+    const DIRS: [(i32, i32); 8] = [
+        (1, 0),
+        (-1, 0),
+        (0, 1),
+        (0, -1),
+        (1, 1),
+        (1, -1),
+        (-1, 1),
+        (-1, -1),
+    ];
     DIRS.into_iter().filter_map(move |(dx, dz)| {
         let diagonal = dx != 0 && dz != 0;
-        if diagonal && !(open_column(solid, c.x + dx, c.y, c.z) && open_column(solid, c.x, c.y, c.z + dz)) {
+        if diagonal
+            && !(open_column(solid, c.x + dx, c.y, c.z) && open_column(solid, c.x, c.y, c.z + dz))
+        {
             return None;
         }
         let n = step_into(solid, c, c.x + dx, c.z + dz)?;
@@ -57,7 +74,9 @@ fn neighbours(solid: &impl Fn(i32, i32, i32) -> bool, c: IVec3) -> impl Iterator
         if diagonal && n.y != c.y {
             return None;
         }
-        let cost = if diagonal { 14 } else { 10 } + if n.y > c.y { 8 } else { 0 } + (c.y - n.y).max(0) as u32 * 3;
+        let cost = if diagonal { 14 } else { 10 }
+            + if n.y > c.y { 8 } else { 0 }
+            + (c.y - n.y).max(0) as u32 * 3;
         Some((n, cost))
     })
 }
@@ -73,14 +92,23 @@ fn guess(a: IVec3, b: IVec3) -> u32 {
 /// within `radius` of the start), the way to the reachable cell closest to
 /// it, so the walker still gets as near as it can. Empty when already there
 /// or boxed in.
-pub fn find(solid: impl Fn(i32, i32, i32) -> bool, start: IVec3, goal: IVec3, radius: i32) -> Vec<IVec3> {
+pub fn find(
+    solid: impl Fn(i32, i32, i32) -> bool,
+    start: IVec3,
+    goal: IVec3,
+    radius: i32,
+) -> Vec<IVec3> {
     if start == goal {
         return Vec::new();
     }
     let mut open = BinaryHeap::new();
     let mut came: HashMap<IVec3, (IVec3, u32)> = HashMap::new();
     came.insert(start, (start, 0));
-    open.push(Reverse((guess(start, goal), 0u32, [start.x, start.y, start.z])));
+    open.push(Reverse((
+        guess(start, goal),
+        0u32,
+        [start.x, start.y, start.z],
+    )));
     let mut best = (guess(start, goal), start);
     let mut looked = 0;
     while let Some(Reverse((_, g, c))) = open.pop() {
@@ -147,13 +175,18 @@ mod tests {
         let way = find(&solid, IVec3::ZERO, IVec3::new(6, 0, 0), 24);
         assert_eq!(*way.last().unwrap(), IVec3::new(6, 0, 0));
         assert!(way.iter().all(|c| standable(&solid, *c)));
-        assert!(way.iter().any(|c| c.z.abs() >= 5), "should go round the end of the wall");
+        assert!(
+            way.iter().any(|c| c.z.abs() >= 5),
+            "should go round the end of the wall"
+        );
     }
 
     #[test]
     fn climbs_a_step_and_drops_down() {
         // A one-block step at x = 2..4, then the floor again.
-        let step: Vec<_> = (2..=4).flat_map(|x| (-2..=2).map(move |z| (x, 0, z))).collect();
+        let step: Vec<_> = (2..=4)
+            .flat_map(|x| (-2..=2).map(move |z| (x, 0, z)))
+            .collect();
         let way = find(world(&step), IVec3::ZERO, IVec3::new(7, 0, 0), 24);
         assert_eq!(*way.last().unwrap(), IVec3::new(7, 0, 0));
         assert!(way.iter().any(|c| c.y == 1), "goes over the step");
@@ -180,6 +213,10 @@ mod tests {
         }
         let way = find(world(&ring), IVec3::ZERO, IVec3::new(10, 0, 0), 24);
         let end = *way.last().unwrap();
-        assert_eq!(end, IVec3::new(7, 0, 0), "stops at the wall nearest the goal");
+        assert_eq!(
+            end,
+            IVec3::new(7, 0, 0),
+            "stops at the wall nearest the goal"
+        );
     }
 }

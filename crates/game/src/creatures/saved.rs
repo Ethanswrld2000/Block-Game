@@ -9,8 +9,8 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use super::data::{Kinds, Temper};
-use super::{spawn_creature, Barrows, Creature, CreatureAssets};
-use crate::save::{read_ron, screenshot_run, write_ron, SaveDir};
+use super::{Barrows, Creature, CreatureAssets, spawn_creature};
+use crate::save::{SaveDir, read_ron, screenshot_run, write_ron};
 
 const FILE: &str = "creatures.ron";
 
@@ -38,21 +38,42 @@ pub fn kept(temper: Temper) -> bool {
     !matches!(temper, Temper::Critter)
 }
 
-pub(super) fn load(mut commands: Commands, dir: Res<SaveDir>, kinds: Option<Res<Kinds>>, assets: Option<Res<CreatureAssets>>, mut barrows: ResMut<Barrows>) {
-    let (Some(kinds), Some(assets)) = (kinds, assets) else { return };
+pub(super) fn load(
+    mut commands: Commands,
+    dir: Res<SaveDir>,
+    kinds: Option<Res<Kinds>>,
+    assets: Option<Res<CreatureAssets>>,
+    mut barrows: ResMut<Barrows>,
+) {
+    let (Some(kinds), Some(assets)) = (kinds, assets) else {
+        return;
+    };
     if screenshot_run() {
         return;
     }
-    let Some(saved) = read_ron::<Saved>(&dir, FILE) else { return };
+    let Some(saved) = read_ron::<Saved>(&dir, FILE) else {
+        return;
+    };
     barrows.woke = saved.barrows;
     for s in &saved.creatures {
         let Some(kind) = kinds.id(&s.kind) else {
             warn!("{FILE}: no creature kind `{}`", s.kind);
             continue;
         };
-        let e = spawn_creature(&mut commands, &kinds, &assets, kind, Vec3::from_array(s.pos), s.yaw);
+        let e = spawn_creature(
+            &mut commands,
+            &kinds,
+            &assets,
+            kind,
+            Vec3::from_array(s.pos),
+            s.yaw,
+        );
         let mut c = Creature::new(kind, s.health, s.yaw);
-        c.fade = if kinds.get(kind).temper == Temper::Spirit { 0.0 } else { 1.0 };
+        c.fade = if kinds.get(kind).temper == Temper::Spirit {
+            0.0
+        } else {
+            1.0
+        };
         c.leash = s.leash.map(|(p, r)| (Vec3::from_array(p), r));
         commands.entity(e).insert(c);
     }
@@ -72,7 +93,14 @@ fn store(dir: &SaveDir, kinds: &Kinds, barrows: &Barrows, q: &Query<Wild>) {
             leash: c.leash.map(|(p, r)| (p.to_array(), r)),
         })
         .collect();
-    write_ron(dir, FILE, &Saved { creatures, barrows: barrows.woke.clone() });
+    write_ron(
+        dir,
+        FILE,
+        &Saved {
+            creatures,
+            barrows: barrows.woke.clone(),
+        },
+    );
 }
 
 pub(super) fn save_now_and_then(
@@ -92,7 +120,13 @@ pub(super) fn save_now_and_then(
     store(&dir, &kinds, &barrows, &q);
 }
 
-pub(super) fn save_on_exit(mut exit: MessageReader<AppExit>, dir: Res<SaveDir>, kinds: Option<Res<Kinds>>, barrows: Res<Barrows>, q: Query<Wild>) {
+pub(super) fn save_on_exit(
+    mut exit: MessageReader<AppExit>,
+    dir: Res<SaveDir>,
+    kinds: Option<Res<Kinds>>,
+    barrows: Res<Barrows>,
+    q: Query<Wild>,
+) {
     if exit.read().next().is_some()
         && !screenshot_run()
         && let Some(kinds) = kinds
@@ -108,7 +142,13 @@ mod tests {
     #[test]
     fn saved_creatures_round_trip() {
         let mut s = Saved::default();
-        s.creatures.push(SavedCreature { kind: "fen_stag".into(), pos: [1.0, 2.0, 3.0], yaw: 0.5, health: 7.0, leash: Some(([0.0, 1.0, 0.0], 10.0)) });
+        s.creatures.push(SavedCreature {
+            kind: "fen_stag".into(),
+            pos: [1.0, 2.0, 3.0],
+            yaw: 0.5,
+            health: 7.0,
+            leash: Some(([0.0, 1.0, 0.0], 10.0)),
+        });
         s.barrows.insert(9, 3.5);
         let text = ron::to_string(&s).unwrap();
         assert_eq!(ron::from_str::<Saved>(&text).unwrap(), s);

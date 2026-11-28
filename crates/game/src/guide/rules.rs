@@ -4,8 +4,8 @@
 use std::collections::BTreeSet;
 
 use serde::Deserialize;
-use voxel::room::Room;
 use voxel::BlockPos;
+use voxel::room::Room;
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 pub enum Goal {
@@ -59,7 +59,8 @@ pub struct GuideData {
 }
 
 pub fn load(text: &str) -> Result<GuideData, String> {
-    let ron = ron::Options::default().with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME);
+    let ron =
+        ron::Options::default().with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME);
     let data: GuideData = ron.from_str(text).map_err(|e| e.to_string())?;
     let mut seen = BTreeSet::new();
     for s in &data.steps {
@@ -89,7 +90,10 @@ pub fn bed_missing(flags: &BTreeSet<String>) -> bool {
 
 /// The step under way: the first not done.
 pub fn current<'a>(data: &'a GuideData, flags: &BTreeSet<String>) -> Option<(usize, &'a StepDef)> {
-    data.steps.iter().enumerate().find(|(_, s)| !flags.contains(&flag(&s.id)))
+    data.steps
+        .iter()
+        .enumerate()
+        .find(|(_, s)| !flags.contains(&flag(&s.id)))
 }
 
 /// Whether a block name is one a mark looks for.
@@ -158,26 +162,66 @@ pub fn home_missing(room: &Room, cell: impl Fn(BlockPos) -> Cell) -> Vec<&'stati
 #[cfg(test)]
 mod tests {
     use super::*;
-    use voxel::room::{find_room, Cell as RoomCell};
+    use voxel::room::{Cell as RoomCell, find_room};
 
     #[test]
     fn day_one_walks_from_sticks_to_the_first_sleep_and_the_gate() {
         let data = load(include_str!("../../../../assets/data/guide.ron")).expect("guide.ron");
         let first = &data.steps[0];
-        assert!(matches!(&first.goal, Goal::Have(l) if l.iter().any(|(i, _)| i == "stick") && l.iter().any(|(i, _)| i == "small_rock")));
-        assert!(first.marks.iter().any(|m| m.blocks.iter().any(|b| matches(b, "twig_north"))), "points to twigs");
-        assert!(first.marks.iter().any(|m| m.blocks.iter().any(|b| matches(b, "pebble"))), "points to pebbles");
+        assert!(
+            matches!(&first.goal, Goal::Have(l) if l.iter().any(|(i, _)| i == "stick") && l.iter().any(|(i, _)| i == "small_rock"))
+        );
+        assert!(
+            first
+                .marks
+                .iter()
+                .any(|m| m.blocks.iter().any(|b| matches(b, "twig_north"))),
+            "points to twigs"
+        );
+        assert!(
+            first
+                .marks
+                .iter()
+                .any(|m| m.blocks.iter().any(|b| matches(b, "pebble"))),
+            "points to pebbles"
+        );
         let ids: Vec<_> = data.steps.iter().map(|s| s.id.as_str()).collect();
-        assert_eq!(ids, ["gather", "fiber", "camp", BED, "axe", "fire", "wood", "block_crafter", "slats", "sleep", "gate"]);
+        assert_eq!(
+            ids,
+            [
+                "gather",
+                "fiber",
+                "camp",
+                BED,
+                "axe",
+                "fire",
+                "wood",
+                "block_crafter",
+                "slats",
+                "sleep",
+                "gate"
+            ]
+        );
         let at = |id: &str| &data.steps[ids.iter().position(|i| *i == id).unwrap()];
         assert_eq!(at("camp").goal, Goal::Camp);
-        assert_eq!(at(BED).goal, Goal::Step("camp_mat".into()), "the urn weaves the camp mat");
+        assert_eq!(
+            at(BED).goal,
+            Goal::Step("camp_mat".into()),
+            "the urn weaves the camp mat"
+        );
         assert_eq!(at("fire").goal, Goal::Made("campfire".into()));
         assert_eq!(at("block_crafter").goal, Goal::Step("block_crafter".into()));
         assert_eq!(at("slats").goal, Goal::Made("wood_slats".into()));
         assert_eq!(at("sleep").goal, Goal::Slept, "the first night by the fire");
-        assert_eq!(data.steps.last().unwrap().place.as_deref(), Some("gate"), "ends pointing at the Rotting Gate");
-        assert!(!data.steps.iter().any(|s| s.goal == Goal::Home), "no home this early");
+        assert_eq!(
+            data.steps.last().unwrap().place.as_deref(),
+            Some("gate"),
+            "ends pointing at the Rotting Gate"
+        );
+        assert!(
+            !data.steps.iter().any(|s| s.goal == Goal::Home),
+            "no home this early"
+        );
         // Every cutscene a step names exists.
         let scenes = include_str!("../../../../assets/data/cutscenes.ron");
         for s in &data.steps {
@@ -195,7 +239,10 @@ mod tests {
     #[test]
     fn sleep_waits_for_the_bed_while_the_guide_runs() {
         let mut flags = BTreeSet::new();
-        assert!(!bed_missing(&flags), "old worlds without the guide sleep as before");
+        assert!(
+            !bed_missing(&flags),
+            "old worlds without the guide sleep as before"
+        );
         flags.insert(ON.to_string());
         assert!(bed_missing(&flags));
         flags.insert(flag(BED));
@@ -212,35 +259,81 @@ mod tests {
             "log" => 2,
             _ => 0,
         };
-        let f = Facts { count: Some(&count), ..Default::default() };
+        let f = Facts {
+            count: Some(&count),
+            ..Default::default()
+        };
         assert!(met(&Goal::Have(vec![("stick".into(), 5)]), &f));
-        assert!(!met(&Goal::Have(vec![("stick".into(), 5), ("small_rock".into(), 1)]), &f));
-        assert!(met(&Goal::Have(vec![("log|swamp_log".into(), 4)]), &f), "logs of any kind add up");
+        assert!(!met(
+            &Goal::Have(vec![("stick".into(), 5), ("small_rock".into(), 1)]),
+            &f
+        ));
+        assert!(
+            met(&Goal::Have(vec![("log|swamp_log".into(), 4)]), &f),
+            "logs of any kind add up"
+        );
         assert!(!met(&Goal::UrnPlaced, &f));
-        let f = Facts { urn_placed: true, ..Default::default() };
+        let f = Facts {
+            urn_placed: true,
+            ..Default::default()
+        };
         assert!(met(&Goal::Urn, &f) && met(&Goal::UrnPlaced, &f));
         assert!(!met(&Goal::Slept, &f));
-        assert!(met(&Goal::Slept, &Facts { slept: true, ..Default::default() }));
+        assert!(met(
+            &Goal::Slept,
+            &Facts {
+                slept: true,
+                ..Default::default()
+            }
+        ));
         assert!(!met(&Goal::Flag("met_bram".into()), &f));
-        assert!(met(&Goal::Flag("met_bram".into()), &Facts { flags: ["met_bram".to_string()].into(), ..Default::default() }));
-        assert!(matches("twig_*", "twig_east") && !matches("twig_*", "log") && matches("pebble", "pebble"));
+        assert!(met(
+            &Goal::Flag("met_bram".into()),
+            &Facts {
+                flags: ["met_bram".to_string()].into(),
+                ..Default::default()
+            }
+        ));
+        assert!(
+            matches("twig_*", "twig_east")
+                && !matches("twig_*", "log")
+                && matches("pebble", "pebble")
+        );
     }
 
     /// A 3x3x3 hollow box: a home once it has a door in a wall and a torch inside.
     #[test]
     fn a_home_needs_a_door_and_a_torch() {
         let wall = |p: BlockPos| p.x.abs() == 2 || p.y.abs() == 2 || p.z.abs() == 2;
-        let room = find_room(BlockPos::new(0, 0, 0), |p| if p.x.abs() > 3 || p.y.abs() > 3 || p.z.abs() > 3 { RoomCell::Unknown } else if wall(p) { RoomCell::Wall } else { RoomCell::Open }).unwrap();
+        let room = find_room(BlockPos::new(0, 0, 0), |p| {
+            if p.x.abs() > 3 || p.y.abs() > 3 || p.z.abs() > 3 {
+                RoomCell::Unknown
+            } else if wall(p) {
+                RoomCell::Wall
+            } else {
+                RoomCell::Open
+            }
+        })
+        .unwrap();
         let door = BlockPos::new(2, 0, 0);
         let torch = BlockPos::new(1, -1, 1);
         let bare = |_| Cell::default();
         assert_eq!(home_missing(&room, bare), vec!["a door", "a torch"]);
-        let with_door = |p: BlockPos| Cell { door: p == door, light: false };
+        let with_door = |p: BlockPos| Cell {
+            door: p == door,
+            light: false,
+        };
         assert_eq!(home_missing(&room, with_door), vec!["a torch"]);
-        let both = |p: BlockPos| Cell { door: p == door, light: p == torch };
+        let both = |p: BlockPos| Cell {
+            door: p == door,
+            light: p == torch,
+        };
         assert!(home_missing(&room, both).is_empty());
         // A torch outside the walls doesn't count.
-        let outside = |p: BlockPos| Cell { door: p == door, light: p == BlockPos::new(3, 0, 0) };
+        let outside = |p: BlockPos| Cell {
+            door: p == door,
+            light: p == BlockPos::new(3, 0, 0),
+        };
         assert_eq!(home_missing(&room, outside), vec!["a torch"]);
     }
 }

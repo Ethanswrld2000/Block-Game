@@ -31,7 +31,11 @@ impl Ailments {
 
     /// How fast it can move (1 = as usual).
     pub fn pace(&self) -> f32 {
-        if self.frost.1 > 0.0 { 1.0 - self.frost.0 } else { 1.0 }
+        if self.frost.1 > 0.0 {
+            1.0 - self.frost.0
+        } else {
+            1.0
+        }
     }
 
     pub fn bleeding(&self) -> bool {

@@ -18,16 +18,16 @@
 //! `BLOCKGAME_SCREENSHOT` too, to take a picture of it.
 
 use bevy::ecs::schedule::ScheduleLabel;
+use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::input::mouse::AccumulatedMouseScroll;
-use bevy::input::ButtonState;
 use bevy::prelude::*;
-use bevy::render::view::screenshot::{save_to_disk, Screenshot};
+use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::ui::ScrollPosition;
 use bevy::window::PrimaryWindow;
 
 use crate::save::{self, SaveDir, SavedWorld};
-use crate::theme::{colors, sizes, Theme};
+use crate::theme::{Theme, colors, sizes};
 use crate::world::WorldSeed;
 
 /// Startup schedules of a world, run in this order when it opens.
@@ -50,7 +50,8 @@ pub enum Screen {
 
 /// Run condition for game systems outside `GameUpdate`.
 /// Set by the pause menu's "Save and quit to title".
-pub static RETURN_TO_TITLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub static RETURN_TO_TITLE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 /// After the app has closed and saved: start it again on the title screen if
 /// that is what was asked. `BLOCKGAME_WORLD` is dropped so the title shows.
@@ -58,8 +59,14 @@ pub fn relaunch_to_title() {
     if !RETURN_TO_TITLE.load(std::sync::atomic::Ordering::Relaxed) {
         return;
     }
-    let Ok(exe) = std::env::current_exe() else { return };
-    if let Err(e) = std::process::Command::new(exe).args(std::env::args_os().skip(1)).env_remove("BLOCKGAME_WORLD").spawn() {
+    let Ok(exe) = std::env::current_exe() else {
+        return;
+    };
+    if let Err(e) = std::process::Command::new(exe)
+        .args(std::env::args_os().skip(1))
+        .env_remove("BLOCKGAME_WORLD")
+        .spawn()
+    {
         eprintln!("could not return to the title screen: {e}");
     }
 }
@@ -84,7 +91,16 @@ impl Plugin for MenuPlugin {
             .add_systems(Update, run_game.run_if(in_state(Screen::Game)))
             .add_systems(
                 Update,
-                (typing, hover_and_click, scroll_list, refresh, blink, menu_screenshot).chain().run_if(in_state(Screen::Title)),
+                (
+                    typing,
+                    hover_and_click,
+                    scroll_list,
+                    refresh,
+                    blink,
+                    menu_screenshot,
+                )
+                    .chain()
+                    .run_if(in_state(Screen::Title)),
             );
     }
 }
@@ -102,7 +118,10 @@ fn run_game(world: &mut World) {
 /// Opens the world in `saves/<folder>` and starts the game.
 fn open_world(commands: &mut Commands, next: &mut NextState<Screen>, folder: &str) {
     let (dir, meta) = SaveDir::open(folder);
-    info!("opening world \"{}\" ({folder}), seed {}", meta.name, meta.seed);
+    info!(
+        "opening world \"{}\" ({folder}), seed {}",
+        meta.name, meta.seed
+    );
     commands.insert_resource(dir);
     commands.insert_resource(WorldSeed(meta.seed));
     next.set(Screen::Game);
@@ -120,7 +139,9 @@ fn forced_page() -> Option<Page> {
 /// Test runs go straight into a world.
 fn skips_title() -> bool {
     forced_page().is_none()
-        && ["BLOCKGAME_WORLD", "BLOCKGAME_SCREENSHOT", "BLOCKGAME_BENCH"].iter().any(|v| std::env::var_os(v).is_some())
+        && ["BLOCKGAME_WORLD", "BLOCKGAME_SCREENSHOT", "BLOCKGAME_BENCH"]
+            .iter()
+            .any(|v| std::env::var_os(v).is_some())
 }
 
 fn skip_title(mut commands: Commands, mut next: ResMut<NextState<Screen>>) {
@@ -220,10 +241,23 @@ fn spawn_title(mut commands: Commands, mut menu: ResMut<Menu>) {
             ])),
         ))
         .with_children(|root| {
-            root.spawn((Node { flex_direction: FlexDirection::Column, align_items: AlignItems::Center, ..default() },)).with_children(|t| {
-                t.spawn(crate::theme::text("BLOCK GAME", sizes::HUGE * 1.5, colors::HEADING));
-                t.spawn(crate::theme::text("The Great Swamp", sizes::LABEL, colors::MUTED));
-            });
+            root.spawn((Node {
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                ..default()
+            },))
+                .with_children(|t| {
+                    t.spawn(crate::theme::text(
+                        "BLOCK GAME",
+                        sizes::HUGE * 1.5,
+                        colors::HEADING,
+                    ));
+                    t.spawn(crate::theme::text(
+                        "The Great Swamp",
+                        sizes::LABEL,
+                        colors::MUTED,
+                    ));
+                });
             root.spawn((
                 PageRoot,
                 Node {
@@ -241,49 +275,103 @@ fn spawn_title(mut commands: Commands, mut menu: ResMut<Menu>) {
 fn button(theme: &Theme, kind: MenuButton, label: &str, width: f32) -> impl Bundle {
     (
         kind,
-        Node { width: Val::Px(width), height: Val::Px(44.0), justify_content: JustifyContent::Center, align_items: AlignItems::Center, ..default() },
+        Node {
+            width: Val::Px(width),
+            height: Val::Px(44.0),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            ..default()
+        },
         theme.skin("button"),
-        children![crate::theme::text(label.to_string(), sizes::LABEL, colors::TEXT)],
+        children![crate::theme::text(
+            label.to_string(),
+            sizes::LABEL,
+            colors::TEXT
+        )],
     )
 }
 
 fn divider(theme: &Theme, width: f32) -> impl Bundle {
-    (Node { width: Val::Px(width), height: Val::Px(8.0), margin: UiRect::bottom(Val::Px(6.0)), ..default() }, theme.skin("divider"))
+    (
+        Node {
+            width: Val::Px(width),
+            height: Val::Px(8.0),
+            margin: UiRect::bottom(Val::Px(6.0)),
+            ..default()
+        },
+        theme.skin("divider"),
+    )
 }
 
 fn label(s: &str) -> impl Bundle {
     (
-        Node { width: Val::Px(420.0), margin: UiRect::top(Val::Px(4.0)), ..default() },
-        children![crate::theme::text(s.to_string(), sizes::BODY, colors::MUTED)],
+        Node {
+            width: Val::Px(420.0),
+            margin: UiRect::top(Val::Px(4.0)),
+            ..default()
+        },
+        children![crate::theme::text(
+            s.to_string(),
+            sizes::BODY,
+            colors::MUTED
+        )],
     )
 }
 
 fn field(theme: &Theme, f: Field) -> impl Bundle {
     (
         MenuButton::Field(f),
-        Node { width: Val::Px(420.0), height: Val::Px(44.0), align_items: AlignItems::Center, padding: UiRect::horizontal(Val::Px(12.0)), ..default() },
+        Node {
+            width: Val::Px(420.0),
+            height: Val::Px(44.0),
+            align_items: AlignItems::Center,
+            padding: UiRect::horizontal(Val::Px(12.0)),
+            ..default()
+        },
         theme.skin("inset"),
-        children![(FieldText(f), crate::theme::text("", sizes::LABEL, colors::TEXT))],
+        children![(
+            FieldText(f),
+            crate::theme::text("", sizes::LABEL, colors::TEXT)
+        )],
     )
 }
 
 /// Rebuilds the panel when the page changes.
-fn refresh(mut commands: Commands, theme: Res<Theme>, mut menu: ResMut<Menu>, root: Single<Entity, With<PageRoot>>) {
+fn refresh(
+    mut commands: Commands,
+    theme: Res<Theme>,
+    mut menu: ResMut<Menu>,
+    root: Single<Entity, With<PageRoot>>,
+) {
     if menu.built == Some(menu.page) {
         return;
     }
     menu.built = Some(menu.page);
     let theme = &*theme;
     let root = *root;
-    commands.entity(root).despawn_children().insert(theme.skin("panel"));
+    commands
+        .entity(root)
+        .despawn_children()
+        .insert(theme.skin("panel"));
     let now = save::now_secs();
     let menu = &*menu;
     commands.entity(root).with_children(|p| match menu.page {
         Page::Main => {
             if let Some(w) = menu.worlds.first() {
                 p.spawn(button(theme, MenuButton::Continue, "Continue", 300.0));
-                p.spawn(crate::theme::text(format!("{} - played {}", w.name(), save::ago(w.meta.last_played, now)), sizes::BODY, colors::MUTED));
-                p.spawn(Node { height: Val::Px(4.0), ..default() });
+                p.spawn(crate::theme::text(
+                    format!(
+                        "{} - played {}",
+                        w.name(),
+                        save::ago(w.meta.last_played, now)
+                    ),
+                    sizes::BODY,
+                    colors::MUTED,
+                ));
+                p.spawn(Node {
+                    height: Val::Px(4.0),
+                    ..default()
+                });
             }
             p.spawn(button(theme, MenuButton::New, "New world", 300.0));
             if !menu.worlds.is_empty() {
@@ -292,24 +380,47 @@ fn refresh(mut commands: Commands, theme: Res<Theme>, mut menu: ResMut<Menu>, ro
             p.spawn(button(theme, MenuButton::Quit, "Quit", 300.0));
         }
         Page::New => {
-            p.spawn((theme.bold(sizes::TITLE), Text::new("New world"), TextColor(colors::HEADING)));
+            p.spawn((
+                theme.bold(sizes::TITLE),
+                Text::new("New world"),
+                TextColor(colors::HEADING),
+            ));
             p.spawn(divider(theme, 420.0));
             p.spawn(label("Name"));
             p.spawn(field(theme, Field::Name));
-            p.spawn(label("Seed (a number or any words; blank for a random one)"));
+            p.spawn(label(
+                "Seed (a number or any words; blank for a random one)",
+            ));
             p.spawn(field(theme, Field::Seed));
-            p.spawn(Node { height: Val::Px(8.0), ..default() });
-            p.spawn(Node { column_gap: Val::Px(12.0), ..default() }).with_children(|row| {
+            p.spawn(Node {
+                height: Val::Px(8.0),
+                ..default()
+            });
+            p.spawn(Node {
+                column_gap: Val::Px(12.0),
+                ..default()
+            })
+            .with_children(|row| {
                 row.spawn(button(theme, MenuButton::Back, "Back", 200.0));
                 row.spawn(button(theme, MenuButton::Create, "Create", 200.0));
             });
         }
         Page::Load => {
-            p.spawn((theme.bold(sizes::TITLE), Text::new("Worlds"), TextColor(colors::HEADING)));
+            p.spawn((
+                theme.bold(sizes::TITLE),
+                Text::new("Worlds"),
+                TextColor(colors::HEADING),
+            ));
             p.spawn(divider(theme, 480.0));
             p.spawn((
                 WorldList,
-                Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(8.0), max_height: Val::Px(360.0), overflow: Overflow::scroll_y(), ..default() },
+                Node {
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(8.0),
+                    max_height: Val::Px(360.0),
+                    overflow: Overflow::scroll_y(),
+                    ..default()
+                },
                 ScrollPosition::default(),
             ))
             .with_children(|list| {
@@ -328,16 +439,27 @@ fn refresh(mut commands: Commands, theme: Res<Theme>, mut menu: ResMut<Menu>, ro
                         theme.skin("button"),
                     ))
                     .with_children(|row| {
-                        row.spawn(crate::theme::text(w.name().to_string(), sizes::LABEL, colors::TEXT));
                         row.spawn(crate::theme::text(
-                            format!("Seed {} - played {}", w.meta.seed, save::ago(w.meta.last_played, now)),
+                            w.name().to_string(),
+                            sizes::LABEL,
+                            colors::TEXT,
+                        ));
+                        row.spawn(crate::theme::text(
+                            format!(
+                                "Seed {} - played {}",
+                                w.meta.seed,
+                                save::ago(w.meta.last_played, now)
+                            ),
                             sizes::SMALL,
                             colors::TEXT,
                         ));
                     });
                 }
             });
-            p.spawn(Node { height: Val::Px(6.0), ..default() });
+            p.spawn(Node {
+                height: Val::Px(6.0),
+                ..default()
+            });
             p.spawn(button(theme, MenuButton::Back, "Back", 300.0));
         }
     });
@@ -362,7 +484,13 @@ fn typing(
         }
         match &k.logical_key {
             Key::Escape => menu.go(Page::Main),
-            Key::Tab => menu.focus = if menu.focus == Field::Name { Field::Seed } else { Field::Name },
+            Key::Tab => {
+                menu.focus = if menu.focus == Field::Name {
+                    Field::Seed
+                } else {
+                    Field::Name
+                }
+            }
             Key::Enter => create(&mut menu, &mut commands, &mut next),
             Key::Backspace => {
                 let f = menu.focus;
@@ -392,7 +520,11 @@ fn text_of(menu: &mut Menu, f: Field) -> &mut String {
 
 fn create(menu: &mut Menu, commands: &mut Commands, next: &mut NextState<Screen>) {
     let name = menu.name.trim();
-    let name = if name.is_empty() { format!("World {}", menu.worlds.len() + 1) } else { name.to_string() };
+    let name = if name.is_empty() {
+        format!("World {}", menu.worlds.len() + 1)
+    } else {
+        name.to_string()
+    };
     let seed = save::seed_from_text(&menu.seed).unwrap_or_else(save::random_seed);
     let folder = save::create_world(&save::saves_root(), &name, seed);
     open_world(commands, next, &folder);
@@ -402,7 +534,13 @@ fn create(menu: &mut Menu, commands: &mut Commands, next: &mut NextState<Screen>
 fn hover_and_click(
     mouse: Res<ButtonInput<MouseButton>>,
     window: Single<&Window, With<PrimaryWindow>>,
-    mut buttons: Query<(&MenuButton, &ComputedNode, &UiGlobalTransform, &InheritedVisibility, &mut ImageNode)>,
+    mut buttons: Query<(
+        &MenuButton,
+        &ComputedNode,
+        &UiGlobalTransform,
+        &InheritedVisibility,
+        &mut ImageNode,
+    )>,
     theme: Res<Theme>,
     mut menu: ResMut<Menu>,
     mut commands: Commands,
@@ -456,7 +594,10 @@ fn hover_and_click(
     }
 }
 
-fn scroll_list(scroll: Res<AccumulatedMouseScroll>, mut list: Query<&mut ScrollPosition, With<WorldList>>) {
+fn scroll_list(
+    scroll: Res<AccumulatedMouseScroll>,
+    mut list: Query<&mut ScrollPosition, With<WorldList>>,
+) {
     if scroll.delta.y == 0.0 {
         return;
     }
@@ -470,7 +611,11 @@ fn scroll_list(scroll: Res<AccumulatedMouseScroll>, mut list: Query<&mut ScrollP
 }
 
 /// Field text with a blinking caret in the focused one.
-fn blink(time: Res<Time>, menu: Res<Menu>, mut texts: Query<(&FieldText, &mut Text, &mut TextColor)>) {
+fn blink(
+    time: Res<Time>,
+    menu: Res<Menu>,
+    mut texts: Query<(&FieldText, &mut Text, &mut TextColor)>,
+) {
     let caret = ((time.elapsed_secs() * 2.0) as u32).is_multiple_of(2);
     for (f, mut text, mut color) in &mut texts {
         let value = match f.0 {
@@ -492,11 +637,19 @@ fn blink(time: Res<Time>, menu: Res<Menu>, mut texts: Query<(&FieldText, &mut Te
 }
 
 /// `BLOCKGAME_MENU=.. BLOCKGAME_SCREENSHOT=out.png`: a picture of the title screen.
-fn menu_screenshot(mut commands: Commands, mut frames: Local<u32>, mut exit: MessageWriter<AppExit>) {
-    let (Some(_), Ok(path)) = (forced_page(), std::env::var("BLOCKGAME_SCREENSHOT")) else { return };
+fn menu_screenshot(
+    mut commands: Commands,
+    mut frames: Local<u32>,
+    mut exit: MessageWriter<AppExit>,
+) {
+    let (Some(_), Ok(path)) = (forced_page(), std::env::var("BLOCKGAME_SCREENSHOT")) else {
+        return;
+    };
     *frames += 1;
     if *frames == 30 {
-        commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path));
+        commands
+            .spawn(Screenshot::primary_window())
+            .observe(save_to_disk(path));
     }
     if *frames == 60 {
         exit.write(AppExit::Success);

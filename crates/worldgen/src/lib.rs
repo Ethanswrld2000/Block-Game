@@ -30,17 +30,17 @@ mod trees;
 mod util;
 
 pub use biome::{Biome, Biomes, Guaranteed, Region, TreeKind};
-pub use delve::{in_pocket, Delves, Floor, FloorPlan, RoomType, POCKET};
+pub use delve::{Delves, Floor, FloorPlan, POCKET, RoomType, in_pocket};
 pub use dungeons::{Aabb, Dungeon, Look, SpawnKind, SpawnPoint, Veil};
 pub use floating::{Land, MAIN_RADIUS};
-pub use landmarks::{AuntIsland, Castle, Forge, AUNT_RADIUS, SPORROW_RADIUS};
+pub use landmarks::{AUNT_RADIUS, AuntIsland, Castle, Forge, SPORROW_RADIUS};
 pub use structures::{Barrow, Hut, Village};
 
 use std::sync::Arc;
 
 use fastnoise_lite::{FastNoiseLite, FractalType};
-use voxel::chunk::{index, CHUNK_VOLUME};
-use voxel::{BlockId, BlockRegistry, Chunk, ChunkPos, CHUNK_SIZE, CHUNK_SIZE_I32};
+use voxel::chunk::{CHUNK_VOLUME, index};
+use voxel::{BlockId, BlockRegistry, CHUNK_SIZE, CHUNK_SIZE_I32, Chunk, ChunkPos};
 
 use util::{hash3, lerp, noise, smoothstep, spline};
 
@@ -87,7 +87,14 @@ pub struct Column {
 impl Column {
     /// Open sky all the way down.
     fn void(climate: Climate, biome: usize) -> Self {
-        Self { height: WORLD_FLOOR - 1, climate, biome, land: Land::Void, bottom: i32::MAX, water: i32::MIN }
+        Self {
+            height: WORLD_FLOOR - 1,
+            climate,
+            biome,
+            land: Land::Void,
+            bottom: i32::MAX,
+            water: i32::MIN,
+        }
     }
 }
 
@@ -181,12 +188,26 @@ struct Landmarks {
 
 impl WorldGen {
     pub fn new(seed: u64, blocks: &BlockRegistry, biomes_ron: &str) -> Result<Self, String> {
-        let b = |n: &str| blocks.id(n).ok_or_else(|| format!("worldgen needs block '{n}'"));
+        let b = |n: &str| {
+            blocks
+                .id(n)
+                .ok_or_else(|| format!("worldgen needs block '{n}'"))
+        };
         let ids = Ids {
             stone: b("stone")?,
             deeprock: b("deeprock")?,
-            vine: [b("vine_north")?, b("vine_south")?, b("vine_east")?, b("vine_west")?],
-            twig: [b("twig_north")?, b("twig_south")?, b("twig_east")?, b("twig_west")?],
+            vine: [
+                b("vine_north")?,
+                b("vine_south")?,
+                b("vine_east")?,
+                b("vine_west")?,
+            ],
+            twig: [
+                b("twig_north")?,
+                b("twig_south")?,
+                b("twig_east")?,
+                b("twig_west")?,
+            ],
             pebble: b("pebble")?,
             moss: b("moss")?,
             mud: b("mud")?,
@@ -211,7 +232,7 @@ impl WorldGen {
             chest: b("chest")?,
             sky_shrine: b("sky_shrine")?,
         };
-        use FractalType::{Ridged, FBm};
+        use FractalType::{FBm, Ridged};
         let mut wg = Self {
             seed,
             warp_x: noise(seed, 1, 0.004, 2, FBm),
@@ -235,7 +256,11 @@ impl WorldGen {
             structures: structures::Cache::default(),
             spawn: [0, 0, 0],
             center: (0, 0),
-            delves: delve::Delves::load(include_str!("../../../assets/data/dungeons.ron"), include_str!("../../../assets/data/rooms.ron"), blocks)?,
+            delves: delve::Delves::load(
+                include_str!("../../../assets/data/dungeons.ron"),
+                include_str!("../../../assets/data/rooms.ron"),
+                blocks,
+            )?,
             chain: Vec::new(),
             landmarks: Landmarks::default(),
             zones: Vec::new(),
@@ -268,12 +293,17 @@ impl WorldGen {
             let mut col = terrain;
             if lifted != terrain.height {
                 col.height = lifted;
-                col.biome = self.biomes.select(col.climate.temperature, col.climate.humidity, lifted - SEA_LEVEL);
+                col.biome = self.biomes.select(
+                    col.climate.temperature,
+                    col.climate.humidity,
+                    lifted - SEA_LEVEL,
+                );
             }
             if let Some(b) = self.zone_biome(x, z, col.height - SEA_LEVEL) {
                 col.biome = b;
             }
-            col.bottom = floating::underside(self, x, z, SEA_LEVEL as f32, e, floating::CORE_DEPTH, 1.0);
+            col.bottom =
+                floating::underside(self, x, z, SEA_LEVEL as f32, e, floating::CORE_DEPTH, 1.0);
             col.height = col.height.max(col.bottom + 1);
             return col;
         }
@@ -293,7 +323,9 @@ impl WorldGen {
             climate: Climate { overhang: 0.0, ..c },
             biome: {
                 let rel = (top - isl.y).max(2);
-                self.biomes.select_in(Region::Outer, c.temperature, c.humidity, rel).unwrap_or_else(|| self.biomes.select(c.temperature, c.humidity, rel))
+                self.biomes
+                    .select_in(Region::Outer, c.temperature, c.humidity, rel)
+                    .unwrap_or_else(|| self.biomes.select(c.temperature, c.humidity, rel))
             },
             land: Land::Outer,
             bottom,
@@ -318,7 +350,16 @@ impl WorldGen {
 
         // Base land height from continentalness: deep ocean -> coast -> inland.
         let base = spline(
-            &[(-1.2, -60.0), (-0.45, -28.0), (-0.18, -6.0), (-0.05, 0.5), (0.1, 3.0), (0.4, 10.0), (0.8, 22.0), (1.2, 30.0)],
+            &[
+                (-1.2, -60.0),
+                (-0.45, -28.0),
+                (-0.18, -6.0),
+                (-0.05, 0.5),
+                (0.1, 3.0),
+                (0.4, 10.0),
+                (0.8, 22.0),
+                (1.2, 30.0),
+            ],
             c,
         );
         let inland = smoothstep(-0.05, 0.35, c);
@@ -329,7 +370,10 @@ impl WorldGen {
         let mut height = base + mountain * peaks + hills * r * 22.0;
 
         // The swamp: warm, wet, low and flat. Flatten towards just above sea level.
-        let swamp = smoothstep(0.35, 0.65, h) * smoothstep(-0.1, 0.25, t) * (1.0 - mountain) * smoothstep(-0.2, 0.1, c);
+        let swamp = smoothstep(0.35, 0.65, h)
+            * smoothstep(-0.1, 0.25, t)
+            * (1.0 - mountain)
+            * smoothstep(-0.2, 0.1, c);
         height = lerp(height, SEA_LEVEL as f32 + 0.2 + d * 2.4, swamp * 0.92);
 
         // Small-scale roughness so nothing looks too smooth; more on mountains.
@@ -342,7 +386,14 @@ impl WorldGen {
         let biome = self.biomes.select(t_alt, h, height_i - SEA_LEVEL);
         Column {
             height: height_i,
-            climate: Climate { continentalness: c, erosion: e, ridges: r, temperature: t_alt, humidity: h, overhang },
+            climate: Climate {
+                continentalness: c,
+                erosion: e,
+                ridges: r,
+                temperature: t_alt,
+                humidity: h,
+                overhang,
+            },
             biome,
             land: Land::Main,
             bottom: WORLD_FLOOR,
@@ -361,7 +412,10 @@ impl WorldGen {
         let col = self.column(x, z);
         if col.land == Land::Void || (y > SKY_MIN - 40 && y > col.height + 40) {
             let c = col.climate;
-            if let Some(b) = self.biomes.select_in(Region::Air, c.temperature, c.humidity, y - SEA_LEVEL) {
+            if let Some(b) =
+                self.biomes
+                    .select_in(Region::Air, c.temperature, c.humidity, y - SEA_LEVEL)
+            {
                 return self.biomes.get(b);
             }
         }
@@ -376,7 +430,10 @@ impl WorldGen {
 
     pub(crate) fn biome_of_island(&self, isl: &islands::Island) -> &Biome {
         let c = self.terrain(isl.x, isl.z).climate;
-        let i = self.biomes.select_in(Region::Sky, c.temperature, c.humidity, isl.y - SEA_LEVEL).unwrap_or(self.biomes.sky);
+        let i = self
+            .biomes
+            .select_in(Region::Sky, c.temperature, c.humidity, isl.y - SEA_LEVEL)
+            .unwrap_or(self.biomes.sky);
         self.biomes.get(i)
     }
 
@@ -410,7 +467,11 @@ impl WorldGen {
                 let h = c.height - SEA_LEVEL;
                 c.land == Land::Main && h >= b.min_height.max(1) && h <= b.max_height
             };
-            let clear = |x: i32, z: i32| out.iter().all(|o| ((o.x - x).pow(2) + (o.z - z).pow(2)) as f32 > (o.radius + g.radius).powi(2));
+            let clear = |x: i32, z: i32| {
+                out.iter().all(|o| {
+                    ((o.x - x).pow(2) + (o.z - z).pow(2)) as f32 > (o.radius + g.radius).powi(2)
+                })
+            };
             let mut best: Option<(usize, i32, i32)> = None;
             for k in 0..160u64 {
                 let h = util::hash2(self.seed ^ 0xF0_06, k as i32, biome as i32);
@@ -425,7 +486,10 @@ impl WorldGen {
                 for i in 0..16 {
                     let t = i as f32 / 16.0 * std::f32::consts::TAU;
                     for f in [0.4, 0.8] {
-                        let (px, pz) = (x + (t.cos() * g.radius * f) as i32, z + (t.sin() * g.radius * f) as i32);
+                        let (px, pz) = (
+                            x + (t.cos() * g.radius * f) as i32,
+                            z + (t.sin() * g.radius * f) as i32,
+                        );
                         good += fits(px, pz) as usize;
                     }
                 }
@@ -437,8 +501,15 @@ impl WorldGen {
                 }
             }
             // Fall back to a spot `near` blocks out so the biome always exists.
-            let (x, z) = best.map(|(_, x, z)| (x, z)).unwrap_or((sx + g.near as i32, sz));
-            out.push(Zone { biome, x, z, radius: g.radius });
+            let (x, z) = best
+                .map(|(_, x, z)| (x, z))
+                .unwrap_or((sx + g.near as i32, sz));
+            out.push(Zone {
+                biome,
+                x,
+                z,
+                radius: g.radius,
+            });
         }
         out
     }
@@ -527,7 +598,11 @@ impl WorldGen {
         const PAD: i32 = 8;
         let steps = [x0 - PAD, x0 + CHUNK_SIZE_I32 / 2, x0 + CHUNK_SIZE_I32 + PAD];
         let zsteps = [z0 - PAD, z0 + CHUNK_SIZE_I32 / 2, z0 + CHUNK_SIZE_I32 + PAD];
-        zsteps.iter().flat_map(|&z| steps.iter().map(move |&x| (x, z))).map(|(x, z)| self.column(x, z)).find(|c| c.land != Land::Void)
+        zsteps
+            .iter()
+            .flat_map(|&z| steps.iter().map(move |&x| (x, z)))
+            .map(|(x, z)| self.column(x, z))
+            .find(|c| c.land != Land::Void)
     }
 
     fn solid_at(&self, x: i32, y: i32, z: i32, col: &Column) -> bool {
@@ -537,11 +612,18 @@ impl WorldGen {
         if col.climate.overhang < 0.02 || (y - col.height).abs() > 22 {
             return y <= col.height;
         }
-        let n = self.overhang.get_noise_3d(x as f32, y as f32 * 1.4, z as f32);
+        let n = self
+            .overhang
+            .get_noise_3d(x as f32, y as f32 * 1.4, z as f32);
         (col.height - y) as f32 + n * 22.0 * col.climate.overhang > 0.0
     }
 
-    fn fill_terrain(&self, pos: ChunkPos, cols: &[[Column; CHUNK_SIZE]; CHUNK_SIZE], dense: &mut [BlockId]) {
+    fn fill_terrain(
+        &self,
+        pos: ChunkPos,
+        cols: &[[Column; CHUNK_SIZE]; CHUNK_SIZE],
+        dense: &mut [BlockId],
+    ) {
         let origin = pos.origin();
         let min_y = origin.y;
         let ids = self.ids;
@@ -557,18 +639,30 @@ impl WorldGen {
                 // Depth below the nearest air above, scanning down from just above the chunk.
                 let mut depth = 0;
                 for y in (min_y + CHUNK_SIZE_I32..min_y + CHUNK_SIZE_I32 + 4).rev() {
-                    depth = if self.solid_at(wx, y, wz, col) { depth + 1 } else { 0 };
+                    depth = if self.solid_at(wx, y, wz, col) {
+                        depth + 1
+                    } else {
+                        0
+                    };
                 }
                 for ly in (0..CHUNK_SIZE).rev() {
                     let y = min_y + ly as i32;
                     let solid = y < WORLD_CEILING && self.solid_at(wx, y, wz, col);
                     let b = if !solid {
                         depth = 0;
-                        if y <= col.water && y > col.bottom { ids.water } else { BlockId::AIR }
+                        if y <= col.water && y > col.bottom {
+                            ids.water
+                        } else {
+                            BlockId::AIR
+                        }
                     } else {
                         depth += 1;
                         let underwater = col.height < col.water;
-                        let rock = if y < DEEP_LEVEL + (wx ^ wz) % 3 { ids.deeprock } else { ids.stone };
+                        let rock = if y < DEEP_LEVEL + (wx ^ wz) % 3 {
+                            ids.deeprock
+                        } else {
+                            ids.stone
+                        };
                         let mut b = if depth == 1 {
                             if underwater {
                                 biome.underwater
@@ -580,12 +674,22 @@ impl WorldGen {
                                 biome.surface
                             }
                         } else if depth <= 4 {
-                            if underwater { biome.underwater } else if biome.subsurface == ids.dirt && col.climate.overhang > 0.02 { ids.stone } else { biome.subsurface }
+                            if underwater {
+                                biome.underwater
+                            } else if biome.subsurface == ids.dirt && col.climate.overhang > 0.02 {
+                                ids.stone
+                            } else {
+                                biome.subsurface
+                            }
                         } else {
                             rock
                         };
                         // Caves: carved below the surface layers, never right under the sea floor.
-                        if depth > 4 && y > col.bottom + 6 && !(underwater && y > col.height - 12) && caves.is_cave(lx, ly, lz) {
+                        if depth > 4
+                            && y > col.bottom + 6
+                            && !(underwater && y > col.height - 12)
+                            && caves.is_cave(lx, ly, lz)
+                        {
                             b = BlockId::AIR;
                         } else if b == rock {
                             b = self.ore(wx, y, wz, rock);
@@ -603,7 +707,12 @@ impl WorldGen {
             return rock;
         }
         // Ores come in small clusters: the cluster cell decides, the block jitters.
-        let cell = hash3(self.seed ^ 0x0E, x.div_euclid(3), y.div_euclid(3), z.div_euclid(3));
+        let cell = hash3(
+            self.seed ^ 0x0E,
+            x.div_euclid(3),
+            y.div_euclid(3),
+            z.div_euclid(3),
+        );
         let here = hash3(self.seed ^ 0x0F, x, y, z);
         match cell % 1000 {
             0..=9 if !here.is_multiple_of(3) => self.ids.coal,
@@ -662,7 +771,11 @@ impl CaveField {
     fn sample(field: &[f32], lx: usize, ly: usize, lz: usize) -> f32 {
         let (ix, iy, iz) = (lx / CAVE_STEP, ly / CAVE_STEP, lz / CAVE_STEP);
         let s = CAVE_STEP as f32;
-        let (fx, fy, fz) = ((lx % CAVE_STEP) as f32 / s, (ly % CAVE_STEP) as f32 / s, (lz % CAVE_STEP) as f32 / s);
+        let (fx, fy, fz) = (
+            (lx % CAVE_STEP) as f32 / s,
+            (ly % CAVE_STEP) as f32 / s,
+            (lz % CAVE_STEP) as f32 / s,
+        );
         let at = |x: usize, y: usize, z: usize| field[x + z * CAVE_N + y * CAVE_N * CAVE_N];
         let l = |a: f32, b: f32, t: f32| a + (b - a) * t;
         let x00 = l(at(ix, iy, iz), at(ix + 1, iy, iz), fx);
@@ -673,7 +786,8 @@ impl CaveField {
     }
 
     fn is_cave(&self, lx: usize, ly: usize, lz: usize) -> bool {
-        Self::sample(&self.cheese, lx, ly, lz) > 0.58 || Self::sample(&self.tunnel, lx, ly, lz) < 0.006
+        Self::sample(&self.cheese, lx, ly, lz) > 0.58
+            || Self::sample(&self.tunnel, lx, ly, lz) < 0.006
     }
 }
 
@@ -683,8 +797,10 @@ mod tests {
     use voxel::TileSheet;
 
     pub(crate) fn wg() -> WorldGen {
-        let tiles = TileSheet::from_ron(include_str!("../../../assets/textures/blocks.ron")).unwrap();
-        let reg = BlockRegistry::from_ron(include_str!("../../../assets/data/blocks.ron"), &tiles).unwrap();
+        let tiles =
+            TileSheet::from_ron(include_str!("../../../assets/textures/blocks.ron")).unwrap();
+        let reg = BlockRegistry::from_ron(include_str!("../../../assets/data/blocks.ron"), &tiles)
+            .unwrap();
         WorldGen::new(42, &reg, include_str!("../../../assets/data/biomes.ron")).unwrap()
     }
 
@@ -698,13 +814,31 @@ mod tests {
     #[test]
     fn high_sky_and_the_void_are_air() {
         let g = wg();
-        assert_eq!(g.generate(ChunkPos::new(0, 40, 0)).is_uniform(), Some(BlockId::AIR));
-        assert_eq!(g.generate(ChunkPos::new(0, 32, 0)).is_uniform(), Some(BlockId::AIR));
-        assert_eq!(g.generate(ChunkPos::new(0, WORLD_FLOOR.div_euclid(32) - 1, 0)).is_uniform(), Some(BlockId::AIR));
+        assert_eq!(
+            g.generate(ChunkPos::new(0, 40, 0)).is_uniform(),
+            Some(BlockId::AIR)
+        );
+        assert_eq!(
+            g.generate(ChunkPos::new(0, 32, 0)).is_uniform(),
+            Some(BlockId::AIR)
+        );
+        assert_eq!(
+            g.generate(ChunkPos::new(0, WORLD_FLOOR.div_euclid(32) - 1, 0))
+                .is_uniform(),
+            Some(BlockId::AIR)
+        );
         // Under the middle of the island, well below its underside: open air.
         let (cx, cz) = g.island_center();
         let below = (floating::CORE_DEPTH as i32 + 200).div_euclid(32);
-        assert_eq!(g.generate(ChunkPos::new(cx.div_euclid(32), -below - 2, cz.div_euclid(32))).is_uniform(), Some(BlockId::AIR));
+        assert_eq!(
+            g.generate(ChunkPos::new(
+                cx.div_euclid(32),
+                -below - 2,
+                cz.div_euclid(32)
+            ))
+            .is_uniform(),
+            Some(BlockId::AIR)
+        );
     }
 
     #[test]
@@ -715,7 +849,11 @@ mod tests {
         for cz in -2..=2 {
             for cx in -2..=2 {
                 for cy in -1..=0 {
-                    let p = ChunkPos::new(sx.div_euclid(32) + cx, sy.div_euclid(32) + cy, sz.div_euclid(32) + cz);
+                    let p = ChunkPos::new(
+                        sx.div_euclid(32) + cx,
+                        sy.div_euclid(32) + cy,
+                        sz.div_euclid(32) + cz,
+                    );
                     for b in g.generate(p).to_dense() {
                         twigs += g.ids.twig.contains(&b) as u32;
                         vines += g.ids.vine.contains(&b) as u32;
@@ -724,7 +862,10 @@ mod tests {
                 }
             }
         }
-        assert!(twigs > 5 && vines > 10 && pebbles > 3, "twigs {twigs}, vines {vines}, pebbles {pebbles}");
+        assert!(
+            twigs > 5 && vines > 10 && pebbles > 3,
+            "twigs {twigs}, vines {vines}, pebbles {pebbles}"
+        );
     }
 
     #[test]
@@ -732,15 +873,26 @@ mod tests {
         let g = wg();
         let (cx, cz) = g.island_center();
         assert_eq!(g.column(cx, cz).land, Land::Main);
-        let reach = |dx: i32, dz: i32| (1..).map(|i| i * 4).find(|d| floating::main_edge(&g, cx + dx * d, cz + dz * d) >= 1.0).unwrap();
+        let reach = |dx: i32, dz: i32| {
+            (1..)
+                .map(|i| i * 4)
+                .find(|d| floating::main_edge(&g, cx + dx * d, cz + dz * d) >= 1.0)
+                .unwrap()
+        };
         // A mile is 1609 blocks.
-        for (w, axis) in [(reach(1, 0) + reach(-1, 0), "x"), (reach(0, 1) + reach(0, -1), "z")] {
+        for (w, axis) in [
+            (reach(1, 0) + reach(-1, 0), "x"),
+            (reach(0, 1) + reach(0, -1), "z"),
+        ] {
             assert!((3219..=4828).contains(&w), "{w} blocks across along {axis}");
         }
         // Past the coast (and not on an outer island): nothing.
         let out = cx + reach(1, 0) + 16;
         let col = g.column(out, cz);
-        assert!(col.land != Land::Main, "past the coast is still main island");
+        assert!(
+            col.land != Land::Main,
+            "past the coast is still main island"
+        );
     }
 
     #[test]
@@ -750,10 +902,16 @@ mod tests {
         for s in 0..360 {
             let a = s as f32 / 360.0 * std::f32::consts::TAU;
             for d in (1800..2400).step_by(4) {
-                let (x, z) = (cx + (a.cos() * d as f32) as i32, cz + (a.sin() * d as f32) as i32);
+                let (x, z) = (
+                    cx + (a.cos() * d as f32) as i32,
+                    cz + (a.sin() * d as f32) as i32,
+                );
                 if (0.97..1.0).contains(&floating::main_edge(&g, x, z)) {
                     let h = g.column(x, z).height;
-                    assert!(h >= SEA_LEVEL + 2, "coast at ({x}, {z}) is {h}, below the sea");
+                    assert!(
+                        h >= SEA_LEVEL + 2,
+                        "coast at ({x}, {z}) is {h}, below the sea"
+                    );
                 }
             }
         }
@@ -764,9 +922,15 @@ mod tests {
         let g = wg();
         let (cx, cz) = g.island_center();
         let middle = g.column(cx, cz).bottom;
-        assert!((-460..=-280).contains(&middle), "middle underside at {middle}");
+        assert!(
+            (-460..=-280).contains(&middle),
+            "middle underside at {middle}"
+        );
         let near_coast = g.column(cx + 1700, cz).bottom;
-        assert!(near_coast > middle + 80, "underside rises towards the coast ({near_coast} vs {middle})");
+        assert!(
+            near_coast > middle + 80,
+            "underside rises towards the coast ({near_coast} vs {middle})"
+        );
         // Drips and lobes: the underside of a patch is far from flat.
         let (mut lo, mut hi) = (i32::MAX, i32::MIN);
         for z in (0..96).step_by(2) {
@@ -780,12 +944,23 @@ mod tests {
         // The generated blocks match the column: air under the underside, ground above it.
         let (x, z) = (cx + 300, cz);
         let col = g.column(x, z);
-        let p = ChunkPos::new(x.div_euclid(32), col.bottom.div_euclid(32), z.div_euclid(32));
+        let p = ChunkPos::new(
+            x.div_euclid(32),
+            col.bottom.div_euclid(32),
+            z.div_euclid(32),
+        );
         let c = g.generate(p).to_dense();
-        let (lx, lz, ly) = (x.rem_euclid(32) as usize, z.rem_euclid(32) as usize, col.bottom.rem_euclid(32) as usize);
+        let (lx, lz, ly) = (
+            x.rem_euclid(32) as usize,
+            z.rem_euclid(32) as usize,
+            col.bottom.rem_euclid(32) as usize,
+        );
         assert!(c[index(lx, ly, lz)].is_air(), "underside block is air");
         if ly + 1 < CHUNK_SIZE {
-            assert!(!c[index(lx, ly + 1, lz)].is_air(), "block above the underside is solid");
+            assert!(
+                !c[index(lx, ly + 1, lz)].is_air(),
+                "block above the underside is solid"
+            );
         }
     }
 
@@ -799,8 +974,16 @@ mod tests {
                 let col = g.column(cx + x, cz + z);
                 if col.land == Land::Outer {
                     outer += 1;
-                    assert!(((x * x + z * z) as f32).sqrt() > MAIN_RADIUS * 1.1, "outer island at ({x}, {z}) overlaps the main one");
-                    assert!(col.bottom < col.height && col.height < SKY_MIN, "outer island column {} .. {}", col.bottom, col.height);
+                    assert!(
+                        ((x * x + z * z) as f32).sqrt() > MAIN_RADIUS * 1.1,
+                        "outer island at ({x}, {z}) overlaps the main one"
+                    );
+                    assert!(
+                        col.bottom < col.height && col.height < SKY_MIN,
+                        "outer island column {} .. {}",
+                        col.bottom,
+                        col.height
+                    );
                 }
             }
         }
@@ -846,7 +1029,13 @@ mod tests {
         let mut air = 0;
         for x in -4..4 {
             for z in -4..4 {
-                let c = g.generate(ChunkPos::new(cx.div_euclid(32) + x, -2, cz.div_euclid(32) + z)).to_dense();
+                let c = g
+                    .generate(ChunkPos::new(
+                        cx.div_euclid(32) + x,
+                        -2,
+                        cz.div_euclid(32) + z,
+                    ))
+                    .to_dense();
                 air += c.iter().filter(|b| b.is_air()).count();
             }
         }
@@ -855,11 +1044,18 @@ mod tests {
 
     #[test]
     fn fungal_growth_on_every_main_island() {
-        let tiles = TileSheet::from_ron(include_str!("../../../assets/textures/blocks.ron")).unwrap();
-        let reg = BlockRegistry::from_ron(include_str!("../../../assets/data/blocks.ron"), &tiles).unwrap();
+        let tiles =
+            TileSheet::from_ron(include_str!("../../../assets/textures/blocks.ron")).unwrap();
+        let reg = BlockRegistry::from_ron(include_str!("../../../assets/data/blocks.ron"), &tiles)
+            .unwrap();
         for seed in [1u64, 42, 777, 9001, 123456] {
-            let g = WorldGen::new(seed, &reg, include_str!("../../../assets/data/biomes.ron")).unwrap();
-            let z = g.zones().iter().find(|z| g.biomes.get(z.biome).name == "fungal_growth").expect("fungal zone");
+            let g =
+                WorldGen::new(seed, &reg, include_str!("../../../assets/data/biomes.ron")).unwrap();
+            let z = g
+                .zones()
+                .iter()
+                .find(|z| g.biomes.get(z.biome).name == "fungal_growth")
+                .expect("fungal zone");
             let r = z.radius as i32;
             let mut fungal = 0;
             for dz in (-r..=r).step_by(8) {
@@ -870,7 +1066,11 @@ mod tests {
                     }
                 }
             }
-            assert!(fungal > 150, "seed {seed}: only {fungal} fungal samples at {:?}", (z.x, z.z));
+            assert!(
+                fungal > 150,
+                "seed {seed}: only {fungal} fungal samples at {:?}",
+                (z.x, z.z)
+            );
         }
     }
 

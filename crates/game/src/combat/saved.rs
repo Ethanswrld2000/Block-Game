@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{Foe, FoeBook, SpawnFoe};
 use crate::dungeon::Nearby;
-use crate::save::{read_ron, screenshot_run, write_ron, SaveDir};
+use crate::save::{SaveDir, read_ron, screenshot_run, write_ron};
 
 const FILE: &str = "foes.ron";
 
@@ -33,7 +33,12 @@ pub(super) fn load(dir: Res<SaveDir>, book: Res<FoeBook>, mut spawn: MessageWrit
             warn!("{FILE}: no foe kind `{}`", s.kind);
             continue;
         };
-        spawn.write(SpawnFoe { boost: s.boost, home: Some(Vec3::from_array(s.home)), health: Some(s.health), ..SpawnFoe::new(kind, Vec3::from_array(s.pos)) });
+        spawn.write(SpawnFoe {
+            boost: s.boost,
+            home: Some(Vec3::from_array(s.home)),
+            health: Some(s.health),
+            ..SpawnFoe::new(kind, Vec3::from_array(s.pos))
+        });
     }
 }
 
@@ -47,13 +52,26 @@ fn store(dir: &SaveDir, book: &FoeBook, nearby: &Nearby, q: &Query<(&Foe, &Trans
         .iter()
         .filter(|(f, _)| kept(f, nearby))
         .filter_map(|(f, tf)| {
-            Some(SavedFoe { kind: book.kinds.get(f.kind)?.name.clone(), pos: tf.translation.to_array(), home: f.home.to_array(), health: f.health, boost: f.boost })
+            Some(SavedFoe {
+                kind: book.kinds.get(f.kind)?.name.clone(),
+                pos: tf.translation.to_array(),
+                home: f.home.to_array(),
+                health: f.health,
+                boost: f.boost,
+            })
         })
         .collect();
     write_ron(dir, FILE, &list);
 }
 
-pub(super) fn save_now_and_then(time: Res<Time<Real>>, mut since: Local<f32>, dir: Res<SaveDir>, book: Res<FoeBook>, nearby: Res<Nearby>, q: Query<(&Foe, &Transform)>) {
+pub(super) fn save_now_and_then(
+    time: Res<Time<Real>>,
+    mut since: Local<f32>,
+    dir: Res<SaveDir>,
+    book: Res<FoeBook>,
+    nearby: Res<Nearby>,
+    q: Query<(&Foe, &Transform)>,
+) {
     *since += time.delta_secs();
     if *since < 30.0 || screenshot_run() {
         return;
@@ -62,7 +80,13 @@ pub(super) fn save_now_and_then(time: Res<Time<Real>>, mut since: Local<f32>, di
     store(&dir, &book, &nearby, &q);
 }
 
-pub(super) fn save_on_exit(mut exit: MessageReader<AppExit>, dir: Res<SaveDir>, book: Res<FoeBook>, nearby: Res<Nearby>, q: Query<(&Foe, &Transform)>) {
+pub(super) fn save_on_exit(
+    mut exit: MessageReader<AppExit>,
+    dir: Res<SaveDir>,
+    book: Res<FoeBook>,
+    nearby: Res<Nearby>,
+    q: Query<(&Foe, &Transform)>,
+) {
     if exit.read().next().is_some() && !screenshot_run() {
         store(&dir, &book, &nearby, &q);
     }
@@ -74,7 +98,13 @@ mod tests {
 
     #[test]
     fn saved_foes_round_trip() {
-        let list = vec![SavedFoe { kind: "hollow".into(), pos: [1.0, 2.0, 3.0], home: [0.0, 2.0, 0.0], health: 12.5, boost: 1.0 }];
+        let list = vec![SavedFoe {
+            kind: "hollow".into(),
+            pos: [1.0, 2.0, 3.0],
+            home: [0.0, 2.0, 0.0],
+            health: 12.5,
+            boost: 1.0,
+        }];
         let text = ron::to_string(&list).unwrap();
         assert_eq!(ron::from_str::<Vec<SavedFoe>>(&text).unwrap(), list);
     }

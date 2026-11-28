@@ -47,10 +47,19 @@ pub struct Constellations(pub Vec<Constellation>);
 
 impl Constellations {
     pub fn from_ron(text: &str) -> Result<Self, String> {
-        let list: Vec<Constellation> = ron::from_str(text).map_err(|e| format!("constellations.ron: {e}"))?;
+        let list: Vec<Constellation> =
+            ron::from_str(text).map_err(|e| format!("constellations.ron: {e}"))?;
         for c in &list {
-            if c.stars.len() < 2 || c.lines.iter().any(|(a, b)| *a >= c.stars.len() || *b >= c.stars.len()) || !(1..=3).contains(&c.tier) {
-                return Err(format!("constellations.ron: '{}' needs 2+ stars, lines between them and a tier 1-3", c.name));
+            if c.stars.len() < 2
+                || c.lines
+                    .iter()
+                    .any(|(a, b)| *a >= c.stars.len() || *b >= c.stars.len())
+                || !(1..=3).contains(&c.tier)
+            {
+                return Err(format!(
+                    "constellations.ron: '{}' needs 2+ stars, lines between them and a tier 1-3",
+                    c.name
+                ));
             }
         }
         Ok(Self(list))
@@ -86,7 +95,10 @@ pub fn map_stars(c: &Constellation) -> Vec<Vec3> {
     let mid = bearing(c.midnight.0, c.midnight.1);
     let right = mid.cross(Vec3::Y).normalize_or(Vec3::X);
     let up = right.cross(mid).normalize();
-    c.stars.iter().map(|(x, y)| (mid + right * x.to_radians().tan() + up * y.to_radians().tan()).normalize()).collect()
+    c.stars
+        .iter()
+        .map(|(x, y)| (mid + right * x.to_radians().tan() + up * y.to_radians().tan()).normalize())
+        .collect()
 }
 
 /// The directions of its stars at a time of day.
@@ -185,7 +197,15 @@ pub fn lens_image(size: u32) -> Vec<u8> {
 pub(super) fn load_constellations(mut commands: Commands, mut sky: ResMut<crate::sky::SkyStars>) {
     match Constellations::from_ron(include_str!("../../../../assets/data/constellations.ron")) {
         Ok(c) => {
-            sky.named = c.0.iter().flat_map(|c| map_stars(c).into_iter().map(|d| d.extend(brightness(c.tier)))).take(crate::sky::MAX_NAMED_STARS).collect();
+            sky.named =
+                c.0.iter()
+                    .flat_map(|c| {
+                        map_stars(c)
+                            .into_iter()
+                            .map(|d| d.extend(brightness(c.tier)))
+                    })
+                    .take(crate::sky::MAX_NAMED_STARS)
+                    .collect();
             commands.insert_resource(c);
         }
         Err(e) => {
@@ -200,7 +220,11 @@ pub(super) fn spawn_scope_ui(mut commands: Commands, mut images: ResMut<Assets<I
     use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
     const SIZE: u32 = 512;
     let mut img = Image::new(
-        Extent3d { width: SIZE, height: SIZE, depth_or_array_layers: 1 },
+        Extent3d {
+            width: SIZE,
+            height: SIZE,
+            depth_or_array_layers: 1,
+        },
         TextureDimension::D2,
         lens_image(SIZE),
         TextureFormat::Rgba8UnormSrgb,
@@ -208,7 +232,12 @@ pub(super) fn spawn_scope_ui(mut commands: Commands, mut images: ResMut<Assets<I
     );
     img.sampler = bevy::image::ImageSampler::linear();
     let lens = images.add(img);
-    let full = || Node { position_type: PositionType::Absolute, width: Val::Percent(100.0), height: Val::Percent(100.0), ..default() };
+    let full = || Node {
+        position_type: PositionType::Absolute,
+        width: Val::Percent(100.0),
+        height: Val::Percent(100.0),
+        ..default()
+    };
     commands
         .spawn((
             ScopeUi,
@@ -230,9 +259,17 @@ pub(super) fn spawn_scope_ui(mut commands: Commands, mut images: ResMut<Assets<I
 }
 
 /// Step up to the telescope (from `use_station`): only on a clear night.
-pub(super) fn look_through(scope: &mut Scope, menus: &mut Menus, hour: f32, clouds: f32, toast: &mut MessageWriter<Toast>) {
+pub(super) fn look_through(
+    scope: &mut Scope,
+    menus: &mut Menus,
+    hour: f32,
+    clouds: f32,
+    toast: &mut MessageWriter<Toast>,
+) {
     if !crate::survival::camp::is_night(hour) {
-        toast.write(Toast("The stars are out only at night: come back after dusk".into()));
+        toast.write(Toast(
+            "The stars are out only at night: come back after dusk".into(),
+        ));
     } else if clouds > MAX_CLOUDS {
         toast.write(Toast("Too cloudy to see the stars tonight".into()));
     } else {
@@ -255,7 +292,11 @@ pub(super) fn scope_view(
     mut menus: ResMut<Menus>,
     mut urns: ResMut<Urns>,
     mut cam: Single<(&Transform, &mut Projection), With<FlyCamera>>,
-    (mut toast, mut gain, mut sound): (MessageWriter<Toast>, MessageWriter<crate::progress::GainXp>, MessageWriter<PlaySound>),
+    (mut toast, mut gain, mut sound): (
+        MessageWriter<Toast>,
+        MessageWriter<crate::progress::GainXp>,
+        MessageWriter<PlaySound>,
+    ),
     mut ui: Query<&mut Visibility, With<ScopeUi>>,
     mut line_text: Query<&mut Text, With<ScopeLine>>,
     mut blink: Query<&mut BackgroundColor, (With<ScopeBlink>, Without<ScopeDark>)>,
@@ -272,8 +313,22 @@ pub(super) fn scope_view(
         }
     }
     let (tf, proj) = &mut *cam;
-    let moved = [KeyCode::KeyW, KeyCode::KeyA, KeyCode::KeyS, KeyCode::KeyD, KeyCode::Space, KeyCode::Escape].iter().any(|k| keys.just_pressed(*k));
-    if scope.open && (*was_open && mouse.just_pressed(MouseButton::Right) || moved || !crate::survival::camp::is_night(clock.hour()) || menus.open) {
+    let moved = [
+        KeyCode::KeyW,
+        KeyCode::KeyA,
+        KeyCode::KeyS,
+        KeyCode::KeyD,
+        KeyCode::Space,
+        KeyCode::Escape,
+    ]
+    .iter()
+    .any(|k| keys.just_pressed(*k));
+    if scope.open
+        && (*was_open && mouse.just_pressed(MouseButton::Right)
+            || moved
+            || !crate::survival::camp::is_night(clock.hour())
+            || menus.open)
+    {
         scope.open = false;
         menus.still = false;
     }
@@ -282,7 +337,11 @@ pub(super) fn scope_view(
         return;
     };
     // Putting your eye to it: the view goes dark for a blink, then the lens opens.
-    scope.blend = if scope.open { (scope.blend + time.delta_secs() / 0.45).min(1.0) } else { 0.0 };
+    scope.blend = if scope.open {
+        (scope.blend + time.delta_secs() / 0.45).min(1.0)
+    } else {
+        0.0
+    };
     let k = scope.blend * scope.blend * (3.0 - 2.0 * scope.blend);
     // The lens gathers more light: fainter stars come out.
     sky.scope = k;
@@ -290,7 +349,11 @@ pub(super) fn scope_view(
         b.0 = Color::srgba(0.0, 0.0, 0.0, 1.0 - k);
     }
     if let Ok(mut vis) = ui.single_mut() {
-        let want = if scope.open { Visibility::Inherited } else { Visibility::Hidden };
+        let want = if scope.open {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
         if *vis != want {
             *vis = want;
         }
@@ -299,8 +362,18 @@ pub(super) fn scope_view(
                 Some((i, _)) if urns.charted.contains(&list.0[i].name) => {
                     format!("{} (charted)", list.0[i].title)
                 }
-                Some((_, t)) => format!("Charting a constellation... {:.0}%", (t / CHART_SECONDS * 100.0).min(100.0)),
-                None => format!("{} of {} constellations charted", list.0.iter().filter(|c| urns.charted.contains(&c.name)).count(), list.0.len()),
+                Some((_, t)) => format!(
+                    "Charting a constellation... {:.0}%",
+                    (t / CHART_SECONDS * 100.0).min(100.0)
+                ),
+                None => format!(
+                    "{} of {} constellations charted",
+                    list.0
+                        .iter()
+                        .filter(|c| urns.charted.contains(&c.name))
+                        .count(),
+                    list.0.len()
+                ),
             };
             if let Ok(mut t) = line_text.single_mut()
                 && t.0 != line
@@ -334,12 +407,22 @@ pub(super) fn scope_view(
         urns.charted.insert(c.name.clone());
         sound.write(PlaySound::new("spell_on").gain(0.6));
         toast.write(Toast(format!("Charted {}", c.title)));
-        gain.write(crate::progress::GainXp { xp: c.xp, why: format!("Charted {}", c.title) });
+        gain.write(crate::progress::GainXp {
+            xp: c.xp,
+            why: format!("Charted {}", c.title),
+        });
     }
 }
 
 /// The lines of the charted constellations, between their stars on the sky dome.
-pub(super) fn draw_constellations(scope: Res<Scope>, clock: Res<WorldClock>, list: Res<Constellations>, urns: Res<Urns>, cam: Single<&Transform, With<FlyCamera>>, mut gizmos: Gizmos) {
+pub(super) fn draw_constellations(
+    scope: Res<Scope>,
+    clock: Res<WorldClock>,
+    list: Res<Constellations>,
+    urns: Res<Urns>,
+    cam: Single<&Transform, With<FlyCamera>>,
+    mut gizmos: Gizmos,
+) {
     if !scope.open {
         return;
     }
@@ -348,7 +431,11 @@ pub(super) fn draw_constellations(scope: Res<Scope>, clock: Res<WorldClock>, lis
     let eye = cam.translation;
     let far = 120.0;
     let charted: &BTreeSet<String> = &urns.charted;
-    for c in list.0.iter().filter(|c| c.tier <= tier && charted.contains(&c.name)) {
+    for c in list
+        .0
+        .iter()
+        .filter(|c| c.tier <= tier && charted.contains(&c.name))
+    {
         if centre(c, clock.time).y < 0.0 {
             continue;
         }
@@ -367,7 +454,8 @@ mod tests {
     use super::*;
 
     fn list() -> Constellations {
-        Constellations::from_ron(include_str!("../../../../assets/data/constellations.ron")).unwrap()
+        Constellations::from_ron(include_str!("../../../../assets/data/constellations.ron"))
+            .unwrap()
     }
 
     #[test]
@@ -411,7 +499,11 @@ mod tests {
     fn the_dome_draws_the_constellation_stars() {
         let l = list();
         let n: usize = l.0.iter().map(|c| c.stars.len()).sum();
-        assert!(n <= crate::sky::MAX_NAMED_STARS, "{n} stars, room for {}", crate::sky::MAX_NAMED_STARS);
+        assert!(
+            n <= crate::sky::MAX_NAMED_STARS,
+            "{n} stars, room for {}",
+            crate::sky::MAX_NAMED_STARS
+        );
         // At any hour, a star seen through the telescope is the star-map star turned by the sky.
         let c = &l.0[0];
         for (seen, map) in stars(c, 0.1).iter().zip(map_stars(c)) {

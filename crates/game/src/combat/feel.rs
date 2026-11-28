@@ -56,7 +56,10 @@ impl Kick {
     /// Springs back to rest.
     pub fn step(&mut self, dt: f32) {
         let dt = dt.min(0.05);
-        for (x, v) in [(&mut self.pitch, &mut self.pitch_vel), (&mut self.roll, &mut self.roll_vel)] {
+        for (x, v) in [
+            (&mut self.pitch, &mut self.pitch_vel),
+            (&mut self.roll, &mut self.roll_vel),
+        ] {
             *v += (-260.0 * *x - 24.0 * *v) * dt;
             *x = (*x + *v * dt).clamp(-0.08, 0.08);
         }
@@ -67,7 +70,11 @@ pub struct FeelPlugin;
 
 impl Plugin for FeelPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<Impact>().add_message::<SlowMo>().init_resource::<HitStop>().init_resource::<Kick>().add_systems(crate::menu::GameUpdate, feel.after(super::fall_set()));
+        app.add_message::<Impact>()
+            .add_message::<SlowMo>()
+            .init_resource::<HitStop>()
+            .init_resource::<Kick>()
+            .add_systems(crate::menu::GameUpdate, feel.after(super::fall_set()));
     }
 }
 
@@ -89,7 +96,10 @@ fn feel(
     for i in impacts.read() {
         stop.left = stop.left.max(stop_for(i.strength));
         *flip = !*flip;
-        kick.push(-0.35 * i.strength, if *flip { 0.15 } else { -0.15 } * i.strength);
+        kick.push(
+            -0.35 * i.strength,
+            if *flip { 0.15 } else { -0.15 } * i.strength,
+        );
     }
     for d in hurts.read() {
         let s = (d.amount / 10.0).clamp(0.2, 1.0);
@@ -134,7 +144,9 @@ mod tests {
     fn a_parry_slows_the_world_then_eases_back() {
         assert_eq!(game_speed(0.0, 0.0), 1.0);
         assert_eq!(game_speed(0.0, SLOW_FOR), SLOW_SPEED);
-        assert!(game_speed(0.0, SLOW_FOR * 0.1) > SLOW_SPEED && game_speed(0.0, SLOW_FOR * 0.1) < 1.0);
+        assert!(
+            game_speed(0.0, SLOW_FOR * 0.1) > SLOW_SPEED && game_speed(0.0, SLOW_FOR * 0.1) < 1.0
+        );
         // A hit stop inside it still stops.
         assert_eq!(game_speed(0.05, SLOW_FOR), STOP_SPEED);
     }

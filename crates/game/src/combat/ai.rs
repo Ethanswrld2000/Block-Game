@@ -159,7 +159,8 @@ impl Brain {
     /// `HEAVY_EVERY`th cut of anything that cuts.
     fn attack(&mut self, t: &Traits) {
         self.attacks += 1;
-        self.heavy = !t.ranged && (t.role == Role::Brute || self.attacks.is_multiple_of(HEAVY_EVERY));
+        self.heavy =
+            !t.ranged && (t.role == Role::Brute || self.attacks.is_multiple_of(HEAVY_EVERY));
         self.set(Tactic::Attack, 0.0);
     }
 
@@ -170,7 +171,11 @@ impl Brain {
 
     /// How red a heavy attack's wind-up glows, 0..1 (rising to the blow).
     pub fn telegraph(&self, t: &Traits) -> f32 {
-        if self.tactic == Tactic::Attack && self.heavy && self.swing < t.contact { (self.swing / t.contact).clamp(0.0, 1.0).sqrt() } else { 0.0 }
+        if self.tactic == Tactic::Attack && self.heavy && self.swing < t.contact {
+            (self.swing / t.contact).clamp(0.0, 1.0).sqrt()
+        } else {
+            0.0
+        }
     }
 
     fn set(&mut self, tactic: Tactic, timer: f32) {
@@ -203,7 +208,9 @@ impl Brain {
             if home && s.sees && s.dist < t.sight {
                 self.aware = true;
                 self.set(Tactic::Approach, 0.0);
-            } else if self.tactic == Tactic::Attack || (self.tactic == Tactic::Stagger && self.timer > 0.0) {
+            } else if self.tactic == Tactic::Attack
+                || (self.tactic == Tactic::Stagger && self.timer > 0.0)
+            {
                 // Let it finish what it was doing.
             } else if s.from_home > 2.0 {
                 self.tactic = Tactic::Return;
@@ -253,7 +260,11 @@ impl Brain {
 
         match self.tactic {
             // A shooter looses as soon as it has a clear line within range.
-            Tactic::Approach | Tactic::Circle | Tactic::Press if t.ranged && s.sees && s.dist <= t.reach => self.attack(t),
+            Tactic::Approach | Tactic::Circle | Tactic::Press
+                if t.ranged && s.sees && s.dist <= t.reach =>
+            {
+                self.attack(t)
+            }
             Tactic::Press if s.dist <= t.reach => self.attack(t),
             Tactic::Approach if s.dist <= ENGAGE => self.decide(s, t, rng),
             Tactic::Circle if s.dist > ENGAGE + 2.0 => self.set(Tactic::Approach, 0.0),
@@ -286,9 +297,20 @@ impl Brain {
         };
         let weights = [
             (Tactic::Press, aggression * crowded * wary * press),
-            (Tactic::Circle, (st.caution * 0.9 + 0.15 + if s.pressing >= PRESSERS { 0.6 } else { 0.0 }) * circle),
-            (Tactic::Guard, (st.guard * st.caution * 0.5 + if t.role == Role::Shield { 0.4 } else { 0.0 }) * guard),
-            (Tactic::Backoff, (st.caution * (1.0 - s.health) * 1.2 + if s.dist < 1.3 { 0.3 } else { 0.0 }) * back + if keeps_off { 2.5 } else { 0.0 }),
+            (
+                Tactic::Circle,
+                (st.caution * 0.9 + 0.15 + if s.pressing >= PRESSERS { 0.6 } else { 0.0 }) * circle,
+            ),
+            (
+                Tactic::Guard,
+                (st.guard * st.caution * 0.5 + if t.role == Role::Shield { 0.4 } else { 0.0 })
+                    * guard,
+            ),
+            (
+                Tactic::Backoff,
+                (st.caution * (1.0 - s.health) * 1.2 + if s.dist < 1.3 { 0.3 } else { 0.0 }) * back
+                    + if keeps_off { 2.5 } else { 0.0 },
+            ),
         ];
         let total: f32 = weights.iter().map(|w| w.1).sum();
         let mut r = rng.unit() * total;
@@ -320,7 +342,10 @@ impl Brain {
         self.aware = true;
         // A shield bearer's shield is always up to the front (unless it's
         // reeling or mid-swing): get round it, kick it or break it.
-        if t.role == Role::Shield && facing && !matches!(self.tactic, Tactic::Stagger | Tactic::Attack) {
+        if t.role == Role::Shield
+            && facing
+            && !matches!(self.tactic, Tactic::Stagger | Tactic::Attack)
+        {
             self.tactic = Tactic::Guard;
             self.timer = self.timer.max(0.4);
         }
@@ -383,7 +408,15 @@ mod tests {
         t.reach = 12.0;
         let mut b = Brain::new(&t.style, 7);
         let mut rng = Rng(3);
-        let mut s = Senses { dist: 10.0, sees: true, from_home: 0.0, health: 1.0, threatened: false, you_guard: false, pressing: 0 };
+        let mut s = Senses {
+            dist: 10.0,
+            sees: true,
+            from_home: 0.0,
+            health: 1.0,
+            threatened: false,
+            you_guard: false,
+            pressing: 0,
+        };
         b.step(&s, &t, &mut rng, 0.05);
         // Noticed you; next it shoots from where it stands.
         b.step(&s, &t, &mut rng, 0.05);
@@ -404,7 +437,12 @@ mod tests {
 
     fn traits(aggression: f32, caution: f32, guard: f32) -> Traits {
         Traits {
-            style: Style { aggression, caution, guard, poise: 2.0 },
+            style: Style {
+                aggression,
+                caution,
+                guard,
+                poise: 2.0,
+            },
             reach: 2.3,
             sight: 18.0,
             forget: 28.0,
@@ -418,7 +456,15 @@ mod tests {
     }
 
     fn near(dist: f32) -> Senses {
-        Senses { dist, sees: true, from_home: 1.0, health: 1.0, threatened: false, you_guard: false, pressing: 0 }
+        Senses {
+            dist,
+            sees: true,
+            from_home: 1.0,
+            health: 1.0,
+            threatened: false,
+            you_guard: false,
+            pressing: 0,
+        }
     }
 
     fn run(b: &mut Brain, s: &Senses, t: &Traits, rng: &mut Rng, secs: f32) -> u32 {

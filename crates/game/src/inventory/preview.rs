@@ -14,14 +14,14 @@
 use std::collections::{BTreeMap, HashMap};
 
 use bevy::asset::RenderAssetUsages;
-use bevy::camera::visibility::RenderLayers;
 use bevy::camera::RenderTarget;
+use bevy::camera::visibility::RenderLayers;
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages};
 
-use super::ui::{InvScreen, Tab};
 use super::Inventory;
+use super::ui::{InvScreen, Tab};
 use crate::avatar::PlayerLooks;
 use crate::hands::Held;
 use crate::interact::{Hand, Wielded};
@@ -36,10 +36,13 @@ pub struct PreviewPlugin;
 
 impl Plugin for PreviewPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(crate::menu::GameStartup, setup).add_systems(
-            crate::menu::GameUpdate,
-            (spawn_body, dress, layer_parts, drive_preview).chain().after(crate::interact::InteractSet),
-        );
+        app.add_systems(crate::menu::GameStartup, setup)
+            .add_systems(
+                crate::menu::GameUpdate,
+                (spawn_body, dress, layer_parts, drive_preview)
+                    .chain()
+                    .after(crate::interact::InteractSet),
+            );
     }
 }
 
@@ -72,35 +75,65 @@ struct Spin {
 
 fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let mut image = Image::new_fill(
-        Extent3d { width: SIZE.x, height: SIZE.y, depth_or_array_layers: 1 },
+        Extent3d {
+            width: SIZE.x,
+            height: SIZE.y,
+            depth_or_array_layers: 1,
+        },
         TextureDimension::D2,
         &[0, 0, 0, 0],
         TextureFormat::Rgba8UnormSrgb,
         RenderAssetUsages::default(),
     );
-    image.texture_descriptor.usage = TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::RENDER_ATTACHMENT;
+    image.texture_descriptor.usage =
+        TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::RENDER_ATTACHMENT;
     let handle = images.add(image);
     let layer = RenderLayers::layer(LAYER);
     commands.spawn((
         PreviewCamera,
         Camera3d::default(),
-        Camera { order: -1, is_active: false, clear_color: ClearColorConfig::Custom(Color::NONE), ..default() },
+        Camera {
+            order: -1,
+            is_active: false,
+            clear_color: ClearColorConfig::Custom(Color::NONE),
+            ..default()
+        },
         RenderTarget::Image(handle.clone().into()),
-        Projection::Perspective(PerspectiveProjection { fov: 0.5, ..default() }),
-        Transform::from_translation(AT + Vec3::new(0.0, 1.0, -5.0)).looking_at(AT + Vec3::new(0.0, 0.92, 0.0), Vec3::Y),
-        AmbientLight { color: Color::srgb(0.75, 0.8, 0.95), brightness: 900.0, ..default() },
+        Projection::Perspective(PerspectiveProjection {
+            fov: 0.5,
+            ..default()
+        }),
+        Transform::from_translation(AT + Vec3::new(0.0, 1.0, -5.0))
+            .looking_at(AT + Vec3::new(0.0, 0.92, 0.0), Vec3::Y),
+        AmbientLight {
+            color: Color::srgb(0.75, 0.8, 0.95),
+            brightness: 900.0,
+            ..default()
+        },
         layer.clone(),
         Name::new("Inventory picture camera"),
     ));
     // A warm key light from the front and above, a cool fill from the side.
     commands.spawn((
-        DirectionalLight { illuminance: 9000.0, color: Color::srgb(1.0, 0.94, 0.84), shadow_maps_enabled: false, ..default() },
-        Transform::from_translation(AT + Vec3::new(1.5, 3.0, -3.0)).looking_at(AT + Vec3::Y, Vec3::Y),
+        DirectionalLight {
+            illuminance: 9000.0,
+            color: Color::srgb(1.0, 0.94, 0.84),
+            shadow_maps_enabled: false,
+            ..default()
+        },
+        Transform::from_translation(AT + Vec3::new(1.5, 3.0, -3.0))
+            .looking_at(AT + Vec3::Y, Vec3::Y),
         layer.clone(),
     ));
     commands.spawn((
-        DirectionalLight { illuminance: 2500.0, color: Color::srgb(0.6, 0.75, 1.0), shadow_maps_enabled: false, ..default() },
-        Transform::from_translation(AT + Vec3::new(-3.0, 1.0, 1.0)).looking_at(AT + Vec3::Y, Vec3::Y),
+        DirectionalLight {
+            illuminance: 2500.0,
+            color: Color::srgb(0.6, 0.75, 1.0),
+            shadow_maps_enabled: false,
+            ..default()
+        },
+        Transform::from_translation(AT + Vec3::new(-3.0, 1.0, 1.0))
+            .looking_at(AT + Vec3::Y, Vec3::Y),
         layer,
     ));
     commands.insert_resource(PreviewImage(handle));
@@ -116,18 +149,46 @@ fn spawn_body(
     if !existing.is_empty() {
         return;
     }
-    let (root, mut rig) = body::build(&mut commands, &mut meshes, &mut materials, &looks.0, AT, 0.0);
+    let (root, mut rig) = body::build(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        &looks.0,
+        AT,
+        0.0,
+    );
     // Lit by its own little stage, not by the world's light where it happens to be.
     rig.follows_light = false;
-    commands.spawn((Held::new(Hand::Right), Transform::from_scale(Vec3::splat(1.6)), Visibility::default(), ChildOf(rig.hands[1])));
-    commands.spawn((Held::new(Hand::Left), Transform::from_scale(Vec3::splat(1.6)), Visibility::default(), ChildOf(rig.hands[0])));
+    commands.spawn((
+        Held::new(Hand::Right),
+        Transform::from_scale(Vec3::splat(1.6)),
+        Visibility::default(),
+        ChildOf(rig.hands[1]),
+    ));
+    commands.spawn((
+        Held::new(Hand::Left),
+        Transform::from_scale(Vec3::splat(1.6)),
+        Visibility::default(),
+        ChildOf(rig.hands[0]),
+    ));
     let dressed = Dressed::new(rig.anchors());
-    commands.entity(root).insert((PreviewBody, Name::new("Inventory picture body"), rig, dressed, RenderLayers::layer(LAYER)));
+    commands.entity(root).insert((
+        PreviewBody,
+        Name::new("Inventory picture body"),
+        rig,
+        dressed,
+        RenderLayers::layer(LAYER),
+    ));
 }
 
 /// Everything under the picture's body goes on its layer (parts, held items
 /// and clothes are added later, so this runs every frame).
-fn layer_parts(mut commands: Commands, body: Query<Entity, With<PreviewBody>>, children: Query<&Children>, missing: Query<(), Without<RenderLayers>>) {
+fn layer_parts(
+    mut commands: Commands,
+    body: Query<Entity, With<PreviewBody>>,
+    children: Query<&Children>,
+    missing: Query<(), Without<RenderLayers>>,
+) {
     let Ok(root) = body.single() else { return };
     for e in children.iter_descendants(root) {
         if missing.contains(e) {
@@ -156,7 +217,9 @@ fn drive_preview(
             c.is_active = on;
         }
     }
-    let Ok((mut tf, mut rig)) = body.single_mut() else { return };
+    let Ok((mut tf, mut rig)) = body.single_mut() else {
+        return;
+    };
     if !on {
         return;
     }
@@ -187,7 +250,9 @@ fn drive_preview(
 
     // The head follows the cursor a little (the camera is straight ahead, at yaw 0).
     let size = window.size();
-    let c = window.cursor_position().map_or(Vec2::ZERO, |p| (p / size - 0.5) * 2.0);
+    let c = window
+        .cursor_position()
+        .map_or(Vec2::ZERO, |p| (p / size - 0.5) * 2.0);
     let focus = [wrap(-yaw) - c.x * 0.5, -c.y * 0.3];
     let arms = wielded.0.map(|_| Limbs::hold());
     let drive = Drive {
@@ -218,7 +283,10 @@ pub(crate) struct Dressed {
 
 impl Dressed {
     pub(crate) fn new(anchors: Anchors) -> Self {
-        Self { anchors, showing: None }
+        Self {
+            anchors,
+            showing: None,
+        }
     }
 }
 
@@ -230,26 +298,88 @@ struct WornPart(Entity);
 fn pieces(slot: WearSlot, a: &Anchors) -> Vec<(Entity, Vec3, Vec3)> {
     let both = |j: [Entity; 2], size: Vec3, at: Vec3| j.into_iter().map(move |e| (e, size, at));
     match slot {
-        WearSlot::Head => vec![(a.head, Vec3::new(0.56, 0.05, 0.52), Vec3::new(0.0, 0.44, 0.0)), (a.head, Vec3::new(0.40, 0.14, 0.38), Vec3::new(0.0, 0.52, 0.02))],
+        WearSlot::Head => vec![
+            (
+                a.head,
+                Vec3::new(0.56, 0.05, 0.52),
+                Vec3::new(0.0, 0.44, 0.0),
+            ),
+            (
+                a.head,
+                Vec3::new(0.40, 0.14, 0.38),
+                Vec3::new(0.0, 0.52, 0.02),
+            ),
+        ],
         WearSlot::HeadArmor => vec![
-            (a.head, Vec3::new(0.52, 0.20, 0.48), Vec3::new(0.0, 0.41, 0.0)),
-            (a.head, Vec3::new(0.05, 0.22, 0.36), Vec3::new(-0.25, 0.24, 0.05)),
-            (a.head, Vec3::new(0.05, 0.22, 0.36), Vec3::new(0.25, 0.24, 0.05)),
-            (a.head, Vec3::new(0.06, 0.14, 0.03), Vec3::new(0.0, 0.26, -0.235)),
+            (
+                a.head,
+                Vec3::new(0.52, 0.20, 0.48),
+                Vec3::new(0.0, 0.41, 0.0),
+            ),
+            (
+                a.head,
+                Vec3::new(0.05, 0.22, 0.36),
+                Vec3::new(-0.25, 0.24, 0.05),
+            ),
+            (
+                a.head,
+                Vec3::new(0.05, 0.22, 0.36),
+                Vec3::new(0.25, 0.24, 0.05),
+            ),
+            (
+                a.head,
+                Vec3::new(0.06, 0.14, 0.03),
+                Vec3::new(0.0, 0.26, -0.235),
+            ),
         ],
         WearSlot::Body => {
-            let mut v = vec![(a.torso, Vec3::new(0.54, 0.52, 0.32), Vec3::new(0.0, 0.30, 0.0))];
-            v.extend(both(a.shoulders, Vec3::new(0.17, 0.30, 0.18), Vec3::new(0.0, -0.11, 0.0)));
+            let mut v = vec![(
+                a.torso,
+                Vec3::new(0.54, 0.52, 0.32),
+                Vec3::new(0.0, 0.30, 0.0),
+            )];
+            v.extend(both(
+                a.shoulders,
+                Vec3::new(0.17, 0.30, 0.18),
+                Vec3::new(0.0, -0.11, 0.0),
+            ));
             v
         }
         WearSlot::BodyArmor => {
-            let mut v = vec![(a.torso, Vec3::new(0.58, 0.40, 0.36), Vec3::new(0.0, 0.34, 0.0))];
-            v.extend(both(a.shoulders, Vec3::new(0.21, 0.11, 0.22), Vec3::new(0.0, 0.0, 0.0)));
+            let mut v = vec![(
+                a.torso,
+                Vec3::new(0.58, 0.40, 0.36),
+                Vec3::new(0.0, 0.34, 0.0),
+            )];
+            v.extend(both(
+                a.shoulders,
+                Vec3::new(0.21, 0.11, 0.22),
+                Vec3::new(0.0, 0.0, 0.0),
+            ));
             v
         }
-        WearSlot::Legs => both(a.legs, Vec3::new(0.23, 0.42, 0.25), Vec3::new(0.0, -0.20, 0.0)).chain(both(a.knees, Vec3::new(0.22, 0.26, 0.24), Vec3::new(0.0, -0.12, 0.0))).collect(),
-        WearSlot::Feet => both(a.knees, Vec3::new(0.25, 0.13, 0.33), Vec3::new(0.0, -0.31, -0.035)).collect(),
-        WearSlot::Back => vec![(a.torso, Vec3::new(0.38, 0.40, 0.16), Vec3::new(0.0, 0.30, 0.23))],
+        WearSlot::Legs => both(
+            a.legs,
+            Vec3::new(0.23, 0.42, 0.25),
+            Vec3::new(0.0, -0.20, 0.0),
+        )
+        .chain(both(
+            a.knees,
+            Vec3::new(0.22, 0.26, 0.24),
+            Vec3::new(0.0, -0.12, 0.0),
+        ))
+        .collect(),
+        WearSlot::Feet => both(
+            a.knees,
+            Vec3::new(0.25, 0.13, 0.33),
+            Vec3::new(0.0, -0.31, -0.035),
+        )
+        .collect(),
+        WearSlot::Back => vec![(
+            a.torso,
+            Vec3::new(0.38, 0.40, 0.16),
+            Vec3::new(0.0, 0.30, 0.23),
+        )],
     }
 }
 
@@ -279,7 +409,14 @@ fn dress(
             }
             match art.average_color(*id, &images) {
                 Some(c) => {
-                    mats.insert(*id, materials.add(StandardMaterial { base_color: c, perceptual_roughness: 0.9, ..default() }));
+                    mats.insert(
+                        *id,
+                        materials.add(StandardMaterial {
+                            base_color: c,
+                            perceptual_roughness: 0.9,
+                            ..default()
+                        }),
+                    );
                 }
                 None => ready = false,
             }
@@ -294,7 +431,13 @@ fn dress(
         }
         for (slot, id) in &inv.worn {
             for (joint, size, at) in pieces(*slot, &d.anchors) {
-                commands.spawn((WornPart(owner), Mesh3d(meshes.add(Cuboid::from_size(size))), MeshMaterial3d(mats[id].clone()), Transform::from_translation(at), ChildOf(joint)));
+                commands.spawn((
+                    WornPart(owner),
+                    Mesh3d(meshes.add(Cuboid::from_size(size))),
+                    MeshMaterial3d(mats[id].clone()),
+                    Transform::from_translation(at),
+                    ChildOf(joint),
+                ));
             }
         }
         d.showing = Some(inv.worn.clone());
@@ -308,7 +451,13 @@ mod tests {
     #[test]
     fn every_slot_has_pieces() {
         let e = Entity::PLACEHOLDER;
-        let a = Anchors { head: e, torso: e, legs: [e; 2], knees: [e; 2], shoulders: [e; 2] };
+        let a = Anchors {
+            head: e,
+            torso: e,
+            legs: [e; 2],
+            knees: [e; 2],
+            shoulders: [e; 2],
+        };
         for s in WearSlot::ALL {
             assert!(!pieces(s, &a).is_empty(), "{s:?}");
         }

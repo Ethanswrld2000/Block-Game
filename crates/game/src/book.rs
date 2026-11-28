@@ -13,7 +13,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::sound::PlaySound;
-use crate::theme::{sizes, NoShadow};
+use crate::theme::{NoShadow, sizes};
 
 /// Seconds for one page turn.
 const TURN: f32 = 0.34;
@@ -145,7 +145,12 @@ pub fn paginate(costs: &[usize], budget: usize) -> Vec<std::ops::Range<usize>> {
 
 /// Ink text for a page (no drop shadow).
 pub fn ink(s: impl Into<String>, size: f32, color: Color) -> impl Bundle {
-    (Text::new(s), TextFont::from_font_size(size), TextColor(color), NoShadow)
+    (
+        Text::new(s),
+        TextFont::from_font_size(size),
+        TextColor(color),
+        NoShadow,
+    )
 }
 
 /// The corner arrows (-1 back, +1 on).
@@ -160,7 +165,11 @@ struct Leaf;
 pub fn build(parent: &mut ChildSpawnerCommands, look: BookLook, extra: impl Bundle) -> Entity {
     let root = parent
         .spawn((
-            Node { border: UiRect::all(Val::Px(3.0)), padding: UiRect::all(Val::Px(9.0)), ..default() },
+            Node {
+                border: UiRect::all(Val::Px(3.0)),
+                padding: UiRect::all(Val::Px(9.0)),
+                ..default()
+            },
             BackgroundColor(LEATHER),
             BorderColor::all(LEATHER_DARK),
             extra,
@@ -191,18 +200,44 @@ pub fn build(parent: &mut ChildSpawnerCommands, look: BookLook, extra: impl Bund
                     BorderColor::all(LEATHER_DARK),
                     ZIndex(3),
                 ))
-                .with_child((Node { width: Val::Px(4.0), height: Val::Px(4.0), margin: UiRect::all(Val::Px(3.0)), ..default() }, BackgroundColor(LEATHER_DARK)));
+                .with_child((
+                    Node {
+                        width: Val::Px(4.0),
+                        height: Val::Px(4.0),
+                        margin: UiRect::all(Val::Px(3.0)),
+                        ..default()
+                    },
+                    BackgroundColor(LEATHER_DARK),
+                ));
         }
         // Gilt rule inside the cover, then the paper block.
         cover
-            .spawn((Node { border: UiRect::all(Val::Px(2.0)), padding: UiRect::all(Val::Px(4.0)), ..default() }, BorderColor::all(GILT)))
+            .spawn((
+                Node {
+                    border: UiRect::all(Val::Px(2.0)),
+                    padding: UiRect::all(Val::Px(4.0)),
+                    ..default()
+                },
+                BorderColor::all(GILT),
+            ))
             .with_children(|trim| {
                 for s in 0..look.sides {
                     if s == 1 {
                         // The spine: a dark crease between the pages.
-                        trim.spawn(Node { width: Val::Px(8.0), ..default() }).with_children(|sp| {
+                        trim.spawn(Node {
+                            width: Val::Px(8.0),
+                            ..default()
+                        })
+                        .with_children(|sp| {
                             for c in [PAPER_SHADE, LEATHER_DARK, LEATHER_DARK, PAPER_SHADE] {
-                                sp.spawn((Node { width: Val::Px(2.0), height: Val::Percent(100.0), ..default() }, BackgroundColor(c)));
+                                sp.spawn((
+                                    Node {
+                                        width: Val::Px(2.0),
+                                        height: Val::Percent(100.0),
+                                        ..default()
+                                    },
+                                    BackgroundColor(c),
+                                ));
                             }
                         });
                     }
@@ -210,7 +245,12 @@ pub fn build(parent: &mut ChildSpawnerCommands, look: BookLook, extra: impl Bund
                     trim.spawn((
                         Node {
                             flex_direction: FlexDirection::Column,
-                            border: UiRect { bottom: Val::Px(4.0), left: Val::Px(if s == 0 { 3.0 } else { 0.0 }), right: Val::Px(if s + 1 == look.sides { 3.0 } else { 0.0 }), ..default() },
+                            border: UiRect {
+                                bottom: Val::Px(4.0),
+                                left: Val::Px(if s == 0 { 3.0 } else { 0.0 }),
+                                right: Val::Px(if s + 1 == look.sides { 3.0 } else { 0.0 }),
+                                ..default()
+                            },
                             ..default()
                         },
                         BorderColor::all(PAPER_EDGE),
@@ -223,24 +263,53 @@ pub fn build(parent: &mut ChildSpawnerCommands, look: BookLook, extra: impl Bund
                                     min_height: Val::Px(look.page.y),
                                     flex_direction: FlexDirection::Column,
                                     flex_grow: 1.0,
-                                    padding: UiRect::new(Val::Px(14.0), Val::Px(14.0), Val::Px(12.0), Val::Px(8.0)),
+                                    padding: UiRect::new(
+                                        Val::Px(14.0),
+                                        Val::Px(14.0),
+                                        Val::Px(12.0),
+                                        Val::Px(8.0),
+                                    ),
                                     ..default()
                                 },
                                 BackgroundColor(PAPER),
                             ))
                             .with_children(|paper| {
                                 // What the owner fills in.
-                                sides[s] = paper.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(6.0), flex_grow: 1.0, ..default() }).id();
+                                sides[s] = paper
+                                    .spawn(Node {
+                                        flex_direction: FlexDirection::Column,
+                                        row_gap: Val::Px(6.0),
+                                        flex_grow: 1.0,
+                                        ..default()
+                                    })
+                                    .id();
                                 // The foot: arrow, page number, arrow.
                                 paper
-                                    .spawn(Node { justify_content: JustifyContent::SpaceBetween, align_items: AlignItems::Center, margin: UiRect::top(Val::Px(6.0)), ..default() })
+                                    .spawn(Node {
+                                        justify_content: JustifyContent::SpaceBetween,
+                                        align_items: AlignItems::Center,
+                                        margin: UiRect::top(Val::Px(6.0)),
+                                        ..default()
+                                    })
                                     .with_children(|foot| {
                                         let back = s == 0;
                                         let on = s + 1 == look.sides;
-                                        foot.spawn((Node { width: Val::Px(28.0), ..default() }, ink(if back { "<" } else { "" }, sizes::HEADING, INK), Flip(root, if back { -1 } else { 0 })));
-                                        folios[s] = foot.spawn(ink("", sizes::SMALL, INK_FAINT)).id();
                                         foot.spawn((
-                                            Node { width: Val::Px(28.0), justify_content: JustifyContent::End, ..default() },
+                                            Node {
+                                                width: Val::Px(28.0),
+                                                ..default()
+                                            },
+                                            ink(if back { "<" } else { "" }, sizes::HEADING, INK),
+                                            Flip(root, if back { -1 } else { 0 }),
+                                        ));
+                                        folios[s] =
+                                            foot.spawn(ink("", sizes::SMALL, INK_FAINT)).id();
+                                        foot.spawn((
+                                            Node {
+                                                width: Val::Px(28.0),
+                                                justify_content: JustifyContent::End,
+                                                ..default()
+                                            },
                                             ink(if on { ">" } else { "" }, sizes::HEADING, INK),
                                             TextLayout::justify(Justify::Right),
                                             Flip(root, if on { 1 } else { 0 }),
@@ -250,7 +319,13 @@ pub fn build(parent: &mut ChildSpawnerCommands, look: BookLook, extra: impl Bund
                                 leaves[s] = paper
                                     .spawn((
                                         Leaf,
-                                        Node { position_type: PositionType::Absolute, top: Val::Px(0.0), bottom: Val::Px(0.0), width: Val::Px(0.0), ..default() },
+                                        Node {
+                                            position_type: PositionType::Absolute,
+                                            top: Val::Px(0.0),
+                                            bottom: Val::Px(0.0),
+                                            width: Val::Px(0.0),
+                                            ..default()
+                                        },
                                         BackgroundColor(PAPER),
                                         BorderColor::all(PAPER_SHADE),
                                         Visibility::Hidden,
@@ -264,12 +339,30 @@ pub fn build(parent: &mut ChildSpawnerCommands, look: BookLook, extra: impl Bund
             });
         // A ribbon hanging from the last page.
         cover.spawn((
-            Node { position_type: PositionType::Absolute, right: Val::Px(48.0), bottom: Val::Px(-24.0), width: Val::Px(12.0), height: Val::Px(44.0), border: UiRect::new(Val::Px(2.0), Val::Px(2.0), Val::Px(0.0), Val::Px(2.0)), ..default() },
+            Node {
+                position_type: PositionType::Absolute,
+                right: Val::Px(48.0),
+                bottom: Val::Px(-24.0),
+                width: Val::Px(12.0),
+                height: Val::Px(44.0),
+                border: UiRect::new(Val::Px(2.0), Val::Px(2.0), Val::Px(0.0), Val::Px(2.0)),
+                ..default()
+            },
             BackgroundColor(RIBBON),
             BorderColor::all(LEATHER_DARK),
         ));
     });
-    parent.commands().entity(root).insert(Book { look, pages: 1, spread: 0, sides, leaves, folios, turn: None, hold: false, refill: true });
+    parent.commands().entity(root).insert(Book {
+        look,
+        pages: 1,
+        spread: 0,
+        sides,
+        leaves,
+        folios,
+        turn: None,
+        hold: false,
+        refill: true,
+    });
     root
 }
 
@@ -290,9 +383,18 @@ fn flip_input(
     let mut click: Option<(Entity, i32)> = None;
     for (f, n, t, mut color) in &mut flips {
         // An arrow shows only where there's a page to turn to.
-        let can = f.1 != 0 && books.get(f.0).is_ok_and(|(_, b, _)| (0..b.spreads() as i32).contains(&(b.spread as i32 + f.1)));
+        let can = f.1 != 0
+            && books
+                .get(f.0)
+                .is_ok_and(|(_, b, _)| (0..b.spreads() as i32).contains(&(b.spread as i32 + f.1)));
         let over = can && cursor.is_some_and(|c| n.contains_point(*t, c));
-        let want = if !can { Color::NONE } else if over { HOVER } else { INK };
+        let want = if !can {
+            Color::NONE
+        } else if over {
+            HOVER
+        } else {
+            INK
+        };
         if color.0 != want {
             color.0 = want;
         }
@@ -300,9 +402,16 @@ fn flip_input(
             click = Some((f.0, f.1));
         }
     }
-    let combo = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight, KeyCode::SuperLeft, KeyCode::SuperRight]);
+    let combo = keys.any_pressed([
+        KeyCode::ControlLeft,
+        KeyCode::ControlRight,
+        KeyCode::SuperLeft,
+        KeyCode::SuperRight,
+    ]);
     // Screenshots: `BLOCKGAME_BOOKTURN=0.4` turns the first open book once and holds the leaf there.
-    let hold = std::env::var("BLOCKGAME_BOOKTURN").ok().and_then(|v| v.parse::<f32>().ok());
+    let hold = std::env::var("BLOCKGAME_BOOKTURN")
+        .ok()
+        .and_then(|v| v.parse::<f32>().ok());
     for (e, mut book, vis) in &mut books {
         if !vis.get() {
             continue;
@@ -319,7 +428,8 @@ fn flip_input(
         }
         let mut dir = click.filter(|c| c.0 == e).map_or(0, |c| c.1);
         if !combo {
-            dir += keys.just_pressed(KeyCode::ArrowRight) as i32 - keys.just_pressed(KeyCode::ArrowLeft) as i32;
+            dir += keys.just_pressed(KeyCode::ArrowRight) as i32
+                - keys.just_pressed(KeyCode::ArrowLeft) as i32;
         }
         if book.look.wheel && scroll.delta.y != 0.0 {
             dir -= scroll.delta.y.signum() as i32;
@@ -334,7 +444,15 @@ fn flip_input(
 fn turn_leaves(
     time: Res<Time<Real>>,
     mut books: Query<&mut Book>,
-    mut leaves: Query<(&mut Node, &mut Visibility, &mut BackgroundColor, &mut BorderColor), With<Leaf>>,
+    mut leaves: Query<
+        (
+            &mut Node,
+            &mut Visibility,
+            &mut BackgroundColor,
+            &mut BorderColor,
+        ),
+        With<Leaf>,
+    >,
     mut folios: Query<&mut Text>,
 ) {
     for mut book in &mut books {
@@ -342,7 +460,11 @@ fn turn_leaves(
         let first = book.spread * book.look.sides;
         for s in 0..book.look.sides {
             let n = first + s;
-            let want = if n < book.pages { format!("{}", n + 1) } else { String::new() };
+            let want = if n < book.pages {
+                format!("{}", n + 1)
+            } else {
+                String::new()
+            };
             if let Ok(mut t) = folios.get_mut(book.folios[s])
                 && t.0 != want
             {
@@ -350,7 +472,11 @@ fn turn_leaves(
             }
         }
         let Some((dir, t)) = book.turn else { continue };
-        let t = if book.hold { t } else { t + time.delta_secs() / TURN };
+        let t = if book.hold {
+            t
+        } else {
+            t + time.delta_secs() / TURN
+        };
         book.turn = (t < 1.0).then_some((dir, t));
         let p = t.min(1.0);
         // Each side's leaf: (how much of the page it covers 0..1, anchored at the left).
@@ -360,23 +486,50 @@ fn turn_leaves(
             cover[0] = (1.0 - p, dir > 0);
         } else if dir > 0 {
             // Right page lifts to the spine, then lands on the left.
-            cover = if p < 0.5 { [(0.0, false), (1.0 - 2.0 * p, true)] } else { [(2.0 * p - 1.0, false), (0.0, true)] };
+            cover = if p < 0.5 {
+                [(0.0, false), (1.0 - 2.0 * p, true)]
+            } else {
+                [(2.0 * p - 1.0, false), (0.0, true)]
+            };
         } else {
-            cover = if p < 0.5 { [(1.0 - 2.0 * p, false), (0.0, true)] } else { [(0.0, false), (2.0 * p - 1.0, true)] };
+            cover = if p < 0.5 {
+                [(1.0 - 2.0 * p, false), (0.0, true)]
+            } else {
+                [(0.0, false), (2.0 * p - 1.0, true)]
+            };
         }
         for s in 0..book.look.sides {
-            let Ok((mut node, mut vis, mut bg, mut edge)) = leaves.get_mut(book.leaves[s]) else { continue };
+            let Ok((mut node, mut vis, mut bg, mut edge)) = leaves.get_mut(book.leaves[s]) else {
+                continue;
+            };
             let (w, left) = cover[s];
             let on = w > 0.001 && t < 1.0;
-            *vis = if on { Visibility::Inherited } else { Visibility::Hidden };
+            *vis = if on {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            };
             node.width = Val::Percent(w * 100.0);
-            (node.left, node.right) = if left { (Val::Px(0.0), Val::Auto) } else { (Val::Auto, Val::Px(0.0)) };
+            (node.left, node.right) = if left {
+                (Val::Px(0.0), Val::Auto)
+            } else {
+                (Val::Auto, Val::Px(0.0))
+            };
             // The free edge of the leaf has a dark line.
-            node.border = if left { UiRect::right(Val::Px(2.0)) } else { UiRect::left(Val::Px(2.0)) };
+            node.border = if left {
+                UiRect::right(Val::Px(2.0))
+            } else {
+                UiRect::left(Val::Px(2.0))
+            };
             // Narrow = standing up off the page = in shade; the leaf that lands fades into the page beneath.
             let shade = 1.0 - w;
-            let landing = (book.look.sides == 2 && ((dir > 0 && s == 0) || (dir < 0 && s == 1))) as u8 as f32;
-            let fade = if landing > 0.0 && p > 0.75 { 1.0 - (p - 0.75) / 0.25 } else { 1.0 };
+            let landing =
+                (book.look.sides == 2 && ((dir > 0 && s == 0) || (dir < 0 && s == 1))) as u8 as f32;
+            let fade = if landing > 0.0 && p > 0.75 {
+                1.0 - (p - 0.75) / 0.25
+            } else {
+                1.0
+            };
             bg.0 = PAPER.mix(&PAPER_SHADE, shade * 0.8).with_alpha(fade);
             *edge = BorderColor::all(PAPER_SHADE.with_alpha(fade));
         }

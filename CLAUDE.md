@@ -366,7 +366,11 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   open, it drops `floor_key` (an item, every floor but the last; `delve::open_stair` takes it at the stair's seal; gone
   when you leave the floor, `forget_keys`), loot, waypoints (cleared marker, next story dungeon), the
   first full clear of a story dungeon drops its urn (`claim_urn`: 1 carpentry, 2 gear, 3 hearth, 4 vehicle). Ways: start
-  room or `exit` back to the entrance with your loot, `stair` down, `passage` out near the next story dungeon. Falling
+  room or `exit` back to the entrance with your loot, `stair` down, `passage` out near the next story dungeon.
+  Floors stack: `delve::floors` builds each under the one before (`Floor.descent`); the stair is a passage to the next cell
+  and a stairwell winding down round a stone core (`WELL`, 20-27 blocks, sconces) whose foot opens south into the next
+  floor's start room. `PocketFloor` holds every floor of the run (`generate_pocket` takes them all; open space wins where
+  two meet), so you walk down; reaching the foot (`Floor.stair`) makes the next floor current (`Travel::descend`, no teleport). Falling
   below loses what you picked up or put on during the run (`lost_on_death`). Rest room campfire heals within 4.5 blocks.
   `delve::hazards`: spikes (pit spikes stay up), swinging blades, dart launchers (poison drains blood), fire jets, oil
   that burns and spreads, barrels (cut, burnt or blasted: fuse then explosion; a kick shoves

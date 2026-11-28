@@ -17,10 +17,10 @@
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 
+use super::data::{Looks, On, Species};
 use super::dialogue::{Anim, Mood};
 use super::motion::{self, Gaze, Pose, Spring};
-use super::data::{Looks, On, Species};
-use super::{Npc, NpcBook, EYES};
+use super::{EYES, Npc, NpcBook};
 use crate::camera::FlyCamera;
 use crate::swing::Limbs;
 
@@ -28,8 +28,13 @@ pub struct BodyPlugin;
 
 impl Plugin for BodyPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<SpawnNpc>()
-            .add_systems(crate::menu::GameUpdate, (spawn, animate, match_light).chain().after(super::NpcSet).after(super::talk::TalkSet));
+        app.add_message::<SpawnNpc>().add_systems(
+            crate::menu::GameUpdate,
+            (spawn, animate, match_light)
+                .chain()
+                .after(super::NpcSet)
+                .after(super::talk::TalkSet),
+        );
     }
 }
 
@@ -100,7 +105,13 @@ impl Rig {
 
     /// The joints clothes and armor hang from (`inventory::preview::dress`).
     pub fn anchors(&self) -> Anchors {
-        Anchors { head: self.head, torso: self.torso, legs: self.legs, knees: self.knees, shoulders: self.shoulders }
+        Anchors {
+            head: self.head,
+            torso: self.torso,
+            legs: self.legs,
+            knees: self.knees,
+            shoulders: self.shoulders,
+        }
     }
 }
 
@@ -208,37 +219,90 @@ const TEETH: usize = 9;
 const GILLS: usize = 10;
 
 fn joint(commands: &mut Commands, parent: Entity, at: Vec3) -> Entity {
-    commands.spawn((Transform::from_translation(at), Visibility::default(), ChildOf(parent))).id()
+    commands
+        .spawn((
+            Transform::from_translation(at),
+            Visibility::default(),
+            ChildOf(parent),
+        ))
+        .id()
 }
 
 impl Kit<'_> {
-    fn part(&mut self, commands: &mut Commands, parent: Entity, size: Vec3, center: Vec3, mat: usize) -> Entity {
+    fn part(
+        &mut self,
+        commands: &mut Commands,
+        parent: Entity,
+        size: Vec3,
+        center: Vec3,
+        mat: usize,
+    ) -> Entity {
         commands
-            .spawn((Mesh3d(self.meshes.add(Cuboid::from_size(size))), MeshMaterial3d(self.mats[mat].clone()), Transform::from_translation(center), ChildOf(parent)))
+            .spawn((
+                Mesh3d(self.meshes.add(Cuboid::from_size(size))),
+                MeshMaterial3d(self.mats[mat].clone()),
+                Transform::from_translation(center),
+                ChildOf(parent),
+            ))
             .id()
     }
 
     /// A small face part: no shadow of its own.
-    fn detail(&mut self, commands: &mut Commands, parent: Entity, size: Vec3, center: Vec3, mat: usize) -> Entity {
+    fn detail(
+        &mut self,
+        commands: &mut Commands,
+        parent: Entity,
+        size: Vec3,
+        center: Vec3,
+        mat: usize,
+    ) -> Entity {
         let e = self.part(commands, parent, size, center, mat);
         commands.entity(e).insert(NotShadowCaster);
         e
     }
 }
 
-fn spawn(mut commands: Commands, mut msgs: MessageReader<SpawnNpc>, book: Res<NpcBook>, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<StandardMaterial>>) {
+fn spawn(
+    mut commands: Commands,
+    mut msgs: MessageReader<SpawnNpc>,
+    book: Res<NpcBook>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
     for m in msgs.read() {
-        let Some(kind) = book.kinds.get(m.npc.kind) else { continue };
-        let (root, rig) = build(&mut commands, &mut meshes, &mut materials, &kind.looks, m.at, m.npc.yaw);
-        commands.entity(root).insert((Name::new(kind.name.clone()), clone_npc(&m.npc), rig));
+        let Some(kind) = book.kinds.get(m.npc.kind) else {
+            continue;
+        };
+        let (root, rig) = build(
+            &mut commands,
+            &mut meshes,
+            &mut materials,
+            &kind.looks,
+            m.at,
+            m.npc.yaw,
+        );
+        commands
+            .entity(root)
+            .insert((Name::new(kind.name.clone()), clone_npc(&m.npc), rig));
     }
 }
 
 /// Build a jointed body with these looks, feet at `at`, facing `yaw`.
 /// Returns its root (no `Rig` on it yet) and the rig to put on it. The
 /// player's body (`avatar`) is built the same way.
-pub fn build(c: &mut Commands, meshes: &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, l: &Looks, at: Vec3, yaw: f32) -> (Entity, Rig) {
-    let flat = |c: (f32, f32, f32), rough: f32| StandardMaterial { base_color: Color::srgb(c.0, c.1, c.2), perceptual_roughness: rough, ..default() };
+pub fn build(
+    c: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    l: &Looks,
+    at: Vec3,
+    yaw: f32,
+) -> (Entity, Rig) {
+    let flat = |c: (f32, f32, f32), rough: f32| StandardMaterial {
+        base_color: Color::srgb(c.0, c.1, c.2),
+        perceptual_roughness: rough,
+        ..default()
+    };
     let mats = [
         flat(l.skin, 0.8),
         flat(l.hair, 0.9),
@@ -250,14 +314,28 @@ pub fn build(c: &mut Commands, meshes: &mut Assets<Mesh>, materials: &mut Assets
         flat((0.02, 0.02, 0.025), 0.3),
         flat((0.28, 0.07, 0.07), 0.9),
         flat((0.97, 0.95, 0.88), 0.5),
-        flat((l.skin.0 * 0.6 + 0.36, l.skin.1 * 0.6 + 0.33, l.skin.2 * 0.6 + 0.26), 0.9),
+        flat(
+            (
+                l.skin.0 * 0.6 + 0.36,
+                l.skin.1 * 0.6 + 0.33,
+                l.skin.2 * 0.6 + 0.26,
+            ),
+            0.9,
+        ),
     ]
     .into_iter()
     .map(|m| materials.add(m))
     .collect();
     let mut kit = Kit { meshes, mats };
     let f = Frame::of(l.body);
-    let root = c.spawn((Transform::from_translation(at).with_rotation(Quat::from_rotation_y(yaw)).with_scale(Vec3::splat(l.scale)), Visibility::default())).id();
+    let root = c
+        .spawn((
+            Transform::from_translation(at)
+                .with_rotation(Quat::from_rotation_y(yaw))
+                .with_scale(Vec3::splat(l.scale)),
+            Visibility::default(),
+        ))
+        .id();
 
     // Joints: the same for every species, placed by its frame.
     let hips = joint(c, root, Vec3::Y * f.hip_y);
@@ -276,7 +354,16 @@ pub fn build(c: &mut Commands, meshes: &mut Assets<Mesh>, materials: &mut Assets
         elbows[i] = joint(c, shoulders[i], Vec3::Y * -f.elbow);
         hands[i] = joint(c, elbows[i], Vec3::Y * -f.hand);
     }
-    let joints = Joints { hips, torso, neck, head, legs, knees, shoulders, elbows };
+    let joints = Joints {
+        hips,
+        torso,
+        neck,
+        head,
+        legs,
+        knees,
+        shoulders,
+        elbows,
+    };
     let tail = match l.body {
         Species::Human => {
             human(c, &mut kit, &joints);
@@ -296,12 +383,30 @@ pub fn build(c: &mut Commands, meshes: &mut Assets<Mesh>, materials: &mut Assets
     let mut brows = [root; 2];
     for (i, side) in [-1.0f32, 1.0].into_iter().enumerate() {
         let x = eye.x * side;
-        kit.detail(c, head, Vec3::new(0.13, 0.10, 0.012), Vec3::new(x, eye.y, face - 0.006), WHITE);
+        kit.detail(
+            c,
+            head,
+            Vec3::new(0.13, 0.10, 0.012),
+            Vec3::new(x, eye.y, face - 0.006),
+            WHITE,
+        );
         pupils[i] = joint(c, head, Vec3::new(x, eye.y, face - 0.013));
         kit.detail(c, pupils[i], Vec3::new(0.06, 0.07, 0.004), Vec3::ZERO, IRIS);
-        kit.detail(c, pupils[i], Vec3::new(0.034, 0.046, 0.004), Vec3::Z * -0.003, BLACK);
+        kit.detail(
+            c,
+            pupils[i],
+            Vec3::new(0.034, 0.046, 0.004),
+            Vec3::Z * -0.003,
+            BLACK,
+        );
         lids[i] = joint(c, head, Vec3::new(x, eye.y + 0.053, face - 0.019));
-        kit.detail(c, lids[i], Vec3::new(0.14, 0.106, 0.006), Vec3::Y * -0.053, SKIN);
+        kit.detail(
+            c,
+            lids[i],
+            Vec3::new(0.14, 0.106, 0.006),
+            Vec3::Y * -0.053,
+            SKIN,
+        );
         brows[i] = joint(c, head, Vec3::new(x, f.brow_y, face - 0.009));
         kit.detail(c, brows[i], Vec3::new(0.14, 0.03, 0.016), Vec3::ZERO, HAIR);
     }
@@ -311,9 +416,21 @@ pub fn build(c: &mut Commands, meshes: &mut Assets<Mesh>, materials: &mut Assets
     let mouth = joint(c, head, Vec3::new(0.0, f.mouth.x, f.mouth.y - 0.003));
     let hole = joint(c, mouth, Vec3::ZERO);
     kit.detail(c, hole, Vec3::new(0.17, 1.0, 0.006), Vec3::Y * -0.5, MOUTH);
-    let top = kit.detail(c, mouth, Vec3::new(0.15, 0.022, 0.004), Vec3::new(0.0, -0.012, -0.005), TEETH);
+    let top = kit.detail(
+        c,
+        mouth,
+        Vec3::new(0.15, 0.022, 0.004),
+        Vec3::new(0.0, -0.012, -0.005),
+        TEETH,
+    );
     let jaw = joint(c, mouth, Vec3::Y * -MOUTH_SHUT);
-    let low = kit.detail(c, jaw, Vec3::new(0.13, 0.02, 0.004), Vec3::new(0.0, 0.011, -0.005), TEETH);
+    let low = kit.detail(
+        c,
+        jaw,
+        Vec3::new(0.13, 0.02, 0.004),
+        Vec3::new(0.0, 0.011, -0.005),
+        TEETH,
+    );
 
     // Extras (caps, ears, hats, robes), each in its own colour.
     for x in &l.extras {
@@ -324,11 +441,28 @@ pub fn build(c: &mut Commands, meshes: &mut Assets<Mesh>, materials: &mut Assets
             On::Torso => torso,
             On::Hips => hips,
         };
-        kit.part(c, parent, Vec3::new(x.size.0, x.size.1, x.size.2), Vec3::new(x.at.0, x.at.1, x.at.2), mat);
+        kit.part(
+            c,
+            parent,
+            Vec3::new(x.size.0, x.size.1, x.size.2),
+            Vec3::new(x.at.0, x.at.1, x.at.2),
+            mat,
+        );
     }
 
     let seed = (at.x.to_bits() as u64) << 32 ^ at.z.to_bits() as u64 ^ 0x9E37_79B9;
-    let mats = kit.mats.iter().map(|h| (h.clone(), materials.get(h).map_or(LinearRgba::WHITE, |m| m.base_color.to_linear()))).collect();
+    let mats = kit
+        .mats
+        .iter()
+        .map(|h| {
+            (
+                h.clone(),
+                materials
+                    .get(h)
+                    .map_or(LinearRgba::WHITE, |m| m.base_color.to_linear()),
+            )
+        })
+        .collect();
     let rig = Rig {
         hips,
         legs,
@@ -385,25 +519,103 @@ struct Joints {
 /// A person: shirt, trousers, boots, hair round the head.
 fn human(c: &mut Commands, kit: &mut Kit, j: &Joints) {
     for i in 0..2 {
-        kit.part(c, j.legs[i], Vec3::new(0.21, 0.40, 0.23), Vec3::Y * -0.20, TROUSERS);
-        kit.part(c, j.knees[i], Vec3::new(0.20, 0.30, 0.22), Vec3::Y * -0.14, TROUSERS);
-        kit.part(c, j.knees[i], Vec3::new(0.22, 0.10, 0.30), Vec3::new(0.0, -0.31, -0.03), BOOTS);
-        kit.part(c, j.shoulders[i], Vec3::new(0.15, 0.28, 0.16), Vec3::Y * -0.11, SHIRT);
-        kit.part(c, j.elbows[i], Vec3::new(0.13, 0.22, 0.14), Vec3::Y * -0.10, SKIN);
-        kit.part(c, j.elbows[i], Vec3::new(0.14, 0.10, 0.15), Vec3::Y * -0.25, SKIN);
+        kit.part(
+            c,
+            j.legs[i],
+            Vec3::new(0.21, 0.40, 0.23),
+            Vec3::Y * -0.20,
+            TROUSERS,
+        );
+        kit.part(
+            c,
+            j.knees[i],
+            Vec3::new(0.20, 0.30, 0.22),
+            Vec3::Y * -0.14,
+            TROUSERS,
+        );
+        kit.part(
+            c,
+            j.knees[i],
+            Vec3::new(0.22, 0.10, 0.30),
+            Vec3::new(0.0, -0.31, -0.03),
+            BOOTS,
+        );
+        kit.part(
+            c,
+            j.shoulders[i],
+            Vec3::new(0.15, 0.28, 0.16),
+            Vec3::Y * -0.11,
+            SHIRT,
+        );
+        kit.part(
+            c,
+            j.elbows[i],
+            Vec3::new(0.13, 0.22, 0.14),
+            Vec3::Y * -0.10,
+            SKIN,
+        );
+        kit.part(
+            c,
+            j.elbows[i],
+            Vec3::new(0.14, 0.10, 0.15),
+            Vec3::Y * -0.25,
+            SKIN,
+        );
     }
-    kit.part(c, j.torso, Vec3::new(0.50, 0.56, 0.28), Vec3::Y * 0.28, SHIRT);
-    kit.part(c, j.torso, Vec3::new(0.52, 0.06, 0.30), Vec3::Y * 0.08, BOOTS);
+    kit.part(
+        c,
+        j.torso,
+        Vec3::new(0.50, 0.56, 0.28),
+        Vec3::Y * 0.28,
+        SHIRT,
+    );
+    kit.part(
+        c,
+        j.torso,
+        Vec3::new(0.52, 0.06, 0.30),
+        Vec3::Y * 0.08,
+        BOOTS,
+    );
     kit.part(c, j.neck, Vec3::new(0.16, 0.08, 0.16), Vec3::Y * 0.02, SKIN);
     let head = j.head;
     kit.part(c, head, Vec3::new(0.46, 0.42, 0.42), Vec3::Y * 0.21, SKIN);
-    kit.part(c, head, Vec3::new(0.48, 0.08, 0.44), Vec3::new(0.0, 0.43, 0.0), HAIR);
-    kit.part(c, head, Vec3::new(0.48, 0.30, 0.08), Vec3::new(0.0, 0.28, 0.20), HAIR);
+    kit.part(
+        c,
+        head,
+        Vec3::new(0.48, 0.08, 0.44),
+        Vec3::new(0.0, 0.43, 0.0),
+        HAIR,
+    );
+    kit.part(
+        c,
+        head,
+        Vec3::new(0.48, 0.30, 0.08),
+        Vec3::new(0.0, 0.28, 0.20),
+        HAIR,
+    );
     for side in [-1.0f32, 1.0] {
-        kit.part(c, head, Vec3::new(0.03, 0.20, 0.30), Vec3::new(0.235 * side, 0.31, 0.06), HAIR);
+        kit.part(
+            c,
+            head,
+            Vec3::new(0.03, 0.20, 0.30),
+            Vec3::new(0.235 * side, 0.31, 0.06),
+            HAIR,
+        );
     }
-    kit.detail(c, head, Vec3::new(0.46, 0.05, 0.03), Vec3::new(0.0, 0.385, -0.215), HAIR);
-    kit.detail(c, head, Vec3::new(0.08, 0.10, 0.05), Vec3::new(0.0, 0.18, -0.235), SKIN);
+    kit.detail(
+        c,
+        head,
+        Vec3::new(0.46, 0.05, 0.03),
+        Vec3::new(0.0, 0.385, -0.215),
+        HAIR,
+    );
+    kit.detail(
+        c,
+        head,
+        Vec3::new(0.08, 0.10, 0.05),
+        Vec3::new(0.0, 0.18, -0.235),
+        SKIN,
+    );
 }
 
 /// A rat: short legs on long pink feet, a pear-shaped body, a skull with a
@@ -411,32 +623,140 @@ fn human(c: &mut Commands, kit: &mut Kit, j: &Joints) {
 /// (returned: its joint, which `drive` sways). Fur is `skin`, bare skin `boots`.
 fn rat(c: &mut Commands, kit: &mut Kit, j: &Joints) -> Entity {
     for (i, side) in [-1.0f32, 1.0].into_iter().enumerate() {
-        kit.part(c, j.legs[i], Vec3::new(0.22, 0.28, 0.24), Vec3::Y * -0.14, TROUSERS);
-        kit.part(c, j.knees[i], Vec3::new(0.18, 0.18, 0.20), Vec3::Y * -0.09, TROUSERS);
-        kit.part(c, j.knees[i], Vec3::new(0.16, 0.06, 0.34), Vec3::new(0.0, -0.21, -0.07), BOOTS);
-        kit.part(c, j.shoulders[i], Vec3::new(0.12, 0.20, 0.13), Vec3::Y * -0.08, SHIRT);
-        kit.part(c, j.elbows[i], Vec3::new(0.10, 0.15, 0.11), Vec3::Y * -0.07, SKIN);
-        kit.part(c, j.elbows[i], Vec3::new(0.11, 0.06, 0.12), Vec3::Y * -0.17, BOOTS);
+        kit.part(
+            c,
+            j.legs[i],
+            Vec3::new(0.22, 0.28, 0.24),
+            Vec3::Y * -0.14,
+            TROUSERS,
+        );
+        kit.part(
+            c,
+            j.knees[i],
+            Vec3::new(0.18, 0.18, 0.20),
+            Vec3::Y * -0.09,
+            TROUSERS,
+        );
+        kit.part(
+            c,
+            j.knees[i],
+            Vec3::new(0.16, 0.06, 0.34),
+            Vec3::new(0.0, -0.21, -0.07),
+            BOOTS,
+        );
+        kit.part(
+            c,
+            j.shoulders[i],
+            Vec3::new(0.12, 0.20, 0.13),
+            Vec3::Y * -0.08,
+            SHIRT,
+        );
+        kit.part(
+            c,
+            j.elbows[i],
+            Vec3::new(0.10, 0.15, 0.11),
+            Vec3::Y * -0.07,
+            SKIN,
+        );
+        kit.part(
+            c,
+            j.elbows[i],
+            Vec3::new(0.11, 0.06, 0.12),
+            Vec3::Y * -0.17,
+            BOOTS,
+        );
         // Ears: round, pink inside.
-        kit.part(c, j.head, Vec3::new(0.22, 0.22, 0.04), Vec3::new(0.19 * side, 0.46, 0.02), SKIN);
-        kit.detail(c, j.head, Vec3::new(0.14, 0.14, 0.02), Vec3::new(0.19 * side, 0.46, -0.012), BOOTS);
+        kit.part(
+            c,
+            j.head,
+            Vec3::new(0.22, 0.22, 0.04),
+            Vec3::new(0.19 * side, 0.46, 0.02),
+            SKIN,
+        );
+        kit.detail(
+            c,
+            j.head,
+            Vec3::new(0.14, 0.14, 0.02),
+            Vec3::new(0.19 * side, 0.46, -0.012),
+            BOOTS,
+        );
         // Whiskers.
-        kit.detail(c, j.head, Vec3::new(0.22, 0.008, 0.008), Vec3::new(0.17 * side, 0.13, -0.42), WHITE);
-        kit.detail(c, j.head, Vec3::new(0.20, 0.008, 0.008), Vec3::new(0.16 * side, 0.10, -0.41), WHITE);
+        kit.detail(
+            c,
+            j.head,
+            Vec3::new(0.22, 0.008, 0.008),
+            Vec3::new(0.17 * side, 0.13, -0.42),
+            WHITE,
+        );
+        kit.detail(
+            c,
+            j.head,
+            Vec3::new(0.20, 0.008, 0.008),
+            Vec3::new(0.16 * side, 0.10, -0.41),
+            WHITE,
+        );
     }
-    kit.part(c, j.torso, Vec3::new(0.54, 0.44, 0.40), Vec3::Y * 0.22, SHIRT);
-    kit.part(c, j.torso, Vec3::new(0.44, 0.16, 0.32), Vec3::Y * 0.50, SHIRT);
+    kit.part(
+        c,
+        j.torso,
+        Vec3::new(0.54, 0.44, 0.40),
+        Vec3::Y * 0.22,
+        SHIRT,
+    );
+    kit.part(
+        c,
+        j.torso,
+        Vec3::new(0.44, 0.16, 0.32),
+        Vec3::Y * 0.50,
+        SHIRT,
+    );
     kit.part(c, j.neck, Vec3::new(0.24, 0.08, 0.24), Vec3::Y * 0.02, SKIN);
     let head = j.head;
     kit.part(c, head, Vec3::new(0.42, 0.36, 0.38), Vec3::Y * 0.20, SKIN);
-    kit.part(c, head, Vec3::new(0.26, 0.18, 0.20), Vec3::new(0.0, 0.13, -0.28), SKIN);
-    kit.part(c, head, Vec3::new(0.17, 0.13, 0.12), Vec3::new(0.0, 0.11, -0.43), SKIN);
-    kit.detail(c, head, Vec3::new(0.08, 0.06, 0.03), Vec3::new(0.0, 0.15, -0.50), BOOTS);
+    kit.part(
+        c,
+        head,
+        Vec3::new(0.26, 0.18, 0.20),
+        Vec3::new(0.0, 0.13, -0.28),
+        SKIN,
+    );
+    kit.part(
+        c,
+        head,
+        Vec3::new(0.17, 0.13, 0.12),
+        Vec3::new(0.0, 0.11, -0.43),
+        SKIN,
+    );
+    kit.detail(
+        c,
+        head,
+        Vec3::new(0.08, 0.06, 0.03),
+        Vec3::new(0.0, 0.15, -0.50),
+        BOOTS,
+    );
     // Tail: from the rump, back and drooping in three steps.
     let tail = joint(c, j.hips, Vec3::new(0.0, 0.06, 0.19));
-    kit.part(c, tail, Vec3::new(0.07, 0.07, 0.30), Vec3::new(0.0, 0.0, 0.15), BOOTS);
-    kit.part(c, tail, Vec3::new(0.06, 0.06, 0.26), Vec3::new(0.0, -0.05, 0.41), BOOTS);
-    kit.part(c, tail, Vec3::new(0.05, 0.05, 0.22), Vec3::new(0.0, -0.11, 0.63), BOOTS);
+    kit.part(
+        c,
+        tail,
+        Vec3::new(0.07, 0.07, 0.30),
+        Vec3::new(0.0, 0.0, 0.15),
+        BOOTS,
+    );
+    kit.part(
+        c,
+        tail,
+        Vec3::new(0.06, 0.06, 0.26),
+        Vec3::new(0.0, -0.05, 0.41),
+        BOOTS,
+    );
+    kit.part(
+        c,
+        tail,
+        Vec3::new(0.05, 0.05, 0.22),
+        Vec3::new(0.0, -0.11, 0.63),
+        BOOTS,
+    );
     tail
 }
 
@@ -444,20 +764,80 @@ fn rat(c: &mut Commands, kit: &mut Kit, j: &Joints) -> Entity {
 /// hair under a wide cap (`hair` colour) with gills beneath it.
 fn mushroom(c: &mut Commands, kit: &mut Kit, j: &Joints) {
     for i in 0..2 {
-        kit.part(c, j.legs[i], Vec3::new(0.22, 0.22, 0.24), Vec3::Y * -0.11, TROUSERS);
-        kit.part(c, j.knees[i], Vec3::new(0.21, 0.10, 0.22), Vec3::Y * -0.05, TROUSERS);
-        kit.part(c, j.knees[i], Vec3::new(0.24, 0.09, 0.30), Vec3::new(0.0, -0.135, -0.03), BOOTS);
-        kit.part(c, j.shoulders[i], Vec3::new(0.14, 0.22, 0.15), Vec3::Y * -0.10, SHIRT);
-        kit.part(c, j.elbows[i], Vec3::new(0.12, 0.16, 0.13), Vec3::Y * -0.08, SKIN);
-        kit.part(c, j.elbows[i], Vec3::new(0.13, 0.09, 0.14), Vec3::Y * -0.20, SKIN);
+        kit.part(
+            c,
+            j.legs[i],
+            Vec3::new(0.22, 0.22, 0.24),
+            Vec3::Y * -0.11,
+            TROUSERS,
+        );
+        kit.part(
+            c,
+            j.knees[i],
+            Vec3::new(0.21, 0.10, 0.22),
+            Vec3::Y * -0.05,
+            TROUSERS,
+        );
+        kit.part(
+            c,
+            j.knees[i],
+            Vec3::new(0.24, 0.09, 0.30),
+            Vec3::new(0.0, -0.135, -0.03),
+            BOOTS,
+        );
+        kit.part(
+            c,
+            j.shoulders[i],
+            Vec3::new(0.14, 0.22, 0.15),
+            Vec3::Y * -0.10,
+            SHIRT,
+        );
+        kit.part(
+            c,
+            j.elbows[i],
+            Vec3::new(0.12, 0.16, 0.13),
+            Vec3::Y * -0.08,
+            SKIN,
+        );
+        kit.part(
+            c,
+            j.elbows[i],
+            Vec3::new(0.13, 0.09, 0.14),
+            Vec3::Y * -0.20,
+            SKIN,
+        );
     }
-    kit.part(c, j.torso, Vec3::new(0.56, 0.48, 0.40), Vec3::Y * 0.26, SHIRT);
-    kit.part(c, j.torso, Vec3::new(0.62, 0.08, 0.46), Vec3::Y * 0.04, TROUSERS);
-    kit.part(c, j.torso, Vec3::new(0.58, 0.05, 0.42), Vec3::Y * 0.12, BOOTS);
+    kit.part(
+        c,
+        j.torso,
+        Vec3::new(0.56, 0.48, 0.40),
+        Vec3::Y * 0.26,
+        SHIRT,
+    );
+    kit.part(
+        c,
+        j.torso,
+        Vec3::new(0.62, 0.08, 0.46),
+        Vec3::Y * 0.04,
+        TROUSERS,
+    );
+    kit.part(
+        c,
+        j.torso,
+        Vec3::new(0.58, 0.05, 0.42),
+        Vec3::Y * 0.12,
+        BOOTS,
+    );
     kit.part(c, j.neck, Vec3::new(0.34, 0.08, 0.30), Vec3::Y * 0.02, SKIN);
     let head = j.head;
     kit.part(c, head, Vec3::new(0.44, 0.40, 0.40), Vec3::Y * 0.20, SKIN);
-    kit.detail(c, head, Vec3::new(0.08, 0.08, 0.04), Vec3::new(0.0, 0.15, -0.22), SKIN);
+    kit.detail(
+        c,
+        head,
+        Vec3::new(0.08, 0.08, 0.04),
+        Vec3::new(0.0, 0.15, -0.22),
+        SKIN,
+    );
     kit.part(c, head, Vec3::new(0.74, 0.03, 0.70), Vec3::Y * 0.42, GILLS);
     kit.part(c, head, Vec3::new(0.84, 0.22, 0.80), Vec3::Y * 0.54, HAIR);
     kit.part(c, head, Vec3::new(0.66, 0.10, 0.62), Vec3::Y * 0.70, HAIR);
@@ -497,7 +877,8 @@ fn energy_of(mood: Mood) -> f32 {
 }
 
 /// The parts of every body (joints and boxes), moved by `drive`.
-pub type Parts<'w, 's> = Query<'w, 's, (&'static mut Transform, &'static mut Visibility), Without<Rig>>;
+pub type Parts<'w, 's> =
+    Query<'w, 's, (&'static mut Transform, &'static mut Visibility), Without<Rig>>;
 
 /// What a body is doing this frame; `drive` turns it into joint motion.
 pub struct Drive {
@@ -529,7 +910,14 @@ pub struct Drive {
     pub kick: Option<f32>,
 }
 
-fn animate(real: Res<Time<Real>>, game: Res<Time>, book: Res<NpcBook>, cam: Single<&GlobalTransform, With<FlyCamera>>, mut npcs: Query<(&mut Transform, &Npc, &mut Rig)>, mut parts: Parts) {
+fn animate(
+    real: Res<Time<Real>>,
+    game: Res<Time>,
+    book: Res<NpcBook>,
+    cam: Single<&GlobalTransform, With<FlyCamera>>,
+    mut npcs: Query<(&mut Transform, &Npc, &mut Rig)>,
+    mut parts: Parts,
+) {
     let dt = real.delta_secs().min(0.05);
     let gdt = game.delta_secs().min(0.05);
     let eye = cam.translation();
@@ -551,7 +939,11 @@ fn animate(real: Res<Time<Real>>, game: Res<Time>, book: Res<NpcBook>, cam: Sing
             walk: book.kinds.get(npc.kind).map_or(2.4, |k| k.walk),
             game_dt: gdt,
             focus,
-            gesture: if blank { 0.0 } else { npc.speaking * energy_of(npc.mood) },
+            gesture: if blank {
+                0.0
+            } else {
+                npc.speaking * energy_of(npc.mood)
+            },
             mood: if blank { Mood::Neutral } else { npc.mood },
             mouth: npc.mouth,
             speaking: npc.speaking,
@@ -575,8 +967,11 @@ pub fn drive(tf: &mut Transform, rig: &mut Rig, parts: &mut Parts, dt: f32, d: &
 
     // Walking: pace eases in and out; the stride advances with the distance
     // covered, one stride per `motion::stride`, so the feet don't slide.
-    let pace = rig.pace.step((d.speed / d.walk.max(0.1)).min(2.0), 0.12, dt);
-    rig.phase = (rig.phase + d.speed * d.game_dt / motion::stride(pace) * std::f32::consts::TAU) % std::f32::consts::TAU;
+    let pace = rig
+        .pace
+        .step((d.speed / d.walk.max(0.1)).min(2.0), 0.12, dt);
+    rig.phase = (rig.phase + d.speed * d.game_dt / motion::stride(pace) * std::f32::consts::TAU)
+        % std::f32::consts::TAU;
 
     let look = rig.gaze.step(dt, d.focus);
     let act = step_act(rig, d.act, dt);
@@ -585,9 +980,16 @@ pub fn drive(tf: &mut Transform, rig: &mut Rig, parts: &mut Parts, dt: f32, d: &
     // eases on springs; the walk cycle goes straight on top, scaled by the
     // eased pace, so the legs keep their full swing and timing. Talking
     // hands quieten while an animation has the arms.
-    let busy = if rig.shown.is_some() { rig.act_w.x } else { 0.0 };
+    let busy = if rig.shown.is_some() {
+        rig.act_w.x
+    } else {
+        0.0
+    };
     let energy = rig.gesture.step(d.gesture, 0.35, dt) * (1.0 - 0.7 * busy);
-    let stance = motion::idle(t).lerp(Pose::default(), pace.min(1.0)).add(motion::gesture(t, energy)).add(act);
+    let stance = motion::idle(t)
+        .lerp(Pose::default(), pace.min(1.0))
+        .add(motion::gesture(t, energy))
+        .add(act);
     let mut arr = stance.to_array();
     for (i, s) in rig.joints.iter_mut().enumerate() {
         arr[i] = s.step(arr[i], 0.07, dt);
@@ -609,7 +1011,8 @@ pub fn drive(tf: &mut Transform, rig: &mut Rig, parts: &mut Parts, dt: f32, d: &
         pose.shoulder[1] = a.shoulder + pose.shoulder[1] * 0.15;
         pose.arm_out[1] = a.arm_out;
         pose.elbow[1] = a.elbow;
-        pose.shoulder[0] = a.left_shoulder + pose.shoulder[0] * (1.0 - (a.left_shoulder.abs() * 2.0).min(1.0));
+        pose.shoulder[0] =
+            a.left_shoulder + pose.shoulder[0] * (1.0 - (a.left_shoulder.abs() * 2.0).min(1.0));
         pose.elbow[0] = pose.elbow[0].max(a.left_elbow);
         arm_yaw = a.yaw;
         wrist = a.wrist;
@@ -639,32 +1042,49 @@ pub fn drive(tf: &mut Transform, rig: &mut Rig, parts: &mut Parts, dt: f32, d: &
         let side = if i == 0 { -1.0 } else { 1.0 };
         let (hip, knee) = (pose.hip[i], pose.knee[i]);
         // Legs stay upright under a rolling pelvis.
-        set!(rig.legs[i], |t| t.rotation = Quat::from_rotation_z(-pose.roll) * Quat::from_rotation_x(hip));
+        set!(rig.legs[i], |t| t.rotation =
+            Quat::from_rotation_z(-pose.roll)
+                * Quat::from_rotation_x(hip));
         set!(rig.knees[i], |t| t.rotation = Quat::from_rotation_x(-knee));
         let (sh, out, el) = (pose.shoulder[i], pose.arm_out[i], pose.elbow[i]);
         let turn = if i == 1 { arm_yaw } else { 0.0 };
-        set!(rig.shoulders[i], |t| t.rotation = Quat::from_rotation_y(turn) * Quat::from_rotation_z(out * side) * Quat::from_rotation_x(sh));
+        set!(rig.shoulders[i], |t| t.rotation =
+            Quat::from_rotation_y(turn)
+                * Quat::from_rotation_z(out * side)
+                * Quat::from_rotation_x(sh));
         set!(rig.elbows[i], |t| t.rotation = Quat::from_rotation_x(el));
     }
     // The held item: tip down (pitch) and rolled about the forearm.
-    set!(rig.hands[1], |t| t.rotation = Quat::from_rotation_y(wrist[1]) * Quat::from_rotation_x(wrist[0]));
-    set!(rig.torso, |t| t.rotation = Quat::from_rotation_z(chest_roll) * Quat::from_rotation_y(twist) * Quat::from_rotation_x(-pose.lean));
+    set!(rig.hands[1], |t| t.rotation =
+        Quat::from_rotation_y(wrist[1])
+            * Quat::from_rotation_x(wrist[0]));
+    set!(rig.torso, |t| t.rotation =
+        Quat::from_rotation_z(chest_roll)
+            * Quat::from_rotation_y(twist)
+            * Quat::from_rotation_x(-pose.lean));
     // The head looks where the gaze says, undoing the torso's twist and lean,
     // with a small nod while talking and a tilt when curious.
     let nod = 0.035 * energy * (t * 5.3).sin();
     let tilt = if d.mood == Mood::Curious { 0.12 } else { 0.0 } + 0.02 * (t * 0.7).sin();
     set!(rig.head, |t| {
-        t.rotation = Quat::from_rotation_y(look.head_yaw - twist + pose.shake) * Quat::from_rotation_x(look.head_pitch + pose.lean + nod + pose.nod) * Quat::from_rotation_z(tilt);
+        t.rotation = Quat::from_rotation_y(look.head_yaw - twist + pose.shake)
+            * Quat::from_rotation_x(look.head_pitch + pose.lean + nod + pose.nod)
+            * Quat::from_rotation_z(tilt);
     });
     // A tail sways lazily, and more as it walks.
     if let Some(tail) = rig.tail {
         let swish = (0.22 + 0.2 * pace.min(1.5)) * (t * (1.3 + pace)).sin();
-        set!(tail, |t| t.rotation = Quat::from_rotation_y(swish) * Quat::from_rotation_x(-0.15 + 0.1 * pace.min(1.0)));
+        set!(tail, |t| t.rotation = Quat::from_rotation_y(swish)
+            * Quat::from_rotation_x(-0.15 + 0.1 * pace.min(1.0)));
     }
 
     // Eyes.
     for (e, side) in rig.pupils.into_iter().zip([-1.0, 1.0]) {
-        let p = Vec3::new(f.eye.x * side - look.pupil[0] * PUPIL_X, f.eye.y + look.pupil[1] * PUPIL_Y, f.face - 0.013);
+        let p = Vec3::new(
+            f.eye.x * side - look.pupil[0] * PUPIL_X,
+            f.eye.y + look.pupil[1] * PUPIL_Y,
+            f.face - 0.013,
+        );
         set!(e, |t| t.translation = p);
     }
     // Lids: also half-lower when looking down.
@@ -672,7 +1092,11 @@ pub fn drive(tf: &mut Transform, rig: &mut Rig, parts: &mut Parts, dt: f32, d: &
     for e in rig.lids {
         if let Ok((mut t, mut v)) = parts.get_mut(e) {
             t.scale.y = lid.max(0.02);
-            let want = if lid < 0.04 { Visibility::Hidden } else { Visibility::Inherited };
+            let want = if lid < 0.04 {
+                Visibility::Hidden
+            } else {
+                Visibility::Inherited
+            };
             if *v != want {
                 *v = want;
             }
@@ -680,7 +1104,11 @@ pub fn drive(tf: &mut Transform, rig: &mut Rig, parts: &mut Parts, dt: f32, d: &
     }
     // Brows.
     let target = brows_of(d.mood);
-    let lift = rig.brow[0].step(target[0] + 0.006 * energy * (t * 3.1).sin().max(0.0), 0.15, dt);
+    let lift = rig.brow[0].step(
+        target[0] + 0.006 * energy * (t * 3.1).sin().max(0.0),
+        0.15,
+        dt,
+    );
     let inner = rig.brow[1].step(target[1], 0.15, dt);
     let left = rig.brow[2].step(target[2], 0.15, dt);
     for (e, side) in rig.brows.into_iter().zip([-1.0f32, 1.0]) {
@@ -697,14 +1125,29 @@ pub fn drive(tf: &mut Transform, rig: &mut Rig, parts: &mut Parts, dt: f32, d: &
         Mood::Surprised => 0.25,
         _ => 0.0,
     };
-    let open = rig.open.step(d.mouth.0.max(rest * (1.0 - d.speaking)), 0.035, dt).clamp(0.0, 1.2);
-    let wide = rig.wide.step(if d.speaking > 0.0 { d.mouth.1 } else { 0.85 + rest }, 0.06, dt);
+    let open = rig
+        .open
+        .step(d.mouth.0.max(rest * (1.0 - d.speaking)), 0.035, dt)
+        .clamp(0.0, 1.2);
+    let wide = rig.wide.step(
+        if d.speaking > 0.0 {
+            d.mouth.1
+        } else {
+            0.85 + rest
+        },
+        0.06,
+        dt,
+    );
     let h = MOUTH_SHUT + (MOUTH_OPEN - MOUTH_SHUT) * open;
     set!(rig.mouth, |t| t.scale.x = wide.clamp(0.4, 1.3));
     set!(rig.hole, |t| t.scale.y = h);
     set!(rig.jaw, |t| t.translation.y = -h);
     // Teeth show once the lips part.
-    let shown = if h > MOUTH_SHUT * 1.6 { Visibility::Inherited } else { Visibility::Hidden };
+    let shown = if h > MOUTH_SHUT * 1.6 {
+        Visibility::Inherited
+    } else {
+        Visibility::Hidden
+    };
     for e in rig.teeth {
         if let Ok((_, mut v)) = parts.get_mut(e)
             && *v != shown
@@ -730,7 +1173,9 @@ fn step_act(rig: &mut Rig, asked: Option<(Anim, u32)>, dt: f32) -> Pose {
         rig.act_t = 0.0;
         rig.act_w = Spring::new(1.0);
     }
-    let Some(a) = rig.shown else { return Pose::default() };
+    let Some(a) = rig.shown else {
+        return Pose::default();
+    };
     rig.act_t += dt;
     if !a.held() && rig.act_t >= a.length() {
         rig.shown = None;
@@ -741,7 +1186,10 @@ fn step_act(rig: &mut Rig, asked: Option<(Anim, u32)>, dt: f32) -> Pose {
 
 /// Feet position and the box you aim at to talk (for `talk`).
 pub fn talk_box(at: Vec3) -> (Vec3, Vec3) {
-    (at - Vec3::new(0.35, 0.0, 0.35), at + Vec3::new(0.35, super::HEIGHT, 0.35))
+    (
+        at - Vec3::new(0.35, 0.0, 0.35),
+        at + Vec3::new(0.35, super::HEIGHT, 0.35),
+    )
 }
 
 #[cfg(test)]
@@ -783,7 +1231,10 @@ fn match_light(
             continue;
         }
         let head = tf.translation() + Vec3::Y * 1.2 * tf.scale().y;
-        let Some((sky, block)) = world.light_at(voxel::BlockPos::from_world(head.to_array())) else { continue };
+        let Some((sky, block)) = world.light_at(voxel::BlockPos::from_world(head.to_array()))
+        else {
+            continue;
+        };
         let want = Vec2::new(level_brightness(sky), level_brightness(block));
         let before = rig.lit;
         rig.lit = before + (want - before) * k;
@@ -792,11 +1243,22 @@ fn match_light(
         }
         let (s, t) = (rig.lit.x, rig.lit.y);
         for (h, base) in &rig.mats {
-            let Some(mut m) = materials.get_mut(h) else { continue };
-            m.base_color = Color::LinearRgba(LinearRgba::new(base.red * s, base.green * s, base.blue * s, base.alpha));
+            let Some(mut m) = materials.get_mut(h) else {
+                continue;
+            };
+            m.base_color = Color::LinearRgba(LinearRgba::new(
+                base.red * s,
+                base.green * s,
+                base.blue * s,
+                base.alpha,
+            ));
             // The sky's shine on it fades too (0.5 is Bevy's default, which every part is built with).
             m.reflectance = 0.5 * s;
-            m.emissive = LinearRgba::rgb(base.red * TORCH_GLOW.x * t, base.green * TORCH_GLOW.y * t, base.blue * TORCH_GLOW.z * t);
+            m.emissive = LinearRgba::rgb(
+                base.red * TORCH_GLOW.x * t,
+                base.green * TORCH_GLOW.y * t,
+                base.blue * TORCH_GLOW.z * t,
+            );
         }
     }
 }

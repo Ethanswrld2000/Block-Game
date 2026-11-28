@@ -22,7 +22,13 @@ pub struct HandsPlugin;
 
 impl Plugin for HandsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(crate::menu::GameUpdate, (spawn_hands, update_held, pose_hands).chain().after(crate::interact::InteractSet).after(crate::player::PlayerSet));
+        app.add_systems(
+            crate::menu::GameUpdate,
+            (spawn_hands, update_held, pose_hands)
+                .chain()
+                .after(crate::interact::InteractSet)
+                .after(crate::player::PlayerSet),
+        );
     }
 }
 
@@ -42,18 +48,25 @@ pub(crate) struct Held {
 
 impl Held {
     pub(crate) fn new(hand: Hand) -> Self {
-        Self { hand, fixed: None, showing: None }
+        Self {
+            hand,
+            fixed: None,
+            showing: None,
+        }
     }
 
     /// A fist that always holds `item` (foes' weapons).
     pub(crate) fn holding(item: ItemId) -> Self {
-        Self { hand: Hand::Right, fixed: Some(item), showing: None }
+        Self {
+            hand: Hand::Right,
+            fixed: Some(item),
+            showing: None,
+        }
     }
 }
 
 /// Metres per sprite pixel for a held item (before the hand's own scale).
 const HAND_PX: f32 = 0.0095;
-
 
 /// Where the fist rests, relative to the eye.
 fn base_position(hand: Hand) -> Vec3 {
@@ -79,19 +92,48 @@ fn spawn_hands(
     let Ok(cam) = cam.single() else { return };
     let sleeve = meshes.add(Cuboid::new(0.09, 0.09, 0.34));
     let fist = meshes.add(Cuboid::new(0.075, 0.075, 0.075));
-    let sleeve_mat = materials.add(StandardMaterial { base_color: rgb(looks.0.shirt), perceptual_roughness: 1.0, ..default() });
-    let skin_mat = materials.add(StandardMaterial { base_color: rgb(looks.0.skin), perceptual_roughness: 0.9, ..default() });
+    let sleeve_mat = materials.add(StandardMaterial {
+        base_color: rgb(looks.0.shirt),
+        perceptual_roughness: 1.0,
+        ..default()
+    });
+    let skin_mat = materials.add(StandardMaterial {
+        base_color: rgb(looks.0.skin),
+        perceptual_roughness: 0.9,
+        ..default()
+    });
     for hand in [Hand::Right, Hand::Left] {
         commands.entity(cam).with_children(|c| {
-            c.spawn((HandRoot(hand), Transform::from_translation(base_position(hand)), Visibility::default())).with_children(|h| {
-                h.spawn((Mesh3d(sleeve.clone()), MeshMaterial3d(sleeve_mat.clone()), Transform::from_xyz(0.0, -0.015, 0.2), NotShadowCaster));
-                h.spawn((Mesh3d(fist.clone()), MeshMaterial3d(skin_mat.clone()), Transform::default(), NotShadowCaster));
+            c.spawn((
+                HandRoot(hand),
+                Transform::from_translation(base_position(hand)),
+                Visibility::default(),
+            ))
+            .with_children(|h| {
+                h.spawn((
+                    Mesh3d(sleeve.clone()),
+                    MeshMaterial3d(sleeve_mat.clone()),
+                    Transform::from_xyz(0.0, -0.015, 0.2),
+                    NotShadowCaster,
+                ));
+                h.spawn((
+                    Mesh3d(fist.clone()),
+                    MeshMaterial3d(skin_mat.clone()),
+                    Transform::default(),
+                    NotShadowCaster,
+                ));
                 // Items are held tilted up and forward.
                 h.spawn((
-                    Held { hand, fixed: None, showing: None },
+                    Held {
+                        hand,
+                        fixed: None,
+                        showing: None,
+                    },
                     // Items are life-size; at arm's length in front of the
                     // eye they read better a bit smaller.
-                    Transform::from_xyz(0.0, 0.03, -0.02).with_rotation(Quat::from_rotation_x(0.9)).with_scale(Vec3::splat(0.42)),
+                    Transform::from_xyz(0.0, 0.03, -0.02)
+                        .with_rotation(Quat::from_rotation_x(0.9))
+                        .with_scale(Vec3::splat(0.42)),
                     Visibility::default(),
                 ));
             });
@@ -126,12 +168,15 @@ pub(crate) fn block_mesh(def: &BlockDef, size: f32) -> Mesh {
             idx.extend_from_slice(&[start, start + 1, start + 2, start, start + 2, start + 3]);
         }
     }
-    Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::RENDER_WORLD)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nor)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
-        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, layer)
-        .with_inserted_indices(Indices::U32(idx))
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pos)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, nor)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uv)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_1, layer)
+    .with_inserted_indices(Indices::U32(idx))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -145,7 +190,9 @@ fn update_held(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let (Some(voxel_mat), Some(art)) = (blocks.material.clone(), art) else { return };
+    let (Some(voxel_mat), Some(art)) = (blocks.material.clone(), art) else {
+        return;
+    };
     if !art.ready {
         return;
     }
@@ -168,7 +215,8 @@ fn update_held(
                 c.spawn((
                     Mesh3d(mesh),
                     MeshMaterial3d::<VoxelMaterial>(voxel_mat.clone()),
-                    Transform::from_xyz(0.0, 0.0, -0.12).with_rotation(Quat::from_rotation_x(-0.6) * Quat::from_rotation_y(0.5)),
+                    Transform::from_xyz(0.0, 0.0, -0.12)
+                        .with_rotation(Quat::from_rotation_x(-0.6) * Quat::from_rotation_y(0.5)),
                     NotShadowCaster,
                 ));
             }
@@ -176,26 +224,46 @@ fn update_held(
                 // The item's sprite, made solid: held near the bottom (the
                 // end of a handle), pointing forward.
                 let id_size = art.size(id).unwrap_or(UVec2::splat(20)).as_vec2();
-                let grip = if id_size.y >= id_size.x * 1.5 { id_size.y * 0.2 } else { id_size.y * 0.5 };
+                let grip = if id_size.y >= id_size.x * 1.5 {
+                    id_size.y * 0.2
+                } else {
+                    id_size.y * 0.5
+                };
                 // Small things (a handful of berries) are drawn a bit bigger
                 // so they show above the hotbar.
                 let px = HAND_PX * (36.0 / id_size.max_element()).max(1.0);
                 let to_center = (id_size.y / 2.0 - grip) * px;
-                let place = Transform::from_xyz(0.0, 0.0, -to_center).with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)).with_scale(Vec3::splat(px));
+                let place = Transform::from_xyz(0.0, 0.0, -to_center)
+                    .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2))
+                    .with_scale(Vec3::splat(px));
                 match art.model(id) {
                     Some((mesh, mat)) => {
                         c.spawn((Mesh3d(mesh), MeshMaterial3d(mat), place, NotShadowCaster));
                     }
                     None => {
-                        c.spawn((Mesh3d(meshes.add(Cuboid::new(0.16, 0.12, 0.2))), MeshMaterial3d(materials.add(Color::srgb(0.5, 0.45, 0.38))), Transform::from_xyz(0.0, 0.0, -0.12), NotShadowCaster));
+                        c.spawn((
+                            Mesh3d(meshes.add(Cuboid::new(0.16, 0.12, 0.2))),
+                            MeshMaterial3d(materials.add(Color::srgb(0.5, 0.45, 0.38))),
+                            Transform::from_xyz(0.0, 0.0, -0.12),
+                            NotShadowCaster,
+                        ));
                     }
                 }
                 if matches!(item.kind, ItemKind::Torch) {
                     // A light that goes where you go, just past the flame.
                     let tip = -(id_size.y - grip) * px;
                     c.spawn((
-                        PointLight { intensity: TORCH_LUMENS * 0.8, range: TORCH_RANGE, color: TORCH_COLOR, shadow_maps_enabled: false, ..default() },
-                        Flicker { base: TORCH_LUMENS * 0.8, seed: if h.hand == Hand::Left { 1.0 } else { 2.0 } },
+                        PointLight {
+                            intensity: TORCH_LUMENS * 0.8,
+                            range: TORCH_RANGE,
+                            color: TORCH_COLOR,
+                            shadow_maps_enabled: false,
+                            ..default()
+                        },
+                        Flicker {
+                            base: TORCH_LUMENS * 0.8,
+                            seed: if h.hand == Hand::Left { 1.0 } else { 2.0 },
+                        },
                         Transform::from_xyz(0.0, 0.25, tip - 0.7),
                     ));
                 }
@@ -235,19 +303,31 @@ pub(crate) fn pose_hands(
         // Both come up to hold an urn (`station::grab`).
         let held = grab.blend();
         let shown = !view.pulled && (hand == Hand::Right || off.0.is_some() || held > 0.001);
-        let want = if shown { Visibility::Inherited } else { Visibility::Hidden };
+        let want = if shown {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
         if *vis != want {
             *vis = want;
         }
         let arm = anim.arm(hand);
         let (style, t) = match (frozen, hand) {
-            (Some(t), Hand::Right) => (wielded.0.map_or(Swing::Jab, |i| items.get(i).swing), Some(t)),
+            (Some(t), Hand::Right) => (
+                wielded.0.map_or(Swing::Jab, |i| items.get(i).swing),
+                Some(t),
+            ),
             _ => (arm.style, arm.t),
         };
         // Wind up, strike, bounce off, back to rest (see `swing`).
-        let (mut swing_pos, mut swing_rot) = t.map_or((Vec3::ZERO, Quat::IDENTITY), |t| style.pose(t));
+        let (mut swing_pos, mut swing_rot) =
+            t.map_or((Vec3::ZERO, Quat::IDENTITY), |t| style.pose(t));
         // Charging a heavy cut: the sword hauled up over the head and held.
-        let charging = if hand == Hand::Right && t.is_none() { anim.charge_level() } else { None };
+        let charging = if hand == Hand::Right && t.is_none() {
+            anim.charge_level()
+        } else {
+            None
+        };
         if let Some((heavy, k)) = charging {
             (swing_pos, swing_rot) = crate::swing::charge_pose(heavy, k);
         }
@@ -255,7 +335,11 @@ pub(crate) fn pose_hands(
         // into the middle to block, shoved out to bash (`combat::shield`).
         let shielding = hand == Hand::Left && off.0.is_some_and(|i| items.get(i).shield.is_some());
         if shielding && t.is_none() {
-            let up = if guard.shield.is_some() { guard.blend } else { 0.0 };
+            let up = if guard.shield.is_some() {
+                guard.blend
+            } else {
+                0.0
+            };
             (swing_pos, swing_rot) = crate::swing::shield_pose(up, guard.bash);
         }
         // A weapon raised to block (`combat::Guard`).
@@ -266,38 +350,84 @@ pub(crate) fn pose_hands(
         }
         let side = if hand == Hand::Right { 1.0 } else { -1.0 };
         let mirror = Vec3::new(side, 1.0, 1.0);
-        let swing_rot = if hand == Hand::Right { swing_rot } else { Quat::from_xyzw(swing_rot.x, -swing_rot.y, -swing_rot.z, swing_rot.w) };
+        let swing_rot = if hand == Hand::Right {
+            swing_rot
+        } else {
+            Quat::from_xyzw(swing_rot.x, -swing_rot.y, -swing_rot.z, swing_rot.w)
+        };
         // Sway with the steps, opposite to the head so the arms feel heavy.
-        let (bob, phase) = if walking { (player.bob, player.bob_phase) } else { (0.0, 0.0) };
-        let sway = Vec3::new((phase * 0.5).sin() * 0.018 * bob, -(phase.sin().abs()) * 0.02 * bob, 0.0);
-        let lift = if mining.block.is_some() && mining.hand == hand { 0.02 } else { 0.0 };
+        let (bob, phase) = if walking {
+            (player.bob, player.bob_phase)
+        } else {
+            (0.0, 0.0)
+        };
+        let sway = Vec3::new(
+            (phase * 0.5).sin() * 0.018 * bob,
+            -(phase.sin().abs()) * 0.02 * bob,
+            0.0,
+        );
+        let lift = if mining.block.is_some() && mining.hand == hand {
+            0.02
+        } else {
+            0.0
+        };
         // Eating: bring the food up toward the mouth and bob while chewing.
-        let e = if anim.eat_hand == hand { (anim.eat * 4.0).min(1.0) } else { 0.0 };
+        let e = if anim.eat_hand == hand {
+            (anim.eat * 4.0).min(1.0)
+        } else {
+            0.0
+        };
         let chew = (anim.eat * 40.0).sin() * 0.012 * e;
         let to_mouth = Vec3::new(-side * 0.2, 0.12 + chew, 0.12) * e;
         // Motion feel (`pov`), eased out while the hand is busy (a swing,
         // a guard, eating) so those poses stay as they are.
-        let busy = if t.is_some() || charging.is_some() || e > 0.0 || (hand == Hand::Right && guard.blend > 0.001 && guard.shield.is_none()) || (shielding && guard.shield.is_some() && guard.blend > 0.001) { 1.0 } else { 0.0 };
+        let busy = if t.is_some()
+            || charging.is_some()
+            || e > 0.0
+            || (hand == Hand::Right && guard.blend > 0.001 && guard.shield.is_none())
+            || (shielding && guard.shield.is_some() && guard.blend > 0.001)
+        {
+            1.0
+        } else {
+            0.0
+        };
         let calm = 1.0 - busy;
         // Sprint carry: low, pulled in and tipped down, pumping with the stride.
         let k = pov.sprint * calm;
         let pump = (phase * 0.5).sin() * k;
         let sprint_pos = Vec3::new(-side * 0.04 * k, -0.06 * k + pump * 0.015 * side, 0.03 * k);
-        let sprint_rot = Quat::from_rotation_x(-0.45 * k + pump * 0.08 * side) * Quat::from_rotation_z(side * 0.35 * k) * Quat::from_rotation_y(side * 0.2 * k);
+        let sprint_rot = Quat::from_rotation_x(-0.45 * k + pump * 0.08 * side)
+            * Quat::from_rotation_z(side * 0.35 * k)
+            * Quat::from_rotation_y(side * 0.2 * k);
         // Falls and landings: the hands sink, get knocked down, spring back.
         let drop = pov.drop.x;
         let drop_rot = Quat::from_rotation_x(drop * 2.5);
         // Look sway: trail the turn a little, sideways and in angle.
         let (ly, lp) = (pov.lag_yaw.x * calm, pov.lag_pitch.x * calm);
         let lag_pos = Vec3::new(-ly * 0.25, lp * 0.25, 0.0);
-        let lag_rot = Quat::from_rotation_y(ly) * Quat::from_rotation_x(lp) * Quat::from_rotation_z(-ly * 0.6);
-        tf.translation = base_position(hand) + sway + to_mouth + Vec3::Y * (lift + drop) + swing_pos * mirror + sprint_pos + lag_pos;
-        tf.rotation = lag_rot * drop_rot * sprint_rot * swing_rot * Quat::from_rotation_x(0.5 * e) * Quat::from_rotation_y(side * 0.5 * e);
+        let lag_rot = Quat::from_rotation_y(ly)
+            * Quat::from_rotation_x(lp)
+            * Quat::from_rotation_z(-ly * 0.6);
+        tf.translation = base_position(hand)
+            + sway
+            + to_mouth
+            + Vec3::Y * (lift + drop)
+            + swing_pos * mirror
+            + sprint_pos
+            + lag_pos;
+        tf.rotation = lag_rot
+            * drop_rot
+            * sprint_rot
+            * swing_rot
+            * Quat::from_rotation_x(0.5 * e)
+            * Quat::from_rotation_y(side * 0.5 * e);
         // Holding an urn by its shoulders: the hands go to its sides, the
         // arms angled out and the fists turned in against the clay.
         if held > 0.001 {
             let grip = grab.grips[if hand == Hand::Right { 0 } else { 1 }];
-            let hold = Quat::from_rotation_y(side * 0.45) * Quat::from_rotation_z(side * 0.5) * Quat::from_rotation_x(-0.2);
+            let hold = Quat::from_rotation_y(side * 0.45)
+                * Quat::from_rotation_z(side * 0.5)
+                * Quat::from_rotation_x(-0.2);
             tf.translation = tf.translation.lerp(grip, held);
             tf.rotation = tf.rotation.slerp(hold, held);
         }

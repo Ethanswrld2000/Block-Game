@@ -24,7 +24,12 @@ pub enum Quality {
 }
 
 impl Quality {
-    pub const ALL: [Quality; 4] = [Quality::Plain, Quality::Fine, Quality::Masterwork, Quality::Relic];
+    pub const ALL: [Quality; 4] = [
+        Quality::Plain,
+        Quality::Fine,
+        Quality::Masterwork,
+        Quality::Relic,
+    ];
 
     pub fn key(self) -> &'static str {
         match self {
@@ -133,7 +138,10 @@ impl Qualities {
         }
         for t in &q.traits {
             if t.name.contains(['@', '+']) {
-                return Err(format!("traits.ron: trait name '{}' can't hold @ or +", t.name));
+                return Err(format!(
+                    "traits.ron: trait name '{}' can't hold @ or +",
+                    t.name
+                ));
             }
         }
         Ok(q)
@@ -168,8 +176,14 @@ impl Qualities {
     pub fn roll_traits(&self, q: Quality, rng: &mut Rng) -> Vec<usize> {
         let tier = self.tier(q);
         let mut out = Vec::new();
-        for (rank, n) in [(Rank::Minor, tier.minor), (Rank::Major, tier.major), (Rank::Relic, tier.relic)] {
-            let mut pool: Vec<usize> = (0..self.traits.len()).filter(|i| self.traits[*i].rank == rank).collect();
+        for (rank, n) in [
+            (Rank::Minor, tier.minor),
+            (Rank::Major, tier.major),
+            (Rank::Relic, tier.relic),
+        ] {
+            let mut pool: Vec<usize> = (0..self.traits.len())
+                .filter(|i| self.traits[*i].rank == rank)
+                .collect();
             for _ in 0..n {
                 if pool.is_empty() {
                     break;
@@ -200,7 +214,9 @@ impl Qualities {
         let (base, rest) = name.split_once('@')?;
         let mut parts = rest.split('+');
         let q = Quality::from_key(parts.next()?)?;
-        let mut traits = parts.map(|t| self.trait_named(t)).collect::<Option<Vec<_>>>()?;
+        let mut traits = parts
+            .map(|t| self.trait_named(t))
+            .collect::<Option<Vec<_>>>()?;
         traits.sort();
         traits.dedup();
         Some((base, q, traits))
@@ -209,7 +225,11 @@ impl Qualities {
     /// Everything the traits add up to.
     pub fn sum(&self, traits: &[usize]) -> Tuning {
         let mut t = Tuning::default();
-        for e in traits.iter().filter_map(|i| self.traits.get(*i)).map(|d| d.effect) {
+        for e in traits
+            .iter()
+            .filter_map(|i| self.traits.get(*i))
+            .map(|d| d.effect)
+        {
             match e {
                 Effect::Reach(x) => t.reach += x,
                 Effect::Speed(x) => t.speed += x,
@@ -245,7 +265,10 @@ mod tests {
     fn traits_ron_loads_with_traits_of_every_rank() {
         let q = load();
         for r in [Rank::Minor, Rank::Major, Rank::Relic] {
-            assert!(q.traits.iter().filter(|t| t.rank == r).count() >= 3, "{r:?}");
+            assert!(
+                q.traits.iter().filter(|t| t.rank == r).count() >= 3,
+                "{r:?}"
+            );
         }
         // Better tiers are better.
         for w in q.tiers.windows(2) {
@@ -262,10 +285,25 @@ mod tests {
             assert!(q.roll_traits(Quality::Plain, &mut rng).is_empty());
             let t = q.roll_traits(Quality::Masterwork, &mut rng);
             assert_eq!(t.len(), 2);
-            assert_eq!(t.iter().filter(|i| q.traits[**i].rank == Rank::Minor).count(), 1);
-            assert_eq!(t.iter().filter(|i| q.traits[**i].rank == Rank::Major).count(), 1);
+            assert_eq!(
+                t.iter()
+                    .filter(|i| q.traits[**i].rank == Rank::Minor)
+                    .count(),
+                1
+            );
+            assert_eq!(
+                t.iter()
+                    .filter(|i| q.traits[**i].rank == Rank::Major)
+                    .count(),
+                1
+            );
             let r = q.roll_traits(Quality::Relic, &mut rng);
-            assert_eq!(r.iter().filter(|i| q.traits[**i].rank == Rank::Relic).count(), 1);
+            assert_eq!(
+                r.iter()
+                    .filter(|i| q.traits[**i].rank == Rank::Relic)
+                    .count(),
+                1
+            );
         }
     }
 
@@ -288,7 +326,10 @@ mod tests {
         for _ in 0..4000 {
             seen[Qualities::roll_quality([0.5, 0.3, 0.15, 0.05], &mut rng) as usize] += 1;
         }
-        assert!(seen[0] > seen[1] && seen[1] > seen[2] && seen[2] > seen[3] && seen[3] > 100, "{seen:?}");
+        assert!(
+            seen[0] > seen[1] && seen[1] > seen[2] && seen[2] > seen[3] && seen[3] > 100,
+            "{seen:?}"
+        );
         assert_eq!(Qualities::roll_quality([0.0; 4], &mut rng), Quality::Plain);
     }
 }

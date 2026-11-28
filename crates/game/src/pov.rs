@@ -22,7 +22,10 @@ impl Plugin for PovPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Pov>().add_systems(
             crate::menu::GameUpdate,
-            (track, sprint_fov).chain().after(crate::player::PlayerSet).before(crate::hands::pose_hands),
+            (track, sprint_fov)
+                .chain()
+                .after(crate::player::PlayerSet)
+                .before(crate::hands::pose_hands),
         );
     }
 }
@@ -135,7 +138,12 @@ fn track(
 
 /// Widen (or narrow) the view with the sprint, on top of the FOV setting.
 /// Left alone while a bench, talk, cutscene or telescope has the camera.
-fn sprint_fov(pov: Res<Pov>, menus: Res<Menus>, settings: Option<Res<crate::settings::Settings>>, mut proj: Query<&mut Projection, With<FlyCamera>>) {
+fn sprint_fov(
+    pov: Res<Pov>,
+    menus: Res<Menus>,
+    settings: Option<Res<crate::settings::Settings>>,
+    mut proj: Query<&mut Projection, With<FlyCamera>>,
+) {
     if menus.still {
         return;
     }
@@ -168,7 +176,10 @@ mod tests {
         for _ in 0..90 {
             s.step(0.0, 160.0, 15.0, 1.0 / 60.0);
         }
-        assert!(s.x.abs() < 0.002 && s.v.abs() < 0.02, "and settle within two seconds");
+        assert!(
+            s.x.abs() < 0.002 && s.v.abs() < 0.02,
+            "and settle within two seconds"
+        );
     }
 
     #[test]
@@ -185,14 +196,20 @@ mod tests {
         let (mut turn, mut lag) = (Vec2::ZERO, Spring::default());
         let mut seen = Vec::new();
         for i in 0..240 {
-            let raw = if i % 2 == 0 { Vec2::ZERO } else { Vec2::new(6.0, 0.0) };
+            let raw = if i % 2 == 0 {
+                Vec2::ZERO
+            } else {
+                Vec2::new(6.0, 0.0)
+            };
             turn = smooth_turn(turn, raw, dt);
             lag.step((turn.x * 0.012).clamp(-0.09, 0.09), 120.0, 17.0, dt);
             if i >= 120 {
                 seen.push(lag.x);
             }
         }
-        let (lo, hi) = seen.iter().fold((f32::MAX, f32::MIN), |(a, b), &x| (a.min(x), b.max(x)));
+        let (lo, hi) = seen
+            .iter()
+            .fold((f32::MAX, f32::MIN), |(a, b), &x| (a.min(x), b.max(x)));
         assert!(hi - lo < 0.002, "the hand shakes by {}", hi - lo);
     }
 

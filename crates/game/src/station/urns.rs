@@ -80,7 +80,10 @@ impl UrnData {
             if let Some(it) = &u.item
                 && !known_item(it)
             {
-                return Err(format!("urns.ron: urn '{}' is carried as unknown item '{it}'", u.name));
+                return Err(format!(
+                    "urns.ron: urn '{}' is carried as unknown item '{it}'",
+                    u.name
+                ));
             }
             for s in &u.steps {
                 if !seen.insert(s.name.clone()) {
@@ -88,12 +91,18 @@ impl UrnData {
                 }
                 for a in &s.after {
                     if u.step(a).is_none() {
-                        return Err(format!("urns.ron: step '{}' comes after '{a}', which isn't in the {}", s.name, u.title));
+                        return Err(format!(
+                            "urns.ron: step '{}' comes after '{a}', which isn't in the {}",
+                            s.name, u.title
+                        ));
                     }
                 }
                 for it in s.needs.keys() {
                     if !known_item(it) {
-                        return Err(format!("urns.ron: step '{}' needs unknown item '{it}'", s.name));
+                        return Err(format!(
+                            "urns.ron: step '{}' needs unknown item '{it}'",
+                            s.name
+                        ));
                     }
                 }
                 if s.needs.is_empty() || s.needs.values().any(|n| *n == 0) {
@@ -102,7 +111,10 @@ impl UrnData {
                 if let Gives::Urn(other) = &s.gives
                     && !d.urns.iter().any(|x| &x.name == other && x.item.is_some())
                 {
-                    return Err(format!("urns.ron: step '{}' gives urn '{other}', which has no item to carry", s.name));
+                    return Err(format!(
+                        "urns.ron: step '{}' gives urn '{other}', which has no item to carry",
+                        s.name
+                    ));
                 }
             }
         }
@@ -160,7 +172,11 @@ impl Progress {
 
     /// How many of an item a step holds so far.
     pub fn given(&self, step: &str, item: &str) -> u32 {
-        self.given.get(step).and_then(|g| g.get(item)).copied().unwrap_or(0)
+        self.given
+            .get(step)
+            .and_then(|g| g.get(item))
+            .copied()
+            .unwrap_or(0)
     }
 
     /// How many more of each item a step still needs.
@@ -168,19 +184,33 @@ impl Progress {
         if self.is_done(&step.name) {
             return BTreeMap::new();
         }
-        step.needs.iter().map(|(it, n)| (it.clone(), n.saturating_sub(self.given(&step.name, it)))).filter(|(_, n)| *n > 0).collect()
+        step.needs
+            .iter()
+            .map(|(it, n)| (it.clone(), n.saturating_sub(self.given(&step.name, it))))
+            .filter(|(_, n)| *n > 0)
+            .collect()
     }
 
     /// How many more of this item the open steps could take.
     pub fn wants(&self, def: &UrnDef, item: &str) -> u32 {
-        def.steps.iter().filter(|s| self.state(s) == State::Open).map(|s| self.missing(s).get(item).copied().unwrap_or(0)).sum()
+        def.steps
+            .iter()
+            .filter(|s| self.state(s) == State::Open)
+            .map(|s| self.missing(s).get(item).copied().unwrap_or(0))
+            .sum()
     }
 
     /// Put up to `count` of an item in. It goes to the open steps in tree order
     /// (only to `only` if given), so nothing is wasted: a step that finishes
     /// may open the next, which takes the rest. Returns how many went in and
     /// the steps finished, in order.
-    pub fn offer(&mut self, def: &UrnDef, item: &str, count: u32, only: Option<&str>) -> (u32, Vec<String>) {
+    pub fn offer(
+        &mut self,
+        def: &UrnDef,
+        item: &str,
+        count: u32,
+        only: Option<&str>,
+    ) -> (u32, Vec<String>) {
         let mut left = count;
         let mut finished = Vec::new();
         loop {
@@ -197,7 +227,12 @@ impl Progress {
                     continue;
                 }
                 let n = want.min(left);
-                *self.given.entry(s.name.clone()).or_default().entry(item.to_string()).or_insert(0) += n;
+                *self
+                    .given
+                    .entry(s.name.clone())
+                    .or_default()
+                    .entry(item.to_string())
+                    .or_insert(0) += n;
                 left -= n;
                 moved = true;
                 if self.missing(s).is_empty() {
@@ -229,7 +264,11 @@ impl Progress {
     pub fn next_fill(&self, def: &UrnDef) -> f32 {
         let Some(s) = self.next(def) else { return 1.0 };
         let total: u32 = s.needs.values().sum();
-        let have: u32 = s.needs.iter().map(|(it, n)| self.given(&s.name, it).min(*n)).sum();
+        let have: u32 = s
+            .needs
+            .iter()
+            .map(|(it, n)| self.given(&s.name, it).min(*n))
+            .sum();
         have as f32 / total.max(1) as f32
     }
 }
@@ -246,13 +285,25 @@ mod tests {
     fn the_data_file_loads() {
         let d = data();
         assert_eq!(d.urns[0].name, "ancestral");
-        assert!(d.urns[0].item.is_none(), "the ancestral urn comes with the bedroll");
+        assert!(
+            d.urns[0].item.is_none(),
+            "the ancestral urn comes with the bedroll"
+        );
         // The Rotting Gate's bosses drop these (game::delve::rules::urn_for); the Star Urn
         // stands in the mountain castle (game::cast).
         let from_bosses = ["carpentry", "gear", "hearth", "vehicle", "star"];
         for u in &d.urns[1..] {
-            let giver = d.urns.iter().flat_map(|x| &x.steps).find(|s| s.gives == Gives::Urn(u.name.clone()));
-            assert_eq!(giver.is_some(), !from_bosses.contains(&u.name.as_str()), "what gives the {}", u.title);
+            let giver = d
+                .urns
+                .iter()
+                .flat_map(|x| &x.steps)
+                .find(|s| s.gives == Gives::Urn(u.name.clone()));
+            assert_eq!(
+                giver.is_some(),
+                !from_bosses.contains(&u.name.as_str()),
+                "what gives the {}",
+                u.title
+            );
         }
     }
 
@@ -264,13 +315,20 @@ mod tests {
         assert_eq!(p.next(anc).unwrap().name, "camp_mat");
         // The tool urn is locked: sticks only go to the camp mat.
         let (n, done) = p.offer(anc, "stick", 10, None);
-        assert_eq!((n, done.len()), (4, 0), "the mat takes 4 sticks, the rest stay with you");
+        assert_eq!(
+            (n, done.len()),
+            (4, 0),
+            "the mat takes 4 sticks, the rest stay with you"
+        );
         let (n, done) = p.offer(anc, "plant_fiber", 9, None);
         assert_eq!(n, 4);
         assert_eq!(done, vec!["camp_mat".to_string()]);
         assert!(p.is_done("camp_mat"));
         assert_eq!(p.state(anc.step("tool_urn").unwrap()), State::Open);
-        assert!(p.given.get("camp_mat").is_none(), "a finished step forgets its items");
+        assert!(
+            p.given.get("camp_mat").is_none(),
+            "a finished step forgets its items"
+        );
     }
 
     #[test]
@@ -307,20 +365,44 @@ mod tests {
         let d = data();
         let in_urn = |urn: &str, step: &str| d.urn(urn).unwrap().step(step).is_some();
         assert!(in_urn("vehicle", "machination_table"));
-        for s in ["carpentry_bench", "carpentry_table", "joiners_table", "door_frame", "glass_kiln"] {
+        for s in [
+            "carpentry_bench",
+            "carpentry_table",
+            "joiners_table",
+            "door_frame",
+            "glass_kiln",
+        ] {
             assert!(in_urn("carpentry", s), "{s}");
         }
-        for s in ["sewing_table", "armor_stand", "bladesmith_bench", "sharpening_stone", "rapier", "metal_armor", "gunsmith_bench"] {
+        for s in [
+            "sewing_table",
+            "armor_stand",
+            "bladesmith_bench",
+            "sharpening_stone",
+            "rapier",
+            "metal_armor",
+            "gunsmith_bench",
+        ] {
             assert!(in_urn("gear", s), "{s}");
         }
-        for s in ["carpentry_bench", "carpentry_table", "machination_table", "sharpening_stone"] {
+        for s in [
+            "carpentry_bench",
+            "carpentry_table",
+            "machination_table",
+            "sharpening_stone",
+        ] {
             assert!(!in_urn("tool", s), "{s} left the tool urn");
         }
         // The gunsmith bench's guns fire now (`combat::guns`).
         assert!(!d.urn("gear").unwrap().step("gunsmith_bench").unwrap().later);
         // Every item an urn asks for or is carried as exists.
         let (_, items) = crate::items::tests::load();
-        assert!(UrnData::from_ron(include_str!("../../../../assets/data/urns.ron"), |n| items.id(n).is_some()).is_ok());
+        assert!(
+            UrnData::from_ron(include_str!("../../../../assets/data/urns.ron"), |n| items
+                .id(n)
+                .is_some())
+            .is_ok()
+        );
         // Every station step names a station the game knows.
         for u in &d.urns {
             for s in &u.steps {

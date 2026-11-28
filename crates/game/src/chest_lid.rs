@@ -35,10 +35,16 @@ pub struct ChestLidPlugin;
 
 impl Plugin for ChestLidPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<ChestOpen>().add_message::<ReachChest>().add_systems(
-            crate::menu::GameUpdate,
-            (reach, swing).chain().after(crate::interact::InteractSet).after(crate::player::PlayerSet).before(crate::hands::pose_hands),
-        );
+        app.init_resource::<ChestOpen>()
+            .add_message::<ReachChest>()
+            .add_systems(
+                crate::menu::GameUpdate,
+                (reach, swing)
+                    .chain()
+                    .after(crate::interact::InteractSet)
+                    .after(crate::player::PlayerSet)
+                    .before(crate::hands::pose_hands),
+            );
     }
 }
 
@@ -70,7 +76,11 @@ pub struct ChestOpen {
 impl ChestOpen {
     /// How far the right hand is out at the lid (0..1, eased).
     pub fn blend(&self) -> f32 {
-        if self.at.is_none() || self.linger > 0.0 { 0.0 } else { smooth(self.t / HAND_FIRST) }
+        if self.at.is_none() || self.linger > 0.0 {
+            0.0
+        } else {
+            smooth(self.t / HAND_FIRST)
+        }
     }
 
     /// How far up the lid is (radians).
@@ -87,7 +97,11 @@ fn smooth(t: f32) -> f32 {
 /// The side of the chest you stand on: a unit step along x or z.
 pub fn facing_side(eye: Vec3, centre: Vec3) -> Vec3 {
     let d = eye - centre;
-    if d.x.abs() >= d.z.abs() { Vec3::X * d.x.signum() } else { Vec3::Z * d.z.signum() }
+    if d.x.abs() >= d.z.abs() {
+        Vec3::X * d.x.signum()
+    } else {
+        Vec3::Z * d.z.signum()
+    }
 }
 
 /// Where the face leans: in front of the chest, over it, looking down into it.
@@ -120,11 +134,19 @@ fn reach(
     cam: Single<&Transform, With<FlyCamera>>,
     mut sound: MessageWriter<PlaySound>,
 ) {
-    let Some(ask) = asks.read().last().copied() else { return };
+    let Some(ask) = asks.read().last().copied() else {
+        return;
+    };
     if open.at.is_some() {
         return;
     }
-    let (Some(chest), Some(lidless), Some(material)) = (blocks.registry.id("chest"), blocks.registry.id("chest_open"), blocks.material.clone()) else { return };
+    let (Some(chest), Some(lidless), Some(material)) = (
+        blocks.registry.id("chest"),
+        blocks.registry.id("chest_open"),
+        blocks.material.clone(),
+    ) else {
+        return;
+    };
     let p = ask.0;
     let base = Vec3::new(p.x as f32, p.y as f32, p.z as f32);
     let front = facing_side(cam.translation, base + Vec3::splat(0.5));
@@ -132,19 +154,41 @@ fn reach(
     // The lid as a model of its own, hinged at the back, in the chest's light.
     let tile = blocks.registry.get(chest).textures[voxel::Face::PosX as usize];
     let light = world.light_at(p).unwrap_or((voxel::light::MAX, 0));
-    let Some(mesh) = crate::chunk_mesh::boxes_mesh(&[crate::chunk_mesh::CHEST_LID], tile, light) else { return };
+    let Some(mesh) = crate::chunk_mesh::boxes_mesh(&[crate::chunk_mesh::CHEST_LID], tile, light)
+    else {
+        return;
+    };
     let lid = commands
         .spawn((Transform::from_translation(hinge), Visibility::default()))
         .with_children(|c| {
-            c.spawn((Mesh3d(meshes.add(mesh)), MeshMaterial3d::<VoxelMaterial>(material), Transform::from_translation(base - hinge)));
+            c.spawn((
+                Mesh3d(meshes.add(mesh)),
+                MeshMaterial3d::<VoxelMaterial>(material),
+                Transform::from_translation(base - hinge),
+            ));
         })
         .id();
     if world.block(p) == Some(chest) && world.set_block(p, lidless) {
         crate::interact::remesh_around(&mut world, &blocks, p);
     }
-    *open = ChestOpen { at: Some(p), t: 0.0, opened: false, releasing: false, view: lean_view(base, front), hinge, front, lid: Some(lid), linger: 0.0, grip: Vec3::ZERO };
+    *open = ChestOpen {
+        at: Some(p),
+        t: 0.0,
+        opened: false,
+        releasing: false,
+        view: lean_view(base, front),
+        hinge,
+        front,
+        lid: Some(lid),
+        linger: 0.0,
+        grip: Vec3::ZERO,
+    };
     menus.still = true;
-    sound.write(PlaySound::new("ui_open").at(base + Vec3::splat(0.5)).speed(0.8));
+    sound.write(
+        PlaySound::new("ui_open")
+            .at(base + Vec3::splat(0.5))
+            .speed(0.8),
+    );
 }
 
 /// Push the lid up and lean in; open the chest's screen; let it fall shut once
@@ -183,8 +227,10 @@ fn swing(
         if open.t <= 0.0 {
             open.t = 0.0;
             // Shut: the chest gets its own lid back, the moving one goes once that shows.
-            if let (Some(chest), Some(lidless)) = (blocks.registry.id("chest"), blocks.registry.id("chest_open"))
-                && world.block(p) == Some(lidless)
+            if let (Some(chest), Some(lidless)) = (
+                blocks.registry.id("chest"),
+                blocks.registry.id("chest_open"),
+            ) && world.block(p) == Some(lidless)
                 && world.set_block(p, chest)
             {
                 crate::interact::remesh_around(&mut world, &blocks, p);
