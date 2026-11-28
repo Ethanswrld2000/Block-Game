@@ -17,7 +17,7 @@ pub(crate) use draw::fill;
 use serde::Deserialize;
 use voxel::{BlockId, BlockRegistry};
 
-pub use floor::{floor, ChestKind, ChestSpot, Doorway, Floor, FloorPlan, HazardSpot, Link, Puzzle, Reward, Room};
+pub use floor::{floor, ChestKind, ChestSpot, Doorway, Floor, FloorPlan, HangKind, Hanging, HazardSpot, Link, Puzzle, Reward, Room};
 
 /// Where the floors are built: far out in the empty sky, above every island
 /// (sky islands stop at y 600) and under the ceiling.
@@ -47,7 +47,7 @@ pub enum RoomType {
     Ambush,
     /// A chest guarded by a trap or an elite.
     Treasure,
-    /// Behind a cracked wall.
+    /// Unused (secret rooms behind cracked walls are gone); kept so old data loads.
     Secret,
     /// A campfire that heals.
     Rest,
@@ -189,13 +189,12 @@ pub struct Theme {
 /// Blocks every floor uses.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Parts {
-    pub cracked_stone: BlockId,
     pub cracked_floor: BlockId,
     pub slab: BlockId,
-    pub vault_door: BlockId,
     pub oil: BlockId,
     pub plate: BlockId,
-    pub torch: BlockId,
+    pub sconce: BlockId,
+    pub chain: BlockId,
     pub campfire: BlockId,
     pub chest: BlockId,
     pub cobblestone: BlockId,
@@ -215,13 +214,23 @@ impl Delves {
         let d: DungeonsRon = ron::from_str(dungeons_ron).map_err(|e| format!("dungeons.ron: {e}"))?;
         let rooms: Vec<RoomDef> = ron::from_str(rooms_ron).map_err(|e| format!("rooms.ron: {e}"))?;
         let b = |n: &str| blocks.id(n).ok_or_else(|| format!("dungeons need block '{n}'"));
+        // Every block a floor is built of keeps the outside out: no leaves, ice
+        // or glass (light and wind would come through, and you could see the sky).
+        let solid = |n: &str| -> Result<BlockId, String> {
+            let id = b(n)?;
+            let def = blocks.get(id);
+            if !def.opaque || !def.solid || def.material == "plant" {
+                return Err(format!("dungeons.ron: '{n}' isn't a solid, opaque block"));
+            }
+            Ok(id)
+        };
         let mut themes = Vec::new();
         for def in d.themes {
             themes.push(Theme {
-                wall: b(&def.wall)?,
-                floor: b(&def.floor)?,
-                pillar: b(&def.pillar)?,
-                growth: def.growth.iter().map(|n| b(n)).collect::<Result<_, _>>()?,
+                wall: solid(&def.wall)?,
+                floor: solid(&def.floor)?,
+                pillar: solid(&def.pillar)?,
+                growth: def.growth.iter().map(|n| solid(n)).collect::<Result<_, _>>()?,
                 pools: def.pools.as_deref().map(b).transpose()?,
                 def,
             });
@@ -246,19 +255,18 @@ impl Delves {
             }
         }
         // Every kind of room a floor needs has a template.
-        for k in [RoomType::Start, RoomType::Fight, RoomType::Trap, RoomType::Puzzle, RoomType::Ambush, RoomType::Treasure, RoomType::Secret, RoomType::Rest, RoomType::Shop, RoomType::Boss] {
+        for k in [RoomType::Start, RoomType::Fight, RoomType::Trap, RoomType::Puzzle, RoomType::Ambush, RoomType::Treasure, RoomType::Rest, RoomType::Shop, RoomType::Boss] {
             if !rooms.iter().any(|r| r.kind == k && r.min_floor <= 1 && r.themes.is_empty()) {
                 return Err(format!("rooms.ron: no {k:?} room for every theme and floor"));
             }
         }
         let parts = Parts {
-            cracked_stone: b("cracked_stone")?,
             cracked_floor: b("cracked_floor")?,
             slab: b("dungeon_slab")?,
-            vault_door: b("vault_door")?,
             oil: b("oil")?,
             plate: b("pressure_plate")?,
-            torch: b("torch")?,
+            sconce: b("sconce")?,
+            chain: b("iron_chain")?,
             campfire: b("campfire")?,
             chest: b("chest")?,
             cobblestone: b("cobblestone")?,

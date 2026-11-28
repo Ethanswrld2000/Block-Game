@@ -532,8 +532,10 @@ fn spirit_look(
                 }
                 if let Some(mut mat) = materials.get_mut(id) {
                     was.push((id, mat.base_color, mat.alpha_mode, mat.emissive));
-                    mat.base_color = SPIRIT;
-                    mat.alpha_mode = AlphaMode::Blend;
+                    // Solid glowing blue, not blended: see-through boxes of the
+                    // arm sorted against each other as you moved and flickered.
+                    mat.base_color = SPIRIT.with_alpha(1.0);
+                    mat.alpha_mode = AlphaMode::Opaque;
                     mat.emissive = SPIRIT_GLOW;
                 }
             }

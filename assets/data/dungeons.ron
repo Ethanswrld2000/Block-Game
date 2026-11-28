@@ -2,6 +2,7 @@
 // Every dungeon is one entrance on the island and 1-4 floors built in the pocket, from rooms.ron.
 //   themes: name, title, place (words for "<place> of <name>"),
 //     wall / floor / pillar: block names; growth: blocks that creep over walls and floors
+//     (all solid and opaque: no leaves, ice or glass, which let the sky and light through)
 //     (growth_share of them); pools: a liquid left in low spots, if any
 //     foes: foes.ron kinds (the game picks one of each role it needs from these)
 //     warden: the boss of every floor but the last; boss: the last floor's boss (it guards the prize chest)
@@ -48,7 +49,7 @@
             wall: "stone",
             floor: "dirt",
             pillar: "swamp_log",
-            growth: ["swamp_leaves", "moss", "peat"],
+            growth: ["moss", "peat", "mud"],
             growth_share: 0.3,
             foes: ["mire_skitter", "rot_brute", "mire_mender", "sporecaster", "shieldbearer"],
             warden: "gloam_stalker",
@@ -76,8 +77,8 @@
             title: "Frozen Vault",
             place: ["Frozen Vault", "Rime Halls", "Winter Crypt"],
             wall: "deeprock",
-            floor: "ice",
-            pillar: "ice",
+            floor: "snow",
+            pillar: "skystone",
             growth: ["snow", "skystone"],
             growth_share: 0.2,
             foes: ["hollow", "shade", "shieldbearer", "rot_brute", "mire_mender", "sporecaster"],

@@ -166,10 +166,10 @@ fn prisoners(
     }
 }
 
-/// Where a prisoner waits (feet): the middle of a fight room half way along, or of
+/// Where a prisoner waits (feet): the middle of a fight room (or ambush) half way along, or of
 /// the boss room (pure).
 pub fn prison_spot(floor: &worldgen::Floor, boss_room: bool) -> Option<[f32; 3]> {
-    let fights: Vec<usize> = (0..floor.rooms.len()).filter(|&i| floor.rooms[i].kind == worldgen::RoomType::Fight).collect();
+    let fights: Vec<usize> = (0..floor.rooms.len()).filter(|&i| matches!(floor.rooms[i].kind, worldgen::RoomType::Fight | worldgen::RoomType::Ambush)).collect();
     let i = if boss_room { floor.boss_room } else { *fights.get(fights.len() / 2)? };
     let r = &floor.rooms.get(i)?.inner;
     // Off the very middle (the boss stood there, and pillars may).
@@ -406,7 +406,7 @@ mod tests {
             let f = worldgen::delve::floor(&d, &plan);
             let spot = prison_spot(&f, false).expect("a fight room");
             let r = f.room_at(spot).expect("in a room");
-            assert_eq!(f.rooms[r].kind, worldgen::RoomType::Fight);
+            assert!(matches!(f.rooms[r].kind, worldgen::RoomType::Fight | worldgen::RoomType::Ambush));
             let boss = prison_spot(&f, true).unwrap();
             assert_eq!(f.room_at(boss), Some(f.boss_room));
         }

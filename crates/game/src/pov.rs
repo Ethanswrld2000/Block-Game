@@ -47,6 +47,11 @@ impl Spring {
     }
 }
 
+/// Eases the turn rate toward this frame's (about a tenth of a second).
+pub fn smooth_turn(current: Vec2, raw: Vec2, dt: f32) -> Vec2 {
+    current.lerp(raw, 1.0 - (-dt * 10.0).exp())
+}
+
 /// Eases the sprint amount (0..1) towards on or off, about a quarter second.
 pub fn ease_sprint(current: f32, sprinting: bool, dt: f32) -> f32 {
     let target = if sprinting { 1.0 } else { 0.0 };
@@ -62,6 +67,10 @@ pub struct Pov {
     /// Hands trailing the look (radians: yaw, pitch).
     pub lag_yaw: Spring,
     pub lag_pitch: Spring,
+    /// How fast you turn (radians a second), smoothed over a few frames: mouse
+    /// moves arrive unevenly (none one frame, two frames' worth the next),
+    /// and following them raw made the hands shake.
+    turn: Vec2,
     was_on_ground: bool,
     last_vy: f32,
 }
@@ -112,13 +121,14 @@ fn track(
     pov.last_vy = p.vel.y;
 
     // Look sway: the hands lag behind how fast you turn, then catch up.
-    let (mut yaw_to, mut pitch_to) = (0.0, 0.0);
+    let mut raw = Vec2::ZERO;
     if on_foot && !menus.open && cursor.grab_mode != CursorGrabMode::None {
         let sens = cam.iter().next().map_or(0.002, |c| c.sensitivity);
-        let turn = motion.delta * sens / dt;
-        yaw_to = (turn.x * 0.012).clamp(-0.09, 0.09);
-        pitch_to = (turn.y * 0.012).clamp(-0.07, 0.07);
+        raw = motion.delta * sens / dt;
     }
+    pov.turn = smooth_turn(pov.turn, raw, dt);
+    let yaw_to = (pov.turn.x * 0.012).clamp(-0.09, 0.09);
+    let pitch_to = (pov.turn.y * 0.012).clamp(-0.07, 0.07);
     pov.lag_yaw.step(yaw_to, 120.0, 17.0, dt);
     pov.lag_pitch.step(pitch_to, 120.0, 17.0, dt);
 }
@@ -166,6 +176,24 @@ mod tests {
         let mut s = Spring { x: -0.1, v: 0.0 };
         s.step(0.0, 160.0, 15.0, 0.1);
         assert!(s.x.abs() <= 0.1);
+    }
+
+    #[test]
+    fn uneven_mouse_input_turns_the_hands_steadily() {
+        // A steady turn whose moves arrive every other frame (0, 2x, 0, 2x...).
+        let dt = 1.0 / 120.0;
+        let (mut turn, mut lag) = (Vec2::ZERO, Spring::default());
+        let mut seen = Vec::new();
+        for i in 0..240 {
+            let raw = if i % 2 == 0 { Vec2::ZERO } else { Vec2::new(6.0, 0.0) };
+            turn = smooth_turn(turn, raw, dt);
+            lag.step((turn.x * 0.012).clamp(-0.09, 0.09), 120.0, 17.0, dt);
+            if i >= 120 {
+                seen.push(lag.x);
+            }
+        }
+        let (lo, hi) = seen.iter().fold((f32::MAX, f32::MIN), |(a, b), &x| (a.min(x), b.max(x)));
+        assert!(hi - lo < 0.002, "the hand shakes by {}", hi - lo);
     }
 
     #[test]

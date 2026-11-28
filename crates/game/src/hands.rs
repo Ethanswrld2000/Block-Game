@@ -222,6 +222,7 @@ pub(crate) fn pose_hands(
     view: Res<crate::camera::View>,
     guard: Res<crate::combat::Guard>,
     grab: Res<crate::station::grab::Grab>,
+    chest: Res<crate::chest_lid::ChestOpen>,
     mut frozen: Local<Option<Option<f32>>>,
     mut roots: Query<(&HandRoot, &mut Transform, &mut Visibility)>,
 ) {
@@ -299,6 +300,13 @@ pub(crate) fn pose_hands(
             let hold = Quat::from_rotation_y(side * 0.45) * Quat::from_rotation_z(side * 0.5) * Quat::from_rotation_x(-0.2);
             tf.translation = tf.translation.lerp(grip, held);
             tf.rotation = tf.rotation.slerp(hold, held);
+        }
+        // Opening a chest: the right hand on the lid's front edge, palm up, pushing it open.
+        let push = chest.blend();
+        if hand == Hand::Right && push > 0.001 {
+            let palm = Quat::from_rotation_x(0.8) * Quat::from_rotation_z(-0.3);
+            tf.translation = tf.translation.lerp(chest.grip, push);
+            tf.rotation = tf.rotation.slerp(palm, push);
         }
     }
 }

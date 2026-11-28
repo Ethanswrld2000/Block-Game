@@ -34,6 +34,7 @@ mod guide;
 mod hands;
 mod hud;
 mod cast;
+mod chest_lid;
 mod chop;
 mod interact;
 mod inventory;
@@ -111,6 +112,7 @@ fn main() {
             hands::HandsPlugin,
             pov::PovPlugin,
             torches::TorchPlugin,
+            chest_lid::ChestLidPlugin,
             glowcaps::GlowcapPlugin,
             hud::HudPlugin,
             survival::SurvivalPlugin,

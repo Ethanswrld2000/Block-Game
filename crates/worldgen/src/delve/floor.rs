@@ -3,13 +3,17 @@
 //!
 //! Rooms sit on a grid of cells `GRID` blocks apart, joined by corridors. Cell
 //! 0 is the start room (the way back up is in its west wall). The boss arena is
-//! the furthest dead end; its one corridor ends in the floor's locked door,
-//! whose key drops in the room furthest from the start once its foes are down.
-//! Every floor has one puzzle room (its prize behind a gate), a rest room, a
-//! trap gauntlet, and maybe treasure, a coin shop and a secret room behind a
-//! cracked wall. Some corridors are trapped. Fight rooms show a reward at their
-//! doors (coin, a boon, a heal, or an elite for better loot), and on deeper
-//! floors two of them may be sealed together as a section.
+//! the furthest dead end, and its stair down (every floor but the last) leads
+//! out of the arena itself: the boss drops the key that opens it. Every floor
+//! has one puzzle room (its prize behind a gate), a rest room, a trap gauntlet,
+//! and maybe treasure and a coin shop. Rooms whose doors shut on you (fight
+//! rooms, ambushes) always have a way on: dead ends get the rooms that never
+//! lock. Some corridors are trapped. On deeper floors two fight rooms may be
+//! sealed together as a section.
+//!
+//! Rooms aren't all plain boxes: some have their corners walled in, some a
+//! stepped, vaulted ceiling, and chains and stone drips hang from the ceilings.
+//! Iron sconces on the walls light every room and corridor.
 //!
 //! After the boss: the stair down (not on the last floor), a way out back to
 //! the entrance, and on a story dungeon's last floor a passage that comes out
@@ -108,10 +112,6 @@ pub struct Link {
     pub a: usize,
     pub b: usize,
     pub corridor: Aabb,
-    /// It ends in the floor's locked door (on `b`'s side).
-    pub locked: bool,
-    /// A cracked wall closes it halfway (a secret room or shortcut).
-    pub secret: bool,
     /// Traps along it.
     pub trapped: bool,
 }
@@ -176,6 +176,23 @@ impl Puzzle {
     }
 }
 
+/// Something hanging from a ceiling.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HangKind {
+    /// An iron chain.
+    Chain,
+    /// A drip of the theme's wall stone.
+    Drip,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Hanging {
+    pub kind: HangKind,
+    /// The top cell (just under the ceiling); it hangs `len` cells down from there.
+    pub top: [i32; 3],
+    pub len: i32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ChestSpot {
     pub pos: [i32; 3],
@@ -196,13 +213,6 @@ pub struct Floor {
     pub chests: Vec<ChestSpot>,
     /// Rooms sealed together: walking into the first shuts the section's outer doors.
     pub sections: Vec<Vec<usize>>,
-    /// The room whose fall drops the floor's key, and where (feet).
-    pub key_room: usize,
-    pub key_at: [i32; 3],
-    /// The locked door (in the boss room's wall).
-    pub locked: Aabb,
-    /// Cracked walls you can break.
-    pub cracked: Vec<[i32; 3]>,
     /// Every open box: rooms, corridors, the ways out, the stair, alcoves.
     pub spaces: Vec<Aabb>,
     /// Holes under the floor (pits, cracked floor).
@@ -221,14 +231,20 @@ pub struct Floor {
     pub passage: Option<Aabb>,
     /// Drawn shut until the boss falls (the stair's mouth, the exit, the passage).
     pub seals: Vec<Aabb>,
+    /// The stair's mouth (in `seals`): the boss's key opens it.
+    pub stair_seal: Option<Aabb>,
     pub boss_room: usize,
     /// Feet height of every room.
     pub floor_y: i32,
     pub campfire: Option<[i32; 3]>,
     /// Where the coin merchant stands.
     pub shop: Option<[i32; 3]>,
-    pub(crate) torches: Vec<[i32; 3]>,
+    /// Wall sconces (the cell the flame is in, against a wall).
+    pub(crate) sconces: Vec<[i32; 3]>,
     pub(crate) pillars: Vec<Aabb>,
+    /// Walled-in corners: solid wall inside a room's box.
+    pub(crate) solids: Vec<Aabb>,
+    pub(crate) hangings: Vec<Hanging>,
     /// Pit steps (a block to climb out on).
     pub(crate) steps: Vec<[i32; 3]>,
 }
@@ -288,6 +304,7 @@ impl Floor {
         let mid = [(r.min[0] + r.max[0]) / 2 + 2, y, (r.min[2] + r.max[2]) / 2];
         let busy = |x: i32, z: i32| {
             self.pillars.iter().any(|p| p.contains(x, y, z))
+                || self.solids.iter().any(|p| p.contains(x, y, z))
                 || self.pits.iter().any(|p| p.contains(x, y - 1, z))
                 || self.hazards.iter().any(|h| h.pos == [x, y, z] || h.cells.contains(&[x, y, z]))
                 || self.chests.iter().any(|c| c.pos == [x, y, z])
@@ -303,7 +320,7 @@ impl Floor {
     pub fn ways_into(&self, room: usize) -> impl Iterator<Item = &Doorway> {
         self.doors.iter().filter(move |d| {
             let l = &self.links[d.link];
-            d.room != room && (l.a == room || l.b == room) && !l.secret
+            d.room != room && (l.a == room || l.b == room)
         })
     }
 }
@@ -355,6 +372,9 @@ fn wall_box(inner: &Aabb, side: (i32, i32), from: i32, depth: i32, half: i32, hi
     }
 }
 
+/// A room's wall: the room cells along it, and the step out through it.
+type Wall = (Vec<(i32, i32)>, (i32, i32));
+
 /// Lay out one floor.
 #[allow(clippy::needless_range_loop)]
 pub fn floor(book: &Delves, plan: &FloorPlan) -> Floor {
@@ -395,8 +415,7 @@ pub fn floor(book: &Delves, plan: &FloorPlan) -> Floor {
         .max_by_key(|&n| (dist[n], n))
         .unwrap_or(cells.len() - 1);
     let stair_side = (!plan.last()).then(|| free_cell(boss, &cells, &index).first().copied().unwrap_or((1, 0)));
-    let stair_cell = stair_side.map(|(di, dj)| (cells[boss].0 + di, cells[boss].1 + dj));
-    // A few loops (never into the boss room: its only way in is the locked door).
+    // A few loops (never into the boss room: it has one way in).
     let mut pairs = tree.clone();
     for a in 0..cells.len() {
         let (i, j) = cells[a];
@@ -412,7 +431,8 @@ pub fn floor(book: &Delves, plan: &FloorPlan) -> Floor {
             }
         }
     }
-    // Which rooms get which part. The key waits in the furthest room from the start.
+    // Which rooms get which part. Dead ends get the rooms that never lock, so
+    // every room whose doors shut on you has a way on once it's cleared.
     let n = cells.len();
     let mut kinds = vec![RoomType::Fight; n];
     kinds[0] = RoomType::Start;
@@ -426,17 +446,13 @@ pub fn floor(book: &Delves, plan: &FloorPlan) -> Floor {
             })
             .collect::<Vec<_>>()
     };
-    let mut others: Vec<usize> = (1..n).filter(|&r| r != boss).collect();
-    others.sort_by_key(|&r| (std::cmp::Reverse(dist[r]), r));
-    let key_room = others.first().copied().unwrap_or(0);
-    let mut rest: Vec<usize> = others.iter().copied().filter(|&r| r != key_room).collect();
-    // Shuffle the rest, then hand out the parts in turn.
+    let dead_end = |r: usize, pairs: &[(usize, usize)]| pairs.iter().filter(|&&(a, b)| a == r || b == r).count() <= 1;
+    let mut rest: Vec<usize> = (1..n).filter(|&r| r != boss).collect();
+    // Shuffle, then dead ends first, then hand out the parts in turn.
     for i in (1..rest.len()).rev() {
         rest.swap(i, dice.int(0, i as i32) as usize);
     }
-    if key_room != 0 {
-        kinds[key_room] = if dice.chance(0.5) { RoomType::Ambush } else { RoomType::Fight };
-    }
+    rest.sort_by_key(|&r| !dead_end(r, &pairs));
     // The puzzle needs a wall with nothing behind it for its vault.
     if let Some(p) = rest.iter().position(|&r| sides_used(r, &pairs, &cells).len() < 4) {
         let r = rest.remove(p);
@@ -449,35 +465,24 @@ pub fn floor(book: &Delves, plan: &FloorPlan) -> Floor {
     if dice.chance(0.4) {
         hand.push(RoomType::Shop);
     }
-    for (k, r) in hand.into_iter().zip(rest.clone()) {
+    // The optional ones (treasure, shop) never take the last two rooms on the
+    // way through: those stay for the fights.
+    for k in hand {
+        let Some(&r) = rest.first() else { break };
+        let through = rest.iter().filter(|&&x| !dead_end(x, &pairs)).count();
+        if matches!(k, RoomType::Treasure | RoomType::Shop) && !dead_end(r, &pairs) && through <= 2 {
+            continue;
+        }
         kinds[r] = k;
-        rest.retain(|&x| x != r);
+        rest.remove(0);
     }
     for &r in &rest {
-        if dice.chance(0.25) {
+        if dead_end(r, &pairs) {
+            // A dead end left over: a hoard at the end of it, not a lock-in.
+            kinds[r] = RoomType::Treasure;
+        } else if dice.chance(0.25) {
             kinds[r] = RoomType::Ambush;
         }
-    }
-    // A secret room behind a cracked wall, off a fight or trap room.
-    let mut secret_pair = None;
-    if dice.chance(0.6) {
-        let hosts: Vec<usize> = (1..n).filter(|&r| matches!(kinds[r], RoomType::Fight | RoomType::Trap | RoomType::Ambush)).collect();
-        'find: for &h in &hosts {
-            for side in free_cell(h, &cells, &index) {
-                let c = (cells[h].0 + side.0, cells[h].1 + side.1);
-                if Some(c) == stair_cell || c.0 < 0 || c.1.abs() > reach + 1 || (c.0 == 0 && c.1 != 0) {
-                    continue;
-                }
-                index.insert(c, cells.len());
-                secret_pair = Some((h, cells.len()));
-                cells.push(c);
-                kinds.push(RoomType::Secret);
-                break 'find;
-            }
-        }
-    }
-    if let Some(p) = secret_pair {
-        pairs.push(p);
     }
     let n = cells.len();
     let centre = |r: usize| (px + cells[r].0 * GRID, pz + cells[r].1 * GRID);
@@ -507,43 +512,12 @@ pub fn floor(book: &Delves, plan: &FloorPlan) -> Floor {
             b_box((ax - HALL_HALF, ax + HALL_HALF), (fy, fy + HALL_HEIGHT - 1), (az, bz))
         };
         let li = links.len();
-        let secret = Some((a, b)) == secret_pair;
-        links.push(Link { a, b, corridor, locked: false, secret, trapped: false });
+        links.push(Link { a, b, corridor, trapped: false });
         spaces.push(corridor);
         for (r, o) in [(a, b), (b, a)] {
             let side = ((cells[o].0 - cells[r].0).signum(), (cells[o].1 - cells[r].1).signum());
             let at = wall_box(&rooms[r].inner, side, 1, 1, HALL_HALF, HALL_HEIGHT);
             doors.push(Doorway { room: r, link: li, at, out: side });
-        }
-    }
-    // The locked door: where the boss room's corridor meets its wall.
-    let boss_link = links.iter().position(|l| l.a == boss || l.b == boss).unwrap_or(0);
-    links[boss_link].locked = true;
-    let locked = doors.iter().find(|d| d.link == boss_link && d.room == boss).map_or(rooms[boss].inner, |d| d.at);
-    // Cracked walls across the secret corridor, halfway.
-    let mut cracked = Vec::new();
-    if let Some(l) = links.iter().find(|l| l.secret) {
-        let c = &l.corridor;
-        let along_x = c.max[0] - c.min[0] > c.max[2] - c.min[2];
-        let (ra, rb) = (&rooms[l.a].inner, &rooms[l.b].inner);
-        if along_x {
-            let lo = ra.max[0].min(rb.max[0]) + 1;
-            let hi = ra.min[0].max(rb.min[0]) - 1;
-            let x = (lo + hi) / 2;
-            for y in c.min[1]..=c.max[1] {
-                for z in c.min[2]..=c.max[2] {
-                    cracked.push([x, y, z]);
-                }
-            }
-        } else {
-            let lo = ra.max[2].min(rb.max[2]) + 1;
-            let hi = ra.min[2].max(rb.min[2]) - 1;
-            let z = (lo + hi) / 2;
-            for y in c.min[1]..=c.max[1] {
-                for x in c.min[0]..=c.max[0] {
-                    cracked.push([x, y, z]);
-                }
-            }
         }
     }
     // The way back up: a doorway two deep in the start room's west wall.
@@ -555,6 +529,7 @@ pub fn floor(book: &Delves, plan: &FloorPlan) -> Floor {
     let mut free_walls: Vec<(i32, i32)> = DIRS.iter().copied().filter(|s| !used.contains(s) && Some(*s) != stair_side).collect();
     let binner = rooms[boss].inner;
     let mut seals = Vec::new();
+    let mut stair_seal = None;
     let stair = stair_side.map(|(ddx, ddz)| {
         let (bx, bz) = centre(boss);
         let (hx, hz) = ((binner.max[0] - binner.min[0]) / 2, (binner.max[2] - binner.min[2]) / 2);
@@ -571,6 +546,7 @@ pub fn floor(book: &Delves, plan: &FloorPlan) -> Floor {
             steps.push(b);
         }
         seals.push(steps[0]);
+        stair_seal = Some(steps[0]);
         let s = steps[steps.len() - 1].union(&steps[steps.len() - 2]);
         spaces.extend(steps);
         s
@@ -595,11 +571,8 @@ pub fn floor(book: &Delves, plan: &FloorPlan) -> Floor {
             if sections.len() < 1 + (d as usize - 2) / 2
                 && kinds[a] == RoomType::Fight
                 && kinds[b] == RoomType::Fight
-                && a != key_room
-                && b != key_room
                 && rooms[a].section.is_none()
                 && rooms[b].section.is_none()
-                && !l.secret
                 && dice.chance(0.6)
             {
                 rooms[a].section = Some(sections.len());
@@ -623,8 +596,37 @@ pub fn floor(book: &Delves, plan: &FloorPlan) -> Floor {
             });
         }
     }
+    // Room shapes: walled-in corners (an octagon, from above) and stepped,
+    // vaulted ceilings, so not every room is a box. Puzzle rooms stay plain
+    // (their levers run along the far wall).
+    let mut solids = Vec::new();
+    for r in rooms.iter() {
+        let inner = r.inner;
+        let (hx, hz) = ((inner.max[0] - inner.min[0]) / 2, (inner.max[2] - inner.min[2]) / 2);
+        let small = hx.min(hz);
+        if r.kind != RoomType::Puzzle && small >= 5 && dice.chance(0.55) {
+            let c = dice.int(2, (small - 3).min(4));
+            for (cx, sx) in [(inner.min[0], 1), (inner.max[0], -1)] {
+                for (cz, sz) in [(inner.min[2], 1), (inner.max[2], -1)] {
+                    for i in 0..c {
+                        for j in 0..c - i {
+                            let (x, z) = (cx + sx * i, cz + sz * j);
+                            solids.push(b_box((x, x), (fy, inner.max[1]), (z, z)));
+                        }
+                    }
+                }
+            }
+        }
+        if small >= 5 && dice.chance(0.5) {
+            let steps = if small >= 8 { 2 } else { 1 };
+            for k in 1..=steps {
+                let g = 2 * k;
+                spaces.push(b_box((inner.min[0] + g, inner.max[0] - g), (inner.max[1] + k, inner.max[1] + k), (inner.min[2] + g, inner.max[2] - g)));
+            }
+        }
+    }
     // Free floor cells per room, for hazards, foes and things.
-    let mut taken: Vec<[i32; 3]> = Vec::new();
+    let mut taken: Vec<[i32; 3]> = solids.iter().map(|s| s.min).collect();
     let mut hazards = Vec::new();
     let mut pits = Vec::new();
     let mut steps = Vec::new();
@@ -693,9 +695,8 @@ pub fn floor(book: &Delves, plan: &FloorPlan) -> Floor {
                 shop = Some(mid);
                 taken.push(mid);
             }
-            RoomType::Treasure | RoomType::Secret => {
-                let kind = if rooms[r].kind == RoomType::Treasure { ChestKind::Treasure } else { ChestKind::Secret };
-                chests.push(ChestSpot { pos: mid, kind, room: r });
+            RoomType::Treasure => {
+                chests.push(ChestSpot { pos: mid, kind: ChestKind::Treasure, room: r });
                 taken.push(mid);
                 // The hoard's trap rings the chest.
                 for p in [[1, 0], [-1, 0], [0, 1], [0, -1]] {
@@ -864,11 +865,11 @@ pub fn floor(book: &Delves, plan: &FloorPlan) -> Floor {
             }
         }
     }
-    // Trapped corridors: one or two, never the locked one or the secret one.
+    // Trapped corridors: one or two, never the one into the boss arena.
     let mut trapped = 0;
     for li in 0..links.len() {
         let l = &links[li];
-        if trapped > (d as usize) / 3 || l.locked || l.secret || l.a == 0 || l.b == 0 || !dice.chance(0.35) {
+        if trapped > (d as usize) / 3 || l.a == boss || l.b == boss || l.a == 0 || l.b == 0 || !dice.chance(0.35) {
             continue;
         }
         let c = l.corridor;
@@ -915,18 +916,83 @@ pub fn floor(book: &Delves, plan: &FloorPlan) -> Floor {
         links[li].trapped = true;
         trapped += 1;
     }
-    // Torches in the corners of every room.
-    let mut torches = Vec::new();
+    // Iron sconces along the walls of every room, and one in each plain corridor.
+    let open = |x: i32, y: i32, z: i32, spaces: &[Aabb]| spaces.iter().any(|s| s.contains(x, y, z));
+    let mut sconces = Vec::new();
+    let sy = fy + 2;
     for r in &rooms {
         let (lo, hi) = (r.inner.min, r.inner.max);
-        for (x, z) in [(lo[0], lo[2]), (hi[0], lo[2]), (lo[0], hi[2]), (hi[0], hi[2])] {
-            torches.push([x, fy, z]);
+        // Each wall: the cells along it, and the way out of the room through it.
+        let walls: [Wall; 4] = [
+            ((lo[2]..=hi[2]).map(|z| (lo[0], z)).collect(), (-1, 0)),
+            ((lo[2]..=hi[2]).map(|z| (hi[0], z)).collect(), (1, 0)),
+            ((lo[0]..=hi[0]).map(|x| (x, lo[2])).collect(), (0, -1)),
+            ((lo[0]..=hi[0]).map(|x| (x, hi[2])).collect(), (0, 1)),
+        ];
+        for (cells, (ox, oz)) in walls {
+            let along = (oz.abs(), ox.abs());
+            for (k, &(x, z)) in cells.iter().enumerate() {
+                if k % 5 != 2 || k + 2 >= cells.len() {
+                    continue;
+                }
+                // Solid wall behind it and beside it (no doorway, alcove or gate),
+                // and the cell itself open (not a walled-in corner).
+                let walled = (-1..=1).all(|w| (sy - 1..=sy + 1).all(|y| !open(x + ox + along.0 * w, y, z + oz + along.1 * w, &spaces)));
+                if walled && !solids.iter().any(|s| s.contains(x, sy, z)) && !pillars.iter().any(|p| p.contains(x, sy, z)) {
+                    sconces.push([x, sy, z]);
+                }
+            }
         }
     }
-    let key_at = {
-        let m = rooms[key_room].middle();
-        if taken.contains(&m) { [m[0] + 1, fy, m[2]] } else { m }
+    for l in links.iter().filter(|l| !l.trapped) {
+        let c = l.corridor;
+        let along_x = c.max[0] - c.min[0] > c.max[2] - c.min[2];
+        let (ra, rb) = (&rooms[l.a].inner, &rooms[l.b].inner);
+        let k = if along_x { (ra.max[0].min(rb.max[0]) + ra.min[0].max(rb.min[0])) / 2 } else { (ra.max[2].min(rb.max[2]) + ra.min[2].max(rb.min[2])) / 2 };
+        let p = if along_x { [k, sy, c.max[2]] } else { [c.max[0], sy, k] };
+        let behind = if along_x { [k, sy, c.max[2] + 1] } else { [c.max[0] + 1, sy, k] };
+        if !open(behind[0], behind[1], behind[2], &spaces) {
+            sconces.push(p);
+        }
+    }
+    // Things hanging from the ceilings: chains anywhere, stone drips near the
+    // walls where the ceiling is high. None over a doorway, a blade or a flame.
+    let ceiling = |x: i32, z: i32, spaces: &[Aabb]| {
+        let mut y = fy;
+        while open(x, y + 1, z, spaces) {
+            y += 1;
+        }
+        y
     };
+    let mut hangings = Vec::new();
+    for (r, room) in rooms.iter().enumerate() {
+        let inner = room.inner;
+        let area = (inner.max[0] - inner.min[0] + 1) * (inner.max[2] - inner.min[2] + 1);
+        let count = dice.int(area / 40, area / 22);
+        for _ in 0..count {
+            let x = dice.int(inner.min[0] + 1, inner.max[0] - 1);
+            let z = dice.int(inner.min[2] + 1, inner.max[2] - 1);
+            let busy = near_door([x, fy, z], r, &doors)
+                || solids.iter().chain(&pillars).any(|s| s.contains(x, fy, z))
+                || hazards.iter().any(|h| matches!(h.kind, Hazard::Blade | Hazard::FireJet) && (h.pos[0] - x).abs() <= 1 && (h.pos[2] - z).abs() <= 1)
+                || hangings.iter().any(|h: &Hanging| (h.top[0] - x).abs() <= 1 && (h.top[2] - z).abs() <= 1);
+            if busy {
+                continue;
+            }
+            let top = ceiling(x, z, &spaces);
+            let room_up = top - fy;
+            let by_wall = x - inner.min[0] <= 1 || inner.max[0] - x <= 1 || z - inner.min[2] <= 1 || inner.max[2] - z <= 1;
+            if by_wall && room_up >= 5 && dice.chance(0.6) {
+                // Stone drips keep four blocks of headroom under them.
+                let len = (room_up - 4).clamp(1, 2);
+                hangings.push(Hanging { kind: HangKind::Drip, top: [x, top, z], len });
+            } else if room_up >= 3 {
+                // Chains keep the lowest two blocks clear (they are never solid).
+                let len = dice.int(1, (room_up - 2).min(4));
+                hangings.push(Hanging { kind: HangKind::Chain, top: [x, top, z], len });
+            }
+        }
+    }
     let bounds = spaces.iter().chain(&pits).fold(spaces[0], |acc, s| acc.union(&s.grow(1)));
     Floor {
         plan: *plan,
@@ -938,10 +1004,6 @@ pub fn floor(book: &Delves, plan: &FloorPlan) -> Floor {
         puzzle,
         chests,
         sections,
-        key_room,
-        key_at,
-        locked,
-        cracked,
         spaces,
         pits,
         bounds,
@@ -951,12 +1013,15 @@ pub fn floor(book: &Delves, plan: &FloorPlan) -> Floor {
         exit,
         passage,
         seals,
+        stair_seal,
         boss_room: boss,
         floor_y: fy,
         campfire,
         shop,
-        torches,
+        sconces,
         pillars,
+        solids,
+        hangings,
         steps,
     }
 }
@@ -1106,11 +1171,11 @@ mod tests {
                     assert_eq!(count(RoomType::Puzzle), 1, "run {run} floor {fl}");
                     assert_eq!(count(RoomType::Rest), 1);
                     assert!(count(RoomType::Trap) >= 1);
-                    assert!(count(RoomType::Secret) <= 1);
+                    assert_eq!(count(RoomType::Secret), 0);
                     assert_eq!(f.spawns.iter().filter(|s| s.kind == SpawnKind::Boss).count(), 1);
                     assert!(f.spawns.iter().all(|s| s.room != 0), "nothing waits in the start room");
                     assert_eq!(f.room_at(f.entry), Some(0));
-                    // Every room is reached from the start, and the boss only through the locked door.
+                    // Every room is reached from the start, and the boss through one corridor.
                     let mut seen = vec![false; f.rooms.len()];
                     seen[0] = true;
                     let mut stack = vec![0];
@@ -1126,11 +1191,20 @@ mod tests {
                     assert!(seen.iter().all(|s| *s), "run {run} floor {fl}");
                     let into_boss: Vec<_> = f.links.iter().filter(|l| l.a == f.boss_room || l.b == f.boss_room).collect();
                     assert_eq!(into_boss.len(), 1);
-                    assert!(into_boss[0].locked);
-                    assert_ne!(f.key_room, f.boss_room);
-                    assert!(f.rooms[f.key_room].inner.contains(f.key_at[0], f.key_at[1], f.key_at[2]));
-                    // The ways on.
+                    assert!(count(RoomType::Fight) + count(RoomType::Ambush) >= 2, "run {run} floor {fl}: fights to be had");
+                    // Rooms that lock you in always lead on.
+                    for (r, room) in f.rooms.iter().enumerate() {
+                        if matches!(room.kind, RoomType::Fight | RoomType::Ambush) {
+                            assert!(f.links.iter().filter(|l| l.a == r || l.b == r).count() >= 2, "run {run} floor {fl}: room {r} is a dead end");
+                        }
+                    }
+                    // The ways on: the stair leads out of the boss arena.
                     assert_eq!(f.stair.is_some(), fl < 4);
+                    assert_eq!(f.stair_seal.is_some(), fl < 4);
+                    if let Some(s) = f.stair_seal {
+                        assert!(s.grow(1).intersects(&f.rooms[f.boss_room].inner));
+                    }
+                    assert!(f.sconces.len() >= f.rooms.len(), "every room is lit");
                     assert!(f.passage.is_some() == (fl == 4));
                     assert!(f.exit.grow(1).intersects(&f.rooms[f.boss_room].inner));
                     assert!(f.bounds.min[0] >= POCKET[0] - POCKET_HALF && f.bounds.max[0] <= POCKET[0] + POCKET_HALF);
@@ -1182,6 +1256,21 @@ mod tests {
             }
             for h in f.hazards.iter().filter(|h| h.kind != Hazard::Darts) {
                 assert!(f.inside([h.pos[0] as f32 + 0.5, h.pos[1] as f32, h.pos[2] as f32 + 0.5]), "{h:?}");
+            }
+            // Sconces and hangings are in open air, never in a walled-in corner,
+            // and nothing hangs low enough to walk into.
+            let solid = |p: [i32; 3]| f.solids.iter().chain(&f.pillars).any(|s| s.contains(p[0], p[1], p[2]));
+            for p in &f.sconces {
+                assert!(f.spaces.iter().any(|s| s.contains(p[0], p[1], p[2])) && !solid(*p), "{p:?}");
+            }
+            for h in &f.hangings {
+                let low = h.top[1] - h.len + 1;
+                assert!(low >= f.floor_y + if h.kind == HangKind::Drip { 4 } else { 2 }, "{h:?}");
+                assert!(!solid(h.top));
+            }
+            // Spawns never stand in a walled-in corner.
+            for s in &f.spawns {
+                assert!(!solid(s.pos), "{s:?}");
             }
         }
     }

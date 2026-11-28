@@ -336,16 +336,20 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   root-choked hall 3, collapsed mine 4), 5 the vault in the castle court (frozen vault, 4). `Dungeon` has `id`, `name`,
   `theme`, `floors`, `chain`, `look` (Gatehouse/Arch/Vault), `door` (`inside(p)`), `outside`, `guide`, `veil`, `bounds`;
   `WorldGen::{dungeons_in, dungeon(id), chain_dungeon(n), rotting_gate()}`. Spirit ward: `WorldGen::warded` covers
-  entrances, barrows, villages and the whole pocket; `interact` won't break, place or pick there, except `cracked_stone`
-  and `cracked_floor`. Themes and the chain in `assets/data/dungeons.ron` (walls, floor, pillar, growth, pools, foes,
-  `warden` = every floor's boss but the last, `boss` = the last's, hazard weights, puzzle kinds); room templates in
+  entrances, barrows, villages and the whole pocket; `interact` won't break, place or pick there (toast "Dungeons Are
+  Protected From Mining"), except `cracked_stone` and `cracked_floor`. Themes and the chain in `assets/data/dungeons.ron` (walls, floor, pillar, growth, pools, foes,
+  `warden` = every floor's boss but the last, `boss` = the last's, hazard weights, puzzle kinds; every wall/floor/pillar/
+  growth block must be solid and opaque, checked on load: no leaves or ice, which let the sky and wind in); room templates in
   `assets/data/rooms.ron` (kind Start/Fight/Trap/Puzzle/Ambush/Treasure/Secret/Rest/Shop/Boss, size, pillars, pits,
   hazards, foes, waves, elite chance, min floor, themes). `worldgen::delve` (pure): `floor(&Delves, &FloorPlan)` lays out
   one floor per run on a 28-block grid in the pocket (`POCKET`, x/z 60000, y 780): start room (`way_out` in its west wall),
-  the key room (furthest fight/ambush: drops the key), the locked door (`vault_door`) into the boss room (furthest dead end;
-  `stair` beside it unless last, `exit`, and on a story dungeon's last floor `passage`; all `seals` until the boss falls),
+  the boss room (furthest dead end, one corridor in; `stair` out of its own wall unless last, behind `stair_seal`, which the
+  boss's `floor_key` opens; `exit`, and on a story dungeon's last floor `passage`, open when the boss falls),
   a puzzle room (`Puzzle`: Plates / Levers / Timed, gate + vault + chest), rest room (campfire), trap rooms and trapped
-  corridors, treasure (chest + trap or elite), maybe a shop (`shop` spot) and a secret room behind a cracked wall; rooms
+  corridors, treasure (chest + trap or elite), maybe a shop (`shop` spot). Dead ends get rooms that never lock, so fight
+  rooms and ambushes always have a way on (no secret rooms or cracked walls any more). Room shapes: walled-in corners
+  (`solids`) and stepped vaulted ceilings; `hangings` (iron chains, `iron_chain` model blocks; stone drips near walls);
+  `sconces` (block `sconce`, drawn by `torches::sconce_model`) on room walls and in plain corridors; rooms
   sealed together in `sections` on floor 2+; `Room.reward` Coin/Boon/Heal/Elite on fight rooms. `generate_pocket` draws it
   in the theme. `world::PocketFloor` makes chunk generation use it there; pocket chunks are never saved
   (`World::forget_pocket`); no height cold or thin air, no creatures or critters there.
@@ -355,27 +359,37 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   (`delve::rules`: `Delve { runs, dungeons: id -> Remembered { cleared, done }, urns }` saved to `delve.ron`; a run starts
   on the first floor whose boss is still up; cleared dungeons start at floor 1 and their last boss and prize never return).
   `Below` holds the run, the floor and `edits` (block changes on the floor, put back whenever a pocket chunk is built
-  again: slabs, opened gates, broken cracked walls, fallen floor). Foes spawn per room and wave as you come near
+  again: slabs, opened gates, the opened stair, fallen floor). Foes spawn per room and wave as you come near
   (`kind_for`: theme foes by role, boss by `boss_for`; tags `delve::tag(room, wave, boss)`). `delve::locks`: fight rooms,
   ambushes and the boss arena drop `dungeon_slab`s in their doorways (or the whole section's) until every wave is down;
-  the shut doors glow, a foe counter shows at the top; `RoomCleared` gives the reward. Key drops in the key room once it's
-  cleared; with it the locked door opens. Boss falls: seals open, loot, waypoints (cleared marker, next story dungeon), the
+  the shut doors glow, a foe counter shows at the top; `RoomCleared` gives the reward. Boss falls: the exit and passage
+  open, it drops `floor_key` (an item, every floor but the last; `delve::open_stair` takes it at the stair's seal; gone
+  when you leave the floor, `forget_keys`), loot, waypoints (cleared marker, next story dungeon), the
   first full clear of a story dungeon drops its urn (`claim_urn`: 1 carpentry, 2 gear, 3 hearth, 4 vehicle). Ways: start
   room or `exit` back to the entrance with your loot, `stair` down, `passage` out near the next story dungeon. Falling
   below loses what you picked up or put on during the run (`lost_on_death`). Rest room campfire heals within 4.5 blocks.
   `delve::hazards`: spikes (pit spikes stay up), swinging blades, dart launchers (poison drains blood), fire jets, oil
-  that burns and spreads, barrels (cut, burnt or blasted: fuse then explosion that breaks cracked stone; a kick shoves
+  that burns and spreads, barrels (cut, burnt or blasted: fuse then explosion; a kick shoves
   them), collapsing cracked floor; they hurt foes too. `delve::puzzle`: plates + pushable stones (lean or kick), levers +
-  lamps (right click), timed gate. `delve::boons` + `assets/data/boons.ron`: reward marks in the corridors (gold coin,
-  blue boon, red heal, purple elite), boons stack until you leave (Might, Ward, Fleet, Mend, Thirst, Fortune; read by
+  lamps (right click), timed gate. `delve::boons` + `assets/data/boons.ron`: rewards for cleared fight rooms (coin, boon,
+  heal, elite's hoard; no floating marks), boons stack until you leave (Might, Ward, Fleet, Mend, Thirst, Fortune; read by
   `interact`, `survival::take_hits`, `survival::set_body`), Tallow the peddler in shop rooms (trades.ron `shop`, old coin).
   Chests on a floor roll loot.ron `dungeon_prize/treasure/puzzle/secret`. Brindlespheimer stands at the entrance nearest
-  you (`cast::keep_brindlespheimer`) and names the dungeon, floors, boss and puzzle hint (`{dungeon}`, `{floors}`, `{boss}`,
+  you (`cast::keep_brindlespheimer`), explains the rules on first talk (dialogue node `rules`, also in C03) and names the
+  dungeon, floors, boss and puzzle hint (`{dungeon}`, `{floors}`, `{boss}`,
   `{hint}`, extra flags `theme:<name>`, `cleared_here`). Prisoners: Messler in the Rotting Gate's last boss room once its
   boss is down, Liora on the Flooded Crypt's floor 2. Story beat `Dungeon(n)` = story dungeon n cleared; Orrin and the
   star urn appear on the castle tower only after the vault is cleared. Screenshots: `BLOCKGAME_GATE=1` starts facing the
   Rotting Gate, `BLOCKGAME_DELVE=n[:floor]` starts a run in story dungeon n, `BLOCKGAME_SPIRIT=cast` runs the cinematic,
   `=1` starts as a spirit.
+- Dungeon look and light: down a dungeon (`delve::in_dungeon`) `sky::update_sky` turns the sun off and holds the ambient
+  at `sky::DUNGEON_AMBIENT` with dark haze, and `atmosphere` uses the plain grade with no mist, so the hour and weather
+  don't show. Spirit-form arms are solid glowing blue (blended ones flickered). First-person look sway smooths the mouse's
+  turn rate first (`pov::smooth_turn`), so uneven mouse input doesn't shake the hands.
+- Chests: block `chest` is `model: chest` (box + lid). `chest_lid`: right click (`ReachChest` from `interact`) swaps it to
+  `chest_open` (box only) and swings a lid model up on the side away from you while your right hand pushes it
+  (`ChestOpen.grip`, used by `hands::pose_hands`) and the camera leans in; at `OPEN_AT` it sends `OpenChest`; closing the
+  inventory lets the lid fall and puts `chest` back.
 - Phased bosses: `combat::boss`. foes.ron kinds with `boss: Some((phases, attacks))` (all wardens and last bosses:
   `bog_warden`, `spore_matron`, `gloam_stalker`, `rotting_king`, `drowned_abbess`, `root_mother`, `pit_foreman`,
   `frost_regent`, scale 1.2-2.0 with their own extras): new phase at 66% and 33% (a roar, attacks come faster), 3-4 named

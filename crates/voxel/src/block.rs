@@ -114,6 +114,12 @@ pub enum Model {
     Door,
     /// The same door swung open against its hinge side.
     DoorOpen,
+    /// A plank chest: an open box with a lid on it.
+    Chest,
+    /// The chest without its lid (while the game swings the lid up).
+    ChestOpen,
+    /// An iron chain hanging down the middle of the cell.
+    Chain,
 }
 
 /// One of the four sides of a cell (north is -Z, east is +X).

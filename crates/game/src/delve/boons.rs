@@ -1,8 +1,6 @@
 //! Room rewards, boons and the coin shop.
 //!
-//! Fight rooms and ambushes promise a reward, shown before you go in by a
-//! glowing mark in each corridor leading to them (gold coin, blue boon, red
-//! heal, purple elite; walking up to one names it). Clearing the room gives it
+//! Fight rooms and ambushes hold a reward. Clearing the room gives it
 //! (`locks::RoomCleared`): a handful of old coin, a boon from `boons.ron`
 //! (they stack until you leave the dungeon: `Boons`), your wounds mended, or
 //! for an elite fight a second share of loot. A shop room has Tallow, who
@@ -31,7 +29,7 @@ impl Plugin for BoonsPlugin {
         let data: BoonData = ron::from_str(include_str!("../../../../assets/data/boons.ron")).unwrap_or_else(|e| panic!("boons.ron: {e}"));
         app.insert_resource(data)
             .init_resource::<Boons>()
-            .add_systems(crate::menu::GameUpdate, (forget, reward, markers, mend, thirst, shopkeeper).chain().after(DelveSet).after(super::locks::LocksSet));
+            .add_systems(crate::menu::GameUpdate, (forget, reward, mend, thirst, shopkeeper).chain().after(DelveSet).after(super::locks::LocksSet));
     }
 }
 
@@ -158,77 +156,6 @@ fn reward(
             _ => {}
         }
         let _ = &player;
-    }
-}
-
-/// The glowing marks in front of rewarded rooms.
-#[derive(Component)]
-struct Marker {
-    room: usize,
-    told: bool,
-}
-
-#[allow(clippy::too_many_arguments)]
-fn markers(
-    mut commands: Commands,
-    time: Res<Time>,
-    below: Res<Below>,
-    player: Res<Player>,
-    mut marks: Query<(Entity, &mut Marker, &mut Transform)>,
-    (mut meshes, mut materials): (ResMut<Assets<Mesh>>, ResMut<Assets<StandardMaterial>>),
-    mut on: Local<Option<(u32, u8)>>,
-    mut toast: MessageWriter<Toast>,
-) {
-    let here = below.run.map(|r| (r.number, r.floor));
-    if here != *on {
-        *on = here;
-        for (e, _, _) in &marks {
-            commands.entity(e).despawn();
-        }
-        let Some(floor) = below.floor.clone() else { return };
-        let mesh = meshes.add(Cuboid::new(0.32, 0.32, 0.32));
-        for (i, room) in floor.rooms.iter().enumerate() {
-            let Some(r) = room.reward else { continue };
-            let (c, glow) = match r {
-                Reward::Coin => (Color::srgb(1.0, 0.82, 0.3), LinearRgba::rgb(2.0, 1.5, 0.3)),
-                Reward::Boon => (Color::srgb(0.4, 0.7, 1.0), LinearRgba::rgb(0.4, 1.0, 2.4)),
-                Reward::Heal => (Color::srgb(1.0, 0.35, 0.35), LinearRgba::rgb(2.2, 0.4, 0.4)),
-                Reward::Elite => (Color::srgb(0.75, 0.4, 1.0), LinearRgba::rgb(1.4, 0.5, 2.4)),
-            };
-            let mat = materials.add(StandardMaterial { base_color: c, emissive: glow, unlit: true, ..default() });
-            for d in floor.ways_into(i) {
-                // Just outside the doorway, in the corridor, at head height.
-                let a = &d.at;
-                let mid = Vec3::new((a.min[0] + a.max[0] + 1) as f32 / 2.0, a.min[1] as f32 + 2.6, (a.min[2] + a.max[2] + 1) as f32 / 2.0);
-                let out = Vec3::new(d.out.0 as f32, 0.0, d.out.1 as f32);
-                commands.spawn((
-                    Marker { room: i, told: false },
-                    Mesh3d(mesh.clone()),
-                    MeshMaterial3d(mat.clone()),
-                    Transform::from_translation(mid + out * 1.2),
-                    bevy::light::NotShadowCaster,
-                ));
-            }
-        }
-        return;
-    }
-    let t = time.elapsed_secs();
-    for (e, mut m, mut tf) in &mut marks {
-        if below.cleared.contains(&m.room) {
-            commands.entity(e).despawn();
-            continue;
-        }
-        tf.rotation = Quat::from_rotation_y(t * 1.2) * Quat::from_rotation_x(0.6);
-        if !m.told && tf.translation.distance(player.pos + Vec3::Y * 1.6) < 3.0 {
-            m.told = true;
-            let what = below.floor.as_ref().and_then(|f| f.rooms.get(m.room)).and_then(|r| r.reward).map_or("", |r| match r {
-                Reward::Coin => "Through here: old coin",
-                Reward::Boon => "Through here: a boon",
-                Reward::Heal => "Through here: healing",
-                Reward::Elite => "Through here: an elite, and its hoard",
-            });
-            toast.write(Toast(what.into()));
-        }
     }
 }
 

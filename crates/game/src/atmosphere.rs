@@ -236,11 +236,12 @@ fn apply(
     let season = looks.season(&seasons.list[p.current].name).lerp(looks.season(&seasons.list[p.next].name), p.blend);
     let t = state.blend * state.blend * (3.0 - 2.0 * state.blend);
     let weather = looks.weather(&kinds.list[state.previous].name).lerp(looks.weather(&kinds.list[state.current].name), t);
-    let grade = current_grade(&looks, season, weather, look.biome, atmos.night);
-
     let Ok((tf, mut grading)) = cam.single_mut() else { return };
-    // Mist: weather, biome and morning, and none deep underground.
-    let amount = (grade.mist + looks.dawn_mist * atmos.dawn).max(0.0);
+    // Down a dungeon the season, weather, place and hour don't show.
+    let below = crate::delve::in_dungeon(tf.translation);
+    let grade = if below { current_grade(&looks, Grade::default(), Grade::default(), Grade::default(), 0.0) } else { current_grade(&looks, season, weather, look.biome, atmos.night) };
+    // Mist: weather, biome and morning, and none deep underground or down a dungeon.
+    let amount = if below { 0.0 } else { (grade.mist + looks.dawn_mist * atmos.dawn).max(0.0) };
     let underground = 1.0 - ((tf.translation.y - (MIST_BASE - 30.0)) / 22.0).clamp(0.0, 1.0);
     atmos.params.mist.x = MIST_BASE;
     atmos.params.mist.y = amount * MIST_DENSITY * (1.0 - underground);
