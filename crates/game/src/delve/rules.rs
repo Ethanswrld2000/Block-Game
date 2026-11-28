@@ -68,11 +68,9 @@ pub struct Run {
     pub chain: Option<u8>,
     pub floor: u8,
     pub floors: u8,
-    /// This floor's boss is down (its ways on are open).
+    /// This floor's boss is down (its ways out are open).
     pub boss_down: bool,
-    /// You carry this floor's key.
-    pub key: bool,
-    /// The key has been used on the locked door.
+    /// The boss's key has opened the stair down.
     pub unlocked: bool,
 }
 
@@ -110,7 +108,7 @@ impl Delve {
     pub fn begin(&mut self, dungeon: u64, chain: Option<u8>, floors: u8) -> Run {
         self.runs += 1;
         let floor = self.start_floor(dungeon, floors);
-        Run { number: self.runs, dungeon, chain, floor, floors, boss_down: false, key: false, unlocked: false }
+        Run { number: self.runs, dungeon, chain, floor, floors, boss_down: false, unlocked: false }
     }
 
     /// The floor's boss fell (or there was none: a cleared dungeon's last floor).
@@ -137,7 +135,6 @@ impl Delve {
         }
         run.floor += 1;
         run.boss_down = false;
-        run.key = false;
         run.unlocked = false;
         Stair::Down(run.floor)
     }
@@ -224,9 +221,9 @@ mod tests {
         assert_eq!((r2.number, r2.floor), (2, 1), "leaving before the boss changes nothing");
         assert!(!d.boss_down(&mut r));
         assert_eq!(d.start_floor(1, 2), 2, "the next run may start a floor down");
-        r.key = true;
+        r.unlocked = true;
         assert_eq!(d.stair(&mut r), Stair::Down(2));
-        assert!(!r.boss_down && !r.key, "a new floor, a new boss and key");
+        assert!(!r.boss_down && !r.unlocked, "a new floor, a new boss and key");
         assert!(d.boss_down(&mut r), "the last boss clears it");
         assert!(d.done(1));
         assert_eq!(d.stair(&mut r), Stair::Sealed, "no stair past the last floor");
@@ -287,7 +284,7 @@ mod tests {
         assert_eq!(l.step(0), LockStep::Open);
         assert!(locks(RoomType::Fight, true, false));
         assert!(!locks(RoomType::Fight, true, true), "cleared rooms stay open");
-        for k in [RoomType::Rest, RoomType::Treasure, RoomType::Puzzle, RoomType::Shop, RoomType::Secret] {
+        for k in [RoomType::Rest, RoomType::Treasure, RoomType::Puzzle, RoomType::Shop] {
             assert!(!locks(k, true, false), "{k:?} never locks");
         }
     }

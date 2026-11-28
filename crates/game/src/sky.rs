@@ -223,6 +223,10 @@ fn luma(c: Vec3) -> f32 {
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Ambient light down a dungeon (lux): enough to make out shapes away from the sconces.
+pub const DUNGEON_AMBIENT: f32 = 70.0;
+
+#[allow(clippy::too_many_arguments)]
 pub fn update_sky(
     clock: Res<WorldClock>,
     seasons: Res<Seasons>,
@@ -236,6 +240,7 @@ pub fn update_sky(
     mut materials: ResMut<Assets<SkyMaterial>>,
     mut atmos: ResMut<Atmos>,
     sky_stars: Res<SkyStars>,
+    eye: Query<&Transform, (With<FlyCamera>, Without<Sun>)>,
 ) {
     let season = seasons.at(&clock);
     let daylight_share = seasons.blended(season, |s| s.daylight);
@@ -329,6 +334,31 @@ pub fn update_sky(
     // Morning: from just before sunrise until the sun is well up.
     let morning = if clock.time < 0.5 { 1.0 } else { 0.0 };
     atmos.dawn = morning * smoothstep(-0.25, -0.02, sun.y) * (1.0 - smoothstep(0.12, 0.4, sun.y));
+
+    // Down a dungeon (the pocket, `worldgen::in_pocket`) the hour and the
+    // weather don't reach: no sun or moon, the same dim ambient day and night,
+    // dark haze. The sconces' block light does the lighting.
+    if let Ok(eye) = eye.single()
+        && crate::delve::in_dungeon(eye.translation)
+    {
+        if let Ok((mut light, _)) = sun_q.single_mut() {
+            light.illuminance = 0.0;
+        }
+        ambient.color = Color::linear_rgb(1.0, 0.86, 0.7);
+        ambient.brightness = DUNGEON_AMBIENT;
+        let dark = Vec3::splat(0.006);
+        clear.0 = Color::linear_rgb(dark.x, dark.y, dark.z);
+        for mut fog in &mut fog_q {
+            fog.color = Color::linear_rgb(dark.x, dark.y, dark.z);
+            fog.directional_light_color = Color::NONE;
+        }
+        atmos.params.horizon = dark.extend(visibility * 0.2);
+        atmos.params.glow = dark.extend(visibility);
+        atmos.params.sun = sun.extend(0.0);
+        atmos.params.mist.w = 0.0;
+        atmos.night = 0.0;
+        atmos.dawn = 0.0;
+    }
 
     if let Ok(handle) = dome.single()
         && let Some(mut mat) = materials.get_mut(&handle.0)

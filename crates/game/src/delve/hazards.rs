@@ -10,7 +10,7 @@
 //! - Oil slicks burn when fire reaches them (a jet, a blast, a torch in your
 //!   hand), spreading cell to cell, then burn away.
 //! - Barrels blow up when cut, burnt or caught in another blast (a short fuse
-//!   first): they hurt everything near and break cracked stone. A kick shoves
+//!   first): they hurt everything near. A kick shoves
 //!   one along the floor.
 //! - Cracked floor gives way a moment after you step on it, into the pit below.
 //! - Pits are just holes (in the floor plan).
@@ -71,7 +71,7 @@ pub struct Traps {
     darts: Vec<Dart>,
     /// Seconds of poison left.
     pub poison: f32,
-    /// Blasts this frame (where), for oil, barrels and cracked stone.
+    /// Blasts this frame (where), for oil and barrels.
     blasts: Vec<Vec3>,
 }
 
@@ -513,7 +513,7 @@ fn darts(
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn barrels(
     time: Res<Time>,
-    mut below: ResMut<Below>,
+    below: Res<Below>,
     mut traps: ResMut<Traps>,
     player: Res<Player>,
     world: Res<World>,
@@ -527,12 +527,14 @@ fn barrels(
     mut kick_before: Local<Option<f32>>,
 ) {
     let dt = time.delta_secs();
-    let floor = below.floor.clone();
+    let on_floor = below.floor.is_some();
     // A kick lands at about 0.4 of the way through.
     let kicked = kicking.t.is_some_and(|t| t >= 0.4) && kick_before.is_none_or(|b| b < 0.4);
     *kick_before = kicking.t;
     let cuts: Vec<Swung> = swung.read().copied().collect();
-    let Some(floor) = floor else { return };
+    if !on_floor {
+        return;
+    }
     let fwd = {
         let f = cam.forward().as_vec3();
         Vec3::new(f.x, 0.0, f.z).normalize_or_zero()
@@ -603,12 +605,6 @@ fn barrels(
                 f.health -= 30.0 * k;
                 f.flinch = 1.0;
                 f.ail.burn(2.0);
-            }
-        }
-        // Cracked stone near it breaks.
-        for c in floor.cracked.clone() {
-            if cell_mid(c).distance(*b) < BLAST {
-                below.edit(c, BlockId::AIR);
             }
         }
     }

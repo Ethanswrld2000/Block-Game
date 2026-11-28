@@ -643,6 +643,20 @@ def wood_slats(s):
 TILES += [("wood_slats", wood_slats)]
 
 
+def iron_chain(s):
+    # Dark wrought iron, oval links (a chain hanging in a dungeon; also the sconce's iron).
+    img = noisy(s, [(46, 46, 50), (70, 70, 76)], (8, 2))
+    ys, xs = np.mgrid[0:T, 0:T]
+    for cy in range(4, T, 8):
+        ring = ((xs - 15.5) / 6.0) ** 2 + ((ys - cy) / 4.5) ** 2
+        img[(ring < 1.0) & (ring > 0.45), :3] = (104, 104, 112)
+        img[(ring < 1.0) & (ring > 0.45) & (xs > 16), :3] = (64, 64, 70)
+    return img
+
+
+TILES += [("iron_chain", iron_chain)]
+
+
 def main():
     root = os.path.join(os.path.dirname(__file__), "..", "assets", "textures")
     os.makedirs(root, exist_ok=True)

@@ -51,7 +51,8 @@
     // A ring of stones round crossed sticks: a big fire that warms you far more than a torch (drawn by `torches`).
     (name: "campfire", top: "planks", solid: false, opaque: false, hardness: 0.5, material: "wood", shape: torch, light: 15),
     // A storage chest: right click opens it (contents are kept in saves/<world>/chests.ron).
-    (name: "chest", top: "log_top", bottom: "planks", side: "planks", hardness: 3.0, material: "wood"),
+    // A plank chest with a lid (`chunk_mesh::model_boxes`); opening it lifts the lid (`chest_lid`), when it is `chest_open` for a moment.
+    (name: "chest", top: "log_top", bottom: "planks", side: "planks", opaque: false, hardness: 3.0, material: "wood", shape: model, model: chest),
     // Ground plants: crossed quads that sway in the wind (see `plants` in biomes.ron).
     (name: "tall_grass", top: "tall_grass", solid: false, opaque: false, foliage: true, hardness: 0.35, material: "plant", shape: plant, slows: 0.85),
     (name: "reeds", top: "reed", solid: false, opaque: false, hardness: 0.6, material: "plant", shape: plant, slows: 0.75),
@@ -160,4 +161,10 @@
     // A slick of lamp oil on the floor: fire spreads over it; a stone plate that a weight presses down.
     (name: "oil", top: "oil", solid: false, opaque: false, hardness: -1.0, shape: layer, level: 1),
     (name: "pressure_plate", top: "pressure_plate", solid: false, opaque: false, hardness: -1.0, shape: layer, level: 1),
+    // An iron sconce on a dungeon wall holding a burning torch (drawn by `torches`).
+    (name: "sconce", top: "iron_chain", solid: false, opaque: false, hardness: -1.0, material: "stone", shape: torch, light: 14),
+    // A chain hanging from a dungeon ceiling.
+    (name: "iron_chain", top: "iron_chain", solid: false, opaque: false, hardness: -1.0, material: "stone", shape: model, model: chain),
+    // A chest whose lid is up (only while `chest_lid` swings it; drawn without the lid).
+    (name: "chest_open", top: "log_top", bottom: "planks", side: "planks", opaque: false, hardness: 3.0, material: "wood", shape: model, model: chest_open),
 ]

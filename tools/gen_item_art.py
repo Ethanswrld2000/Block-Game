@@ -1062,6 +1062,19 @@ def warden_sigil(c):
         c.dot(x, y, hexc("c8a860"))
 
 
+
+def floor_key(c):
+    """A dungeon boss's key: an old iron key, ring bow at the top left, bit at the bottom right."""
+    iron, lit, dark = hexc("6e6a64"), hexc("a8a298"), hexc("3a3734")
+    c.ellipse(6, 6, 4.5, 4.5, iron, kind="metal")
+    c.ellipse(6, 6, 2, 2, dark)
+    c.line(8, 8, 16, 16, 2, iron, kind="metal")
+    c.rect(13, 15, 14, 18, iron)
+    c.rect(16, 12, 18, 13, iron)
+    c.dot(4, 4, lit)
+    c.dot(10, 10, lit)
+    c.dot(12, 12, lit)
+
 def urn_sprite(c, body, band, mark):
     """A carried urn, 40 x 40: foot, round belly with a band of glowing
     marks, gold rims on the lip and foot."""
@@ -1266,7 +1279,7 @@ DRAW = {f.__name__: f for f in [
     tool_urn, hearth_urn, star_urn, golem_urn, portable_bedroll, portable_tent, airship,
     carpentry_urn, gear_urn, vehicle_urn, iron_dagger, rapier, makeshift_pistol, rifle, iron_helm, iron_mail,
     mold_bloom, deepstone_shard, warden_sigil, linen_robe, sun_hat, fur_boots, reed_breather,
-    barley, mire_tuber, iron_shot,
+    barley, mire_tuber, iron_shot, floor_key,
     iron_hammer, steel_hammer, wooden_shield, hide_shield, iron_shield,
 ]}
 

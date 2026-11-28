@@ -3,6 +3,7 @@
 use voxel::chunk::CHUNK_VOLUME;
 use voxel::{BlockId, Chunk, ChunkPos, CHUNK_SIZE_I32};
 
+use super::floor::HangKind;
 use super::{Floor, Hazard};
 use crate::dungeons::Aabb;
 use crate::trees::Canvas;
@@ -54,6 +55,12 @@ impl WorldGen {
         }
         for s in &f.pits {
             fill(&mut c, &Aabb { min: [s.min[0], s.min[1] - 1, s.min[2]], max: [s.max[0], s.min[1] - 1, s.max[2]] }, theme.floor);
+        }
+        // Walled-in corners.
+        for s in &f.solids {
+            if s.intersects(&chunk) {
+                fill(&mut c, s, theme.wall);
+            }
         }
         // Growth: the theme's moss, mud, roots or frost creeps over walls, floors and ceilings.
         let seed = self.seed ^ (f.plan.run as u64) << 8 ^ f.plan.floor as u64 ^ f.plan.dungeon.rotate_left(5);
@@ -119,24 +126,33 @@ impl WorldGen {
                 c.put(q[0], q[1], q[2], parts.plate);
             }
         }
-        // Cracked walls, the locked door, and the seals the game opens.
-        for p in &f.cracked {
-            c.put(p[0], p[1], p[2], parts.cracked_stone);
+        // Things hanging from the ceilings.
+        for h in &f.hangings {
+            let block = match h.kind {
+                HangKind::Chain => parts.chain,
+                HangKind::Drip => theme.wall,
+            };
+            for k in 0..h.len {
+                let y = h.top[1] - k;
+                if c.is_air(h.top[0], y, h.top[2]) != Some(false) {
+                    c.put(h.top[0], y, h.top[2], block);
+                }
+            }
         }
-        fill(&mut c, &f.locked, parts.vault_door);
+        // The seals the game opens.
         for s in &f.seals {
             fill(&mut c, s, parts.slab);
         }
-        // Chests, the campfire, torches.
+        // Chests, the campfire, the wall sconces.
         for ch in &f.chests {
             c.put(ch.pos[0], ch.pos[1], ch.pos[2], parts.chest);
         }
         if let Some(p) = f.campfire {
             c.put(p[0], p[1], p[2], parts.campfire);
         }
-        for t in &f.torches {
+        for t in &f.sconces {
             if c.is_air(t[0], t[1], t[2]) == Some(true) || c.is_air(t[0], t[1], t[2]).is_none() {
-                c.put(t[0], t[1], t[2], parts.torch);
+                c.put(t[0], t[1], t[2], parts.sconce);
             }
         }
         // The start room's way back up: a cobbled arch.

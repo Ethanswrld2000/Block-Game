@@ -2,7 +2,8 @@
 //! particles (flame licks, embers, a wisp of smoke) for every torch block in
 //! the loaded world. Campfires (block `campfire`, also `shape: torch`) are
 //! drawn here too: a ring of stones, crossed sticks, a bigger flame; they warm
-//! you far more (see `survival`).
+//! you far more (see `survival`). Sconces (block `sconce`, dungeon walls) are
+//! an iron bracket on the wall beside them holding a torch.
 //!
 //! Placed fires light the terrain through block light (`light` in blocks.ron,
 //! `voxel::light`), not point lights: it can't pass through walls and has no
@@ -74,6 +75,8 @@ pub struct TorchAssets {
     pub fire: [Handle<StandardMaterial>; 3],
     pub stone: Handle<Mesh>,
     pub stone_mat: Handle<StandardMaterial>,
+    /// Wrought iron (sconce brackets).
+    pub iron: Handle<StandardMaterial>,
     pub log: Handle<Mesh>,
     /// Particles: one quad, flame colours by age, embers, smoke.
     pub quad: Handle<Mesh>,
@@ -157,6 +160,7 @@ fn torch_assets(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut ma
         flame: meshes.add(Cuboid::new(1.0, 1.0, 1.0)),
         stone: meshes.add(Cuboid::new(0.2, 0.14, 0.2)),
         stone_mat: materials.add(StandardMaterial { base_color: Color::srgb(0.45, 0.44, 0.42), perceptual_roughness: 1.0, ..default() }),
+        iron: materials.add(StandardMaterial { base_color: Color::srgb(0.2, 0.2, 0.22), perceptual_roughness: 0.6, metallic: 0.6, ..default() }),
         log: meshes.add(Cuboid::new(0.1, 0.1, 0.7)),
         wood: materials.add(StandardMaterial { base_color: Color::srgb(0.42, 0.28, 0.15), perceptual_roughness: 1.0, ..default() }),
         torch_stick: materials.add(StandardMaterial {
@@ -229,6 +233,19 @@ pub fn campfire_model(parent: &mut ChildSpawnerCommands, a: &TorchAssets, seed: 
     flame_layers(parent, a, Vec3::new(0.05, 0.5, -0.03), 0.18, seed + 7.0);
 }
 
+/// A wall sconce, as children of `parent`: its frame has the wall at -Z (half
+/// a block back) and +Z pointing out into the room.
+pub fn sconce_model(parent: &mut ChildSpawnerCommands, a: &TorchAssets, seed: f32) {
+    let iron = |size: Vec3, at: Vec3| (Mesh3d(a.flame.clone()), MeshMaterial3d(a.iron.clone()), Transform::from_translation(at).with_scale(size), NotShadowCaster);
+    // A plate on the wall, an arm out from it, a cup round the torch.
+    parent.spawn(iron(Vec3::new(0.2, 0.34, 0.04), Vec3::new(0.0, 0.42, -0.48)));
+    parent.spawn(iron(Vec3::new(0.05, 0.05, 0.3), Vec3::new(0.0, 0.36, -0.33)));
+    parent.spawn(iron(Vec3::new(0.16, 0.06, 0.16), Vec3::new(0.0, 0.42, -0.18)));
+    let tilt = Quat::from_rotation_x(0.22);
+    parent.spawn((Mesh3d(a.stick.clone()), MeshMaterial3d(a.torch_stick.clone()), Transform::from_xyz(0.0, 0.55, -0.2).with_rotation(tilt).with_scale(Vec3::splat(0.75)), NotShadowCaster));
+    flame_layers(parent, a, Vec3::new(0.0, 0.84, -0.14), 0.16, seed);
+}
+
 fn sync_torches(
     mut commands: Commands,
     mut world: ResMut<World>,
@@ -255,6 +272,18 @@ fn sync_torches(
                     continue;
                 }
                 let solid = |q: BlockPos| world.block(q).is_some_and(|b| blocks.registry.get(b).solid);
+                if blocks.registry.get(block).name == "sconce" {
+                    // Against the first wall beside it, facing out.
+                    let (dx, dz) = [(1, 0), (-1, 0), (0, 1), (0, -1)].into_iter().find(|&(dx, dz)| solid(BlockPos::new(p.x + dx, p.y, p.z + dz))).unwrap_or((0, -1));
+                    let out = Vec3::new(-dx as f32, 0.0, -dz as f32);
+                    let tf = Transform::from_xyz(p.x as f32 + 0.5, p.y as f32, p.z as f32 + 0.5).with_rotation(Quat::from_rotation_y(out.x.atan2(out.z)));
+                    let e = commands
+                        .spawn((tf, Visibility::default(), FireSource { big: false, tip: Vec3::new(0.0, 0.88, -0.14), due: 0.0 }))
+                        .with_children(|c| sconce_model(c, &assets, seed))
+                        .id();
+                    torches.placed.insert(p, (e, Fire::Torch));
+                    continue;
+                }
                 // Stand on the block below; otherwise lean out from a wall.
                 let base = Vec3::new(p.x as f32 + 0.5, p.y as f32, p.z as f32 + 0.5);
                 let mut tf = Transform::from_translation(base);

@@ -346,7 +346,48 @@ pub fn model_boxes(m: voxel::Model, walls: Walls) -> Vec<([f32; 3], [f32; 3])> {
         // Swung open on the west (or north) edge, standing along the other axis.
         Model::DoorOpen if across_x => vec![([0.0, 0.0, 0.0], [t, 1.0, 1.0])],
         Model::DoorOpen => vec![([0.0, 0.0, 0.0], [1.0, 1.0, t])],
+        Model::ChestOpen => chest_body(),
+        Model::Chest => {
+            let mut v = chest_body();
+            v.push(CHEST_LID);
+            v
+        }
+        // Links turned alternately, a little apart.
+        Model::Chain => (0..4)
+            .map(|k| {
+                let y = k as f32 * 0.25;
+                if k % 2 == 0 { ([0.47, y, 0.42], [0.53, y + 0.25, 0.58]) } else { ([0.42, y, 0.47], [0.58, y + 0.25, 0.53]) }
+            })
+            .collect(),
     }
+}
+
+/// The chest's lid (`lo`, `hi` in the cell): `chest_lid` swings a copy of it.
+pub const CHEST_LID: ([f32; 3], [f32; 3]) = ([0.06, 0.62, 0.06], [0.94, 0.8, 0.94]);
+
+/// The chest's box: a floor and four walls, open on top.
+fn chest_body() -> Vec<([f32; 3], [f32; 3])> {
+    let (lo, hi, w, top) = (0.08, 0.92, 0.08, 0.62);
+    vec![
+        ([lo, 0.0, lo], [hi, 0.1, hi]),
+        ([lo, 0.0, lo], [hi, top, lo + w]),
+        ([lo, 0.0, hi - w], [hi, top, hi]),
+        ([lo, 0.0, lo + w], [lo + w, top, hi - w]),
+        ([hi - w, 0.0, lo + w], [hi, top, hi - w]),
+    ]
+}
+
+/// A few boxes (`lo`, `hi` from 0 to 1, around a cell whose low corner is the
+/// origin) as one mesh for the voxel material, textured with `tile` and lit
+/// by `light` (sky, torch levels 0..=15).
+pub fn boxes_mesh(boxes: &[([f32; 3], [f32; 3])], tile: u32, light: (u8, u8)) -> Option<Mesh> {
+    let mut b = Buffers::default();
+    for (lo, hi) in boxes {
+        push_box(&mut b, [0.0; 3], *lo, *hi, tile as f32, 0.0);
+    }
+    let lit = light_color([light.0 * 4, light.1 * 4]);
+    b.light.resize(b.pos.len(), lit);
+    b.into_mesh()
 }
 
 /// A snow layer or puddle: its top at `level` eighths (water a little lower,
@@ -509,7 +550,7 @@ mod tests {
         // Open, it turns the other way.
         let (lo, hi) = model_boxes(voxel::Model::DoorOpen, ew)[0];
         assert!(hi[2] - lo[2] > 0.9 && hi[0] - lo[0] < 0.2);
-        for m in [voxel::Model::Chair, voxel::Model::Table, voxel::Model::Door, voxel::Model::DoorOpen] {
+        for m in [voxel::Model::Chair, voxel::Model::Table, voxel::Model::Door, voxel::Model::DoorOpen, voxel::Model::Chest, voxel::Model::ChestOpen, voxel::Model::Chain] {
             for (lo, hi) in model_boxes(m, ew) {
                 assert!((0..3).all(|k| 0.0 <= lo[k] && lo[k] < hi[k] && hi[k] <= 1.0), "{m:?}");
             }

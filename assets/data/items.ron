@@ -192,6 +192,8 @@
         (name: "mold_bloom", title: "Mold Bloom", kind: Material, mass: 0.05, stack: 32),
         (name: "deepstone_shard", title: "Deepstone Shard", kind: Material, mass: 0.3, stack: 32),
         (name: "warden_sigil", title: "Warden's Sigil", kind: Material, mass: 0.1, stack: 8),
+        // Dropped by a dungeon floor's boss; opens the stair down in its arena (game::delve). Gone when you leave the floor.
+        (name: "floor_key", title: "Boss Key", kind: Material, mass: 0.1, stack: 1),
         // A weapon.
         // Hammered at the iron anvil (benches.ron); steel and spirit ones once it's upgraded.
         (

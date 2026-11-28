@@ -558,7 +558,7 @@ fn use_hands(
         MessageWriter<Mined>,
         MessageWriter<Blow>,
         MessageWriter<crate::chop::Chop>,
-        MessageWriter<OpenChest>,
+        MessageWriter<crate::chest_lid::ReachChest>,
         MessageWriter<Placed>,
         MessageWriter<Strike>,
         MessageWriter<crate::survival::Toast>,
@@ -653,21 +653,22 @@ fn use_hands(
     // Named places (dungeons, barrows, villages) are under a spirit ward:
     // nothing in them can be broken or built.
     let warded = |p: BlockPos| generator.as_ref().is_some_and(|g| g.0.warded(p.x, p.y, p.z));
-    let ward_note = |toast: &mut MessageWriter<crate::survival::Toast>| toast.write(crate::survival::Toast("A spirit ward holds this place".into()));
+    let ward_note = |toast: &mut MessageWriter<crate::survival::Toast>| toast.write(crate::survival::Toast("Dungeons Are Protected From Mining".into()));
 
     // A station nearer than the block you aim at takes right clicks (`station`).
     // So does an airship (`airship` boards it).
     let at_station = station.0.is_some_and(|(_, d)| block_dist.is_none_or(|b| d < b)) || ship.0.is_some_and(|(_, d)| block_dist.is_none_or(|b| d < b));
 
-    // Right click on a chest opens it (whatever you hold).
+    // Right click on a chest: your hand pushes the lid up and it opens (`chest_lid`), whatever you hold.
     let chest = blocks.registry.id("chest");
+    let lidless = blocks.registry.id("chest_open");
     if mouse.just_pressed(MouseButton::Right)
         && !at_station
         && let Some(hit) = target.hit
         && chest.is_some()
-        && world.block(hit.block) == chest
+        && (world.block(hit.block) == chest || world.block(hit.block) == lidless)
     {
-        open_chest.write(OpenChest(hit.block));
+        open_chest.write(crate::chest_lid::ReachChest(hit.block));
         return;
     }
 

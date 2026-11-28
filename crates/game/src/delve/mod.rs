@@ -8,16 +8,15 @@
 //!
 //! On a floor: foes appear room by room as you come near (`combat::SpawnFoe`,
 //! tagged with their room and wave). Fight rooms, ambushes and the boss arena
-//! lock you in (`locks`); the room furthest from the start drops the floor's
-//! key when it's cleared, and the key opens the locked door to the boss. The
-//! boss's fall opens the stair down, the way out (back to the entrance with
+//! lock you in (`locks`) and open again once they're cleared, always with a
+//! way on. The boss's fall opens the way out (back to the entrance with
 //! everything you found) and, on a story dungeon's last floor, the passage
-//! out near the next one. Traps are in `hazards`, the puzzle room in `puzzle`,
+//! out near the next one; on every other floor the boss drops the floor's key
+//! (`floor_key`, a real item), which opens the stair down in its arena. Traps are in `hazards`, the puzzle room in `puzzle`,
 //! rewards and boons in `boons`. The start room's west doorway always leads
 //! back up. Falling below costs what you picked up during the run.
 //!
-//! Block changes on a floor (shut doors, opened gates, broken cracked walls,
-//! fallen floor) are kept in `Below::edits` and put back whenever a chunk
+//! Block changes on a floor (shut doors, opened gates, fallen floor) are kept in `Below::edits` and put back whenever a chunk
 //! there is built again (`apply_edits`).
 //!
 //! Screenshots and testing: `BLOCKGAME_GATE=1` starts in front of the Rotting
@@ -63,7 +62,7 @@ impl Plugin for DelvePlugin {
             .add_systems(crate::menu::GamePostStartup, (load, start_here).chain().after(crate::world::setup_generator))
             .add_systems(
                 crate::menu::GameUpdate,
-                (enter, walk_floor, take_key, open_locked, boss_falls, ways, fell_below, rest, apply_edits, brindle_talk)
+                (enter, walk_floor, boss_falls, open_stair, ways, fell_below, rest, apply_edits, forget_keys, brindle_talk)
                     .chain()
                     .in_set(DelveSet)
                     .after(crate::player::PlayerSet)
@@ -115,8 +114,6 @@ pub struct Below {
     pub cleared: HashSet<usize>,
     /// Blocks changed on this floor (kept when a chunk there is built again).
     pub edits: HashMap<BlockPos, BlockId>,
-    /// The key lies on the floor here, waiting to be picked up.
-    key_waiting: Option<Vec3>,
     brought: Brought,
     /// Seconds before a door takes you again (after coming back up).
     cooldown: f32,
@@ -259,7 +256,6 @@ impl Travel<'_, '_> {
         below.spawned.clear();
         below.cleared.clear();
         below.edits.clear();
-        below.key_waiting = None;
         // A cleared dungeon's last floor has no boss: its ways out stand open.
         if plan.done && plan.last() {
             let mut r = run;
@@ -286,7 +282,6 @@ impl Travel<'_, '_> {
         below.spawned.clear();
         below.cleared.clear();
         below.edits.clear();
-        below.key_waiting = None;
         below.cooldown = 3.0;
         self.pocket.0 = None;
         self.despawn_foes();
@@ -397,7 +392,7 @@ fn walk_floor(mut below: ResMut<Below>, generator: Res<Generator>, book: Res<Foe
     }
     let Some(room) = floor.room_at(player.pos.to_array()) else { return };
     let mut rooms = vec![room];
-    for l in floor.links.iter().filter(|l| !l.secret) {
+    for l in &floor.links {
         if l.a == room {
             rooms.push(l.b);
         } else if l.b == room {
@@ -412,98 +407,62 @@ fn walk_floor(mut below: ResMut<Below>, generator: Res<Generator>, book: Res<Foe
     }
 }
 
-/// The key: it drops where the key room was, once that room is cleared.
-#[derive(Component)]
-struct KeyItem;
-
-#[allow(clippy::too_many_arguments)]
-fn take_key(
-    mut commands: Commands,
-    time: Res<Time>,
-    mut below: ResMut<Below>,
-    player: Res<Player>,
-    keys: Query<(Entity, &mut Transform), With<KeyItem>>,
-    (mut meshes, mut materials): (ResMut<Assets<Mesh>>, ResMut<Assets<StandardMaterial>>),
-    mut sound: MessageWriter<PlaySound>,
-    mut toast: MessageWriter<Toast>,
-) {
-    let (Some(floor), Some(run)) = (below.floor.clone(), below.run) else {
-        for (e, _) in &keys {
-            commands.entity(e).despawn();
-        }
-        return;
-    };
-    // The key room cleared (or never held a foe): the key appears.
-    let has_foes = floor.spawns.iter().any(|s| s.room == floor.key_room);
-    if !run.key && !run.unlocked && below.key_waiting.is_none() && keys.is_empty() && (below.cleared.contains(&floor.key_room) || (!has_foes && floor.room_at(player.pos.to_array()) == Some(floor.key_room))) {
-        let at = Vec3::new(floor.key_at[0] as f32 + 0.5, floor.key_at[1] as f32 + 0.9, floor.key_at[2] as f32 + 0.5);
-        below.key_waiting = Some(at);
-        let gold = materials.add(StandardMaterial { base_color: Color::srgb(0.95, 0.75, 0.25), emissive: LinearRgba::rgb(1.6, 1.1, 0.3), metallic: 0.8, ..default() });
-        commands
-            .spawn((KeyItem, Transform::from_translation(at), Visibility::default()))
-            .with_children(|c| {
-                c.spawn((Mesh3d(meshes.add(Torus::new(0.09, 0.16))), MeshMaterial3d(gold.clone()), Transform::from_xyz(0.0, 0.22, 0.0).with_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2))));
-                c.spawn((Mesh3d(meshes.add(Cuboid::new(0.07, 0.42, 0.07))), MeshMaterial3d(gold.clone()), Transform::from_xyz(0.0, -0.05, 0.0)));
-                c.spawn((Mesh3d(meshes.add(Cuboid::new(0.16, 0.06, 0.06))), MeshMaterial3d(gold), Transform::from_xyz(0.08, -0.2, 0.0)));
-                c.spawn((PointLight { color: Color::srgb(1.0, 0.8, 0.4), intensity: 25_000.0, range: 5.0, shadow_maps_enabled: false, ..default() }, Transform::default()));
-            });
-        sound.write(PlaySound::new("craft_pop").at(at).speed(1.2));
-        toast.write(Toast("A key falls to the floor".into()));
-    }
-    let t = time.elapsed_secs();
-    for (e, mut tf) in keys {
-        let Some(at) = below.key_waiting else {
-            commands.entity(e).despawn();
-            continue;
-        };
-        tf.translation = at + Vec3::Y * (t * 2.0).sin() * 0.12;
-        tf.rotation = Quat::from_rotation_y(t * 1.5);
-        if (player.pos + Vec3::Y).distance(at) < 1.6 {
-            below.key_waiting = None;
-            if let Some(r) = below.run.as_mut() {
-                r.key = true;
-            }
-            commands.entity(e).despawn();
-            sound.write(PlaySound::new("ui_pick").gain(1.0));
-            toast.write(Toast("You take the floor's key. It opens the door to the boss".into()));
-        }
-    }
+/// Is this point down a dungeon (in the pocket where floors are built)?
+pub fn in_dungeon(p: Vec3) -> bool {
+    p.y > worldgen::SKY_MAX as f32 && worldgen::in_pocket(p.x as i32, p.z as i32)
 }
 
-/// Walk up to the locked door with the key and it opens.
-fn open_locked(
+/// The boss's key (items.ron).
+pub const KEY: &str = "floor_key";
+
+/// Walk up to the stair's sealed mouth with the boss's key and it opens.
+fn open_stair(
     mut below: ResMut<Below>,
-    blocks: Res<crate::blocks::Blocks>,
     player: Res<Player>,
+    (mut inv, items): (ResMut<Inventory>, Res<Items>),
     mut sound: MessageWriter<PlaySound>,
     mut toast: MessageWriter<Toast>,
     mut bursts: MessageWriter<Burst>,
 ) {
     let (Some(floor), Some(run)) = (below.floor.clone(), below.run) else { return };
+    let Some(seal) = floor.stair_seal else { return };
     if run.unlocked {
         return;
     }
-    let l = floor.locked;
-    let mid = Vec3::new((l.min[0] + l.max[0]) as f32 / 2.0 + 0.5, l.min[1] as f32 + 1.0, (l.min[2] + l.max[2]) as f32 / 2.0 + 0.5);
+    let mid = Vec3::new((seal.min[0] + seal.max[0]) as f32 / 2.0 + 0.5, seal.min[1] as f32 + 1.0, (seal.min[2] + seal.max[2]) as f32 / 2.0 + 0.5);
     if player.pos.distance(mid) > 3.2 {
         return;
     }
-    if !run.key {
+    let Some(key) = items.id(KEY) else { return };
+    if !inv.take(key, 1) {
         if below.note <= 0.0 {
             below.note = 4.0;
-            toast.write(Toast("Locked. The key is somewhere on this floor".into()));
+            toast.write(Toast(if run.boss_down { "Sealed. The boss's key opens it".into() } else { "Sealed. The boss of this floor carries its key".to_string() }));
         }
         return;
     }
-    below.edit_box(&l, BlockId::AIR);
+    below.edit_box(&seal, BlockId::AIR);
     if let Some(r) = below.run.as_mut() {
-        r.key = false;
         r.unlocked = true;
     }
-    let _ = &blocks;
     sound.write(PlaySound::new("clash").at(mid).speed(0.5));
     bursts.write(Burst::new(mid, BurstKind::Chips, 10));
-    toast.write(Toast("The key turns. The door swings open".into()));
+    toast.write(Toast("The key turns. The stair down opens".into()));
+}
+
+/// A floor's key is only good on its floor: gone when you leave it.
+fn forget_keys(below: Res<Below>, (mut inv, items): (ResMut<Inventory>, Res<Items>), mut on: Local<Option<(u32, u8)>>) {
+    let here = below.run.map(|r| (r.number, r.floor));
+    if here == *on {
+        return;
+    }
+    *on = here;
+    if let Some(key) = items.id(KEY) {
+        let n = inv.count(key);
+        if n > 0 {
+            inv.take(key, n);
+        }
+    }
 }
 
 /// The boss falls: its ways on open, the floor is remembered as cleared, and
@@ -539,6 +498,12 @@ fn boss_falls(
         let first = below.delve.boss_down(&mut run);
         below.run = Some(run);
         open_ways(&mut below, &floor);
+        // Every floor but the last: the boss drops the key to the stair down.
+        if floor.stair_seal.is_some()
+            && let Some(key) = items.id(KEY)
+        {
+            spill.write(Spill { stack: Stack::new(key, 1), at: s.at });
+        }
         gain.write(crate::progress::GainXp { xp: 20.0 * run.floor as f32, why: "boss".into() });
         if first {
             toast.write(Toast(format!("{} is cleared", d.name)));
@@ -558,16 +523,16 @@ fn boss_falls(
                 }
             }
         } else {
-            toast.write(Toast(if run.floor < run.floors { "The boss falls. The stair down and the way out are open".into() } else { "The boss falls. The way out is open".to_string() }));
+            toast.write(Toast(if run.floor < run.floors { "The boss falls and drops its key. It opens the stair down".into() } else { "The boss falls. The way out is open".to_string() }));
         }
         save(&below.delve, &dir);
     }
 }
 
-/// Unseal the boss room's ways on (the stair's mouth, the exit, the passage).
+/// Unseal the boss room's ways out (the exit, the passage; the stair waits for the key).
 fn open_ways(below: &mut Below, floor: &Floor) {
     let puzzle_gate = floor.puzzle.as_ref().map(|p| p.gate);
-    for s in floor.seals.iter().filter(|s| Some(**s) != puzzle_gate) {
+    for s in floor.seals.iter().filter(|s| Some(**s) != puzzle_gate && Some(**s) != floor.stair_seal) {
         below.edit_box(s, BlockId::AIR);
     }
 }
