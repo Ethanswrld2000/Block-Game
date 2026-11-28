@@ -427,7 +427,7 @@ fn begin(
             npcs: seen,
             places: t.places.0.clone(),
             cleared: Some(&t.encounters.cleared),
-            boss: t.below.as_ref().map_or(0, |b| b.delve.cleared),
+            boss: t.below.as_ref().map_or(0, |b| b.chain_cleared()),
             made: Some(&story.made),
             placed: Some(&story.placed),
             hour: t.clock.hour(),

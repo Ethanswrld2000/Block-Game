@@ -21,8 +21,8 @@ pub enum Cond {
     Urn(String),
     /// This urn step is done (`carpentry_bench`, ...).
     Step(String),
-    /// The Rotting Gate's boss at this depth has been beaten.
-    Depth(u8),
+    /// Story dungeon n (1 the Rotting Gate .. 5 the castle vault) is cleared.
+    Dungeon(u8),
     /// You have talked to this NPC (dialogue key).
     Met(String),
     /// This NPC has settled by its urn.
@@ -110,7 +110,7 @@ impl StoryData {
 /// Everything the beats look at.
 #[derive(Default)]
 pub struct Facts<'a> {
-    /// Where you are, NPCs in sight, places, made/placed, hour, flags, deepest boss beaten.
+    /// Where you are, NPCs in sight, places, made/placed, hour, flags, furthest story dungeon cleared.
     pub base: script::Facts<'a>,
     pub day: u32,
     pub urns: BTreeSet<String>,
@@ -140,7 +140,7 @@ pub fn holds(c: &Cond, f: &Facts) -> bool {
         Cond::AtCamp(r) => b.places.get("camp").is_some_and(|p| p.distance(b.player) <= *r),
         Cond::Urn(n) => f.urns.contains(n),
         Cond::Step(n) => f.steps.contains(n),
-        Cond::Depth(d) => b.boss >= *d,
+        Cond::Dungeon(d) => b.boss >= *d,
         Cond::Met(k) => has(f.met, k),
         Cond::Recruited(k) => f.recruited.contains(k),
         Cond::Flag(x) => has(b.flags, x),
@@ -210,7 +210,7 @@ mod tests {
         assert!(holds(&Cond::AtCamp(5.0), &f) && !holds(&Cond::AtCamp(2.0), &f));
         assert!(holds(&Cond::Urn("carpentry".into()), &f) && !holds(&Cond::Urn("gear".into()), &f));
         assert!(holds(&Cond::Step("carpentry_bench".into()), &f));
-        assert!(holds(&Cond::Depth(1), &f) && !holds(&Cond::Depth(3), &f));
+        assert!(holds(&Cond::Dungeon(1), &f) && !holds(&Cond::Dungeon(3), &f));
         assert!(holds(&Cond::Met("bram".into()), &f) && !holds(&Cond::Met("gilm".into()), &f));
         assert!(holds(&Cond::Recruited("orrin".into()), &f));
         assert!(holds(&Cond::Flag("fed_messler".into()), &f));

@@ -171,7 +171,7 @@ impl WorldGen {
 
     pub(crate) fn search_sporrow(&self) -> Option<(Village, Forge)> {
         let g = self.rotting_gate()?;
-        let [gx, _, gz] = g.pos;
+        let [gx, _, gz] = g.gate;
         for ring in 0..6 {
             let r = 60.0 + ring as f32 * 10.0;
             for s in 0..24 {
@@ -223,7 +223,7 @@ impl WorldGen {
             return None;
         }
         if let Some(g) = self.rotting_gate() {
-            let (dx, dz) = (x - g.pos[0], z - g.pos[2]);
+            let (dx, dz) = (x - g.gate[0], z - g.gate[2]);
             if dx * dx + dz * dz < (SPORROW_RADIUS + 20).pow(2) {
                 return None;
             }
@@ -567,7 +567,7 @@ mod tests {
         let wg = crate::tests::wg();
         let g = wg.rotting_gate().expect("a gate");
         let v = wg.sporrow().expect("Sporrow");
-        let d = (((v.center[0] - g.pos[0]).pow(2) + (v.center[2] - g.pos[2]).pow(2)) as f32).sqrt();
+        let d = (((v.center[0] - g.gate[0]).pow(2) + (v.center[2] - g.gate[2]).pow(2)) as f32).sqrt();
         assert!((55.0..125.0).contains(&d), "Sporrow is {d} blocks from the gate");
         assert!(v.huts.len() >= 4);
         // Listed with the villages, and warded like them.

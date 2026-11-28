@@ -3,11 +3,13 @@
 //! in inventory cells, a stack size and a weight.
 
 use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use voxel::{BlockDef, BlockId, BlockRegistry};
 
+use crate::quality::{Qualities, Quality, Tuning};
 use crate::survival::health::Layer;
 use crate::swing::Swing;
 
@@ -41,6 +43,58 @@ struct ItemSpec {
     /// A gun: left click fires it.
     #[serde(default)]
     gun: Option<GunSpec>,
+    /// A weapon's moves (light combo, heavy, reach, arc, special).
+    #[serde(default)]
+    moves: Option<Moves>,
+    /// A shield: held in the left hand, raised with right click.
+    #[serde(default)]
+    shield: Option<Shield>,
+}
+
+/// How a weapon fights (`moves:` in items.ron): tap for the light moves in
+/// turn (a combo), hold and let go for the heavy.
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+pub struct Moves {
+    /// The light moves, in combo order (one to three; the third hits 1.25x).
+    pub light: Vec<Swing>,
+    /// The charged move.
+    pub heavy: Swing,
+    /// Blocks from your eyes a move reaches.
+    pub reach: f32,
+    /// Half the arc a move sweeps, degrees (a spin hits all round).
+    pub arc: f32,
+    #[serde(default)]
+    pub special: Special,
+}
+
+/// What sets a weapon apart.
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Default)]
+pub enum Special {
+    /// The sword: nothing extra, nothing missing.
+    #[default]
+    Balanced,
+    /// The dagger: backstabs deal this many times the damage (not `ai::BACKSTAB`).
+    Backstab(f32),
+    /// The axe: a blow caught on a guard still does this share of its damage.
+    Cleave(f32),
+    /// The spear: blows push foes back this many times as far.
+    KeepAway(f32),
+    /// The rapier: blows soon after a parry deal this many times the damage.
+    Riposte(f32),
+    /// The hammer: every blow breaks a raised guard (and a shield's), and the
+    /// heavy knocks down everything close by.
+    Wreck,
+}
+
+/// A shield in the left hand.
+#[derive(Deserialize, Debug, Clone, Copy, PartialEq)]
+pub struct Shield {
+    /// Share of a blocked blow's Fatigue cost it takes (a sword alone takes 1).
+    pub cost: f32,
+    /// Half the arc it covers, degrees.
+    pub arc: f32,
+    /// Damage of a shield bash (left click with it raised).
+    pub bash: f32,
 }
 
 #[derive(Deserialize)]
@@ -157,6 +211,19 @@ pub struct Item {
     pub swing: Swing,
     /// Fires (left click) instead of swinging.
     pub gun: Option<Gun>,
+    /// A weapon's moves.
+    pub moves: Option<Moves>,
+    /// A shield.
+    pub shield: Option<Shield>,
+    /// The plain item this is a better version of (itself for plain items).
+    pub base: ItemId,
+    pub quality: Quality,
+    /// Indexes into `Qualities::traits`.
+    pub traits: Vec<usize>,
+    /// What its minor traits add up to.
+    pub tuning: Tuning,
+    /// Multiplier on the Fatigue its swings and blocks cost.
+    pub stamina: f32,
 }
 
 /// Damage of a bare-handed blow.
@@ -174,7 +241,27 @@ impl Item {
     /// A weapon for the weapon slot: a tool made only for hitting (swords,
     /// daggers, the spear), not for working blocks.
     pub fn is_weapon(&self) -> bool {
-        matches!(&self.kind, ItemKind::Tool { speeds } if speeds.is_empty()) && self.damage > FIST_DAMAGE
+        matches!(&self.kind, ItemKind::Tool { speeds } if speeds.is_empty()) && self.damage > FIST_DAMAGE && self.shield.is_none()
+    }
+
+    /// Can it come in better qualities (tools, weapons, shields, armor)?
+    pub fn takes_quality(&self) -> bool {
+        matches!(self.kind, ItemKind::Tool { .. } | ItemKind::Wear { .. })
+    }
+
+    /// Does it have a trait with this effect?
+    pub fn has(&self, quals: &Qualities, f: impl Fn(crate::quality::Effect) -> bool) -> bool {
+        self.traits.iter().any(|t| quals.traits.get(*t).is_some_and(|d| f(d.effect)))
+    }
+
+    /// The first trait effect `f` picks out.
+    pub fn effect<T>(&self, quals: &Qualities, f: impl Fn(crate::quality::Effect) -> Option<T>) -> Option<T> {
+        self.traits.iter().filter_map(|t| quals.traits.get(*t)).find_map(|d| f(d.effect))
+    }
+
+    /// Reach of its moves (with traits), or a sword's.
+    pub fn reach(&self) -> f32 {
+        self.moves.as_ref().map_or(3.0, |m| m.reach) + self.tuning.reach
     }
 }
 
@@ -182,6 +269,11 @@ impl Item {
 pub struct Items {
     hand: HashMap<String, f32>,
     list: Vec<Item>,
+    /// Quality tiers and traits (`traits.ron`).
+    quals: Arc<Qualities>,
+    /// Better versions made on demand (`variant`), after `list`. Never freed
+    /// (there are only ever a few hundred), so they can be lent out freely.
+    extra: Arc<RwLock<Vec<&'static Item>>>,
 }
 
 impl Items {
@@ -234,17 +326,141 @@ impl Items {
                 }
                 None => None,
             };
-            list.push(Item { name: s.name, title: s.title, kind, mass: s.mass, size: s.size, stack: stack.max(1), damage, swing: s.swing, gun });
+            if let Some(m) = &s.moves
+                && (m.light.is_empty() || m.light.len() > 3 || m.light.iter().chain([&m.heavy]).any(|s| !s.fights() && *s != Swing::Chop))
+            {
+                return Err(format!("item '{}': moves need one to three light fighting moves and a fighting heavy", s.name));
+            }
+            if s.name.contains(['@', '+']) {
+                return Err(format!("item '{}': names can't hold @ or +", s.name));
+            }
+            let base = ItemId(list.len() as u16);
+            list.push(Item {
+                name: s.name,
+                title: s.title,
+                kind,
+                mass: s.mass,
+                size: s.size,
+                stack: stack.max(1),
+                damage,
+                swing: s.swing,
+                gun,
+                moves: s.moves,
+                shield: s.shield,
+                base,
+                quality: Quality::Plain,
+                traits: Vec::new(),
+                tuning: Tuning::default(),
+                stamina: 1.0,
+            });
         }
-        Ok(Self { hand: spec.hand, list })
+        let quals = Qualities::load(include_str!("../../../assets/data/traits.ron"))?;
+        Ok(Self { hand: spec.hand, list, quals: Arc::new(quals), extra: Arc::default() })
     }
 
     pub fn get(&self, id: ItemId) -> &Item {
-        &self.list[id.0 as usize]
+        let i = id.0 as usize;
+        if i < self.list.len() {
+            &self.list[i]
+        } else {
+            self.extra.read().unwrap_or_else(|e| e.into_inner())[i - self.list.len()]
+        }
     }
 
+    /// An item by name; a better version (`iron_sword@fine+reach`) is made
+    /// the first time it's asked for.
     pub fn id(&self, name: &str) -> Option<ItemId> {
-        self.list.iter().position(|i| i.name == name).map(|i| ItemId(i as u16))
+        if let Some(i) = self.list.iter().position(|i| i.name == name) {
+            return Some(ItemId(i as u16));
+        }
+        let (base, q, traits) = self.quals.parse(name)?;
+        let base = self.list.iter().position(|i| i.name == base)?;
+        Some(self.variant(ItemId(base as u16), q, &traits))
+    }
+
+    /// Quality tiers and traits.
+    pub fn qualities(&self) -> &Qualities {
+        &self.quals
+    }
+
+    /// The version of `base` with quality `q` and these traits (`base` itself
+    /// for a plain one, or an item that can't have a quality).
+    pub fn variant(&self, base: ItemId, q: Quality, traits: &[usize]) -> ItemId {
+        let base = self.get(base).base;
+        let b = &self.list[base.0 as usize];
+        if !b.takes_quality() || (q == Quality::Plain && traits.is_empty()) {
+            return base;
+        }
+        let mut traits: Vec<usize> = traits.iter().copied().filter(|t| *t < self.quals.traits.len()).collect();
+        traits.sort();
+        traits.dedup();
+        let name = self.quals.name(&b.name, q, &traits);
+        let mut extra = self.extra.write().unwrap_or_else(|e| e.into_inner());
+        if let Some(i) = extra.iter().position(|i| i.name == name) {
+            return ItemId((self.list.len() + i) as u16);
+        }
+        let tier = self.quals.tier(q);
+        let up = 1.0 + tier.power;
+        let tuning = self.quals.sum(&traits);
+        let mut it = b.clone();
+        it.title = format!("{} {}", tier.title, b.title);
+        it.name = name;
+        it.quality = q;
+        it.traits = traits;
+        it.tuning = tuning;
+        it.stamina = (1.0 - tier.stamina) * (1.0 - tuning.lighter).max(0.2);
+        it.damage *= up;
+        if let Some(g) = &mut it.gun {
+            g.damage *= up;
+        }
+        if let Some(sh) = &mut it.shield {
+            sh.cost /= up;
+            sh.bash *= up;
+        }
+        match &mut it.kind {
+            ItemKind::Tool { speeds } => speeds.values_mut().for_each(|v| *v *= up),
+            ItemKind::Wear { protection, .. } => protection.values_mut().for_each(|v| *v = (*v * up).min(0.9)),
+            _ => {}
+        }
+        extra.push(Box::leak(Box::new(it)));
+        ItemId((self.list.len() + extra.len() - 1) as u16)
+    }
+
+    /// Roll a quality from `odds` and traits to go with it, for `base`.
+    pub fn roll(&self, base: ItemId, odds: crate::quality::Odds, rng: &mut crate::creatures::brain::Rng) -> ItemId {
+        if !self.get(base).takes_quality() {
+            return base;
+        }
+        let q = Qualities::roll_quality(odds, rng);
+        let traits = self.quals.roll_traits(q, rng);
+        self.variant(base, q, &traits)
+    }
+
+    /// One quality up (fine traits kept, one major trait added on the way to
+    /// masterwork), or `None` if it can't go higher.
+    pub fn upgraded(&self, id: ItemId, rng: &mut crate::creatures::brain::Rng) -> Option<ItemId> {
+        let it = self.get(id);
+        if !it.takes_quality() {
+            return None;
+        }
+        let next = it.quality.next()?;
+        let want = self.quals.roll_traits(next, rng);
+        // Keep what it had, topping up with fresh ones of the ranks it lacks.
+        let mut traits = it.traits.clone();
+        for t in want {
+            let rank = self.quals.traits[t].rank;
+            let have = traits.iter().filter(|x| self.quals.traits[**x].rank == rank).count();
+            let tier = self.quals.tier(next);
+            let room = match rank {
+                crate::quality::Rank::Minor => tier.minor,
+                crate::quality::Rank::Major => tier.major,
+                crate::quality::Rank::Relic => tier.relic,
+            } as usize;
+            if have < room && !traits.contains(&t) {
+                traits.push(t);
+            }
+        }
+        Some(self.variant(it.base, next, &traits))
     }
 
     pub fn ids(&self) -> impl Iterator<Item = ItemId> {

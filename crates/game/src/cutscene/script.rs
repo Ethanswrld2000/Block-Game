@@ -54,7 +54,7 @@ pub enum Trigger {
     Area { place: String, within: f32 },
     /// An encounter (encounters.ron id) was beaten.
     Cleared(String),
-    /// The Rotting Gate's boss at this depth was beaten.
+    /// Story dungeon n (1 the Rotting Gate .. 5 the castle vault) is cleared.
     Boss(u8),
     /// You made this item (at a bench).
     Made(String),
@@ -184,7 +184,7 @@ pub struct Facts<'a> {
     pub npcs: Vec<(String, Vec3, bool)>,
     pub places: HashMap<String, Vec3>,
     pub cleared: Option<&'a BTreeSet<String>>,
-    /// The deepest Rotting Gate depth whose boss is beaten.
+    /// The furthest story dungeon cleared (0 = none).
     pub boss: u8,
     pub made: Option<&'a BTreeSet<String>>,
     pub placed: Option<&'a BTreeSet<String>>,

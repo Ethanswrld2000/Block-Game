@@ -329,25 +329,58 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   urns (carpentry after the tool urn, gear and vehicle after carpentry). New benches reuse an older bench's board
   (`StationKind::base`: layout, slots, tool, size) and add a few parts of their own in `models::parts`. Chairs,
   tables and doors are box models (see Furniture below); glass and windows are see-through blocks.
-- Warded dungeons: `worldgen::dungeons` (pure). One per 1024-block cell (chance 0.7, 700+ blocks from spawn) plus a home
-  dungeon 170-290 blocks from spawn, away from `WorldGen::home` (where the home village once stood). A stone gatehouse with one doorway, a stair 20-27 down,
-  then 7-10 large rooms (13-23 wide, 6-9 high) on a 30-block grid in the dungeon's own frame, joined by 3-wide corridors
-  (a few loops); the furthest room is the warden's hall (25x25, boss). `Dungeon` has `rooms`, `links`, `spaces` (open
-  boxes past the veil: `inside(p)`), `spawns` (`SpawnPoint` pos/kind Guard|Pack|Boss/room: hooks for enemies, nothing
-  spawns them yet), `bounds`, `outside` (path spot), `guide`, `veil`. Spirit ward: `WorldGen::warded(x, y, z)` covers
-  dungeons, barrows and villages; `interact` won't break, place or pick in them ("A spirit ward holds this place").
-  `game::dungeon`: `Nearby` dungeons, a shimmering veil in each doorway, a guide NPC (`warden` kind in npcs.ron and
-  dialogue.ron, `Npc.post` = dungeon id) by each path. Dialogue `act: Spirit` (`Talk::take_cast`) starts
-  `dungeon::spirit`: a 5.6 s cinematic (bars, view tips down, two arms rise and drain to see-through glowing blue with
-  sparkles, turn over, drop). As a spirit: arm materials tinted blue, faint blue screen wash, health starts full and the
-  body's health waits (`Spirit.body`). Non-spirits inside a dungeon are put back on the path. A spirit that falls is cast
-  out to the path with its body's health back (no death); walking out 14+ blocks from the gate ends the spirit form.
-  `EnteredRoom` (first time per run) and `LeftDungeon { fell }` drive `dungeon::foes`: entering a room spawns the foes
-  (`combat::SpawnFoe`) of it and the rooms its corridors lead to, from the dungeon's spawn points (guards hollows, packs
-  mixed hollows and shades, boss a shade: `foes::kind_for`); the run ending despawns every foe whose home is inside that
-  dungeon.
-  Screenshots: `BLOCKGAME_DUNGEON=1` starts on the home dungeon's path facing the door (its position is logged),
-  `BLOCKGAME_SPIRIT=cast` runs the cinematic, `=1` starts as a spirit.
+- Dungeons (combat plan steps 4-6, Claude Doc "Block Game: Combat and Dungeon Plan"): one system. Entrances on the island
+  are `worldgen::dungeons` (pure): one per 1024-block cell (chance 0.7, 700+ blocks from spawn; theme by hash, 1-4 floors,
+  more the further out) plus the five story dungeons placed once per world in order (`search_chain`): 1 the Rotting Gate
+  (arch, rotting bog, 2 floors), 2-4 gatehouses spaced along the way from the Gate to the castle (flooded crypt 3,
+  root-choked hall 3, collapsed mine 4), 5 the vault in the castle court (frozen vault, 4). `Dungeon` has `id`, `name`,
+  `theme`, `floors`, `chain`, `look` (Gatehouse/Arch/Vault), `door` (`inside(p)`), `outside`, `guide`, `veil`, `bounds`;
+  `WorldGen::{dungeons_in, dungeon(id), chain_dungeon(n), rotting_gate()}`. Spirit ward: `WorldGen::warded` covers
+  entrances, barrows, villages and the whole pocket; `interact` won't break, place or pick there, except `cracked_stone`
+  and `cracked_floor`. Themes and the chain in `assets/data/dungeons.ron` (walls, floor, pillar, growth, pools, foes,
+  `warden` = every floor's boss but the last, `boss` = the last's, hazard weights, puzzle kinds); room templates in
+  `assets/data/rooms.ron` (kind Start/Fight/Trap/Puzzle/Ambush/Treasure/Secret/Rest/Shop/Boss, size, pillars, pits,
+  hazards, foes, waves, elite chance, min floor, themes). `worldgen::delve` (pure): `floor(&Delves, &FloorPlan)` lays out
+  one floor per run on a 28-block grid in the pocket (`POCKET`, x/z 60000, y 780): start room (`way_out` in its west wall),
+  the key room (furthest fight/ambush: drops the key), the locked door (`vault_door`) into the boss room (furthest dead end;
+  `stair` beside it unless last, `exit`, and on a story dungeon's last floor `passage`; all `seals` until the boss falls),
+  a puzzle room (`Puzzle`: Plates / Levers / Timed, gate + vault + chest), rest room (campfire), trap rooms and trapped
+  corridors, treasure (chest + trap or elite), maybe a shop (`shop` spot) and a secret room behind a cracked wall; rooms
+  sealed together in `sections` on floor 2+; `Room.reward` Coin/Boon/Heal/Elite on fight rooms. `generate_pocket` draws it
+  in the theme. `world::PocketFloor` makes chunk generation use it there; pocket chunks are never saved
+  (`World::forget_pocket`); no height cold or thin air, no creatures or critters there.
+  Game side: `game::dungeon` (`Nearby` entrances, veils) and `dungeon::spirit` (Brindlespheimer's spell, `act: Spirit`: the
+  5.6 s cinematic; spirits only past the veil; a spirit that falls is cast out to the entrance with its body's health back;
+  walking 14+ blocks from the door ends the form). `game::delve`: a spirit walking through a door starts a run
+  (`delve::rules`: `Delve { runs, dungeons: id -> Remembered { cleared, done }, urns }` saved to `delve.ron`; a run starts
+  on the first floor whose boss is still up; cleared dungeons start at floor 1 and their last boss and prize never return).
+  `Below` holds the run, the floor and `edits` (block changes on the floor, put back whenever a pocket chunk is built
+  again: slabs, opened gates, broken cracked walls, fallen floor). Foes spawn per room and wave as you come near
+  (`kind_for`: theme foes by role, boss by `boss_for`; tags `delve::tag(room, wave, boss)`). `delve::locks`: fight rooms,
+  ambushes and the boss arena drop `dungeon_slab`s in their doorways (or the whole section's) until every wave is down;
+  the shut doors glow, a foe counter shows at the top; `RoomCleared` gives the reward. Key drops in the key room once it's
+  cleared; with it the locked door opens. Boss falls: seals open, loot, waypoints (cleared marker, next story dungeon), the
+  first full clear of a story dungeon drops its urn (`claim_urn`: 1 carpentry, 2 gear, 3 hearth, 4 vehicle). Ways: start
+  room or `exit` back to the entrance with your loot, `stair` down, `passage` out near the next story dungeon. Falling
+  below loses what you picked up or put on during the run (`lost_on_death`). Rest room campfire heals within 4.5 blocks.
+  `delve::hazards`: spikes (pit spikes stay up), swinging blades, dart launchers (poison drains blood), fire jets, oil
+  that burns and spreads, barrels (cut, burnt or blasted: fuse then explosion that breaks cracked stone; a kick shoves
+  them), collapsing cracked floor; they hurt foes too. `delve::puzzle`: plates + pushable stones (lean or kick), levers +
+  lamps (right click), timed gate. `delve::boons` + `assets/data/boons.ron`: reward marks in the corridors (gold coin,
+  blue boon, red heal, purple elite), boons stack until you leave (Might, Ward, Fleet, Mend, Thirst, Fortune; read by
+  `interact`, `survival::take_hits`, `survival::set_body`), Tallow the peddler in shop rooms (trades.ron `shop`, old coin).
+  Chests on a floor roll loot.ron `dungeon_prize/treasure/puzzle/secret`. Brindlespheimer stands at the entrance nearest
+  you (`cast::keep_brindlespheimer`) and names the dungeon, floors, boss and puzzle hint (`{dungeon}`, `{floors}`, `{boss}`,
+  `{hint}`, extra flags `theme:<name>`, `cleared_here`). Prisoners: Messler in the Rotting Gate's last boss room once its
+  boss is down, Liora on the Flooded Crypt's floor 2. Story beat `Dungeon(n)` = story dungeon n cleared; Orrin and the
+  star urn appear on the castle tower only after the vault is cleared. Screenshots: `BLOCKGAME_GATE=1` starts facing the
+  Rotting Gate, `BLOCKGAME_DELVE=n[:floor]` starts a run in story dungeon n, `BLOCKGAME_SPIRIT=cast` runs the cinematic,
+  `=1` starts as a spirit.
+- Phased bosses: `combat::boss`. foes.ron kinds with `boss: Some((phases, attacks))` (all wardens and last bosses:
+  `bog_warden`, `spore_matron`, `gloam_stalker`, `rotting_king`, `drowned_abbess`, `root_mother`, `pit_foreman`,
+  `frost_regent`, scale 1.2-2.0 with their own extras): new phase at 66% and 33% (a roar, attacks come faster), 3-4 named
+  attacks each (Slam ring, Volley fan of bolts, Charge, Summon adds), each with a warning; a boss bar (name, health, attack
+  coming) at the top while one that has seen you is near.
 - Player body and third person: `game::avatar` builds your body with `npc::body::build` (the NPC rig; looks in
   `assets/data/player.ron`, also used for the first-person arm) and moves it with `npc::body::drive` (shared with NPCs).
   P toggles `camera::View` third person: the camera is pulled back 4 blocks (less if a wall is in the way) only for
@@ -365,7 +398,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   the iron anvil) cut on left click and never mine: the cut lands at `Swing::contact` as `interact::Swung`, hitting every
   foe in a 55° sweep within `SWORD_REACH` (and the creature you aim at). Hold right click to block (`combat::Guard`,
   `swing::guard_pose` / `Limbs::guard`); a block raised under `ai::PARRY_WINDOW` before a cut lands parries it (the foe
-  reels). Q shoves every foe close in front back and off balance (2 s cooldown). Foes: kinds in `assets/data/foes.ron`
+  reels). Q kicks (see Combat core below). Foes: kinds in `assets/data/foes.ron`
   (NPC rig looks, weapon item held via `hands::Held::holding`, damage, reach, swing time, sight/forget/leash, style:
   aggression, caution, guard, poise). Pure mind in `combat::ai` (`Brain`: Idle, Return, Approach, Circle, Press, Attack,
   Recover, Guard, Backoff, Stagger; at most `PRESSERS` press you at once, the rest circle; gives up past `forget` or
@@ -375,25 +408,22 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   shimmering per part, a faint light, `BurstKind::Wisp` particles trailing (and a burst on death). Sound `clash`.
   Dev keys: Ctrl+Shift+J (Cmd on a Mac) spawns a Hollow Warden, Ctrl+Shift+H a Fen Shade, 6 blocks ahead; either gives
   you an iron sword on the hotbar if you have no sword. Foes don't despawn.
-- Rotting Gate (Legacy prompts 5-7): `worldgen::rotting` (pure). The gate is a mossy cobblestone arch placed once on the
-  main island 300-600 blocks from spawn (`WorldGen::rotting_gate`, warded, position logged). `rotting_floor(seed, run, depth)`
-  lays out a fresh floor per run on a 28-block grid: start room (way out in its west wall), halls, boss room with the stair;
-  `DEPTHS` = 4, each deeper floor has more rooms and spawns. Floors are built in the pocket (`POCKET`, x/z 60000, y 780,
-  `in_pocket`): `world::PocketFloor` makes chunk generation use `generate_pocket` there, pocket chunks are never saved and
-  `World::forget_pocket` drops them when the floor changes; no height cold or thin air there, no creatures or critters.
-  `game::delve`: walk into the gate to start a run at the deepest unlocked depth; rooms spawn foes as you reach them
-  (`combat::SpawnFoe` with `boost` per depth and a `tag`; each depth's boss is its own kind, see below); the boss's
-  `FoeSlain` opens the stair; the stair goes down a depth (after depth 4 it brings you back up); the start room's west
-  doorway leads back to the gate. Pure rules in `delve::rules` (`Delve { runs, deepest, cleared }`, saved to `delve.ron`;
-  clearing a depth's boss lets the next run start one deeper; `lost_on_death`). Dying below loses what you picked up or put
-  on during the run and wakes you outside the gate (`survival::RespawnAt`). Dungeon foes in foes.ron: `sporecaster`
-  (ranged: `ranged: Some((speed, color))` shoots bolts a raised guard blocks), `rot_brute` (slow, heavy), `mire_skitter`
-  (fast). Place name banners are off (`places::PLACE_CARDS`). Screenshots: `BLOCKGAME_GATE=1` starts facing the gate,
-  `BLOCKGAME_DELVE=n` starts a run at depth n.
-- Boss urns and the cast (Legacy prompts 8-9): each Rotting Gate depth has its own boss in foes.ron (`bog_warden`,
-  `spore_matron` (ranged), `gloam_stalker` (fast), `rotting_king`; `delve::rules::boss_for`). The first time each falls it
-  drops its urn (depth 1 carpentry, 2 gear, 3 hearth, 4 vehicle; `Delve.urns`, once per world); the ancestral urn no longer
-  gives those four. Foes below roll loot.ron `rotting`, bosses `rotting_warden` (`Loot::roll`): dungeon-only `mold_bloom`
+- Combat core (plan step 1, Claude Doc "Block Game: Combat and Dungeon Plan"): fighting wears the existing Fatigue bar
+  (`combat::stamina`, pure rules on `Health`; no separate stamina bar): light cut 2, heavy 4, kick 3, a blocked cut 3, never
+  below `stamina::FLOOR` (55, where sprinting stops too); at the floor you're winded: no cuts, kicks or guard, and a block
+  breaks and the cut lands; badly hurt (a mortal layer) it costs nothing more. Swords (`interact::sword`): tap = light cut on release, three chain into a combo (`interact::combo_cut`:
+  `Slash`, `SlashBack`, then a 1.25x `Slash`) if clicked within `COMBO_WINDOW` (0.45 s) of the last; hold past `TAP`
+  (0.22 s) to charge a heavy cut (`Swing::Heavy`, arm held at `swing::charge_pose`), released for `heavy_mult` (1.6-2.4x)
+  over `CHARGE` (0.7 s); a heavy cut (`Swung.heavy`) breaks a raised guard outright (`ai::Brain::struck`). No dodge (Ethan's
+  call). A parry (guard raised under `ai::PARRY_WINDOW`) costs nothing and sends `feel::SlowMo` (game at 0.3x for 0.6 real s,
+  easing back). Blows on a foe that hasn't noticed you do `ai::BACKSTAB` (3x). `combat::kick` (Q, replaced the shove):
+  the nearest foe within 2.6 blocks in a 50° arc is booted back (4 damage, staggered, guard broken); hitting a wall within
+  `SLAM_WINDOW` slams it (8 more, longer stagger). First person shows a shin and boot (`LegView`); third person kicks the
+  body's right leg (`Drive::kick`, `kick::leg_body`).
+- Dungeon foes in foes.ron: `sporecaster` (ranged: `ranged: Some((speed, color))` shoots bolts a raised guard blocks),
+  `rot_brute` (slow, heavy), `mire_skitter` (fast). Place name banners are off (`places::PLACE_CARDS`).
+- Boss urns and the cast (Legacy prompts 8-9): story dungeons' last bosses drop the urns (see Dungeons); the ancestral
+  urn no longer gives those four. Foes below roll loot.ron `rotting`, bosses `rotting_warden` (`Loot::roll`): dungeon-only `mold_bloom`
   (tier 2 urn steps need 3), `deepstone_shard` and `warden_sigil` (tier 3 steps need 4 + 1). The cast in npcs.ron and
   dialogue.ron: Bram Holloway, Gilm, Wren Calloway, Liora Vance, Messler, Orrin Vale, Brindlespheimer. NPC looks have
   `scale` (Gilm and Messler 0.55 = one block tall), `extras` (boxes on Head/Torso/Hips: caps, ears, hats, robes) and
@@ -419,7 +449,7 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   `assets/voice/<id>.ogg` if it exists, else the `npc::voice` babble; the subtitle always shows. `lines::Bark { speaker,
   trigger, at }` says a random bark (Messler's cooking remarks use it). `game::cutscene` (`assets/data/cutscenes.ron`; pure
   runner and triggers in `cutscene::script`): triggers Near (NPC + line of sight), Area (place: camp, gate, sporrow, castle,
-  forge), Cleared (encounter), Boss (depth), Made (bench item, `board::Crafted`), Placed (block), TimeAfter (flag + hours);
+  forge), Cleared (encounter), Boss (story dungeon n cleared), Made (bench item, `board::Crafted`), Placed (block), TimeAfter (flag + hours);
   actors are NPC dialogue keys, brought in (spawned, placed or walked to their mark via `Npc.cue`/`face`) before the steps:
   Say, Camera, CameraMove, Walk, Face, Wait, Fade, Encounter, Flag, Clue, Give, Swap, Place. Draws through the talk's bars
   (`Talk.scene`), locks input, hides the HUD, world keeps running; click ends a line, hold Esc skips (lasting steps still
@@ -430,14 +460,13 @@ This is not a Minecraft clone: original names, art, creatures and systems only.
   (foes go, all return when you're back within 48 blocks); the one running saves to `encounter.ron` and starts over on load.
   Screenshots: `BLOCKGAME_CUTSCENE=C02`, `BLOCKGAME_ENCOUNTER=bog_ambush`.
 - Story beats, journal, the raid (Legacy prompts 16-17): `game::story` (`assets/data/story.ron`; pure rules in
-  `story::beats`): a beat lists conditions (NewWorld, Day, Hours, AtCamp, Urn, Step, Depth, Met, Recruited, Flag, Played,
+  `story::beats`): a beat lists conditions (NewWorld, Day, Hours, AtCamp, Urn, Step, Dungeon, Met, Recruited, Flag, Played,
   DayAfter(`flag:`/`played:`/`step:` key, dates in `Story.when`), Near, Area, Made, Placed) and starts one cutscene; it fires
   once (when that cutscene has played). C01-C16 are all wired (C06b and C08b are the second halves of C06 and C08).
   `cutscene::Story` also keeps `met`, `when`, clues in order found, and `edits` (Swap/Place steps wait there until their
   area is loaded: `apply_edits`). New cutscene steps `Follow(actor)` and `Remove(actor)`. Cutscene start requests queue
   while one plays (`Playing::busy`). `cutscene::Places` (camp = bedroll, else the ancestral urn; gate, sporrow, castle,
-  forge) is shared with encounters (`Place(name, r)` now spawns at the place). Prisoners: Liora waits in a hall on depth
-  2 and Messler in the depth 3 boss room (`story::PRISON_POST`, gone with the floor) until C08/C09 set `liora_found`/
+  forge) is shared with encounters (`Place(name, r)` now spawns at the place). Prisoners (see Dungeons; `story::PRISON_POST`, gone with the floor) until C08/C09 set `liora_found`/
   `messler_found` and they follow you. Flags from the game: `fed_messler` (Messler's feed service), `used_telescope`.
   J opens the journal (clue texts in story.ron `clues`; `BLOCKGAME_JOURNAL=1`). New NPC kinds `sporrow_elder` and `aunt`. The raid: C11 (night after C10, at camp) ends in encounter `raid_camp`
   (5 `court_soldier`s from an airship: rifle bolts at range, a cut within `close`, the new foes.ron field), then C12

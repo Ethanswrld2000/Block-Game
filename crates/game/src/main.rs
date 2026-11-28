@@ -39,6 +39,7 @@ mod interact;
 mod inventory;
 mod item_art;
 mod items;
+mod quality;
 mod journey;
 mod lines;
 mod cutscene;

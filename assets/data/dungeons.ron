@@ -1,0 +1,97 @@
+// Dungeon themes and the story chain (worldgen::delve, game::delve).
+// Every dungeon is one entrance on the island and 1-4 floors built in the pocket, from rooms.ron.
+//   themes: name, title, place (words for "<place> of <name>"),
+//     wall / floor / pillar: block names; growth: blocks that creep over walls and floors
+//     (growth_share of them); pools: a liquid left in low spots, if any
+//     foes: foes.ron kinds (the game picks one of each role it needs from these)
+//     warden: the boss of every floor but the last; boss: the last floor's boss (it guards the prize chest)
+//     hazards: weights for the hazards rooms.ron asks for as `Any`; puzzles: the kinds its puzzle rooms use
+//   chain: the five story dungeons, in order (theme, floors, name). Each boss drops its urn the first
+//     time (game::delve::rules::urn_for); clearing one opens a passage out near the next.
+(
+    themes: [
+        (
+            name: "rotting_bog",
+            title: "Rotting Bog",
+            place: ["Rotting Halls", "Mire Deep", "Sunken Hollow"],
+            wall: "deeprock",
+            floor: "cobblestone",
+            pillar: "deeprock",
+            growth: ["moss", "mud"],
+            growth_share: 0.24,
+            foes: ["mire_skitter", "sporecaster", "rot_brute", "shieldbearer", "mire_mender"],
+            warden: "bog_warden",
+            boss: "rotting_king",
+            hazards: [(Spikes, 1.0), (Pit, 0.6), (Oil, 0.8), (Barrel, 0.7), (Darts, 0.5), (Blade, 0.3), (Collapse, 0.6), (FireJet, 0.4)],
+            puzzles: [Plates, Levers],
+        ),
+        (
+            name: "flooded_crypt",
+            title: "Flooded Crypt",
+            place: ["Flooded Crypt", "Drowned Vaults", "Sunken Tombs"],
+            wall: "cobblestone",
+            floor: "stone",
+            pillar: "cobblestone",
+            growth: ["moss", "clay"],
+            growth_share: 0.16,
+            pools: Some("puddle_2"),
+            foes: ["hollow", "mire_skitter", "sporecaster", "shieldbearer", "mire_mender", "rot_brute"],
+            warden: "spore_matron",
+            boss: "drowned_abbess",
+            hazards: [(Spikes, 0.8), (Pit, 1.0), (Oil, 0.2), (Barrel, 0.3), (Darts, 1.0), (Blade, 0.8), (Collapse, 0.4), (FireJet, 0.2)],
+            puzzles: [Levers, Timed],
+        ),
+        (
+            name: "root_choked_hall",
+            title: "Root-choked Hall",
+            place: ["Root-choked Hall", "Tangled Deep", "Rootbound Court"],
+            wall: "stone",
+            floor: "dirt",
+            pillar: "swamp_log",
+            growth: ["swamp_leaves", "moss", "peat"],
+            growth_share: 0.3,
+            foes: ["mire_skitter", "rot_brute", "mire_mender", "sporecaster", "shieldbearer"],
+            warden: "gloam_stalker",
+            boss: "root_mother",
+            hazards: [(Spikes, 1.0), (Pit, 0.5), (Oil, 0.6), (Barrel, 0.4), (Darts, 0.4), (Blade, 0.6), (Collapse, 0.8), (FireJet, 0.6)],
+            puzzles: [Plates, Timed],
+        ),
+        (
+            name: "collapsed_mine",
+            title: "Collapsed Mine",
+            place: ["Collapsed Mine", "Old Diggings", "Fallen Shafts"],
+            wall: "stone",
+            floor: "gravel",
+            pillar: "planks",
+            growth: ["gravel", "coal_ore", "iron_ore"],
+            growth_share: 0.12,
+            foes: ["rot_brute", "shieldbearer", "mire_skitter", "sporecaster", "mire_mender"],
+            warden: "bog_warden",
+            boss: "pit_foreman",
+            hazards: [(Spikes, 0.5), (Pit, 0.8), (Oil, 1.0), (Barrel, 1.0), (Darts, 0.3), (Blade, 0.4), (Collapse, 1.0), (FireJet, 0.5)],
+            puzzles: [Plates, Levers, Timed],
+        ),
+        (
+            name: "frozen_vault",
+            title: "Frozen Vault",
+            place: ["Frozen Vault", "Rime Halls", "Winter Crypt"],
+            wall: "deeprock",
+            floor: "ice",
+            pillar: "ice",
+            growth: ["snow", "skystone"],
+            growth_share: 0.2,
+            foes: ["hollow", "shade", "shieldbearer", "rot_brute", "mire_mender", "sporecaster"],
+            warden: "gloam_stalker",
+            boss: "frost_regent",
+            hazards: [(Spikes, 1.0), (Pit, 0.6), (Oil, 0.2), (Barrel, 0.3), (Darts, 0.8), (Blade, 1.0), (Collapse, 0.5), (FireJet, 0.7)],
+            puzzles: [Levers, Plates, Timed],
+        ),
+    ],
+    chain: [
+        (theme: "rotting_bog", floors: 2, name: "The Rotting Gate"),
+        (theme: "flooded_crypt", floors: 3, name: "The Flooded Crypt"),
+        (theme: "root_choked_hall", floors: 3, name: "The Root-choked Hall"),
+        (theme: "collapsed_mine", floors: 4, name: "The Collapsed Mine"),
+        (theme: "frozen_vault", floors: 4, name: "The Castle Vault"),
+    ],
+)

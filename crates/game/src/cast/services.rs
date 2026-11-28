@@ -72,6 +72,9 @@ pub struct Commission {
 pub struct Trades {
     pub per_visit: usize,
     pub trades: Vec<Trade>,
+    /// Tallow's wares on the dungeon floors (always all in stock).
+    #[serde(default)]
+    pub shop: Vec<Trade>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -180,6 +183,16 @@ fn add_choices(mut book: ResMut<NpcBook>, data: Res<Services>, trades: Res<Trade
         })
         .collect();
     add("wren", "trade", made);
+    let made = trades
+        .shop
+        .iter()
+        .map(|t| {
+            let (n, c) = &t.gives;
+            let gives = list(&items, &BTreeMap::from([(n.clone(), *c)]));
+            plain_choice(format!("{gives} for {}", list(&items, &t.wants)), format!("trade:{}", t.id), Vec::new(), Vec::new())
+        })
+        .collect();
+    add("tallow", "trade", made);
 }
 
 /// While you talk: which replies count (what you can already make, today's stock).
@@ -200,6 +213,8 @@ fn offers(mut talk: ResMut<Talk>, book: Res<NpcBook>, npcs: Query<&Npc>, (data, 
             extra.insert(format!("stock:{}", trades.trades[i].id));
         }
     }
+    // Keep what others put there (`delve` adds the dungeon at hand).
+    extra.extend(talk.extra.iter().filter(|f| !f.starts_with("knows:") && !f.starts_with("stock:")).cloned());
     if talk.extra != extra {
         talk.extra = extra;
     }
@@ -279,7 +294,7 @@ fn serve(
             }
         }
         ("trade", id) => {
-            let Some(t) = trades.trades.iter().find(|t| t.id == id) else { return };
+            let Some(t) = trades.trades.iter().chain(&trades.shop).find(|t| t.id == id) else { return };
             let short = missing(&t.wants, |n| have(&inv, n));
             if short.is_empty() {
                 for (n, c) in &t.wants {

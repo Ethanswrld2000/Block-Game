@@ -98,7 +98,7 @@ fn check_beats(
     f.base.npcs = crate::cutscene::sight(&player, &npc_book, npcs.iter(), &world, &blocks);
     f.base.places = places.0.clone();
     f.base.cleared = Some(&encounters.cleared);
-    f.base.boss = below.as_ref().map_or(0, |b| b.delve.cleared);
+    f.base.boss = below.as_ref().map_or(0, |b| b.chain_cleared());
     f.base.made = Some(&story.made);
     f.base.placed = Some(&story.placed);
     f.base.hour = clock.hour();
@@ -122,8 +122,10 @@ fn check_beats(
     }
 }
 
-/// Liora waits in a hall on depth 2 and Messler in the depth 3 boss room, until found.
-/// They go with the floor (a fresh floor brings them back) unless a cutscene took them along.
+/// Messler waits in the Rotting Gate's last boss room once its boss is down, and
+/// Liora in a fight room half way along the Flooded Crypt's second floor, until
+/// found. They go with the floor (a fresh floor brings them back) unless a
+/// cutscene took them along.
 #[allow(clippy::too_many_arguments)]
 fn prisoners(
     mut commands: Commands,
@@ -132,10 +134,11 @@ fn prisoners(
     npc_book: Res<NpcBook>,
     npcs: Query<(Entity, &Npc)>,
     mut spawn: MessageWriter<SpawnNpc>,
-    mut on: Local<Option<(u32, u8)>>,
+    mut on: Local<Option<(u32, u8, bool)>>,
 ) {
     let floor = below.as_ref().and_then(|b| b.floor.clone());
-    let here = floor.as_ref().map(|f| (f.run, f.depth));
+    let run = below.as_ref().and_then(|b| b.run);
+    let here = run.map(|r| (r.number, r.floor, r.boss_down));
     if here == *on {
         return;
     }
@@ -146,13 +149,16 @@ fn prisoners(
             commands.entity(e).despawn();
         }
     }
-    let Some(floor) = floor else { return };
-    for (who, depth, found) in [("liora", 2, "liora_found"), ("messler", 3, "messler_found")] {
+    let (Some(floor), Some(run)) = (floor, run) else { return };
+    for (who, chain, at_floor, found, boss_room) in [("liora", 2, 2, "liora_found", false), ("messler", 1, 2, "messler_found", true)] {
         let Some(kind) = npc_book.kinds.iter().position(|k| k.dialogue == who) else { continue };
-        if floor.depth != depth || story.flags.contains(found) || npcs.iter().any(|(_, n)| n.kind == kind && n.post != Some(PRISON_POST)) {
+        if run.chain != Some(chain) || run.floor != at_floor || (boss_room && !run.boss_down) {
             continue;
         }
-        let Some(at) = prison_spot(&floor, who == "messler") else { continue };
+        if story.flags.contains(found) || npcs.iter().any(|(_, n)| n.kind == kind && n.post != Some(PRISON_POST)) {
+            continue;
+        }
+        let Some(at) = prison_spot(&floor, boss_room) else { continue };
         let mut npc = Npc::new(kind, 0.0);
         npc.order = Order::Stay;
         npc.post = Some(PRISON_POST);
@@ -160,12 +166,15 @@ fn prisoners(
     }
 }
 
-/// Where a prisoner waits (feet): the middle of a hall half way along, or of the boss room (pure).
+/// Where a prisoner waits (feet): the middle of a fight room half way along, or of
+/// the boss room (pure).
 pub fn prison_spot(floor: &worldgen::Floor, boss_room: bool) -> Option<[f32; 3]> {
-    let halls: Vec<usize> = (0..floor.rooms.len()).filter(|&i| floor.rooms[i].kind == worldgen::FloorKind::Hall).collect();
-    let i = if boss_room { floor.boss_room } else { *halls.get(halls.len() / 2)? };
+    let fights: Vec<usize> = (0..floor.rooms.len()).filter(|&i| floor.rooms[i].kind == worldgen::RoomType::Fight).collect();
+    let i = if boss_room { floor.boss_room } else { *fights.get(fights.len() / 2)? };
     let r = &floor.rooms.get(i)?.inner;
-    Some([(r.min[0] + r.max[0]) as f32 / 2.0, floor.floor_y as f32, (r.min[2] + r.max[2]) as f32 / 2.0])
+    // Off the very middle (the boss stood there, and pillars may).
+    let mid = floor.room_free_spot(i).unwrap_or([(r.min[0] + r.max[0]) / 2, floor.floor_y, (r.min[2] + r.max[2]) / 2]);
+    Some([mid[0] as f32 + 0.5, mid[1] as f32, mid[2] as f32 + 0.5])
 }
 
 // ---- The journal ----
@@ -388,13 +397,19 @@ mod tests {
     }
 
     #[test]
-    fn prisoners_wait_in_a_hall_and_the_boss_room() {
-        let f = worldgen::rotting_floor(7, 1, 2);
-        let hall = prison_spot(&f, false).expect("a hall");
-        let r = f.room_at(hall).expect("in a room");
-        assert_eq!(f.rooms[r].kind, worldgen::FloorKind::Hall);
-        let f = worldgen::rotting_floor(7, 1, 3);
-        let boss = prison_spot(&f, true).unwrap();
-        assert_eq!(f.room_at(boss), Some(f.boss_room));
+    fn prisoners_wait_in_a_fight_room_and_the_boss_room() {
+        let tiles = voxel::TileSheet::from_ron(include_str!("../../../../assets/textures/blocks.ron")).unwrap();
+        let reg = voxel::BlockRegistry::from_ron(include_str!("../../../../assets/data/blocks.ron"), &tiles).unwrap();
+        let d = worldgen::Delves::load(include_str!("../../../../assets/data/dungeons.ron"), include_str!("../../../../assets/data/rooms.ron"), &reg).unwrap();
+        for run in 1..6 {
+            let plan = worldgen::FloorPlan { seed: 7, dungeon: 2, theme: 1, run, floor: 2, floors: 3, chain: true, done: false };
+            let f = worldgen::delve::floor(&d, &plan);
+            let spot = prison_spot(&f, false).expect("a fight room");
+            let r = f.room_at(spot).expect("in a room");
+            assert_eq!(f.rooms[r].kind, worldgen::RoomType::Fight);
+            let boss = prison_spot(&f, true).unwrap();
+            assert_eq!(f.room_at(boss), Some(f.boss_room));
+        }
     }
+
 }

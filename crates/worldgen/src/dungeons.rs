@@ -1,44 +1,37 @@
-//! Warded dungeons: a stone gatehouse on the surface with one doorway, a long
-//! stair down, then a network of large rooms joined by wide corridors, all on
-//! one floor deep under the ground. The last room (the furthest walk from the
-//! stair) is the warden's hall: the biggest, where the boss stands.
+//! Dungeon entrances on the island. There is one kind of dungeon: an entrance
+//! here, with a shimmering veil in its doorway (only a spirit passes), and its
+//! floors built in the pocket (`crate::delve`).
 //!
-//! Everything is a pure function of the seed and the gate position, like the
-//! other structures: each chunk draws the parts of nearby dungeons that fall in
-//! it. A dungeon lists `spaces` (the open boxes you can walk in, for "you are
-//! inside"), `spawns` (where enemies stand; the game spawns them) and `bounds`
-//! (the whole warded box: no block in it can be broken or placed).
+//! The five story dungeons come in a fixed order (`dungeons.ron` `chain`):
+//! the Rotting Gate (a squat mossy arch 300-600 blocks from spawn), then three
+//! gatehouses spaced along the way from the Gate to the mountain castle, and
+//! last the castle's vault, a stone house in the corner of its court. The
+//! others are gatehouses scattered about one per 1024-block cell, each with a
+//! theme picked by its seed and 1-4 floors, more the further out it is.
 //!
-//! The layout grows on a grid of 30-block cells in the dungeon's own frame
-//! (u runs away from the door, v across), so a dungeon can face any of the four
-//! directions and boxes stay axis-aligned.
+//! Everything is a pure function of the seed. A dungeon lists its `door` (walk
+//! into it to go down), `outside` (where you stand on the path), `guide`
+//! (where Brindlespheimer stands) and `bounds` (the warded box).
 
-use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
 use voxel::BlockId;
 
-use crate::structures::{cached, pick, BARROW_KIN};
+use crate::delve::fill;
+use crate::structures::{cached, BARROW_KIN};
 use crate::trees::Canvas;
 use crate::util::{hash2, unit};
 use crate::{Land, WorldGen, SEA_LEVEL};
 
-/// One dungeon per cell of this size (when the land allows), plus one near spawn.
+/// One dungeon per cell of this size (when the land allows).
 const CELL: i32 = 1024;
 const CHANCE: f32 = 0.7;
-/// Room grid: cells along u (away from the door) and across (v = -SIDE..=SIDE).
-const GRID: i32 = 30;
-const ALONG: i32 = 5;
-const SIDE: i32 = 2;
-/// How far a dungeon reaches from its gate, any direction (for lookups).
-const REACH: i32 = 200;
-/// Corridors: inner half-width and height.
-const HALL_HALF: i32 = 1;
-const HALL_HEIGHT: i32 = 4;
-/// Regular dungeons keep this far from spawn (the home dungeon is nearer).
+/// How far an entrance reaches from its centre, any direction (for lookups).
+const REACH: i32 = 16;
+/// Scattered dungeons keep this far from spawn (the story ones are placed on their own).
 const CLEAR_OF_SPAWN: i32 = 700;
-
-const DUNGEON_KIND: [&str; 6] = ["Sunken Halls of", "Drowned Vaults of", "Hollow Court of", "Warded Deep of", "Silent Cloister of", "Mourning Keep of"];
+/// Ids of scattered dungeons have this bit (the story dungeons are 1-5).
+const GRID_ID: u64 = 1 << 40;
 
 /// An inclusive box of blocks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,40 +58,27 @@ impl Aabb {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RoomKind {
-    /// The first room at the foot of the stair; nothing spawns here.
-    Entry,
-    Hall,
-    /// The furthest room: the biggest, with the boss.
-    Warden,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Room {
-    pub kind: RoomKind,
-    /// The open space inside the walls.
-    pub inner: Aabb,
-}
-
-/// What kind of enemy a spawn point wants (the combat side picks the creature).
+/// What kind of foe a spawn point wants (the game picks the creature).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SpawnKind {
-    /// One standing watch in a corridor or by the boss.
+    /// One standing watch (a tougher kind).
     Guard,
-    /// One of a group in a room.
+    /// One of a group.
     Pack,
-    /// The boss of the warden's hall.
+    /// The floor's boss.
     Boss,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SpawnPoint {
-    /// The block the enemy's feet stand in.
+    /// The block the foe's feet stand in.
     pub pos: [i32; 3],
     pub kind: SpawnKind,
-    /// The room it belongs to (corridor guards belong to the room they lead into).
+    /// The room it belongs to.
     pub room: usize,
+    /// Which wave it comes in (0 first).
+    pub wave: u8,
+    pub elite: bool,
 }
 
 /// The shimmering veil across the doorway: only spirits pass it.
@@ -112,29 +92,39 @@ pub struct Veil {
     pub height: f32,
 }
 
+/// How the entrance looks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Look {
+    /// A stone gatehouse with a stair going down at the back.
+    Gatehouse,
+    /// The Rotting Gate: a squat mossy arch.
+    Arch,
+    /// The castle's vault: a stone house in the court.
+    Vault,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Dungeon {
     pub id: u64,
     pub name: String,
-    /// Centre of the gatehouse floor (feet height).
+    /// Index into `Delves::themes`.
+    pub theme: usize,
+    pub floors: u8,
+    /// Its place in the story (1-5), if it's one of those.
+    pub chain: Option<u8>,
+    pub look: Look,
+    /// Centre of the entrance's floor (feet height).
     pub gate: [i32; 3],
-    /// Where you stand on the path in front of the door, outside the veil
-    /// (feet). Turned-back walkers and spirits cast out land here.
+    /// Walk into this and you go down.
+    pub door: Aabb,
+    /// Where you stand on the path in front of the door (feet).
     pub outside: [f32; 3],
-    /// Where the guide stands beside the path (feet).
+    /// Where Brindlespheimer stands beside the path (feet).
     pub guide: [f32; 3],
     pub veil: Veil,
-    /// Feet height of every room and corridor.
-    pub floor: i32,
-    pub rooms: Vec<Room>,
-    /// Corridors between rooms (indices into `rooms`).
-    pub links: Vec<(usize, usize)>,
-    pub spawns: Vec<SpawnPoint>,
-    /// Open boxes past the veil: gatehouse, stair, corridors, rooms.
-    pub spaces: Vec<Aabb>,
-    /// Everything built, walls included: the spirit ward covers it.
+    /// Everything built: the spirit ward covers it.
     pub bounds: Aabb,
-    /// Local frame: u runs along `dir` (into the dungeon), v along `side`.
+    /// Local frame: u runs along `dir` (into the entrance), v along `side`.
     dir: (i32, i32),
     side: (i32, i32),
 }
@@ -145,16 +135,10 @@ impl Dungeon {
         self.bounds.contains(x, y, z)
     }
 
-    /// A point (feet) is past the veil, somewhere inside.
+    /// Past the veil: inside the entrance, where the way down starts.
     pub fn inside(&self, p: [f32; 3]) -> bool {
         let b = p.map(|v| v.floor() as i32);
-        self.spaces.iter().any(|s| s.contains(b[0], b[1], b[2]))
-    }
-
-    /// The room a point (feet) stands in.
-    pub fn room_at(&self, p: [f32; 3]) -> Option<usize> {
-        let b = p.map(|v| v.floor() as i32);
-        self.rooms.iter().position(|r| r.inner.contains(b[0], b[1], b[2]))
+        self.door.contains(b[0], b[1], b[2])
     }
 
     fn world(&self, u: i32, v: i32) -> (i32, i32) {
@@ -170,58 +154,21 @@ fn frame_world(gate: [i32; 3], dir: (i32, i32), side: (i32, i32), u: i32, v: i32
 fn local_box(gate: [i32; 3], dir: (i32, i32), side: (i32, i32), u: (i32, i32), v: (i32, i32), y: (i32, i32)) -> Aabb {
     let a = frame_world(gate, dir, side, u.0, v.0);
     let b = frame_world(gate, dir, side, u.1, v.1);
-    Aabb { min: [a.0.min(b.0), y.0, a.1.min(b.1)], max: [a.0.max(b.0), y.1, a.1.max(b.1)] }
+    Aabb { min: [a.0.min(b.0), y.0.min(y.1), a.1.min(b.1)], max: [a.0.max(b.0), y.0.max(y.1), a.1.max(b.1)] }
 }
 
-/// A small deterministic dice for laying out one dungeon.
-struct Dice(u64);
-
-impl Dice {
-    fn next(&mut self) -> u64 {
-        self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
-        let mut z = self.0;
-        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-        z ^ (z >> 31)
-    }
-
-    /// A whole number in lo..=hi.
-    fn int(&mut self, lo: i32, hi: i32) -> i32 {
-        lo + (self.next() % (hi - lo + 1) as u64) as i32
-    }
-
-    fn chance(&mut self, p: f32) -> bool {
-        unit(self.next()) < p
-    }
+fn b_box(x: (i32, i32), y: (i32, i32), z: (i32, i32)) -> Aabb {
+    Aabb { min: [x.0.min(x.1), y.0.min(y.1), z.0.min(z.1)], max: [x.0.max(x.1), y.0.max(y.1), z.0.max(z.1)] }
 }
 
 impl WorldGen {
     /// Dungeons whose warded area touches the rectangle (inclusive block coordinates).
     pub fn dungeons_in(&self, x0: i32, z0: i32, x1: i32, z1: i32) -> Vec<Arc<Dungeon>> {
-        let mut out = Vec::new();
         let touches = |d: &Dungeon| d.bounds.min[0] <= x1 && d.bounds.max[0] >= x0 && d.bounds.min[2] <= z1 && d.bounds.max[2] >= z0;
-        if let Some(d) = &self.home_dungeon
-            && touches(d)
-        {
-            out.push(d.clone());
-        }
-        let [sx, _, sz] = self.spawn;
+        let mut out: Vec<Arc<Dungeon>> = self.chain.iter().flatten().filter(|d| touches(d)).cloned().collect();
         for cz in (z0 - REACH).div_euclid(CELL)..=(z1 + REACH).div_euclid(CELL) {
             for cx in (x0 - REACH).div_euclid(CELL)..=(x1 + REACH).div_euclid(CELL) {
-                let h = hash2(self.seed ^ 0xD0D6, cx, cz);
-                if unit(h) >= CHANCE {
-                    continue;
-                }
-                let span = CELL - 2 * REACH;
-                let x = cx * CELL + REACH + (h >> 8) as i32 % span;
-                let z = cz * CELL + REACH + (h >> 24) as i32 % span;
-                if x + REACH < x0 || x - REACH > x1 || z + REACH < z0 || z - REACH > z1 {
-                    continue;
-                }
-                if ((x - sx) as i64).pow(2) + ((z - sz) as i64).pow(2) < (CLEAR_OF_SPAWN as i64).pow(2) {
-                    continue;
-                }
-                if let Some(d) = cached(&self.structures.dungeons, (cx, cz), || self.build_dungeon(h, x, z))
+                if let Some(d) = self.grid_dungeon(cx, cz)
                     && touches(&d)
                 {
                     out.push(d);
@@ -231,53 +178,135 @@ impl WorldGen {
         out
     }
 
-    /// The dungeon a short walk from spawn.
-    pub fn home_dungeon(&self) -> Option<Arc<Dungeon>> {
-        self.home_dungeon.clone()
+    /// The scattered dungeon of one cell, if it has one.
+    fn grid_dungeon(&self, cx: i32, cz: i32) -> Option<Arc<Dungeon>> {
+        let h = hash2(self.seed ^ 0xD0D6, cx, cz);
+        if unit(h) >= CHANCE {
+            return None;
+        }
+        let span = CELL - 2 * 200;
+        let x = cx * CELL + 200 + ((h >> 8) % span as u64) as i32;
+        let z = cz * CELL + 200 + ((h >> 24) % span as u64) as i32;
+        let [sx, _, sz] = self.spawn;
+        let far = ((((x - sx) as i64).pow(2) + ((z - sz) as i64).pow(2)) as f64).sqrt() as i32;
+        if far < CLEAR_OF_SPAWN {
+            return None;
+        }
+        let id = GRID_ID | (((cx + 0x8000) as u64) << 16) | (cz + 0x8000) as u64;
+        cached(&self.structures.dungeons, (cx, cz), || {
+            let theme = (h >> 33) as usize % self.delves.themes.len();
+            let floors = (1 + (far - CLEAR_OF_SPAWN) / 450).clamp(1, crate::delve::MAX_FLOORS as i32) as u8;
+            let t = &self.delves.themes[theme].def;
+            let place = &t.place[(h >> 13) as usize % t.place.len().max(1)];
+            let name = format!("The {place} of {}", BARROW_KIN[(h >> 29) as usize % BARROW_KIN.len()]);
+            self.build_gatehouse(h, x, z, id, name, theme, floors, None)
+        })
     }
 
-    /// Ground 170-290 blocks from spawn, not towards `WorldGen::home`, where a
-    /// whole dungeon fits under the island.
-    pub(crate) fn search_home_dungeon(&self) -> Option<Dungeon> {
+    /// A dungeon by its id (story dungeons 1-5, or a scattered one).
+    pub fn dungeon(&self, id: u64) -> Option<Arc<Dungeon>> {
+        if id & GRID_ID != 0 {
+            let cx = ((id >> 16) & 0xFFFF) as i32 - 0x8000;
+            let cz = (id & 0xFFFF) as i32 - 0x8000;
+            return self.grid_dungeon(cx, cz).filter(|d| d.id == id);
+        }
+        self.chain.iter().flatten().find(|d| d.id == id).cloned()
+    }
+
+    /// The n-th story dungeon (1 = the Rotting Gate, 5 = the castle's vault).
+    pub fn chain_dungeon(&self, n: u8) -> Option<Arc<Dungeon>> {
+        self.chain.get(n as usize - 1).cloned().flatten()
+    }
+
+    /// The Rotting Gate: the first story dungeon.
+    pub fn rotting_gate(&self) -> Option<Arc<Dungeon>> {
+        self.chain_dungeon(1)
+    }
+
+    /// Is this block protected by a spirit ward (a dungeon entrance, a barrow,
+    /// a village, or anywhere in the pocket)?
+    pub fn warded(&self, x: i32, y: i32, z: i32) -> bool {
+        self.dungeons_in(x, z, x, z).iter().any(|d| d.warded(x, y, z))
+            || self.barrows_in(x, z, x, z).iter().any(|b| b.warded(x, y, z))
+            || self.villages_in(x, z, x, z).iter().any(|v| v.warded(x, y, z))
+            || crate::delve::in_pocket(x, z)
+    }
+
+    /// The story dungeons, placed once per world (`new`): the Gate, three along
+    /// the way to the castle, the castle's vault.
+    pub(crate) fn search_chain(&mut self) {
+        let chain = self.delves.chain.clone();
+        let theme = |i: usize| self.delves.theme_named(&chain[i].theme).unwrap_or(0);
+        let info = |i: usize| (theme(i), chain[i].floors, chain[i].name.clone());
+        let mut list: Vec<Option<Arc<Dungeon>>> = Vec::new();
+        if !chain.is_empty() {
+            let (t, f, n) = info(0);
+            list.push(self.search_rotting_gate(t, f, n).map(Arc::new));
+        }
+        self.chain = list;
+        // Sporrow and the castle are placed by the Gate (`landmarks`).
+        if let Some((v, f)) = self.search_sporrow() {
+            self.landmarks.sporrow = Some(Arc::new(v));
+            self.landmarks.forge = Some(f);
+        }
+        self.landmarks.castle = self.search_castle();
         let [sx, _, sz] = self.spawn;
-        let village = ((self.home.1 - sz) as f32).atan2((self.home.0 - sx) as f32);
-        for ring in 0..5 {
-            let r = 170.0 + ring as f32 * 30.0;
-            for s in 0..24 {
-                let a = village + std::f32::consts::PI + (s as f32 / 24.0 - 0.5) * 1.5 * std::f32::consts::PI;
-                let (x, z) = (sx + (a.cos() * r) as i32, sz + (a.sin() * r) as i32);
-                if let Some(d) = self.build_dungeon(hash2(self.seed ^ 0xD0D7, x, z), x, z) {
-                    return Some(d);
+        let from = self.chain.first().cloned().flatten().map_or((sx, sz), |g| (g.gate[0], g.gate[2]));
+        let to = self.landmarks.castle.as_ref().map_or((sx + 1200, sz + 300), |c| (c.center[0], c.center[2]));
+        let middle = chain.len().saturating_sub(1);
+        for i in 1..middle {
+            let t = i as f32 / middle as f32;
+            let (x, z) = (from.0 + ((to.0 - from.0) as f32 * t) as i32, from.1 + ((to.1 - from.1) as f32 * t) as i32);
+            let (th, fl, name) = info(i);
+            let found = self.search_gatehouse_near(x, z, i as u64 + 1, name, th, fl, i as u8 + 1).map(Arc::new);
+            self.chain.push(found);
+        }
+        if middle >= 1 {
+            let (th, fl, name) = info(middle);
+            let vault = self.landmarks.castle.clone().map(|k| Arc::new(self.build_vault(&k, middle as u64 + 1, name, th, fl, middle as u8 + 1)));
+            self.chain.push(vault);
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn search_gatehouse_near(&self, x: i32, z: i32, id: u64, name: String, theme: usize, floors: u8, chain: u8) -> Option<Dungeon> {
+        for ring in 0..12 {
+            let r = ring as f32 * 18.0;
+            for s in 0..(1 + ring * 6) {
+                let a = s as f32 / (1 + ring * 6) as f32 * std::f32::consts::TAU + ring as f32 * 0.9;
+                let (px, pz) = (x + (a.cos() * r) as i32, z + (a.sin() * r) as i32);
+                let h = hash2(self.seed ^ 0xC4A1 ^ id, px, pz);
+                let Some(d) = self.build_gatehouse(h, px, pz, id, name.clone(), theme, floors, Some(chain)) else { continue };
+                let area = d.bounds.grow(60);
+                if self.dungeons_in(area.min[0], area.min[2], area.max[0], area.max[2]).iter().any(|o| o.bounds.intersects(&area)) {
+                    continue;
                 }
+                if self.landmarks.castle.as_ref().is_some_and(|c| c.bounds.intersects(&area)) || self.landmarks.sporrow.as_ref().is_some_and(|v| {
+                    let (dx, dz) = (px - v.center[0], pz - v.center[2]);
+                    dx * dx + dz * dz < (v.radius + 30).pow(2)
+                }) {
+                    continue;
+                }
+                return Some(d);
             }
         }
         None
     }
 
-    /// Is this block protected by a spirit ward (inside a dungeon, barrow or village)?
-    pub fn warded(&self, x: i32, y: i32, z: i32) -> bool {
-        self.dungeons_in(x, z, x, z).iter().any(|d| d.warded(x, y, z))
-            || self.barrows_in(x, z, x, z).iter().any(|b| b.warded(x, y, z))
-            || self.villages_in(x, z, x, z).iter().any(|v| v.warded(x, y, z))
-            || self.rotting_gate().is_some_and(|g| g.bounds.contains(x, y, z))
-            || crate::rotting::in_pocket(x, z)
-    }
-
-    pub(crate) fn build_dungeon(&self, h: u64, gx: i32, gz: i32) -> Option<Dungeon> {
+    /// A stone gatehouse facing a random way, on fairly level, dry ground.
+    #[allow(clippy::too_many_arguments)]
+    fn build_gatehouse(&self, h: u64, gx: i32, gz: i32, id: u64, name: String, theme: usize, floors: u8, chain: Option<u8>) -> Option<Dungeon> {
         let col = self.column(gx, gz);
         if col.land != Land::Main || col.height < SEA_LEVEL + 1 || col.climate.overhang > 0.02 {
             return None;
         }
-        let mut dice = Dice(h);
         let dirs = [(1, 0), (0, 1), (-1, 0), (0, -1)];
-        let dir = dirs[dice.int(0, 3) as usize];
+        let dir = dirs[(h >> 3) as usize % 4];
         let side = (-dir.1, dir.0);
         let g = col.height + 1;
         let gate = [gx, g, gz];
         let at = |u: i32, v: i32| frame_world(gate, dir, side, u, v);
-        // The gatehouse and its path need fairly level, dry ground.
-        let mut lo = i32::MAX;
-        let mut hi = i32::MIN;
+        let (mut lo, mut hi) = (i32::MAX, i32::MIN);
         for u in [-8, -4, 0, 3] {
             for v in [-3, 0, 3] {
                 let (x, z) = at(u, v);
@@ -292,245 +321,158 @@ impl WorldGen {
         if hi - lo > 4 {
             return None;
         }
-        let depth = dice.int(20, 27);
-        let floor = g - depth;
-        // A room cell is usable when solid island surrounds it on every side,
-        // with ground over its ceiling and island under its floor.
-        let centre = |i: i32, j: i32| (depth + 2 + GRID / 2 + i * GRID, j * GRID);
-        let usable = |i: i32, j: i32| {
-            let (cu, cv) = centre(i, j);
-            [(0, 0), (-13, -13), (-13, 13), (13, -13), (13, 13)].iter().all(|(du, dv)| {
-                let (x, z) = at(cu + du, cv + dv);
-                let c = self.column(x, z);
-                c.land == Land::Main && c.bottom < floor - 6 && c.height > floor + 14
-            })
-        };
-        // The stair runs down under the ground too.
-        let (sx, sz) = at(depth, 0);
-        let sc = self.column(sx, sz);
-        if sc.land != Land::Main || sc.bottom > floor - 6 || !usable(0, 0) {
-            return None;
-        }
-        // Grow the rooms: pick a room, try a neighbouring cell.
-        let mut cells = vec![(0, 0)];
-        let mut index: HashMap<(i32, i32), usize> = HashMap::from([((0, 0), 0)]);
-        let mut links = Vec::new();
-        let want = dice.int(7, 10) as usize;
-        let mut checked: HashMap<(i32, i32), bool> = HashMap::new();
-        for _ in 0..300 {
-            if cells.len() >= want {
-                break;
-            }
-            let from = dice.int(0, cells.len() as i32 - 1) as usize;
-            let (di, dj) = dirs[dice.int(0, 3) as usize];
-            let (i, j) = (cells[from].0 + di, cells[from].1 + dj);
-            if !(0..ALONG).contains(&i) || !(-SIDE..=SIDE).contains(&j) || index.contains_key(&(i, j)) {
-                continue;
-            }
-            if !*checked.entry((i, j)).or_insert_with(|| usable(i, j)) {
-                continue;
-            }
-            index.insert((i, j), cells.len());
-            links.push((from, cells.len()));
-            cells.push((i, j));
-        }
-        if cells.len() < 4 {
-            return None;
-        }
-        // A few extra corridors make loops, so it's not one long line.
-        for (a, &(i, j)) in cells.iter().enumerate() {
-            for (di, dj) in [(1, 0), (0, 1)] {
-                if let Some(&b) = index.get(&(i + di, j + dj))
-                    && !links.contains(&(a, b))
-                    && !links.contains(&(b, a))
-                    && dice.chance(0.25)
-                {
-                    links.push((a, b));
-                }
-            }
-        }
-        // The warden's hall: the room furthest from the stair.
-        let mut dist = vec![usize::MAX; cells.len()];
-        dist[0] = 0;
-        let mut queue = VecDeque::from([0]);
-        while let Some(a) = queue.pop_front() {
-            for &(p, q) in &links {
-                let b = if p == a { q } else if q == a { p } else { continue };
-                if dist[b] == usize::MAX {
-                    dist[b] = dist[a] + 1;
-                    queue.push_back(b);
-                }
-            }
-        }
-        let warden = (1..cells.len()).max_by_key(|&i| (dist[i], i)).unwrap_or(1);
         let lbox = |u: (i32, i32), v: (i32, i32), y: (i32, i32)| local_box(gate, dir, side, u, v, y);
-        let mut rooms = Vec::new();
-        let mut room_local = Vec::new();
-        for (n, &(i, j)) in cells.iter().enumerate() {
-            let (cu, cv) = centre(i, j);
-            let (kind, ru, rv, height) = if n == 0 {
-                (RoomKind::Entry, dice.int(6, 8), dice.int(6, 8), 7)
-            } else if n == warden {
-                (RoomKind::Warden, 12, 12, 11)
-            } else {
-                (RoomKind::Hall, dice.int(6, 11), dice.int(6, 11), dice.int(6, 9))
-            };
-            room_local.push((cu, cv, ru, rv));
-            rooms.push(Room { kind, inner: lbox((cu - ru, cu + ru), (cv - rv, cv + rv), (floor, floor + height - 1)) });
-        }
-        // Open spaces: gatehouse, stair, the corridor from the stair, corridors, rooms.
-        let mut spaces = vec![lbox((-2, 2), (-2, 2), (g, g + 3))];
-        for k in 0..depth {
-            spaces.push(lbox((k, k), (-HALL_HALF, HALL_HALF), (g - k, g - k + 3)));
-        }
-        spaces.push(lbox((depth, room_local[0].0), (-HALL_HALF, HALL_HALF), (floor, floor + HALL_HEIGHT - 1)));
-        let corridor = |a: usize, b: usize| {
-            let (au, av, _, _) = room_local[a];
-            let (bu, bv, _, _) = room_local[b];
-            if av == bv {
-                lbox((au.min(bu), au.max(bu)), (av - HALL_HALF, av + HALL_HALF), (floor, floor + HALL_HEIGHT - 1))
-            } else {
-                lbox((au - HALL_HALF, au + HALL_HALF), (av.min(bv), av.max(bv)), (floor, floor + HALL_HEIGHT - 1))
-            }
-        };
-        for &(a, b) in &links {
-            spaces.push(corridor(a, b));
-        }
-        spaces.extend(rooms.iter().map(|r| r.inner));
-        // Enemies: packs in the halls, guards in some corridors, the boss and
-        // two guards in the warden's hall.
-        let mut spawns = Vec::new();
-        let pillar = |n: usize, du: i32, dv: i32| {
-            let (_, _, ru, rv) = room_local[n];
-            ru >= 8 && rv >= 8 && du.abs() == ru - 3 && dv.abs() == rv - 3
-        };
-        for (n, room) in rooms.iter().enumerate() {
-            let (cu, cv, ru, rv) = room_local[n];
-            let put = |du: i32, dv: i32| {
-                let (x, z) = at(cu + du, cv + dv);
-                [x, floor, z]
-            };
-            match room.kind {
-                RoomKind::Entry => {}
-                RoomKind::Warden => {
-                    spawns.push(SpawnPoint { pos: put(0, 0), kind: SpawnKind::Boss, room: n });
-                    spawns.push(SpawnPoint { pos: put(-4, -5), kind: SpawnKind::Guard, room: n });
-                    spawns.push(SpawnPoint { pos: put(-4, 5), kind: SpawnKind::Guard, room: n });
-                }
-                RoomKind::Hall => {
-                    let count = (2 + (ru * rv) / 30).min(6);
-                    let mut tries = 0;
-                    let mut placed = 0;
-                    while placed < count && tries < 40 {
-                        tries += 1;
-                        let (du, dv) = (dice.int(-(ru - 2), ru - 2), dice.int(-(rv - 2), rv - 2));
-                        let pos = put(du, dv);
-                        if pillar(n, du, dv) || spawns.iter().any(|s: &SpawnPoint| s.pos == pos) {
-                            continue;
-                        }
-                        spawns.push(SpawnPoint { pos, kind: SpawnKind::Pack, room: n });
-                        placed += 1;
-                    }
-                }
-            }
-        }
-        for &(a, b) in &links {
-            if dice.chance(0.5) {
-                let (au, av, _, _) = room_local[a];
-                let (bu, bv, _, _) = room_local[b];
-                let (x, z) = at((au + bu) / 2, (av + bv) / 2);
-                let room = if dist[b] >= dist[a] { b } else { a };
-                spawns.push(SpawnPoint { pos: [x, floor, z], kind: SpawnKind::Guard, room });
-            }
-        }
-        // The gatehouse, its pillars and the path in front of it.
-        let house = lbox((-3, 3), (-3, 3), (g - 1, g + 5));
+        let house = lbox((-4, 4), (-4, 4), (lo - 1, g + 6));
         let path = lbox((-8, -3), (-2, 2), (lo - 1, g + 4));
-        let mut bounds = spaces.iter().fold(house.union(&path), |acc, s| acc.union(&s.grow(1)));
-        bounds.min[1] = bounds.min[1].min(lo - 1);
-        // Keep clear of villages.
+        let bounds = house.union(&path).union(&lbox((0, 2), (-1, 1), (g - 5, g)));
         if !self.villages_in(bounds.min[0] - 8, bounds.min[2] - 8, bounds.max[0] + 8, bounds.max[2] + 8).is_empty() {
             return None;
         }
         let (ox, oz) = at(-6, 0);
-        let (wx, wz) = at(-5, -3);
+        let (wx, wz) = at(-6, 3);
         let guide_y = self.column(wx, wz).height + 1;
         let (vx, vz) = at(-3, 0);
-        let name = format!("The {} {}", pick(&DUNGEON_KIND, h >> 13), pick(&BARROW_KIN, h >> 29));
         Some(Dungeon {
-            id: h,
+            id,
             name,
+            theme,
+            floors,
+            chain,
+            look: Look::Gatehouse,
             gate,
+            door: lbox((0, 2), (-1, 1), (g - 4, g + 2)),
             outside: [ox as f32 + 0.5, g as f32, oz as f32 + 0.5],
             guide: [wx as f32 + 0.5, guide_y as f32, wz as f32 + 0.5],
             veil: Veil { center: [vx as f32 + 0.5, g as f32 + 1.5, vz as f32 + 0.5], out: (-dir.0, -dir.1), width: 3.0, height: 3.0 },
-            floor,
-            rooms,
-            links,
-            spawns,
-            spaces,
             bounds,
             dir,
             side,
         })
     }
-}
 
-/// Fill a box with a block, clipped to the chunk.
-fn fill(c: &mut Canvas, b: &Aabb, block: BlockId) {
-    let lo = c.origin;
-    let hi = lo.map(|v| v + voxel::CHUNK_SIZE_I32 - 1);
-    for y in b.min[1].max(lo[1])..=b.max[1].min(hi[1]) {
-        for z in b.min[2].max(lo[2])..=b.max[2].min(hi[2]) {
-            for x in b.min[0].max(lo[0])..=b.max[0].min(hi[0]) {
-                c.put(x, y, z, block);
-            }
-        }
-    }
-}
-
-/// Draw the parts of a dungeon that fall in this chunk.
-pub(crate) fn draw(wg: &WorldGen, c: &mut Canvas, d: &Dungeon) {
-    let ids = &wg.ids;
-    let chunk = Aabb { min: c.origin, max: c.origin.map(|v| v + voxel::CHUNK_SIZE_I32 - 1) };
-    let g = d.gate[1];
-    let lbox = |u: (i32, i32), v: (i32, i32), y: (i32, i32)| local_box(d.gate, d.dir, d.side, u, v, y);
-    // Shells first: every open space gets a deeprock skin and a stone floor;
-    // the air is carved afterwards so corridors open into the rooms.
-    for s in &d.spaces {
-        let shell = s.grow(1);
-        if !shell.intersects(&chunk) {
-            continue;
-        }
-        fill(c, &shell, ids.deeprock);
-        fill(c, &Aabb { min: [shell.min[0], shell.min[1], shell.min[2]], max: [shell.max[0], shell.min[1], shell.max[2]] }, ids.cobblestone);
-    }
-    // The gatehouse: stone walls on a foundation down to the ground, a roof,
-    // and two tall deeprock pillars by the door.
-    let house = lbox((-3, 3), (-3, 3), (g - 1, g + 4));
-    if house.grow(3).intersects(&chunk) {
-        for u in -3..=3 {
-            for v in -3..=3 {
-                let (x, z) = d.world(u, v);
-                let ground = wg.column(x, z).height;
-                for y in ground.min(g - 2)..g - 1 {
-                    c.put(x, y, z, ids.cobblestone);
+    /// Level, dry ground on the main island 300-600 blocks from spawn, clear
+    /// of villages and dungeons: the Rotting Gate.
+    fn search_rotting_gate(&self, theme: usize, floors: u8, name: String) -> Option<Dungeon> {
+        let [sx, _, sz] = self.spawn;
+        for ring in 0..11 {
+            let r = 300.0 + ring as f32 * 30.0;
+            for s in 0..32 {
+                let a = s as f32 / 32.0 * std::f32::consts::TAU + ring as f32 * 0.7 + unit(self.seed) * 6.0;
+                let (x, z) = (sx + (a.cos() * r) as i32, sz + (a.sin() * r) as i32);
+                if let Some(g) = self.build_rotting_gate(x, z, theme, floors, name.clone()) {
+                    return Some(g);
                 }
             }
         }
-        fill(c, &house, ids.cobblestone);
-        fill(c, &lbox((-4, 4), (-4, 4), (g + 5, g + 5)), ids.deeprock);
-        for v in [-2, 2] {
-            fill(c, &lbox((-4, -4), (v, v), (g - 1, g + 6)), ids.deeprock);
+        None
+    }
+
+    fn build_rotting_gate(&self, x: i32, z: i32, theme: usize, floors: u8, name: String) -> Option<Dungeon> {
+        let col = self.column(x, z);
+        if col.land != Land::Main || col.height < SEA_LEVEL + 1 || col.height < col.water || col.climate.overhang > 0.02 {
+            return None;
         }
+        let (mut lo, mut hi) = (i32::MAX, i32::MIN);
+        for dz in -5..=5 {
+            for dx in -5..=5 {
+                let c = self.column(x + dx, z + dz);
+                if c.land != Land::Main || c.height < c.water {
+                    return None;
+                }
+                lo = lo.min(c.height);
+                hi = hi.max(c.height);
+            }
+        }
+        if hi - lo > 3 {
+            return None;
+        }
+        let g = col.height + 1;
+        let bounds = b_box((x - 5, x + 5), (lo - 1, g + 6), (z - 5, z + 5));
+        let near = |b: &Aabb| b.intersects(&bounds.grow(6));
+        if self.villages_in(x - 40, z - 40, x + 40, z + 40).iter().any(|v| {
+            let (dx, dz) = (x - v.center[0], z - v.center[2]);
+            dx * dx + dz * dz < (v.radius + 12) * (v.radius + 12)
+        }) || self.dungeons_in(x - 8, z - 8, x + 8, z + 8).iter().any(|d| near(&d.bounds))
+        {
+            return None;
+        }
+        // Face back towards spawn.
+        let (tx, tz) = (self.spawn[0] - x, self.spawn[2] - z);
+        let out = if tx.abs() > tz.abs() { (tx.signum(), 0) } else { (0, tz.signum()) };
+        let out = if out == (0, 0) { (1, 0) } else { out };
+        let dir = (-out.0, -out.1);
+        let side = (-dir.1, dir.0);
+        // The chamber inside the arch: walk to its back half to go down.
+        let (bx, bz) = (x - out.0, z - out.1);
+        let door = if out.0 != 0 { b_box((bx, bx - out.0), (g - 1, g + 2), (z - 1, z + 1)) } else { b_box((x - 1, x + 1), (g - 1, g + 2), (bz, bz - out.1)) };
+        let outside = [(x + out.0 * 6) as f32 + 0.5, g as f32, (z + out.1 * 6) as f32 + 0.5];
+        let guide = [outside[0] + side.0 as f32 * 2.5 + out.0 as f32, g as f32, outside[2] + side.1 as f32 * 2.5 + out.1 as f32];
+        let veil = Veil { center: [(x + out.0 * 3) as f32 + 0.5, g as f32 + 1.5, (z + out.1 * 3) as f32 + 0.5], out, width: 3.0, height: 3.0 };
+        Some(Dungeon { id: 1, name, theme, floors, chain: Some(1), look: Look::Arch, gate: [x, g, z], door, outside, guide, veil, bounds, dir, side })
+    }
+
+    /// The castle's vault: a small stone house in the court's far corner from the tower.
+    fn build_vault(&self, k: &crate::Castle, id: u64, name: String, theme: usize, floors: u8, chain: u8) -> Dungeon {
+        let [x, fl, z] = k.center;
+        // The tower stands in the court's (-, -) corner; the vault in the (+, +) one.
+        let gate = [x + 6, fl, z + 6];
+        let dir = (1, 0);
+        let side = (0, 1);
+        let lbox = |u: (i32, i32), v: (i32, i32), y: (i32, i32)| local_box(gate, dir, side, u, v, y);
+        let (ox, oz) = frame_world(gate, dir, side, -5, 0);
+        let (wx, wz) = frame_world(gate, dir, side, -5, -3);
+        Dungeon {
+            id,
+            name,
+            theme,
+            floors,
+            chain: Some(chain),
+            look: Look::Vault,
+            gate,
+            door: lbox((0, 1), (-1, 1), (fl - 4, fl + 2)),
+            outside: [ox as f32 + 0.5, fl as f32, oz as f32 + 0.5],
+            guide: [wx as f32 + 0.5, fl as f32, wz as f32 + 0.5],
+            veil: Veil { center: [(gate[0] - 2) as f32 + 0.5, fl as f32 + 1.5, gate[2] as f32 + 0.5], out: (-1, 0), width: 3.0, height: 3.0 },
+            bounds: lbox((-2, 2), (-2, 2), (fl - 6, fl + 5)),
+            dir,
+            side,
+        }
+    }
+}
+
+/// Draw the parts of an entrance that fall in this chunk.
+pub(crate) fn draw(wg: &WorldGen, c: &mut Canvas, d: &Dungeon) {
+    match d.look {
+        Look::Gatehouse => draw_gatehouse(wg, c, d),
+        Look::Arch => draw_arch(wg, c, d),
+        Look::Vault => draw_vault(wg, c, d),
+    }
+}
+
+fn draw_gatehouse(wg: &WorldGen, c: &mut Canvas, d: &Dungeon) {
+    let ids = &wg.ids;
+    let g = d.gate[1];
+    let lbox = |u: (i32, i32), v: (i32, i32), y: (i32, i32)| local_box(d.gate, d.dir, d.side, u, v, y);
+    // Stone walls on a foundation down to the ground, a roof, and two tall
+    // deeprock pillars by the door.
+    for u in -3..=3 {
+        for v in -3..=3 {
+            let (x, z) = d.world(u, v);
+            let ground = wg.column(x, z).height;
+            for y in ground.min(g - 2)..g - 1 {
+                c.put(x, y, z, ids.cobblestone);
+            }
+        }
+    }
+    fill(c, &lbox((-3, 3), (-3, 3), (g - 1, g + 4)), ids.cobblestone);
+    fill(c, &lbox((-4, 4), (-4, 4), (g + 5, g + 5)), ids.deeprock);
+    for v in [-2, 2] {
+        fill(c, &lbox((-4, -4), (v, v), (g - 1, g + 6)), ids.deeprock);
     }
     // The path to the door: cleared, paved, filled underneath.
     for u in -8..=-4 {
         for v in -2..=2 {
             let (x, z) = d.world(u, v);
-            if !chunk.grow(1).contains(x, chunk.min[1], z) {
-                continue;
-            }
             let ground = wg.column(x, z).height;
             for y in ground.min(g - 2)..g - 1 {
                 c.put(x, y, z, ids.cobblestone);
@@ -541,35 +483,77 @@ pub(crate) fn draw(wg: &WorldGen, c: &mut Canvas, d: &Dungeon) {
             }
         }
     }
-    // Air: the doorway (where the veil hangs) and every open space.
+    // Inside: the chamber, the doorway (where the veil hangs), and a dark
+    // stairwell at the back going down.
+    fill(c, &lbox((-2, 2), (-2, 2), (g, g + 3)), BlockId::AIR);
     fill(c, &lbox((-3, -3), (-1, 1), (g, g + 2)), BlockId::AIR);
-    for s in &d.spaces {
-        if s.intersects(&chunk) {
-            fill(c, s, BlockId::AIR);
-        }
+    fill(c, &lbox((0, 2), (-1, 1), (g - 5, g - 1)), BlockId::AIR);
+    fill(c, &lbox((-1, 3), (-2, 2), (g - 6, g - 6)), ids.deeprock);
+    for k in 0..3 {
+        fill(c, &lbox((k, k), (-1, 1), (g - 5, g - 2 - k)), ids.deeprock);
     }
-    // Pillars in the big rooms and torches in the corners.
-    for r in &d.rooms {
-        if !r.inner.grow(1).intersects(&chunk) {
-            continue;
-        }
-        let (w, h) = (r.inner.max[0] - r.inner.min[0], r.inner.max[2] - r.inner.min[2]);
-        if w >= 16 && h >= 16 {
-            for (x, z) in [(r.inner.min[0] + 3, r.inner.min[2] + 3), (r.inner.min[0] + 3, r.inner.max[2] - 3), (r.inner.max[0] - 3, r.inner.min[2] + 3), (r.inner.max[0] - 3, r.inner.max[2] - 3)] {
-                fill(c, &Aabb { min: [x, r.inner.min[1], z], max: [x, r.inner.max[1], z] }, ids.deeprock);
-            }
-        }
-        let y = r.inner.min[1];
-        c.put(r.inner.min[0], y, r.inner.min[2], ids.torch);
-        c.put(r.inner.max[0], y, r.inner.max[2], ids.torch);
-        if r.kind == RoomKind::Warden {
-            c.put(r.inner.min[0], y, r.inner.max[2], ids.torch);
-            c.put(r.inner.max[0], y, r.inner.min[2], ids.torch);
-        }
-    }
-    // Two torches in the gatehouse, clear of the stair.
     for v in [-2, 2] {
         let (x, z) = d.world(-2, v);
+        c.put(x, g, z, ids.torch);
+    }
+}
+
+/// The Rotting Gate: a squat mossy arch with a dark hole at the back.
+fn draw_arch(wg: &WorldGen, c: &mut Canvas, d: &Dungeon) {
+    let ids = &wg.ids;
+    let [x, y, z] = d.gate;
+    for dz in -4..=4 {
+        for dx in -4..=4 {
+            let ground = wg.column(x + dx, z + dz).height;
+            for yy in ground.min(y - 2)..y {
+                c.put(x + dx, yy, z + dz, ids.cobblestone);
+            }
+        }
+    }
+    fill(c, &b_box((x - 3, x + 3), (y, y + 4), (z - 3, z + 3)), ids.cobblestone);
+    fill(c, &b_box((x - 1, x + 1), (y, y + 2), (z - 1, z + 1)), BlockId::AIR);
+    let (ox, oz) = d.veil.out;
+    for k in 2..=3 {
+        let (dx, dz) = (x + ox * k, z + oz * k);
+        let b = if ox != 0 { b_box((dx, dx), (y, y + 2), (z - 1, z + 1)) } else { b_box((x - 1, x + 1), (y, y + 2), (dz, dz)) };
+        fill(c, &b, BlockId::AIR);
+    }
+    // A dark hole in the floor at the back, rimmed in deeprock.
+    fill(c, &b_box((x - 1, x + 1), (y - 1, y - 1), (z - 1, z + 1)), ids.deeprock);
+    fill(c, &d.door, BlockId::AIR);
+    fill(c, &b_box((x - 2, x + 2), (y - 3, y - 3), (z - 2, z + 2)), ids.deeprock);
+    // Mold over everything: moss on the roof and running down the walls.
+    fill(c, &b_box((x - 4, x + 4), (y + 5, y + 5), (z - 4, z + 4)), ids.moss);
+    fill(c, &b_box((x - 2, x + 2), (y + 6, y + 6), (z - 2, z + 2)), ids.moss);
+    for dz in -3..=3 {
+        for dx in -3..=3 {
+            for yy in y..=y + 4 {
+                if c.is_air(x + dx, yy, z + dz) == Some(false) && unit(hash2(wg.seed ^ 0x601D ^ yy as u64, x + dx, z + dz)) < 0.4 {
+                    c.put(x + dx, yy, z + dz, if yy % 2 == 0 { ids.moss } else { ids.mud });
+                }
+            }
+        }
+    }
+    // Two torches flank the doorway.
+    let (sx, sz) = (-oz, ox);
+    for s in [-2, 2] {
+        c.put(x + ox * 4 + sx * s, y, z + oz * 4 + sz * s, ids.torch);
+    }
+}
+
+/// The castle's vault house, in the court.
+fn draw_vault(wg: &WorldGen, c: &mut Canvas, d: &Dungeon) {
+    let ids = &wg.ids;
+    let g = d.gate[1];
+    let lbox = |u: (i32, i32), v: (i32, i32), y: (i32, i32)| local_box(d.gate, d.dir, d.side, u, v, y);
+    fill(c, &lbox((-2, 2), (-2, 2), (g, g + 3)), ids.cobblestone);
+    fill(c, &lbox((-2, 2), (-2, 2), (g + 4, g + 4)), ids.deeprock);
+    fill(c, &lbox((-1, 1), (-1, 1), (g, g + 2)), BlockId::AIR);
+    fill(c, &lbox((-2, -2), (-1, 1), (g, g + 2)), BlockId::AIR);
+    fill(c, &d.door, BlockId::AIR);
+    fill(c, &lbox((0, 1), (-1, 1), (g - 5, g - 5)), ids.deeprock);
+    for v in [-1, 1] {
+        let (x, z) = d.world(-1, v);
         c.put(x, g, z, ids.torch);
     }
 }
@@ -579,75 +563,55 @@ mod tests {
     use super::*;
     use crate::tests::wg;
 
-    fn home() -> (WorldGen, Arc<Dungeon>) {
+    #[test]
+    fn the_story_dungeons_lead_from_the_gate_to_the_castle() {
         let g = wg();
-        let d = g.home_dungeon().expect("a home dungeon near spawn");
-        (g, d)
-    }
-
-    #[test]
-    fn home_dungeon_is_near_spawn_with_big_rooms() {
-        let (g, d) = home();
-        let [sx, _, sz] = g.find_spawn();
-        let dist = (((d.gate[0] - sx).pow(2) + (d.gate[2] - sz).pow(2)) as f32).sqrt();
-        assert!((150.0..320.0).contains(&dist), "{} is {dist} blocks from spawn", d.name);
-        assert!(d.rooms.len() >= 4, "{} rooms", d.rooms.len());
-        assert_eq!(d.rooms.iter().filter(|r| r.kind == RoomKind::Warden).count(), 1);
-        assert_eq!(d.rooms[0].kind, RoomKind::Entry);
-        for r in &d.rooms {
-            let w = r.inner.max[0] - r.inner.min[0] + 1;
-            let l = r.inner.max[2] - r.inner.min[2] + 1;
-            assert!(w >= 13 && l >= 13, "room {w}x{l} is too small");
+        let gate = g.rotting_gate().expect("the Rotting Gate");
+        let [sx, _, sz] = g.spawn;
+        let d = (((gate.gate[0] - sx).pow(2) + (gate.gate[2] - sz).pow(2)) as f32).sqrt();
+        assert!((290.0..=610.0).contains(&d), "{d}");
+        assert_eq!(gate.chain, Some(1));
+        assert_eq!(gate.floors, 2);
+        assert_eq!(gate.look, Look::Arch);
+        let castle = g.castle().expect("a castle");
+        let vault = g.chain_dungeon(5).expect("the castle's vault");
+        assert!(castle.bounds.contains(vault.gate[0], vault.gate[1], vault.gate[2]));
+        for n in 1..=5 {
+            let d = g.chain_dungeon(n).unwrap_or_else(|| panic!("story dungeon {n}"));
+            assert_eq!(d.chain, Some(n));
+            assert_eq!(g.dungeon(d.id).as_deref(), Some(&*d));
+            assert!(g.warded(d.gate[0], d.gate[1] + 1, d.gate[2]));
+            assert!(d.inside([d.door.min[0] as f32 + 0.5, d.door.min[1] as f32 + 1.0, d.door.min[2] as f32 + 0.5]));
+            assert!(!d.inside(d.outside));
+            eprintln!("{} ({}) at {:?}", d.name, g.delves.themes[d.theme].def.title, d.gate);
         }
-        // Deterministic.
-        assert_eq!(*g.home_dungeon().unwrap(), *d);
-        eprintln!("{} at {:?}, {} rooms, {} spawns, floor {}", d.name, d.gate, d.rooms.len(), d.spawns.len(), d.floor);
+        // Each one along the way is further from the Gate than the last.
+        let far = |n: u8| {
+            let d = g.chain_dungeon(n).unwrap();
+            (((d.gate[0] - gate.gate[0]).pow(2) + (d.gate[2] - gate.gate[2]).pow(2)) as f32).sqrt()
+        };
+        assert!(far(2) < far(3) && far(3) < far(4));
     }
 
     #[test]
-    fn every_room_is_reachable_from_the_stair() {
-        let (_, d) = home();
-        let mut seen = vec![false; d.rooms.len()];
-        seen[0] = true;
-        let mut changed = true;
-        while changed {
-            changed = false;
-            for &(a, b) in &d.links {
-                if seen[a] != seen[b] {
-                    seen[a] = true;
-                    seen[b] = true;
-                    changed = true;
-                }
+    fn scattered_dungeons_have_themes_floors_and_ids() {
+        let g = wg();
+        let (cx, cz) = g.island_center();
+        let r = crate::MAIN_RADIUS as i32;
+        let all: Vec<_> = g.dungeons_in(cx - r, cz - r, cx + r, cz + r).into_iter().filter(|d| d.chain.is_none()).collect();
+        assert!(all.len() >= 3, "{} dungeons", all.len());
+        for d in &all {
+            assert!((1..=4).contains(&d.floors));
+            assert!(d.theme < g.delves.themes.len());
+            assert_eq!(g.dungeon(d.id).as_deref(), Some(&**d));
+        }
+        for (i, a) in all.iter().enumerate() {
+            for b in &all[i + 1..] {
+                assert!(!a.bounds.intersects(&b.bounds), "{} overlaps {}", a.name, b.name);
             }
         }
-        assert!(seen.iter().all(|s| *s));
-    }
-
-    #[test]
-    fn spawns_stand_inside_on_open_floor() {
-        let (_, d) = home();
-        assert!(d.spawns.iter().any(|s| s.kind == SpawnKind::Boss));
-        assert!(!d.spawns.iter().any(|s| d.rooms[s.room].kind == RoomKind::Entry), "nothing spawns in the entry room");
-        for s in &d.spawns {
-            let p = [s.pos[0] as f32 + 0.5, s.pos[1] as f32, s.pos[2] as f32 + 0.5];
-            assert!(d.inside(p), "{s:?} is not in an open space");
-            assert!(d.warded(s.pos[0], s.pos[1], s.pos[2]));
-        }
-    }
-
-    #[test]
-    fn one_way_in_past_the_veil() {
-        let (g, d) = home();
-        // The path in front of the door is outside; one step through the doorway is inside.
-        assert!(!d.inside(d.outside));
-        let (ox, oz) = d.veil.out;
-        let past = [d.veil.center[0] - ox as f32 * 1.0, d.gate[1] as f32, d.veil.center[2] - oz as f32 * 1.0];
-        assert!(d.inside(past));
-        // Walking from the door to the warden's hall stays inside the open spaces:
-        // the gatehouse, stair and first corridor are joined.
-        let entry = &d.rooms[0].inner;
-        assert!(d.inside([(entry.min[0] + entry.max[0]) as f32 / 2.0 + 0.5, d.floor as f32, (entry.min[2] + entry.max[2]) as f32 / 2.0 + 0.5]));
-        // Blocks are as described: the doorway open, the gate floor stone, room air open.
+        // Blocks: the gatehouse's doorway is open, its wall beside it is not.
+        let d = &all[0];
         let block = |x: i32, y: i32, z: i32| {
             let p = voxel::BlockPos::new(x, y, z);
             let l = p.local();
@@ -655,36 +619,7 @@ mod tests {
         };
         let door = d.veil.center.map(|v| v.floor() as i32);
         assert_eq!(block(door[0], d.gate[1], door[2]), BlockId::AIR, "doorway");
-        let (cx, cz) = ((entry.min[0] + entry.max[0]) / 2, (entry.min[2] + entry.max[2]) / 2);
-        assert_eq!(block(cx, d.floor, cz), BlockId::AIR, "entry room air");
-        assert_eq!(block(cx, d.floor - 1, cz), g.ids.cobblestone, "entry room floor");
-        // The rest of the gatehouse wall beside the door is solid.
         let (sx, sz) = d.world(-3, -2);
         assert_ne!(block(sx, d.gate[1] + 1, sz), BlockId::AIR, "gatehouse wall");
-    }
-
-    #[test]
-    fn named_places_are_warded() {
-        let (g, d) = home();
-        let r = &d.rooms[1].inner;
-        assert!(g.warded(r.min[0] - 1, r.min[1], r.min[2]), "room wall");
-        assert!(g.warded(d.gate[0], d.gate[1] + 5, d.gate[2]), "gatehouse roof");
-        // Open country is not.
-        let [sx, sy, sz] = g.find_spawn();
-        assert!(!g.warded(sx, sy - 1, sz));
-    }
-
-    #[test]
-    fn dungeons_are_scattered_over_the_island() {
-        let g = wg();
-        let (cx, cz) = g.island_center();
-        let r = crate::MAIN_RADIUS as i32;
-        let all = g.dungeons_in(cx - r, cz - r, cx + r, cz + r);
-        assert!(all.len() >= 4, "{} dungeons", all.len());
-        for (i, a) in all.iter().enumerate() {
-            for b in &all[i + 1..] {
-                assert!(!a.bounds.intersects(&b.bounds), "{} overlaps {}", a.name, b.name);
-            }
-        }
     }
 }
