@@ -716,6 +716,13 @@ pub fn parts(kind: StationKind, has: &dyn Fn(&str) -> bool, lit: u32) -> Vec<Par
                         v.push(b(0.12, 0.03, 0.04, x, 0.56, -0.42, Brass));
                     }
                 }
+                StationKind::BlockCrafter => {
+                    // A stack of split slats at the bench's end.
+                    for (i, y) in [0.05, 0.13, 0.21].into_iter().enumerate() {
+                        let x = if i % 2 == 0 { 1.05 } else { 1.08 };
+                        v.push(b(0.3, 0.07, 0.8, x, y, 0.0, if i % 2 == 0 { Wood } else { WoodDark }));
+                    }
+                }
                 StationKind::GunsmithBench => {
                     // A long barrel and a stock laid out behind the anvil.
                     v.extend([

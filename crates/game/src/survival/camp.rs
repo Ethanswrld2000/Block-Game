@@ -1,10 +1,11 @@
 //! Bedroll camping and sleep.
 //!
-//! The bedroll has its own fixed slot: you always have exactly one. B unrolls
-//! it on a clear, flat 2x2 patch in front of you (or rolls it back up when
-//! you're next to it). Where it lies is your camp: you wake there after
-//! dying. Z sleeps on it, at night or when you're worn out: the night passes,
-//! you're rested, and wounds mend a little.
+//! The bedroll is an item you weave by hand (recipes.ron). With one in your
+//! pockets, B unrolls it on a clear, flat 2x2 patch in front of you (or rolls
+//! it back up into your pockets when you're next to it). Where it lies is your
+//! camp: you wake there after dying. Z sleeps on it, at night or when you're
+//! worn out, as long as a campfire burns within `FIRE_REACH` blocks (or you are
+//! inside a closed room): the night passes, you're rested, and wounds mend a little.
 //!
 //! Away from home: hold a `portable_bedroll` or `portable_tent` (camp mat
 //! recipes) and right click the ground to lay it out on a clear 2x2 patch
@@ -23,11 +24,20 @@ use super::{Survival, SurvivalSet, Toast};
 use crate::blocks::Blocks;
 use crate::camera::FlyCamera;
 use crate::clock::WorldClock;
+use crate::inventory::{grid::Stack, Inventory};
+use crate::items::Items;
+use crate::torches::{Fire, Torches};
 use crate::player::{MoveMode, Player};
 use crate::world::World;
 
 /// How close to the bedroll you must be to sleep or roll it up.
 pub const CAMP_REACH: f32 = 4.0;
+/// How close a campfire must be for you to sleep.
+pub const FIRE_REACH: f32 = 6.0;
+/// Story flag set once you have slept.
+pub const SLEPT: &str = "slept";
+/// The item that is your bedroll.
+pub const BEDROLL: &str = "bedroll";
 /// Fatigue below this lets you sleep in the daytime.
 pub const EXHAUSTED: f32 = 30.0;
 /// Hours you sleep when you lie down in the daytime.
@@ -182,20 +192,30 @@ fn bedroll_key(
     cam: Query<&FlyCamera>,
     sleep: Res<Sleep>,
     s: Res<Survival>,
+    (items, mut inv): (Res<Items>, ResMut<Inventory>),
     mut camp: ResMut<Camp>,
     mut toast: MessageWriter<Toast>,
 ) {
     if !keys.just_pressed(KeyCode::KeyB) || *mode != MoveMode::Walk || sleep.active() || s.vitals.health.is_dead() {
         return;
     }
+    let Some(bedroll) = items.id(BEDROLL) else { return };
     if let Some(b) = camp.bedroll {
         if camp.near(player.pos) {
+            if inv.add(&items, Stack::new(bedroll, 1)).is_some() {
+                toast.write(Toast("No room in your pockets for the bedroll".into()));
+                return;
+            }
             camp.bedroll = None;
             toast.write(Toast("Rolled up the bedroll".into()));
         } else {
             let c = b.center();
             toast.write(Toast(format!("Your bedroll is at {:.0}, {:.0}: go back to roll it up", c.x, c.z)));
         }
+        return;
+    }
+    if inv.count(bedroll) == 0 {
+        toast.write(Toast("You have no bedroll: weave one from plant fiber and sticks (Tab)".into()));
         return;
     }
     if !player.on_ground {
@@ -214,6 +234,7 @@ fn bedroll_key(
     for dy in [0, 1, -1] {
         let corner = BlockPos::new(cx - 1, y + dy, cz - 1);
         if clear_patch(&world, &blocks, corner) {
+            inv.take(bedroll, 1);
             camp.bedroll = Some(Bedroll { pos: (cx as f32, (y + dy) as f32, cz as f32), along_x });
             toast.write(Toast("Camp made: you'll wake here".into()));
             return;
@@ -230,6 +251,7 @@ fn sleep_key(
     clock: Res<WorldClock>,
     camp: Res<Camp>,
     s: Res<Survival>,
+    torches: Res<Torches>,
     story: Res<crate::cutscene::Story>,
     mut sleep: ResMut<Sleep>,
     mut toast: MessageWriter<Toast>,
@@ -243,12 +265,20 @@ fn sleep_key(
     } else if !camp.near(player.pos) && !away {
         toast.write(Toast("Too far from your bedroll".into()));
     } else if crate::guide::rules::bed_missing(&story.flags) {
-        toast.write(Toast("Make your bed first: put 4 sticks and 4 plant fiber in the urn".into()));
+        toast.write(Toast("Make your camp mat first: put 4 sticks and 4 plant fiber in the urn".into()));
     } else if !(is_night(clock.hour()) || s.vitals.health.get(Layer::Fatigue) < EXHAUSTED) {
         toast.write(Toast("You can only sleep at night, or when worn out".into()));
+    } else if !warm_enough(player.pos, torches.fires(), s.cover == super::shelter::Cover::Room) {
+        toast.write(Toast("Too cold to sleep: light a campfire by your bed".into()));
     } else {
         *sleep = Sleep { t: Some(0.0), slept: false, away };
     }
+}
+
+/// Can you sleep here: a campfire within `FIRE_REACH`, or walls and a roof round you.
+pub fn warm_enough(at: Vec3, fires: impl IntoIterator<Item = (BlockPos, Fire)>, in_room: bool) -> bool {
+    in_room
+        || fires.into_iter().any(|(p, f)| f == Fire::Campfire && Vec3::new(p.x as f32 + 0.5, p.y as f32, p.z as f32 + 0.5).distance(at) <= FIRE_REACH)
 }
 
 pub fn is_night(hour: f32) -> bool {
@@ -267,6 +297,7 @@ pub fn wake_time(hour: f32) -> (u32, f32) {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn sleep(
     time: Res<Time>,
     camp: Res<Camp>,
@@ -274,6 +305,7 @@ fn sleep(
     mut clock: ResMut<WorldClock>,
     mut s: ResMut<Survival>,
     mut player: ResMut<Player>,
+    mut story: ResMut<crate::cutscene::Story>,
     mut toast: MessageWriter<Toast>,
 ) {
     let Some(t) = sleep.t.as_mut() else { return };
@@ -287,6 +319,8 @@ fn sleep(
         clock.time = time;
         let hours = (days as f32 * 24.0 + time * 24.0 - before).max(0.0);
         s.vitals.sleep();
+        // Bram comes by the morning after your first night (story.ron `bram_arrives`).
+        story.flags.insert(SLEPT.to_string());
         // The home bed's extras stay at home; a tent wakes you warm.
         let tent = sleep.away && camp.away.is_some_and(|a| a.tent);
         let (mend, fed, warm) = if sleep.away { (0.0, 0.0, tent.then_some(TENT_WARMTH)) } else { camp.bed.rest() };
@@ -473,6 +507,17 @@ mod tests {
         assert!(!a.inside(Vec3::new(12.0, 5.0, -3.0)));
         assert!(!a.inside(Vec3::new(10.0, 8.0, -3.0)));
         assert_eq!(a.item(), "portable_tent");
+    }
+
+    #[test]
+    fn you_sleep_by_a_campfire_or_indoors() {
+        let at = Vec3::new(0.5, 10.0, 0.5);
+        let fire = |x: i32, f: Fire| (BlockPos::new(x, 10, 0), f);
+        assert!(!warm_enough(at, [], false), "nothing to keep you warm");
+        assert!(warm_enough(at, [fire(4, Fire::Campfire)], false));
+        assert!(!warm_enough(at, [fire(9, Fire::Campfire)], false), "too far");
+        assert!(!warm_enough(at, [fire(1, Fire::Torch)], false), "a torch isn't enough");
+        assert!(warm_enough(at, [], true), "a closed room will do");
     }
 
     #[test]

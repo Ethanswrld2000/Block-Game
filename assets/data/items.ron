@@ -49,6 +49,8 @@
         (name: "torch", title: "Torch", mass: 0.4, size: (1, 2), kind: Torch),
         (name: "dirt", title: "Dirt", kind: Block("dirt"), mass: 1.5),
         (name: "planks", title: "Planks", kind: Block("planks"), mass: 1.0),
+        // The first building block: raw wood split into slats at the block crafter.
+        (name: "wood_slats", title: "Wood Slats", kind: Block("wood_slats"), mass: 0.8),
         (name: "cobblestone", title: "Cobblestone", kind: Block("cobblestone"), mass: 2.0),
         (name: "log", title: "Log", kind: Block("log"), mass: 2.0),
         (name: "moss", title: "Moss", kind: Block("moss"), mass: 0.5),
@@ -92,6 +94,10 @@
         // Crafting materials.
         (name: "stick", title: "Stick", kind: Material, mass: 0.1, size: (1, 2)),
         (name: "plant_fiber", title: "Plant Fiber", kind: Material, mass: 0.05),
+        // What a chopped log gives (drops.ron): sawn and shaped at the block crafter and the carpentry bench.
+        (name: "raw_wood", title: "Raw Wood", kind: Material, mass: 0.8),
+        // Your first bed, woven by hand (recipes.ron). B lays it out; the ancestral urn stands beside it.
+        (name: "bedroll", title: "Bedroll", kind: Material, mass: 2.0, size: (2, 1), stack: 1),
         // Farming (crops.ron): right click soil (dirt, grass, mud, peat) to sow.
         (name: "barley_seeds", title: "Bog Barley Seeds", kind: Block("barley_0"), mass: 0.02),
         (name: "barley", title: "Bog Barley", kind: Material, mass: 0.1),

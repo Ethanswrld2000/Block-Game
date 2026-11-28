@@ -78,8 +78,11 @@ mod tests {
         assert!((2..=3).contains(&stone.iter().map(|s| s.count).sum::<u16>()));
         // The last layer of dug dirt gives the dirt.
         assert_eq!(drops.roll(&items, blocks.expect("dirt_layer_2"), at, 0), vec![Stack::new(items.id("dirt").unwrap(), 1)]);
-        // Unlisted blocks drop themselves.
-        assert_eq!(drops.roll(&items, blocks.expect("log"), at, 0), vec![Stack::new(items.id("log").unwrap(), 1)]);
+        // Unlisted blocks drop themselves; logs, standing or felled, give raw wood.
+        assert_eq!(drops.roll(&items, blocks.expect("planks"), at, 0), vec![Stack::new(items.id("planks").unwrap(), 1)]);
+        let wood = vec![Stack::new(items.id("raw_wood").unwrap(), 2)];
+        assert_eq!(drops.roll(&items, blocks.expect("log"), at, 0), wood);
+        assert_eq!(drops.roll(&items, blocks.expect("log_x"), at, 0), wood);
         assert!(drops.roll(&items, blocks.expect("water"), at, 0).is_empty());
         // Leaves give sticks about half the time.
         let stick = items.id("stick").unwrap();

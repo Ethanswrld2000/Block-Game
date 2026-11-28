@@ -321,6 +321,8 @@ pub enum StationKind {
     ArmorStand,
     BladesmithBench,
     GunsmithBench,
+    /// Splits raw wood into wood slats (the ancestral urn, right after the camp mat).
+    BlockCrafter,
 }
 
 impl StationKind {
@@ -350,6 +352,7 @@ impl StationKind {
             "armor_stand" => Self::ArmorStand,
             "bladesmith_bench" => Self::BladesmithBench,
             "gunsmith_bench" => Self::GunsmithBench,
+            "block_crafter" => Self::BlockCrafter,
             _ => return None,
         })
     }
@@ -382,6 +385,7 @@ impl StationKind {
             Self::ArmorStand => "Armor Stand",
             Self::BladesmithBench => "Bladesmith Bench",
             Self::GunsmithBench => "Gunsmith Bench",
+            Self::BlockCrafter => "Block Crafter",
         }
     }
 
@@ -392,6 +396,7 @@ impl StationKind {
         match self {
             Self::JoinersTable | Self::DoorFrame | Self::SewingTable | Self::ArmorStand => Self::CarpentryTable,
             Self::GlassKiln => Self::SmokingRack,
+            Self::BlockCrafter => Self::CarpentryBench,
             Self::BladesmithBench | Self::GunsmithBench => Self::IronAnvil,
             k => k,
         }
@@ -425,6 +430,7 @@ impl StationKind {
             Self::ArmorStand => "armor_stand",
             Self::BladesmithBench => "bladesmith_bench",
             Self::GunsmithBench => "gunsmith_bench",
+            Self::BlockCrafter => "block_crafter",
             Self::Urn => return None,
         })
     }
@@ -748,6 +754,11 @@ fn aim(cam: Single<&Transform, With<FlyCamera>>, stations: Query<&Station>, mut 
     aimed.1 = best.map(|(s, _)| s);
 }
 
+/// Carried urns can be set down in the open this close to the bedroll.
+pub const CAMP_URNS: f32 = 16.0;
+/// How far apart urns set down at camp must stand, so their stations don't overlap.
+pub const URN_SPACING: f32 = 8.0;
+
 /// The closed room around a cell, if there is one (`voxel::room`).
 pub fn room_at(world: &World, blocks: &Blocks, at: BlockPos) -> Result<Room, NotRoom> {
     find_room(at, |p| match world.block(p) {
@@ -758,7 +769,8 @@ pub fn room_at(world: &World, blocks: &Blocks, at: BlockPos) -> Result<Room, Not
 }
 
 /// Right click the ground with an urn in hand: set it down there, if it
-/// stands in a closed room with a door and a torch, and no other urn.
+/// stands by your camp (within `CAMP_URNS` of the bedroll, `URN_SPACING` from other urns),
+/// or elsewhere in a closed room with a door and a torch, and no other urn.
 #[allow(clippy::too_many_arguments)]
 fn place_urn(
     mouse: Res<ButtonInput<MouseButton>>,
@@ -793,33 +805,39 @@ fn place_urn(
     if !free {
         return;
     }
-    // A station needs a closed room of its own.
-    let room = match room_at(&world, &blocks, hit.before) {
-        Ok(room) => room,
-        Err(NotRoom::Unknown) => return,
-        Err(_) => {
-            toast.write(Toast(format!("The {} needs a closed room: walls, floor and roof all round (at most {} blocks inside)", def.title, MAX_ROOM)));
+    let at = Vec3::new(hit.before.x as f32 + 0.5, hit.before.y as f32, hit.before.z as f32 + 0.5);
+    let me = book.0.urns.iter().position(|u| u.name == def.name);
+    let others: Vec<Station> = layout(&camp, &world, &blocks, &urns, &book.0).into_iter().filter(|s| s.kind == StationKind::Urn && Some(s.urn) != me).collect();
+    if camp.bedroll.is_some_and(|b| b.center().distance(at) <= CAMP_URNS) {
+        // At camp, out in the open: just keep clear of the other urns' stations.
+        if let Some(other) = others.iter().find(|s| s.pos.distance(at) < URN_SPACING) {
+            toast.write(Toast(format!("Too close to the {}: give it {URN_SPACING:.0} blocks", book.0.urns[other.urn].title)));
             return;
         }
-    };
-    // ...and a proper home: a door in its walls and a torch inside.
-    let missing = crate::guide::home_missing(&room, &world, &blocks);
-    if !missing.is_empty() {
-        toast.write(Toast(format!("The {} needs a proper home: this room still needs {}", def.title, missing.join(" and "))));
-        return;
-    }
-    let me = book.0.urns.iter().position(|u| u.name == def.name);
-    let taken = layout(&camp, &world, &blocks, &urns, &book.0)
-        .into_iter()
-        .find(|s| s.kind == StationKind::Urn && Some(s.urn) != me && room.contains(BlockPos::from_world(s.pos.to_array())));
-    if let Some(other) = taken {
-        toast.write(Toast(format!("This room already has the {}. One station per room", book.0.urns[other.urn].title)));
-        return;
+    } else {
+        // Away from camp a station needs a closed room of its own...
+        let room = match room_at(&world, &blocks, hit.before) {
+            Ok(room) => room,
+            Err(NotRoom::Unknown) => return,
+            Err(_) => {
+                toast.write(Toast(format!("The {} goes by your camp, or in a closed room: walls, floor and roof all round (at most {} blocks inside)", def.title, MAX_ROOM)));
+                return;
+            }
+        };
+        // ...and a proper home: a door in its walls and a torch inside.
+        let missing = crate::guide::home_missing(&room, &world, &blocks);
+        if !missing.is_empty() {
+            toast.write(Toast(format!("The {} needs a proper home: this room still needs {}", def.title, missing.join(" and "))));
+            return;
+        }
+        if let Some(other) = others.iter().find(|s| room.contains(BlockPos::from_world(s.pos.to_array()))) {
+            toast.write(Toast(format!("This room already has the {}. One station per room", book.0.urns[other.urn].title)));
+            return;
+        }
     }
     if !inv.take(item, 1) {
         return;
     }
-    let at = Vec3::new(hit.before.x as f32 + 0.5, hit.before.y as f32, hit.before.z as f32 + 0.5);
     let mut forward = cam.forward().as_vec3();
     forward.y = 0.0;
     urns.placed.insert(def.name.clone(), placed_facing(at, forward));

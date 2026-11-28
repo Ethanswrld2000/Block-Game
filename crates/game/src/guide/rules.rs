@@ -25,6 +25,8 @@ pub enum Goal {
     UrnPlaced,
     /// You have slept (Z by your bed).
     Slept,
+    /// A story flag is set (a cutscene's `Flag` step, ...).
+    Flag(String),
 }
 
 /// A waypoint to the nearest of some blocks, until you have enough of an item.
@@ -46,6 +48,9 @@ pub struct StepDef {
     pub marks: Vec<MarkDef>,
     #[serde(default)]
     pub cutscene: Option<String>,
+    /// A waypoint to a named place (`cutscene::Places`: "gate", "sporrow", ...) while the step is under way.
+    #[serde(default)]
+    pub place: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
@@ -74,7 +79,7 @@ pub fn flag(id: &str) -> String {
 pub const ON: &str = "guide_on";
 /// Set once every step is done.
 pub const DONE: &str = "guide_done";
-/// The step that makes your bed: until it's done, the guide keeps you from sleeping.
+/// The step that makes the camp mat: until it's done, the guide keeps you from sleeping.
 pub const BED: &str = "bed";
 
 /// Whether the guide still holds sleep back: it's under way and the bed isn't made yet.
@@ -112,6 +117,7 @@ pub struct Facts<'a> {
     pub urn: bool,
     pub urn_placed: bool,
     pub slept: bool,
+    pub flags: BTreeSet<String>,
 }
 
 pub fn met(goal: &Goal, f: &Facts) -> bool {
@@ -125,6 +131,7 @@ pub fn met(goal: &Goal, f: &Facts) -> bool {
         Goal::Urn => f.urn || f.urn_placed,
         Goal::UrnPlaced => f.urn_placed,
         Goal::Slept => f.slept,
+        Goal::Flag(flag) => f.flags.contains(flag),
     }
 }
 
@@ -154,20 +161,24 @@ mod tests {
     use voxel::room::{find_room, Cell as RoomCell};
 
     #[test]
-    fn day_one_walks_from_sticks_to_the_first_sleep() {
+    fn day_one_walks_from_sticks_to_the_first_sleep_and_the_gate() {
         let data = load(include_str!("../../../../assets/data/guide.ron")).expect("guide.ron");
         let first = &data.steps[0];
         assert!(matches!(&first.goal, Goal::Have(l) if l.iter().any(|(i, _)| i == "stick") && l.iter().any(|(i, _)| i == "small_rock")));
         assert!(first.marks.iter().any(|m| m.blocks.iter().any(|b| matches(b, "twig_north"))), "points to twigs");
         assert!(first.marks.iter().any(|m| m.blocks.iter().any(|b| matches(b, "pebble"))), "points to pebbles");
         let ids: Vec<_> = data.steps.iter().map(|s| s.id.as_str()).collect();
-        assert_eq!(ids, ["gather", "camp", "fiber", BED, "sleep"]);
-        assert_eq!(data.steps[1].goal, Goal::Camp);
-        assert!(matches!(&data.steps[2].goal, Goal::Have(l) if l.iter().any(|(i, _)| i == "plant_fiber")));
-        assert_eq!(data.steps[3].goal, Goal::Step("camp_mat".into()), "the urn weaves the bed");
-        assert_eq!(data.steps.last().unwrap().goal, Goal::Slept, "ends with the first night's sleep");
-        // Bram talks as every step after the first comes up (the opening covers the first).
-        assert!(data.steps[1..].iter().all(|s| s.cutscene.is_some()));
+        assert_eq!(ids, ["gather", "fiber", "camp", BED, "axe", "fire", "wood", "block_crafter", "slats", "sleep", "gate"]);
+        let at = |id: &str| &data.steps[ids.iter().position(|i| *i == id).unwrap()];
+        assert_eq!(at("camp").goal, Goal::Camp);
+        assert_eq!(at(BED).goal, Goal::Step("camp_mat".into()), "the urn weaves the camp mat");
+        assert_eq!(at("fire").goal, Goal::Made("campfire".into()));
+        assert_eq!(at("block_crafter").goal, Goal::Step("block_crafter".into()));
+        assert_eq!(at("slats").goal, Goal::Made("wood_slats".into()));
+        assert_eq!(at("sleep").goal, Goal::Slept, "the first night by the fire");
+        assert_eq!(data.steps.last().unwrap().place.as_deref(), Some("gate"), "ends pointing at the Rotting Gate");
+        assert!(!data.steps.iter().any(|s| s.goal == Goal::Home), "no home this early");
+        // Every cutscene a step names exists.
         let scenes = include_str!("../../../../assets/data/cutscenes.ron");
         for s in &data.steps {
             if let Some(c) = &s.cutscene {
@@ -210,6 +221,8 @@ mod tests {
         assert!(met(&Goal::Urn, &f) && met(&Goal::UrnPlaced, &f));
         assert!(!met(&Goal::Slept, &f));
         assert!(met(&Goal::Slept, &Facts { slept: true, ..Default::default() }));
+        assert!(!met(&Goal::Flag("met_bram".into()), &f));
+        assert!(met(&Goal::Flag("met_bram".into()), &Facts { flags: ["met_bram".to_string()].into(), ..Default::default() }));
         assert!(matches("twig_*", "twig_east") && !matches("twig_*", "log") && matches("pebble", "pebble"));
     }
 

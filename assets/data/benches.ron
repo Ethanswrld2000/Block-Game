@@ -3,7 +3,8 @@
 //   slots:   what each slot on the board must hold, (item, count)
 //            camp_mat:        "base" (what lies on the mat, up to 8), "tie" (what binds it, up to 8)
 //            tool_bench:      "handle" (the long groove, 1), "material" (the hollow, up to 4)
-//            carpentry_bench: "bed" (logs and boards, up to 8), "vise" (up to 4)
+//            carpentry_bench: "bed" (raw wood and boards, up to 8), "vise" (up to 4)
+//            block_crafter:   like carpentry_bench ("bed", "vise")
 //            carpentry_table: "top" (the wood to join, up to 8), "joint" (pegs, cord, mud, up to 4)
 //            machination_table: "keel" (up to 8), "rigging" (up to 8), "envelope" (up to 4), "engine" (up to 8)
 //            cutting_board:   "board" (up to 4)
@@ -27,7 +28,7 @@
 // When several recipes match, the one that uses the most wins (2 or 3 cobblestone).
 (
     // What burns in the cooking pot's fire, and the heat one of it gives.
-    fuel: { "plant_fiber": 1, "stick": 1, "planks": 2, "peat": 3, "log": 4, "swamp_log": 4, "redwood_log": 4, "coal": 6 },
+    fuel: { "plant_fiber": 1, "stick": 1, "planks": 2, "peat": 3, "raw_wood": 2, "coal": 6 },
     // Turns of the wheel; a sharpened tool works `speed` times as fast for `seconds` of play.
     sharpen: Some((work: 4, seconds: 600.0, speed: 1.6)),
     // Turns of the lens's focusing dial to study something.
@@ -40,12 +41,11 @@
         (station: "camp_mat", slots: {"base": ("coal", 1), "tie": ("stick", 1)}, work: 1, makes: ("torch", 4)),
         (station: "camp_mat", slots: {"base": ("peat", 1), "tie": ("stick", 1)}, work: 1, makes: ("torch", 2)),
         (station: "camp_mat", slots: {"base": ("spirit_ember", 3), "tie": ("plant_fiber", 2)}, work: 3, makes: ("ember_herb", 1)),
-        // A door to get started with (also at the carpentry bench and the door frame).
-        (station: "camp_mat", slots: {"base": ("log", 3), "tie": ("cordage", 1)}, work: 4, makes: ("wooden_door", 1)),
-        (station: "camp_mat", slots: {"base": ("swamp_log", 3), "tie": ("cordage", 1)}, work: 4, makes: ("wooden_door", 1)),
-        (station: "camp_mat", slots: {"base": ("redwood_log", 3), "tie": ("cordage", 1)}, work: 4, makes: ("wooden_door", 1)),
         (station: "camp_mat", slots: {"base": ("hide", 2), "tie": ("cordage", 3)}, work: 4, makes: ("portable_bedroll", 1), unlock: "portable_bedroll"),
         (station: "camp_mat", slots: {"base": ("hide", 4), "tie": ("stick", 8)}, work: 6, makes: ("portable_tent", 1), unlock: "portable_tent"),
+
+        // Block crafter (sleeping station): raw wood split into slats, the first building block.
+        (station: "block_crafter", slots: {"bed": ("raw_wood", 1)}, work: 3, makes: ("wood_slats", 2)),
 
         // Tool bench (tool station): a handle and a head.
         (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("small_rock", 3)}, work: 4, makes: ("stone_pickaxe", 1)),
@@ -57,17 +57,15 @@
         (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("cobblestone", 2)}, work: 4, makes: ("stone_axe", 1), unlock: "improved_tool_bench"),
         (station: "tool_bench", slots: {"handle": ("stick", 1), "material": ("flint", 2)}, work: 4, makes: ("flint_spear", 1), unlock: "improved_tool_bench"),
 
-        // Carpentry bench (carpentry station): saw logs into planks, planks into sticks, and build.
-        (station: "carpentry_bench", slots: {"bed": ("log", 1)}, work: 4, makes: ("planks", 4)),
-        (station: "carpentry_bench", slots: {"bed": ("swamp_log", 1)}, work: 4, makes: ("planks", 4)),
-        (station: "carpentry_bench", slots: {"bed": ("redwood_log", 1)}, work: 4, makes: ("planks", 4)),
+        // Carpentry bench (carpentry station): saw raw wood into planks, planks into sticks, and build.
+        (station: "carpentry_bench", slots: {"bed": ("raw_wood", 1)}, work: 4, makes: ("planks", 2)),
         (station: "carpentry_bench", slots: {"bed": ("planks", 2)}, work: 2, makes: ("stick", 4)),
         (station: "carpentry_bench", slots: {"bed": ("planks", 8)}, work: 6, makes: ("chest", 1)),
         (station: "carpentry_bench", slots: {"bed": ("planks", 6), "vise": ("stick", 2)}, work: 6, makes: ("wooden_door", 1)),
 
         // Carpentry table (carpentry station): building supplies, knocked together with the mallet.
         (station: "carpentry_table", slots: {"top": ("planks", 4), "joint": ("stick", 2)}, work: 4, makes: ("floorboards", 4)),
-        (station: "carpentry_table", slots: {"top": ("planks", 4), "joint": ("log", 1)}, work: 5, makes: ("timber_wall", 4)),
+        (station: "carpentry_table", slots: {"top": ("planks", 4), "joint": ("raw_wood", 2)}, work: 5, makes: ("timber_wall", 4)),
         (station: "carpentry_table", slots: {"top": ("stick", 6), "joint": ("mud", 2)}, work: 4, makes: ("wattle_wall", 4)),
         (station: "carpentry_table", slots: {"top": ("plant_fiber", 6), "joint": ("stick", 2)}, work: 3, makes: ("thatch", 4)),
 
@@ -92,8 +90,8 @@
         (station: "sewing_table", slots: {"top": ("fur", 2), "joint": ("cordage", 1)}, work: 3, makes: ("fur_boots", 1)),
         (station: "sewing_table", slots: {"top": ("hide", 1), "joint": ("swamp_reed", 3)}, work: 4, makes: ("reed_breather", 1)),
         // Armor stand (gear station): bark and leather armor; iron once taught.
-        (station: "armor_stand", slots: {"top": ("log", 2), "joint": ("cordage", 2)}, work: 4, makes: ("bark_helm", 1)),
-        (station: "armor_stand", slots: {"top": ("log", 4), "joint": ("cordage", 3)}, work: 5, makes: ("bark_vest", 1)),
+        (station: "armor_stand", slots: {"top": ("raw_wood", 4), "joint": ("cordage", 2)}, work: 4, makes: ("bark_helm", 1)),
+        (station: "armor_stand", slots: {"top": ("raw_wood", 8), "joint": ("cordage", 3)}, work: 5, makes: ("bark_vest", 1)),
         (station: "armor_stand", slots: {"top": ("hide", 3), "joint": ("cordage", 2)}, work: 5, makes: ("hide_jerkin", 1)),
         (station: "armor_stand", slots: {"top": ("raw_iron", 3), "joint": ("hide", 1)}, work: 6, makes: ("iron_helm", 1), unlock: "metal_armor"),
         (station: "armor_stand", slots: {"top": ("raw_iron", 6), "joint": ("hide", 2)}, work: 8, makes: ("iron_mail", 1), unlock: "metal_armor"),

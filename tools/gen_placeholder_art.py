@@ -560,6 +560,22 @@ def sky_shrine_top(s):
 TILES += [("sky_shrine", sky_shrine), ("sky_shrine_top", sky_shrine_top)]
 
 
+def wood_slats(s):
+    # Rough split slats, bark-edged and uneven, laid side by side with dark gaps.
+    img = noisy(s, [(150, 112, 70), (178, 136, 86)], (16, 2))
+    ys, xs = np.mgrid[0:T, 0:T]
+    row = ys // 8
+    shift = (row * 5) % 8
+    img[(ys % 8) == 7, :3] = (60, 42, 26)
+    img[(ys % 8) == 0, :3] *= 0.8
+    img[((xs + shift * 3) % 16 == 0) & ((ys % 8) != 7), :3] *= 0.6
+    img[(row % 2 == 1) & ((ys % 8) < 7), :3] *= 0.9
+    return img
+
+
+TILES += [("wood_slats", wood_slats)]
+
+
 def main():
     root = os.path.join(os.path.dirname(__file__), "..", "assets", "textures")
     os.makedirs(root, exist_ok=True)

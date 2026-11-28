@@ -279,10 +279,11 @@ mod tests {
         let anc = d.urn("ancestral").unwrap();
         let mut p = Progress::default();
         p.offer(anc, "plant_fiber", 4, None);
-        // 4 sticks finish the mat, which opens the tool urn: it takes 6 more.
-        let (n, done) = p.offer(anc, "stick", 12, None);
-        assert_eq!(n, 10);
+        // 4 sticks finish the mat, which opens the block crafter (4 more) and the tool urn (6 more), in tree order.
+        let (n, done) = p.offer(anc, "stick", 20, None);
+        assert_eq!(n, 14);
         assert_eq!(done, vec!["camp_mat".to_string()]);
+        assert_eq!(p.given("block_crafter", "stick"), 4);
         assert_eq!(p.given("tool_urn", "stick"), 6);
         assert_eq!(p.wants(anc, "stick"), 0);
     }

@@ -71,5 +71,7 @@
         "vehicle_urn": (210, 336, 40, 40),
         "portable_bedroll": (42, 338, 40, 20),
         "portable_tent": (166, 338, 40, 40),
+        "raw_wood": (42, 312, 20, 20),
+        "bedroll": (0, 354, 40, 20),
     },
 )

@@ -76,8 +76,10 @@ mod tests {
     #[test]
     fn craft_by_hand_from_raw_materials() {
         let (_, items) = load();
-        // Everything moved to the stations; the list still reads and crafts.
-        assert!(Recipes::from_ron(include_str!("../../../../assets/data/recipes.ron"), &items).unwrap().list.is_empty());
+        // Only the bedroll is made by hand; everything else moved to the stations.
+        let data = Recipes::from_ron(include_str!("../../../../assets/data/recipes.ron"), &items).unwrap();
+        assert_eq!(data.list.len(), 1);
+        assert_eq!(items.get(data.list[0].makes.item).name, "bedroll");
         let recipes = Recipes::from_ron(r#"[(makes: ("cordage", 1), needs: [("plant_fiber", 3)])]"#, &items).unwrap();
         let mut inv = Inventory::empty();
         let id = |n: &str| items.id(n).unwrap();
