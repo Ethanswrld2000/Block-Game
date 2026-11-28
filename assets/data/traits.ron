@@ -1,0 +1,34 @@
+// Item quality and traits (game::quality). Weapons, tools, shields and armor come in four qualities
+// on top of their material. An item with a quality is named `base@quality+trait+..` in saves and
+// loot tables (for example "iron_sword@fine+reach").
+//   tiers:  in order plain, fine, masterwork, relic
+//     power:   share more damage (weapons) or protection (armor, shields)
+//     stamina: share off the Fatigue a swing or block costs
+//     minor/major/relic: how many traits of each rank are rolled
+//   traits: name (no @ or +), title, rank Minor | Major | Relic, effect, tooltip text
+//     Reach(blocks) Speed(share) Lighter(share) Knockback(share) Backstab(extra multiple)
+//     Bleed(dps) Frost(share slower) Burn(dps) Lifesteal(share) GuardBreaker
+//     ParryRefill ChainSpark(damage) Riposte(multiple)
+(
+    tiers: [
+        (quality: Plain, title: "Plain", color: (0.78, 0.76, 0.72), power: 0.0, stamina: 0.0, minor: 0, major: 0, relic: 0),
+        (quality: Fine, title: "Fine", color: (0.45, 0.85, 0.40), power: 0.10, stamina: 0.05, minor: 1, major: 0, relic: 0),
+        (quality: Masterwork, title: "Masterwork", color: (0.40, 0.65, 1.00), power: 0.20, stamina: 0.10, minor: 1, major: 1, relic: 0),
+        (quality: Relic, title: "Relic", color: (1.00, 0.78, 0.25), power: 0.30, stamina: 0.15, minor: 0, major: 1, relic: 1),
+    ],
+    traits: [
+        (name: "reach", title: "Long", rank: Minor, effect: Reach(0.5), text: "+0.5 reach"),
+        (name: "swift", title: "Swift", rank: Minor, effect: Speed(0.15), text: "15% faster swings"),
+        (name: "light", title: "Light", rank: Minor, effect: Lighter(0.15), text: "15% less Fatigue per swing"),
+        (name: "heft", title: "Heavy-headed", rank: Minor, effect: Knockback(0.5), text: "Knocks foes back 50% further"),
+        (name: "sly", title: "Sly", rank: Minor, effect: Backstab(1.0), text: "Backstabs deal one more multiple"),
+        (name: "bleed", title: "Serrated", rank: Major, effect: Bleed(2.0), text: "Wounds bleed: 2 damage a second"),
+        (name: "frost", title: "Frost", rank: Major, effect: Frost(0.4), text: "Hits chill foes: 40% slower"),
+        (name: "burn", title: "Ember", rank: Major, effect: Burn(3.0), text: "Hits set foes alight: 3 damage a second"),
+        (name: "lifesteal", title: "Thirsting", rank: Major, effect: Lifesteal(0.15), text: "15% of damage dealt heals you"),
+        (name: "breaker", title: "Guard-breaking", rank: Major, effect: GuardBreaker, text: "Every blow breaks a raised guard"),
+        (name: "second_wind", title: "Second Wind", rank: Relic, effect: ParryRefill, text: "A perfect parry refills your Fatigue"),
+        (name: "spark", title: "Arcing", rank: Relic, effect: ChainSpark(10.0), text: "A kill sparks to the next foe for 10"),
+        (name: "riposte", title: "Answering", rank: Relic, effect: Riposte(1.5), text: "A parry sends the blow back, half again as hard"),
+    ],
+)

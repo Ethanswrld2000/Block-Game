@@ -1,0 +1,15 @@
+// Boons (game::delve::boons): a room whose reward is a boon gives one of these when it's
+// cleared. They stack until you leave the dungeon (taking one twice adds it twice).
+// effect: Might(share) your blows hit harder; Ward(share) you take less harm;
+//   Fleet(share) you move faster; Mend(per second) your wounds slowly close;
+//   Thirst(amount) each foe you fell mends you; Fortune(share) more coin from rewards.
+(
+    boons: [
+        (name: "might", title: "Might", text: "Your blows hit 20% harder.", effect: Might(0.2)),
+        (name: "ward", title: "Ward", text: "You take 15% less harm.", effect: Ward(0.15)),
+        (name: "fleet", title: "Fleet Foot", text: "You move 10% faster.", effect: Fleet(0.1)),
+        (name: "mend", title: "Mending", text: "Your wounds slowly close.", effect: Mend(0.6)),
+        (name: "thirst", title: "Bloodthirst", text: "Each foe you fell mends you a little.", effect: Thirst(4.0)),
+        (name: "fortune", title: "Fortune", text: "Coin rewards are half as big again.", effect: Fortune(0.5)),
+    ],
+)

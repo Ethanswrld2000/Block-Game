@@ -1,6 +1,7 @@
 // Wren Calloway's stock (game::cast::wren). She lands by the vehicle urn on even days and flies
 // off the next; each visit she offers `per_visit` of these, picked by the day.
 // gives: what you get; wants: what you hand over.
+// shop: Tallow's wares on the dungeon floors (game::delve::boons), always all in stock.
 (
     per_visit: 4,
     trades: [
@@ -16,5 +17,15 @@
         (id: "planks", gives: ("planks", 12), wants: {"raw_meat": 2}),
         (id: "mold", gives: ("mold_bloom", 1), wants: {"raw_iron": 4}),
         (id: "hide", gives: ("hide", 3), wants: {"coal": 4}),
+    ],
+    shop: [
+        (id: "shop_meat", gives: ("roast_meat", 2), wants: {"old_coin": 4}),
+        (id: "shop_torches", gives: ("torch", 4), wants: {"old_coin": 3}),
+        (id: "shop_embers", gives: ("spirit_ember", 2), wants: {"old_coin": 5}),
+        (id: "shop_shards", gives: ("deepstone_shard", 2), wants: {"old_coin": 8}),
+        (id: "shop_dagger", gives: ("iron_dagger", 1), wants: {"old_coin": 12}),
+        (id: "shop_shield", gives: ("hide_shield", 1), wants: {"old_coin": 10}),
+        (id: "shop_sword", gives: ("iron_sword", 1), wants: {"old_coin": 20}),
+        (id: "shop_light", gives: ("light_draught", 1), wants: {"old_coin": 9}),
     ],
 )

@@ -85,6 +85,7 @@ fn animate(
     items: Res<Items>,
     cam: Single<&FlyCamera>,
     guard: Res<crate::combat::Guard>,
+    kicking: Res<crate::combat::kick::Kicking>,
     mut frozen: Local<Option<Option<f32>>>,
     mut facing: Local<f32>,
     mut weight: Local<(Vec2, [Spring; 2])>,
@@ -108,7 +109,11 @@ fn animate(
     let arms = match (frozen, arm.t) {
         (Some(t), _) => Some(held.unwrap_or(Swing::Jab).limbs(t)),
         (None, Some(t)) => Some(arm.style.limbs(t)),
-        (None, None) => held.map(|_| Limbs::hold().lerp(Limbs::guard(), guard.blend)),
+        (None, None) => match anim.charge_level() {
+            Some((heavy, k)) => Some(crate::swing::charge_limbs(heavy, k)),
+            None if guard.shield.is_some() => Some(Limbs::hold().lerp(Limbs::shield(), guard.blend)),
+            None => held.map(|_| Limbs::hold().lerp(Limbs::guard(), guard.blend)),
+        },
     };
 
     // Facing (Minecraft-style): moving, the body turns toward where you go,
@@ -153,6 +158,7 @@ fn animate(
         arms,
         sway,
         act: None,
+        kick: kicking.t,
     };
     body::drive(&mut tf, &mut rig, &mut parts, dt, &drive);
 }

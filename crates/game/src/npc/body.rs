@@ -525,6 +525,8 @@ pub struct Drive {
     pub sway: [f32; 2],
     /// A body animation and its number (a new number starts it again).
     pub act: Option<(Anim, u32)>,
+    /// A kick with the right leg, this far through (0..1).
+    pub kick: Option<f32>,
 }
 
 fn animate(real: Res<Time<Real>>, game: Res<Time>, book: Res<NpcBook>, cam: Single<&GlobalTransform, With<FlyCamera>>, mut npcs: Query<(&mut Transform, &Npc, &mut Rig)>, mut parts: Parts) {
@@ -556,6 +558,7 @@ fn animate(real: Res<Time<Real>>, game: Res<Time>, book: Res<NpcBook>, cam: Sing
             arms: None,
             sway: [0.0; 2],
             act: npc.act,
+            kick: None,
         };
         drive(&mut tf, &mut rig, &mut parts, dt, &drive_with);
     }
@@ -610,6 +613,12 @@ pub fn drive(tf: &mut Transform, rig: &mut Rig, parts: &mut Parts, dt: f32, d: &
         pose.elbow[0] = pose.elbow[0].max(a.left_elbow);
         arm_yaw = a.yaw;
         wrist = a.wrist;
+    }
+    if let Some(t) = d.kick {
+        let (hip, knee, lean) = crate::combat::kick::leg_body(t);
+        pose.hip[1] = hip;
+        pose.knee[1] = knee;
+        pose.lean += lean;
     }
     let twist = pose.twist + look.twist;
 

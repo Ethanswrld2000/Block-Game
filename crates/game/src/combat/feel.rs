@@ -13,6 +13,14 @@ pub struct Impact {
     pub strength: f32,
 }
 
+/// A perfect parry: the world slows for a moment so you can punish.
+#[derive(Message, Debug, Clone, Copy)]
+pub struct SlowMo;
+
+/// Game speed and real seconds of a perfect parry's slow-down.
+pub const SLOW_SPEED: f32 = 0.3;
+pub const SLOW_FOR: f32 = 0.6;
+
 /// Game speed during a hit stop.
 const STOP_SPEED: f32 = 0.04;
 
@@ -24,6 +32,8 @@ pub fn stop_for(strength: f32) -> f32 {
 #[derive(Resource, Default)]
 pub struct HitStop {
     left: f32,
+    /// Real seconds of slow-down left.
+    slow: f32,
     /// We slowed the game (so we're the one to put it back).
     slowed: bool,
 }
@@ -57,10 +67,11 @@ pub struct FeelPlugin;
 
 impl Plugin for FeelPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<Impact>().init_resource::<HitStop>().init_resource::<Kick>().add_systems(crate::menu::GameUpdate, feel.after(super::fall_set()));
+        app.add_message::<Impact>().add_message::<SlowMo>().init_resource::<HitStop>().init_resource::<Kick>().add_systems(crate::menu::GameUpdate, feel.after(super::fall_set()));
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn feel(
     real: Res<Time<Real>>,
     mut virt: ResMut<Time<Virtual>>,
@@ -68,9 +79,13 @@ fn feel(
     mut kick: ResMut<Kick>,
     mut impacts: MessageReader<Impact>,
     mut hurts: MessageReader<Damage>,
+    mut slows: MessageReader<SlowMo>,
     mut flip: Local<bool>,
 ) {
     let dt = real.delta_secs();
+    if slows.read().count() > 0 {
+        stop.slow = SLOW_FOR;
+    }
     for i in impacts.read() {
         stop.left = stop.left.max(stop_for(i.strength));
         *flip = !*flip;
@@ -82,15 +97,15 @@ fn feel(
         kick.push(1.1 * s, if *flip { 0.9 } else { -0.9 } * s);
     }
     kick.step(dt);
-    if stop.left > 0.0 {
-        stop.left -= dt;
-        if stop.left > 0.0 {
-            if !stop.slowed {
-                virt.set_relative_speed(STOP_SPEED);
-                stop.slowed = true;
-            }
-            return;
+    stop.left -= dt;
+    stop.slow -= dt;
+    let speed = game_speed(stop.left, stop.slow);
+    if speed < 1.0 {
+        if !stop.slowed || virt.relative_speed() != speed {
+            virt.set_relative_speed(speed);
+            stop.slowed = true;
         }
+        return;
     }
     if stop.slowed {
         virt.set_relative_speed(1.0);
@@ -98,9 +113,31 @@ fn feel(
     }
 }
 
+/// Game speed with `stop` seconds of hit stop and `slow` of slow-down left:
+/// the slow-down eases back to full speed over its last third.
+pub fn game_speed(stop: f32, slow: f32) -> f32 {
+    if stop > 0.0 {
+        return STOP_SPEED;
+    }
+    if slow <= 0.0 {
+        return 1.0;
+    }
+    let ease = (slow / (SLOW_FOR / 3.0)).min(1.0);
+    1.0 - (1.0 - SLOW_SPEED) * ease
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_parry_slows_the_world_then_eases_back() {
+        assert_eq!(game_speed(0.0, 0.0), 1.0);
+        assert_eq!(game_speed(0.0, SLOW_FOR), SLOW_SPEED);
+        assert!(game_speed(0.0, SLOW_FOR * 0.1) > SLOW_SPEED && game_speed(0.0, SLOW_FOR * 0.1) < 1.0);
+        // A hit stop inside it still stops.
+        assert_eq!(game_speed(0.05, SLOW_FOR), STOP_SPEED);
+    }
 
     #[test]
     fn harder_hits_stop_longer_but_briefly() {

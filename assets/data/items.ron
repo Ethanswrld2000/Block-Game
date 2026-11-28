@@ -17,6 +17,15 @@
 //           Overhead (pick: straight down), Dig (shovel: thrust into the ground and scoop) or
 //           Slash (sword: a fighting cut, never mines).
 //           Mining lands one blow per swing, when it connects.
+//   moves:  a weapon's fighting moves (combat): (light: [moves in combo order, 1-3; the third hits
+//           1.25x], heavy: the charged move, reach: blocks, arc: half the sweep in degrees,
+//           special: Balanced | Backstab(times) | Cleave(share through a guard) | KeepAway(times the
+//           push) | Riposte(times, just after a parry) | Wreck (every blow breaks a guard)).
+//           Moves: Slash, SlashBack, Heavy (overhead cut), Thrust, Lunge, Chop, Spin (hits all round),
+//           Smash, Slam (knocks down everything close by). An axe fights when it isn't aimed at a block.
+//   shield: (cost: share of a blocked blow's Fatigue, arc: half the arc covered in degrees,
+//           bash: damage of a bash) - held in the left hand, right click raises it, left click bashes.
+// Weapons, tools, shields and armor can come in better qualities (traits.ron): "iron_sword@fine+reach".
 // Pictures: every item has a sprite in assets/textures/icons/ (items.png, weapons.png for
 // tools, blocks.png for blocks), 20 px per cell of its size. The same sprite is the held model.
 // After adding an item, run `python3 tools/gen_item_art.py` to give it a placeholder sprite.
@@ -36,10 +45,12 @@
         // The first axe: a stick and two small rocks knocked together at the tool bench.
         (
             name: "rough_axe", title: "Rough Stone Axe", mass: 0.8, size: (1, 2), damage: 5.0, swing: Chop,
+            moves: (light: [Chop], heavy: Spin, reach: 2.6, arc: 65.0, special: Cleave(0.3)),
             kind: Tool(speeds: { "log": 0.6, "wood": 1.6, "plant": 2.0 }),
         ),
         (
             name: "stone_axe", title: "Stone Axe", mass: 2.0, size: (1, 3), damage: 7.0, swing: Chop,
+            moves: (light: [Chop], heavy: Spin, reach: 2.8, arc: 65.0, special: Cleave(0.4)),
             kind: Tool(speeds: { "log": 4.0, "wood": 4.0, "plant": 3.0 }),
         ),
         (
@@ -189,6 +200,7 @@
         ),
         (
             name: "iron_axe", title: "Iron Axe", mass: 2.2, size: (1, 3), damage: 9.0, swing: Chop,
+            moves: (light: [Chop], heavy: Spin, reach: 2.8, arc: 65.0, special: Cleave(0.4)),
             kind: Tool(speeds: { "log": 6.0, "wood": 6.0, "plant": 4.0 }),
         ),
         (name: "iron_shovel", title: "Iron Shovel", mass: 2.0, size: (1, 3), damage: 5.0, swing: Dig, kind: Tool(speeds: { "soil": 2.4 })),
@@ -198,6 +210,7 @@
         ),
         (
             name: "steel_axe", title: "Steel Axe", mass: 2.0, size: (1, 3), damage: 11.0, swing: Chop,
+            moves: (light: [Chop], heavy: Spin, reach: 2.8, arc: 65.0, special: Cleave(0.4)),
             kind: Tool(speeds: { "log": 8.5, "wood": 8.5, "plant": 5.0 }),
         ),
         (
@@ -206,17 +219,40 @@
         ),
         (
             name: "spirit_axe", title: "Spirit-Etched Axe", mass: 1.8, size: (1, 3), damage: 14.0, swing: Chop,
+            moves: (light: [Chop], heavy: Spin, reach: 2.8, arc: 65.0, special: Cleave(0.4)),
             kind: Tool(speeds: { "log": 11.0, "wood": 11.0, "plant": 6.0 }),
         ),
-        // Swords: swung with a quick diagonal cut (left click, never mines); hold right click
-        // to block, a block just as the cut comes parries it. Hammered at the iron anvil.
-        (name: "iron_sword", title: "Iron Sword", mass: 1.6, size: (1, 3), damage: 9.0, swing: Slash, kind: Tool(speeds: {})),
-        (name: "steel_sword", title: "Steel Sword", mass: 1.4, size: (1, 3), damage: 12.0, swing: Slash, kind: Tool(speeds: {})),
-        (name: "spirit_sword", title: "Spirit-Etched Sword", mass: 1.2, size: (1, 3), damage: 15.0, swing: Slash, kind: Tool(speeds: {})),
-        (name: "flint_spear", title: "Flint Spear", mass: 1.6, size: (1, 4), damage: 10.0, kind: Tool(speeds: {})),
-        // From the gear urn's bladesmith bench.
-        (name: "iron_dagger", title: "Iron Dagger", mass: 0.6, size: (1, 2), damage: 6.0, swing: Slash, kind: Tool(speeds: {})),
-        (name: "rapier", title: "Rapier", mass: 1.0, size: (1, 3), damage: 10.0, swing: Slash, kind: Tool(speeds: {})),
+        // Swords: tap for a three-cut combo, hold for an overhead heavy (left click, never mines);
+        // hold right click to block, a block just as the cut comes parries it.
+        (name: "iron_sword", title: "Iron Sword", mass: 1.6, size: (1, 3), damage: 9.0, swing: Slash, kind: Tool(speeds: {}),
+            moves: (light: [Slash, SlashBack, Slash], heavy: Heavy, reach: 3.0, arc: 55.0)),
+        (name: "steel_sword", title: "Steel Sword", mass: 1.4, size: (1, 3), damage: 12.0, swing: Slash, kind: Tool(speeds: {}),
+            moves: (light: [Slash, SlashBack, Slash], heavy: Heavy, reach: 3.0, arc: 55.0)),
+        (name: "spirit_sword", title: "Spirit-Etched Sword", mass: 1.2, size: (1, 3), damage: 15.0, swing: Slash, kind: Tool(speeds: {}),
+            moves: (light: [Slash, SlashBack, Slash], heavy: Heavy, reach: 3.0, arc: 55.0)),
+        // The spear: long thrusts that keep foes back, a lunge for the heavy.
+        (name: "flint_spear", title: "Flint Spear", mass: 1.6, size: (1, 4), damage: 10.0, swing: Thrust, kind: Tool(speeds: {}),
+            moves: (light: [Thrust], heavy: Lunge, reach: 4.0, arc: 22.0, special: KeepAway(1.8))),
+        // From the gear urn's bladesmith bench. The dagger: quick stabs, a lunge, deadly from behind.
+        (name: "iron_dagger", title: "Iron Dagger", mass: 0.6, size: (1, 2), damage: 6.0, swing: Thrust, kind: Tool(speeds: {}),
+            moves: (light: [Thrust, Thrust, Slash], heavy: Lunge, reach: 2.3, arc: 35.0, special: Backstab(4.0))),
+        // The rapier: quick thrusts and a piercing lunge; hits right after a parry land hard.
+        (name: "rapier", title: "Rapier", mass: 1.0, size: (1, 3), damage: 10.0, swing: Thrust, kind: Tool(speeds: {}),
+            moves: (light: [Thrust, Thrust, Lunge], heavy: Lunge, reach: 3.3, arc: 25.0, special: Riposte(2.0))),
+        // Hammers: slow smashes that break any guard; the heavy slams the ground and knocks down
+        // everything close by. From the bladesmith bench (iron) and the iron anvil (steel).
+        (name: "iron_hammer", title: "Iron War Hammer", mass: 3.0, size: (1, 3), damage: 13.0, swing: Smash, kind: Tool(speeds: {}),
+            moves: (light: [Smash], heavy: Slam, reach: 2.8, arc: 40.0, special: Wreck)),
+        (name: "steel_hammer", title: "Steel War Hammer", mass: 2.8, size: (1, 3), damage: 17.0, swing: Smash, kind: Tool(speeds: {}),
+            moves: (light: [Smash], heavy: Slam, reach: 2.8, arc: 40.0, special: Wreck)),
+        // Shields: held in the left hand. Right click raises one (a wider guard than a blade, blows
+        // cost less Fatigue, bolts stop on it), left click behind it bashes.
+        (name: "wooden_shield", title: "Wooden Shield", mass: 2.5, size: (2, 2), damage: 3.0, kind: Tool(speeds: {}),
+            shield: (cost: 0.6, arc: 75.0, bash: 4.0)),
+        (name: "hide_shield", title: "Hide Shield", mass: 2.0, size: (2, 2), damage: 3.0, kind: Tool(speeds: {}),
+            shield: (cost: 0.5, arc: 75.0, bash: 4.0)),
+        (name: "iron_shield", title: "Iron Shield", mass: 4.0, size: (2, 2), damage: 5.0, kind: Tool(speeds: {}),
+            shield: (cost: 0.35, arc: 85.0, bash: 7.0)),
         // From the gunsmith bench. Left click fires (`combat::guns`); each shot uses one `ammo`.
         //   gun: (damage per hit, range in blocks, reload seconds between shots, ammo item)
         (name: "makeshift_pistol", title: "Makeshift Pistol", mass: 1.2, size: (2, 1), stack: 1, damage: 3.0,

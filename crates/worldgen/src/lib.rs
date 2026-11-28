@@ -19,20 +19,20 @@
 //! in the distance.
 
 mod biome;
+pub mod delve;
 mod dungeons;
 mod floating;
 mod islands;
 mod landmarks;
 mod plants;
-mod rotting;
 mod structures;
 mod trees;
 mod util;
 
 pub use biome::{Biome, Biomes, Guaranteed, Region, TreeKind};
-pub use dungeons::{Aabb, Dungeon, Room, RoomKind, SpawnKind, SpawnPoint, Veil};
+pub use delve::{in_pocket, Delves, Floor, FloorPlan, RoomType, POCKET};
+pub use dungeons::{Aabb, Dungeon, Look, SpawnKind, SpawnPoint, Veil};
 pub use floating::{Land, MAIN_RADIUS};
-pub use rotting::{floor as rotting_floor, in_pocket, Floor, FloorKind, FloorRoom, RottingGate, DEPTHS, POCKET};
 pub use landmarks::{AuntIsland, Castle, Forge, AUNT_RADIUS, SPORROW_RADIUS};
 pub use structures::{Barrow, Hut, Village};
 
@@ -150,15 +150,12 @@ pub struct WorldGen {
     ids: Ids,
     structures: structures::Cache,
     spawn: [i32; 3],
-    /// A spot 50-90 blocks from spawn (where the home village once stood);
-    /// the home dungeon is placed away from it, so it stays where it was.
-    home: (i32, i32),
     /// Centre of the main island (the spawn column).
     center: (i32, i32),
-    /// The dungeon a short walk from spawn.
-    home_dungeon: Option<Arc<dungeons::Dungeon>>,
-    /// The Rotting Gate (one per world).
-    rotting_gate: Option<rotting::RottingGate>,
+    /// Dungeon themes and room templates (`dungeons.ron`, `rooms.ron`).
+    pub delves: delve::Delves,
+    /// The five story dungeons, in order (`None` where the land had no room).
+    chain: Vec<Option<Arc<dungeons::Dungeon>>>,
     /// Sporrow, Gilm's hut and the castle (one each per world).
     landmarks: Landmarks,
     /// Areas of guaranteed biomes on the main island (one per such biome).
@@ -237,43 +234,19 @@ impl WorldGen {
             ids,
             structures: structures::Cache::default(),
             spawn: [0, 0, 0],
-            home: (0, 0),
             center: (0, 0),
-            home_dungeon: None,
-            rotting_gate: None,
+            delves: delve::Delves::load(include_str!("../../../assets/data/dungeons.ron"), include_str!("../../../assets/data/rooms.ron"), blocks)?,
+            chain: Vec::new(),
             landmarks: Landmarks::default(),
             zones: Vec::new(),
         };
         wg.spawn = wg.search_spawn();
         wg.center = (wg.spawn[0], wg.spawn[2]);
         wg.zones = wg.search_zones();
-        wg.home = wg.search_home();
-        wg.home_dungeon = wg.search_home_dungeon().map(Arc::new);
-        wg.rotting_gate = wg.search_rotting_gate();
-        if let Some((v, f)) = wg.search_sporrow() {
-            wg.landmarks.sporrow = Some(Arc::new(v));
-            wg.landmarks.forge = Some(f);
-        }
-        wg.landmarks.castle = wg.search_castle();
+        // The story dungeons, with Sporrow and the castle placed by the Gate.
+        wg.search_chain();
         wg.landmarks.aunt = wg.search_aunt_island();
         Ok(wg)
-    }
-
-    /// Dry, flat ground 50-90 blocks from spawn (see `home`).
-    fn search_home(&self) -> (i32, i32) {
-        let [sx, _, sz] = self.spawn;
-        for ring in 0..6 {
-            let r = 50.0 + ring as f32 * 8.0;
-            for s in 0..16 {
-                let a = s as f32 / 16.0 * std::f32::consts::TAU + ring as f32 * 0.3;
-                let (x, z) = (sx + (a.cos() * r) as i32, sz + (a.sin() * r) as i32);
-                let col = self.column(x, z);
-                if col.height >= SEA_LEVEL && col.climate.overhang < 0.01 {
-                    return (x, z);
-                }
-            }
-        }
-        (sx + 60, sz)
     }
 
     pub fn seed(&self) -> u64 {

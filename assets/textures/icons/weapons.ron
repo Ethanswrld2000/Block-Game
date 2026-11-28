@@ -23,5 +23,10 @@
         "rapier": (174, 62, 20, 60),
         "makeshift_pistol": (196, 62, 40, 20),
         "rifle": (196, 84, 20, 80),
+        "iron_hammer": (218, 84, 20, 60),
+        "steel_hammer": (42, 104, 20, 60),
+        "wooden_shield": (0, 124, 40, 40),
+        "hide_shield": (64, 124, 40, 40),
+        "iron_shield": (152, 124, 40, 40),
     },
 )

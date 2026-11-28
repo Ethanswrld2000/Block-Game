@@ -14,10 +14,9 @@
 //! onto the path in front of the door (no death, no lost camp).
 //!
 //! Saved to `spirit.ron` (every 30 s and on exit): whether you are a spirit,
-//! the dungeon, and your body's waiting health. The run's rooms fill again as
-//! you walk into them after a load.
+//! the dungeon, and your body's waiting health. A run in progress is not saved:
+//! you wake at the dungeon's entrance.
 
-use std::collections::HashSet;
 use std::sync::Arc;
 
 use bevy::light::NotShadowCaster;
@@ -26,7 +25,7 @@ use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 use serde::{Deserialize, Serialize};
 use worldgen::Dungeon;
 
-use super::{gate_dist, EnteredRoom, LeftDungeon, Nearby};
+use super::{gate_dist, LeftDungeon, Nearby};
 use crate::camera::{FlyCamera, Menus};
 use crate::npc::talk::Talk;
 use crate::player::Player;
@@ -77,7 +76,6 @@ impl Spirit {
         self.form = Form::Spirit;
         self.dungeon = dungeon;
         self.body = saved.body;
-        self.visited.clear();
     }
 }
 
@@ -86,8 +84,8 @@ fn load(dir: Res<crate::save::SaveDir>, generator: Option<Res<crate::world::Gene
         return;
     }
     let Some(Some(saved)) = crate::save::read_ron::<Option<SavedSpirit>>(&dir, FILE) else { return };
-    let (x, z) = (player.pos.x as i32, player.pos.z as i32);
-    let dungeon = saved.dungeon.and_then(|id| generator.as_ref()?.0.dungeons_in(x - 1500, z - 1500, x + 1500, z + 1500).into_iter().find(|d| d.id == id));
+    let _ = &player;
+    let dungeon = saved.dungeon.and_then(|id| generator.as_ref()?.0.dungeon(id));
     spirit.restore(saved, dungeon);
 }
 
@@ -146,8 +144,6 @@ pub struct Spirit {
     t: f32,
     pitch_before: f32,
     hidden: Vec<(Entity, Visibility)>,
-    /// Rooms entered this run.
-    visited: HashSet<usize>,
     /// Seconds before the "turned back" message can show again.
     turned_back: f32,
     next_sparkle: f32,
@@ -170,17 +166,23 @@ impl Spirit {
     /// Become a spirit: keep the body's health and start the spirit whole.
     fn begin(&mut self, s: &mut Survival) {
         self.form = Form::Spirit;
-        self.visited.clear();
         if self.body.is_none() {
             self.body = Some(s.vitals.health);
         }
         s.vitals.health = Health::default();
     }
 
+    /// Start as a spirit at this dungeon (screenshots and testing).
+    pub fn enter_as_spirit(&mut self, d: Arc<Dungeon>, s: &mut Survival) {
+        self.dungeon = Some(d);
+        if self.form != Form::Spirit {
+            self.begin(s);
+        }
+    }
+
     /// Back into the body: its own health returns.
     fn end(&mut self, s: &mut Survival) {
         self.form = Form::Body;
-        self.visited.clear();
         if let Some(h) = self.body.take() {
             s.vitals.health = h;
         }
@@ -234,7 +236,7 @@ fn take_spell(
     }
     if !*auto_done && player.ready {
         *auto_done = true;
-        let d = nearby.nearest(player.pos).or_else(|| generator.and_then(|g| g.0.home_dungeon()));
+        let d = nearby.nearest(player.pos).or_else(|| generator.and_then(|g| g.0.rotting_gate()));
         match std::env::var("BLOCKGAME_SPIRIT").as_deref() {
             Ok("cast") => {
                 spirit.queued = true;
@@ -426,8 +428,8 @@ fn hide_for_cast(
     }
 }
 
-/// Only spirits pass the veil; a spirit's run is tracked room by room and ends
-/// when it walks back out and away from the gate.
+/// Only spirits pass the veil (walking through it starts a run, `delve`); the
+/// spirit form ends when you walk back out and away from the gate.
 #[allow(clippy::too_many_arguments)]
 fn ward_gate(
     time: Res<Time>,
@@ -437,22 +439,20 @@ fn ward_gate(
     mut player: ResMut<Player>,
     mut cam: Query<&mut Transform, With<FlyCamera>>,
     mut toast: MessageWriter<Toast>,
-    (mut entered, mut left): (MessageWriter<EnteredRoom>, MessageWriter<LeftDungeon>),
+    mut left: MessageWriter<LeftDungeon>,
 ) {
     spirit.turned_back -= time.delta_secs();
+    // Down on a floor: the run is under way.
+    if worldgen::in_pocket(player.pos.x as i32, player.pos.z as i32) {
+        return;
+    }
     let at = player.pos.to_array();
     let inside = nearby.list.iter().find(|d| d.inside(at)).cloned();
     match (spirit.form, inside) {
         (Form::Spirit, Some(d)) => {
-            // A spirit cast at one gate can walk into any warded dungeon.
+            // A spirit cast at one gate can walk into any dungeon.
             if spirit.dungeon.as_ref().is_none_or(|k| k.id != d.id) {
-                spirit.dungeon = Some(d.clone());
-                spirit.visited.clear();
-            }
-            if let Some(room) = d.room_at(at)
-                && spirit.visited.insert(room)
-            {
-                entered.write(EnteredRoom { dungeon: d, room });
+                spirit.dungeon = Some(d);
             }
         }
         (Form::Spirit, None) => {

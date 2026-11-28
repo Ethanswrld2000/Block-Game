@@ -87,7 +87,7 @@
         (
             name: "carpentry", title: "Carpentry Urn", station: "Carpentry Station", item: Some("carpentry_urn"),
             color: (0.62, 0.48, 0.3),
-            how: "The warden of the Rotting Gate's depth 1 drops it, once per world.",
+            how: "The Rotting King drops it when the Rotting Gate (the first dungeon) is cleared, once per world.",
             steps: [
                 (name: "carpentry_bench", title: "Carpentry Bench", tier: 1, gives: Station("carpentry_bench"),
                  needs: { "raw_wood": 8, "flint": 2 },
@@ -109,7 +109,7 @@
         (
             name: "vehicle", title: "Vehicle Urn", station: "Vehicle Station", item: Some("vehicle_urn"),
             color: (0.42, 0.5, 0.56),
-            how: "The warden of the Rotting Gate's depth 4 drops it, once per world.",
+            how: "The Pit Foreman drops it when the Collapsed Mine (the fourth dungeon) is cleared, once per world.",
             steps: [
                 (name: "machination_table", title: "Machination Table", tier: 1, gives: Station("machination_table"),
                  needs: { "planks": 12, "raw_iron": 6, "cordage": 4 },
@@ -119,7 +119,7 @@
         (
             name: "gear", title: "Gear Urn", station: "Gear Station", item: Some("gear_urn"),
             color: (0.5, 0.26, 0.3),
-            how: "The warden of the Rotting Gate's depth 2 drops it, once per world.",
+            how: "The Drowned Abbess drops it when the Flooded Crypt (the second dungeon) is cleared, once per world.",
             steps: [
                 (name: "sewing_table", title: "Sewing Table", tier: 1, gives: Station("sewing_table"),
                  needs: { "planks": 6, "cordage": 4, "plant_fiber": 6 },
@@ -147,7 +147,7 @@
         (
             name: "hearth", title: "Hearth Urn", station: "Cooking Station", item: Some("hearth_urn"),
             color: (0.72, 0.3, 0.2),
-            how: "The warden of the Rotting Gate's depth 3 drops it, once per world.",
+            how: "The Root Mother drops it when the Root-choked Hall (the third dungeon) is cleared, once per world.",
             steps: [
                 (name: "cooking_pot", title: "Cooking Pot", tier: 1, gives: Station("cooking_pot"),
                  needs: { "clay": 6, "stick": 6, "small_rock": 4 },
@@ -169,7 +169,7 @@
         (
             name: "star", title: "Star Urn", station: "Astronomy Station", item: Some("star_urn"),
             color: (0.28, 0.32, 0.62),
-            how: "It stands at the top of the abandoned castle in the mountains, by Orrin Vale.",
+            how: "Once the vault under the mountain castle is cleared, it stands at the top of the castle tower, by Orrin Vale.",
             steps: [
                 (name: "telescope", title: "Telescope", tier: 1, gives: Station("telescope"),
                  needs: { "planks": 6, "flint": 4, "raw_iron": 2 },

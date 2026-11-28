@@ -299,7 +299,7 @@ fn open_close(
     (mut spill, mut sound): (MessageWriter<Spill>, MessageWriter<PlaySound>),
     mut cursor: Single<&mut CursorOptions, With<PrimaryWindow>>,
     loot: Option<Res<super::loot::Loot>>,
-    generator: Option<Res<crate::world::Generator>>,
+    (generator, below): (Option<Res<crate::world::Generator>>, Option<Res<crate::delve::Below>>),
     mut seed: Local<u64>,
 ) {
     motion.now = real.elapsed_secs();
@@ -339,7 +339,9 @@ fn open_close(
             *seed = seed.wrapping_add(0x9E37_79B9_7F4A_7C15) ^ (p.x as u64).wrapping_mul(31) ^ (p.z as u64).wrapping_mul(1_000_003);
             let mut rng = crate::creatures::brain::Rng(*seed | 1);
             let grid = chests.grid(p);
-            let table = if generator.0.island_chest(p.x, p.y, p.z) {
+            let table = if let Some(t) = below.as_ref().and_then(|b| b.chest_table(p)) {
+                t
+            } else if generator.0.island_chest(p.x, p.y, p.z) {
                 "sky_island"
             } else if in_barrow {
                 "barrow"
@@ -930,6 +932,17 @@ const RECIPE_VIEW: f32 = CONTENT_H - 72.0;
 pub(crate) fn icon(c: &mut ChildSpawnerCommands, items: &Items, art: &ItemArt, stack: Stack, w: f32, h: f32, rotated: bool) {
     match (art.image(stack.item), art.size(stack.item)) {
         (Some(img), Some(size)) => {
+            // A better quality glows faintly in its colour behind the sprite.
+            let q = items.get(stack.item).quality;
+            if q != crate::quality::Quality::Plain {
+                let (r, g, b) = items.qualities().tier(q).color;
+                let a = if q >= crate::quality::Quality::Masterwork { 0.3 } else { 0.16 };
+                c.spawn((
+                    Node { position_type: PositionType::Absolute, left: Val::Px(3.0), top: Val::Px(3.0), right: Val::Px(3.0), bottom: Val::Px(3.0), ..default() },
+                    BackgroundColor(Color::srgba(r, g, b, a * 0.5)),
+                    BoxShadow::new(Color::srgba(r, g, b, a), Val::Px(0.0), Val::Px(0.0), Val::Px(0.0), Val::Px(6.0)),
+                ));
+            }
             // At 2x, or smaller if that doesn't fit (a tall item on the
             // hotbar); turned with the item.
             let s = size.as_vec2();
@@ -1140,6 +1153,14 @@ fn describe(items: &Items, id: ItemId) -> (String, String, Vec<Line>) {
             lines.push((None, "Hold right click to eat".into(), colors::MUTED));
             "Food".into()
         }
+        ItemKind::Tool { .. } if it.shield.is_some() => {
+            let sh = it.shield.unwrap_or(crate::items::Shield { cost: 1.0, arc: 0.0, bash: 0.0 });
+            lines.push((None, format!("Blocks take {:.0}% of the Fatigue a blade's would", sh.cost * 100.0), colors::GOOD));
+            lines.push((None, format!("Covers {:.0} degrees; stops bolts", sh.arc * 2.0), colors::TEXT));
+            lines.push((Some("icon_sword"), format!("Bash for {:.0}", sh.bash), colors::TEXT));
+            lines.push((None, "Left hand: right click raises it, left click bashes".into(), colors::MUTED));
+            "Shield".into()
+        }
         ItemKind::Tool { speeds } if it.is_weapon() => {
             lines.push((None, "Weapon slot: R draws it".into(), colors::MUTED));
             let _ = speeds;
@@ -1165,8 +1186,38 @@ fn describe(items: &Items, id: ItemId) -> (String, String, Vec<Line>) {
             "Machine".into()
         }
     };
-    if it.damage > crate::items::FIST_DAMAGE {
+    if it.damage > crate::items::FIST_DAMAGE && it.shield.is_none() {
         lines.push((Some("icon_sword"), format!("Hits for {:.0}", it.damage), colors::TEXT));
+    }
+    if let Some(m) = &it.moves {
+        let names = |s: &crate::swing::Swing| format!("{s:?}").to_lowercase();
+        let light: Vec<String> = m.light.iter().map(names).collect();
+        lines.push((None, format!("Tap: {}; hold: {}; reach {:.1}", light.join(", "), names(&m.heavy), it.reach()), colors::TEXT));
+        let special = match m.special {
+            crate::items::Special::Balanced => None,
+            crate::items::Special::Backstab(x) => Some(format!("Backstabs deal {x:.0}x")),
+            crate::items::Special::Cleave(x) => Some(format!("{:.0}% gets through a guard", x * 100.0)),
+            crate::items::Special::KeepAway(x) => Some(format!("Pushes foes back {x:.1}x as far")),
+            crate::items::Special::Riposte(x) => Some(format!("Just after a parry, hits deal {x:.0}x")),
+            crate::items::Special::Wreck => Some("Every blow breaks a guard; the heavy knocks foes down".into()),
+        };
+        if let Some(sp) = special {
+            lines.push((None, sp, colors::GOOD));
+        }
+    }
+    // Quality and traits.
+    if it.quality != crate::quality::Quality::Plain {
+        let quals = items.qualities();
+        let tier = quals.tier(it.quality);
+        let (r, g, b) = tier.color;
+        let mut line = format!("{} quality: +{:.0}%", tier.title, tier.power * 100.0);
+        if it.stamina < 1.0 {
+            line.push_str(&format!(", {:.0}% less Fatigue", (1.0 - it.stamina) * 100.0));
+        }
+        lines.push((None, line, Color::srgb(r, g, b)));
+        for t in it.traits.iter().filter_map(|t| quals.traits.get(*t)) {
+            lines.push((None, format!("{}: {}", t.title, t.text), Color::srgb(r, g, b)));
+        }
     }
     let mut weight = format!("{:.1} kg, takes {}x{}", it.mass, it.size.0, it.size.1);
     if it.stack > 1 {
@@ -1358,7 +1409,14 @@ fn tooltip(root: &mut ChildSpawnerCommands, theme: &Theme, items: &Items, art: &
             .with_children(|b| {
                 b.spawn(Node { width: Val::Px(size.x * k), height: Val::Px(size.y * k), ..default() }).with_children(|q| icon(q, items, art, Stack::new(id, 1), size.x * k + 4.0, size.y * k + 4.0, false));
             });
-        t.spawn((theme.bold(sizes::LABEL), Text::new(title), TextColor(colors::HEADING)));
+        let q = items.get(id).quality;
+        let heading = if q == crate::quality::Quality::Plain {
+            colors::HEADING
+        } else {
+            let (r, g, b) = items.qualities().tier(q).color;
+            Color::srgb(r, g, b)
+        };
+        t.spawn((theme.bold(sizes::LABEL), Text::new(title), TextColor(heading)));
         t.spawn(text(kind, sizes::SMALL, colors::MUTED));
         t.spawn((Node { height: Val::Px(4.0), margin: UiRect::vertical(Val::Px(2.0)), ..default() }, theme.skin("divider")));
         for (ic, s, c) in lines {

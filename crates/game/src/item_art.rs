@@ -98,27 +98,34 @@ pub struct ItemArt {
     materials: [Handle<StandardMaterial>; 3],
     /// The models are built.
     pub ready: bool,
+    /// Better versions of an item use the plain one's sprite.
+    items: Items,
 }
 
 impl ItemArt {
+    /// Where an item's sprite is kept: its plain version's slot.
+    fn slot(&self, id: ItemId) -> usize {
+        self.items.get(id).base.0 as usize
+    }
+
     fn sheet(&self, s: Sheet) -> usize {
         Sheet::ALL.iter().position(|&x| x == s).unwrap()
     }
 
     /// The sprite's size in sheet pixels.
     pub fn size(&self, id: ItemId) -> Option<UVec2> {
-        self.sprites.get(id.0 as usize).copied().flatten().map(|(_, r)| r.size())
+        self.sprites.get(self.slot(id)).copied().flatten().map(|(_, r)| r.size())
     }
 
     /// The sprite as a UI image.
     pub fn image(&self, id: ItemId) -> Option<ImageNode> {
-        let (sheet, r) = self.sprites.get(id.0 as usize).copied().flatten()?;
+        let (sheet, r) = self.sprites.get(self.slot(id)).copied().flatten()?;
         Some(ImageNode { image: self.sheets[self.sheet(sheet)].clone(), rect: Some(r.as_rect()), ..default() })
     }
 
     /// The sprite's average colour (its opaque pixels), once the sheet has loaded.
     pub fn average_color(&self, id: ItemId, images: &Assets<Image>) -> Option<Color> {
-        let (sheet, r) = self.sprites.get(id.0 as usize).copied().flatten()?;
+        let (sheet, r) = self.sprites.get(self.slot(id)).copied().flatten()?;
         let img = images.get(&self.sheets[self.sheet(sheet)])?;
         let (mut sum, mut n) = (Vec3::ZERO, 0.0);
         for y in r.min.y..r.max.y {
@@ -141,8 +148,8 @@ impl ItemArt {
     /// The 3D model made from the sprite, one unit per pixel, centred, the
     /// sprite's up along +Y and its face towards +Z.
     pub fn model(&self, id: ItemId) -> Option<(Handle<Mesh>, Handle<StandardMaterial>)> {
-        let mesh = self.models.get(id.0 as usize).cloned().flatten()?;
-        let (sheet, _) = self.sprites[id.0 as usize]?;
+        let mesh = self.models.get(self.slot(id)).cloned().flatten()?;
+        let (sheet, _) = self.sprites[self.slot(id)]?;
         Some((mesh, self.materials[self.sheet(sheet)].clone()))
     }
 }
@@ -164,7 +171,7 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>, items: Res<Items>, mu
         materials.add(StandardMaterial { base_color_texture: Some(image), perceptual_roughness: 0.9, reflectance: 0.2, ..default() })
     });
     let models = vec![None; sprites.len()];
-    commands.insert_resource(ItemArt { sheets, sprites, models, materials, ready: false });
+    commands.insert_resource(ItemArt { sheets, sprites, models, materials, ready: false, items: items.clone() });
 }
 
 fn build_models(art: Option<ResMut<ItemArt>>, images: Res<Assets<Image>>, mut meshes: ResMut<Assets<Mesh>>) {
